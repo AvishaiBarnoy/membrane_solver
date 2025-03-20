@@ -1,7 +1,0 @@
-refine
-save_geometry
-set_dt 1e-5
-set_epsilon 1e-6
-set_volume_k 1
-gradient descent
-opt 50 

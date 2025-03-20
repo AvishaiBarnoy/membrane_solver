@@ -1,6 +1,6 @@
 {
     "vertices": [
-        [0, 0, 0],
+        [0, 0, 0, {"fixed": false}],
         [1, 0, 0],
         [1, 1, 0],
         [0, 1, 0],
@@ -10,7 +10,7 @@
         [1, 1, 1]
     ],
     "edges": [
-        [0, 1, {"refine": false}],
+        [0, 1, {"refine": false, "fixed": true}],
         [1, 2],
         [2, 3],
         [3, 0],
@@ -35,7 +35,11 @@
         "faces": [[0, 1, 2, 3, 4, 5]],
         "target_volume": [1]
     },
-    "global_parameters": {"surface tension": 0, "intrinsic curvature": 0, "bending modulus": 0, "gaussian modulus": 0},
+    "global_parameters": {"surface tension": 0,
+                        "intrinsic curvature": 0, 
+                        "bending modulus": 0, 
+                        "gaussian modulus": 0
+    },
     "instructions": [
         "gradient descent",
         "opt 10",

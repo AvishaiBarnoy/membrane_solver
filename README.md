@@ -1,7 +1,6 @@
 # My try on a SurfaceEvolver-like software
 
 ## TODO:
-1. upload project to github 
 1. add fixed option to vertices 
 1. define energy over facets -> by size of facet
 2. define volume constraints -> leads to pressure
@@ -14,7 +13,7 @@
 6. surface area constraints:
     1. local - specific faces
     2. global - total area conservation -> maybe replace volume constraint?
-7. rigid facets -> all facets move together?
+7. rigid facets -> all edges move together?
 8. fixed option -> vertix: don't move, edges: don't change length, facets: does anything?
     how is energy evaluated over fixed components? in SE integrals are not
     evaluated over fixed edges, what about vertices (is energy even evaluted
