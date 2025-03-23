@@ -9,7 +9,6 @@
     target volume
 3. how to calculate mean curvature from facets?
 4. energy minimization algorithms
-5. replace print statments with logging functions and write a log file
 6. surface area constraints:
     1. local - specific faces
     2. global - total area conservation -> maybe replace volume constraint?

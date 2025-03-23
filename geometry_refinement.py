@@ -72,6 +72,8 @@ if __name__ == '__main__':
     import sys
     from geometry_io import load_geometry, initial_triangulation
 
+    logger = setup_logging()
+
     try:
         inpfile = sys.argv[1]
     except IndexError:
@@ -83,19 +85,19 @@ if __name__ == '__main__':
         logger.info(v.position)
     logger.info("Loaded facets:")
     for facet in facets:
-        logger.info(facet.indices, facet.options)
+        logger.info(f"{facet.indices} {facet.options}")
 
     # Perform the initial triangulation (always subdividing to triangles).
     vertices, tri_facets = initial_triangulation(vertices, facets)
     logger.info("\nAfter initial triangulation:")
-    logger.info("Number of vertices:", len(vertices))
+    logger.info(f"Number of vertices: {len(vertices)}")
     for facet in tri_facets:
-        logger.info(facet.indices, facet.options)
+        logger.info(f"{facet.indices} {facet.options}")
 
     # Refine the mesh: facets with {"refine": False} remain unchanged.
     vertices, refined_facets = refine_mesh(vertices, tri_facets)
     logger.info("\nAfter refinement:")
-    logger.info("Number of vertices:", len(vertices))
+    logger.info(f"Number of vertices: {len(vertices)}")
     for facet in refined_facets:
-        logger.info(facet.indices, facet.options)
+        logger.info(f"{facet.indices} {facet.options}")
 

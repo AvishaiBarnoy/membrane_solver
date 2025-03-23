@@ -143,7 +143,7 @@ def main():
         logger.info(v.position)
     logger.info("Loaded facets:")
     for facet in facets:
-        logger.info(facet.indices, facet.options)
+        logger.info(f"{facet.indices} {facet.options}")
 
     # Perform the initial triangulation (always subdividing non-simplex facets).
     vertices, tri_facets = initial_triangulation(vertices, facets)
@@ -158,8 +158,8 @@ if __name__ == '__main__':
 
     vertices, facets, volume = main()
     logger.info("\nAfter initial triangulation:")
-    logger.info("Number of vertices:", len(vertices))
+    logger.info(f"Number of vertices: {len(vertices)}")
     for facet in facets:
-        logger.info(facet.indices, facet.options)
-    logger.info("Initial volume of object:", volume)
+        logger.info(f"{facet.indices} {facet.options}")
+    logger.info(f"Initial volume of object: {volume}")
 

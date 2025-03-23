@@ -25,7 +25,13 @@ def load_geometry(filename):
     with open(filename, 'r') as f:
         data = json.load(f)
 
-    vertices = [Vertex(pos) for pos in data["vertices"]]
+    # vertices = [Vertex(pos) for pos in data["vertices"]]  # depracted definition
+    vertices = []
+    for item in data["vertices"]:
+        coords = item[:3]   # Extract first 3 elements as coordinates
+        attributes = item[3] if len(item) > 3 else {}   # Extract optional attributes
+        vertex = Vertex(coords, **attributes)    # Pass attributes as keyword args
+        vertices.append(vertex)
     facets = []
     for face in data["faces"]:
         if face and isinstance(face[-1], dict):
@@ -37,9 +43,9 @@ def load_geometry(filename):
         facets.append(Facet(indices, options))
     volumes = {'target volume': None, 'current volume': None} # initialize volume dicitionary
     # TODO: replace direct access to volume with dynamic access to multiple objects
-    volume['target volume'] = data['body']['targe_volume'][0]
-    volume['current volume'] = calculate_volume()
-    return vertices, facets, volume
+    volumes['target volume'] = data['body']['target_volume'][0]
+    volumes['current volume'] = calculate_volume()
+    return vertices, facets, volumes
 
 def calculate_volume():
     """
@@ -96,19 +102,21 @@ if __name__ == '__main__':
     except IndexError:
         inpfile = "meshes/sample_geometry.json"
 
-    vertices, facets, initial_volume = load_geometry(inpfile)
+    logger = setup_logging()
+
+    vertices, facets, volumes = load_geometry(inpfile)
     logger.info("Loaded vertices:")
     for v in vertices:
         logger.info(v.position)
     logger.info("Loaded facets:")
     for facet in facets:
-        logger.info(facet.indices, facet.options)
+        logger.info(f"{facet.indices} {facet.options}")
 
     # Perform the initial triangulation (always subdividing non-simplex facets).
     vertices, tri_facets = initial_triangulation(vertices, facets)
     logger.info("\nAfter initial triangulation:")
-    logger.info("Number of vertices:", len(vertices))
+    logger.info(f"Number of vertices: {len(vertices)}")
     for facet in tri_facets:
-        logger.info(facet.indices, facet.options)
-    logger.info("Initial volume of object:", initial_volume)
-    logger.info("Target volume of object:", )
+        logger.info(f"{facet.indices} {facet.options}")
+    logger.info(f"Initial volume of object: {volumes['current volume']}")
+    logger.info(f"Target volume of object: {volumes['target volume']}")
