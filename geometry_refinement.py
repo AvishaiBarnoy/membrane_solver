@@ -6,6 +6,7 @@
 # geometry_refinement.py
 
 from geometry_entities  import Vertex, Facet
+from logging_config import setup_logging
 
 def refine_mesh(vertices, facets):
     """
@@ -13,18 +14,18 @@ def refine_mesh(vertices, facets):
     options permit refinement. For each triangle that is refined, a new vertex
     is inserted at the midpoint of each edge, and the triangle is subdivided into
     four smaller triangles.
-    
+
     Facets with the option {"refine": False} are left unmodified.
-    
+
     Child facets inherit a copy of the parent facet's options.
-    
+
     This function uses a cache (dictionary) so that the midpoint for a given edge is
     computed only once.
-    
+
     Args:
         vertices (list of Vertex): The list of vertices.
         facets (list of Facet): The list of triangular facets.
-        
+
     Returns:
         (vertices, new_facets): The updated list of vertices and the new list of facets.
     """
@@ -58,13 +59,13 @@ def refine_mesh(vertices, facets):
             ab = get_midpoint(a, b)
             bc = get_midpoint(b, c)
             ca = get_midpoint(c, a)
-            
+
             # Subdivide the triangle into 4 smaller triangles.
             new_facets.append(Facet((a, ab, ca), facet.options.copy()))
             new_facets.append(Facet((b, bc, ab), facet.options.copy()))
             new_facets.append(Facet((c, ca, bc), facet.options.copy()))
             new_facets.append(Facet((ab, bc, ca), facet.options.copy()))
-    
+
     return vertices, new_facets
 
 if __name__ == '__main__':
@@ -75,26 +76,26 @@ if __name__ == '__main__':
         inpfile = sys.argv[1]
     except IndexError:
         inpfile = "meshes/sample_geometry.json"
-    
+
     vertices, facets, volume = load_geometry(inpfile)
-    print("Loaded vertices:")
+    logger.info("Loaded vertices:")
     for v in vertices:
-        print(v.position)
-    print("Loaded facets:")
+        logger.info(v.position)
+    logger.info("Loaded facets:")
     for facet in facets:
-        print(facet.indices, facet.options)
-    
+        logger.info(facet.indices, facet.options)
+
     # Perform the initial triangulation (always subdividing to triangles).
     vertices, tri_facets = initial_triangulation(vertices, facets)
-    print("\nAfter initial triangulation:")
-    print("Number of vertices:", len(vertices))
+    logger.info("\nAfter initial triangulation:")
+    logger.info("Number of vertices:", len(vertices))
     for facet in tri_facets:
-        print(facet.indices, facet.options)
-    
+        logger.info(facet.indices, facet.options)
+
     # Refine the mesh: facets with {"refine": False} remain unchanged.
     vertices, refined_facets = refine_mesh(vertices, tri_facets)
-    print("\nAfter refinement:")
-    print("Number of vertices:", len(vertices))
+    logger.info("\nAfter refinement:")
+    logger.info("Number of vertices:", len(vertices))
     for facet in refined_facets:
-        print(facet.indices, facet.options)
+        logger.info(facet.indices, facet.options)
 

@@ -1,7 +1,8 @@
 # read_inputfile.py
 import json
-from geometry import Vertex, Facet
+from geometry_entities import Vertex, Facet
 import sys
+from logging_config import setup_logging
 
 def load_geometry(filename):
     """
@@ -96,18 +97,18 @@ if __name__ == '__main__':
         inpfile = "meshes/sample_geometry.json"
 
     vertices, facets, initial_volume = load_geometry(inpfile)
-    print("Loaded vertices:")
+    logger.info("Loaded vertices:")
     for v in vertices:
-        print(v.position)
-    print("Loaded facets:")
+        logger.info(v.position)
+    logger.info("Loaded facets:")
     for facet in facets:
-        print(facet.indices, facet.options)
+        logger.info(facet.indices, facet.options)
 
     # Perform the initial triangulation (always subdividing non-simplex facets).
     vertices, tri_facets = initial_triangulation(vertices, facets)
-    print("\nAfter initial triangulation:")
-    print("Number of vertices:", len(vertices))
+    logger.info("\nAfter initial triangulation:")
+    logger.info("Number of vertices:", len(vertices))
     for facet in tri_facets:
-        print(facet.indices, facet.options)
-    print("Initial volume of object:", initial_volume)
-    print("Target volume of object:", )
+        logger.info(facet.indices, facet.options)
+    logger.info("Initial volume of object:", initial_volume)
+    logger.info("Target volume of object:", )

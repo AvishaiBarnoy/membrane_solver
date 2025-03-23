@@ -3,6 +3,7 @@ import json
 from geometry_entities import Vertex, Facet, Volume
 import os
 import sys
+from logging_config import setup_logging
 
 def load_geometry(filename):
     """
@@ -25,7 +26,13 @@ def load_geometry(filename):
     with open(filename, 'r') as f:
         data = json.load(f)
 
-    vertices = [Vertex(pos) for pos in data["vertices"]]
+    vertices = []
+    for item in data["vertices"]:
+        coords = item[:3]   # Extract first 3 elements as coordinates
+        attributes = item[3] if len(item) > 3 else {}   # Extract optional attributes
+        vertex = Vertex(coords, **attributes)    # Pass attributes as keyword args
+        vertices.append(vertex)
+
     facets = []
     for face in data["faces"]:
         if face and isinstance(face[-1], dict):
@@ -99,25 +106,25 @@ def save_geometry(filename, vertices, facets, volume):
         "faces": [],
         "volume": volume
     }
-    
+
     for facet in facets:
         # If there are facet options, append them as the last element.
         if facet.options:
             data["faces"].append(list(facet.indices) + [facet.options])
         else:
             data["faces"].append(list(facet.indices))
-    
+
     original_filename = filename
     counter = 1
     while os.path.exists(filename):
-        print(f"Warning: File '{filename}' already exists. Adjusting output name.")
+        logger.warning(f"Warning: File '{filename}' already exists. Adjusting output name.")
         base, ext = os.path.splitext(original_filename)
         filename = f"{base}_{counter}{ext}"
         counter += 1
 
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
-    print(f"Geometry saved to {filename}")
+    logger.info(f"Geometry saved to {filename}")
 
 def main():
     # TODO:
@@ -131,12 +138,12 @@ def main():
         inpfile = "meshes/sample_geometry.json"
 
     vertices, facets, initial_volume = load_geometry(inpfile)
-    print("Loaded vertices:")
+    logger.info("Loaded vertices:")
     for v in vertices:
-        print(v.position)
-    print("Loaded facets:")
+        logger.info(v.position)
+    logger.info("Loaded facets:")
     for facet in facets:
-        print(facet.indices, facet.options)
+        logger.info(facet.indices, facet.options)
 
     # Perform the initial triangulation (always subdividing non-simplex facets).
     vertices, tri_facets = initial_triangulation(vertices, facets)
@@ -147,10 +154,12 @@ def main():
     return vertices, tri_facets, initial_volume
 
 if __name__ == '__main__':
+    logger = setup_logging()
+
     vertices, facets, volume = main()
-    print("\nAfter initial triangulation:")
-    print("Number of vertices:", len(vertices))
+    logger.info("\nAfter initial triangulation:")
+    logger.info("Number of vertices:", len(vertices))
     for facet in facets:
-        print(facet.indices, facet.options)
-    print("Initial volume of object:", volume)
+        logger.info(facet.indices, facet.options)
+    logger.info("Initial volume of object:", volume)
 
