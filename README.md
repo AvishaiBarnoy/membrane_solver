@@ -25,6 +25,7 @@
 12. different library for visualization, for example:
     12.1 https://docs.pyvista.org/
     12.2 https://vedo.embl.es/
+13. move scripts to a different folder and leave only main and deploy outside.
 
 ## Current limitations
 1. only one object with volume
