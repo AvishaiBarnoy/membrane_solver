@@ -12,13 +12,26 @@ class Vertex:
         self.initialized_cg = False  # Flag to initialize the search direction
 
 class Edge:
-    def __init__(self, v1, v2):
+    def __init__(self, v1, v2, options=None):
+        """
+        An edge is a one-dimensional geometric element
+        """
         # Store vertex indices (or references) for the edge endpoints.
+        # TODO: implement orientability of edge
         self.v1 = v1
         self.v2 = v2
+        self.options = options if options is not None else {}
+
+        def vector(self):
+            """Compute the vector representing the edge."""
+            return np.array(self.head_vertex.coordinates) - np.array(self.tail_vertex.coordinates)
+
+        def length(self):
+            """Compute the length of the edge."""
+            return np.linalg.norm(self.vector())
 
 class Facet:
-    def __init__(self, indices, options=None):
+    def __init__(self, edges, options=None):
         """
         A facet is defined by a set of oriented (for normal direction) edges
 
@@ -26,8 +39,20 @@ class Facet:
             indices (list or tuple of int): Vertex indices defining the facet.
             options (dict, optional): Dictionary of facet-specific options.
         """
-        self.indices = tuple(indices)
+        self.edges = edges  # list of edges instances 
+        self.area = None
         self.options = options if options is not None else {}
+
+    def calculate_area(self, edges):
+        """Calculates the area of the facet assuming it is a triangle"""
+        # TODO: Tests: check calculation is the same no matter vector choice
+        # Assume edges are cyclically ordered (e1: v0->v1, e2: v1->v2, e3: v2->v0)
+        edge_vec1 = self.edges[0].vector()
+        edge_vec2 = self.edges[1].vector()
+
+        area = 0.5 * np.linalg.norm(np.cross(edge_vec1, edge_vec2))
+
+        return area
 
 class Body:
     def __init__(self, facets=None, target_volume=None):
