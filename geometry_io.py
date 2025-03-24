@@ -3,8 +3,10 @@ import json
 from geometry_entities import Vertex, Facet, Body
 import os
 import sys
-from logging_config import setup_logging
 import importlib
+import logging
+from logging_config import setup_logging
+logger = logging.getLogger('membrane_solver')
 
 def load_geometry(filename):
     """
@@ -111,6 +113,8 @@ def initial_triangulation(vertices, facets):
                 # Use a copy of the parent's options for the child facets.
                 new_facets.append(Facet(tri_indices, facet.options.copy()))
         else:
+            logger.critical("""Critical error! Cannot proceed further.
+                            Facet with fewer than three vertices encounterd!""")
             raise ValueError("Facet with fewer than three vertices encountered!")
     return vertices, new_facets
 
@@ -184,9 +188,9 @@ def main():
     logger.info(f"Number of vertices: {len(vertices)}")
     for v in vertices:
         logger.info(v.position)
-    logger.info(f"Number of facets: {len(facets)}")
+    logger.info(f"Number of facets: {len(tri_facets)}")
     logger.info("Triangulated facets:")
-    for facet in facets:
+    for facet in tri_facets:
         logger.info(f"{facet.indices} {facet.options}")
 
     logger.info("Loaded global parameters:")
@@ -204,6 +208,5 @@ def main():
 
 if __name__ == '__main__':
     logger = setup_logging()
-
     vertices, facets, global_params, body, modules = main()
 
