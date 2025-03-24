@@ -170,6 +170,7 @@ def main():
         inpfile = "meshes/sample_geometry.json"
 
     vertices, facets, global_params, body, modules = load_geometry(inpfile)
+
     logger.info(f"Number of vertices: {len(vertices)}")
     logger.info("Loaded vertices:")
     for v in vertices:
@@ -207,6 +208,6 @@ def main():
     return vertices, tri_facets, global_params, body, modules
 
 if __name__ == '__main__':
-    logger = setup_logging()
+    logger = setup_logging('membrane_solver.log')
     vertices, facets, global_params, body, modules = main()
 

@@ -7,6 +7,10 @@ import sys
 from geometry_io import load_geometry, initial_triangulation
 from geometry_refinement import refine_mesh
 
+import logging
+from logging_config import setup_logging
+logger = logging.getLogger('membrane_solver')
+
 def plot_geometry(vertices, facets, title="Triangulated Geometry"):
     """
     Creates a 3D plot of the triangulated geometry.
@@ -40,8 +44,14 @@ def plot_geometry(vertices, facets, title="Triangulated Geometry"):
     plt.show()
 
 if __name__ == '__main__':
+    logger = setup_logging('membrane_solver.log')
+
     try:
         inpfile = sys.argv[1]
+        if not inpfile.endwith('.json'):
+            raise ValueError("Input file must be a JSON file (.json).")
+        if not os.path.isfile(inpfile):
+            raise FileNotFoundError(f"Input file '{inpfile}' not found!")
     except IndexError:
         inpfile = "meshes/sample_geometry.json"
 
