@@ -55,11 +55,11 @@ def load_geometry(filename):
     # Default modules logic
     energy_modules = set(body_data.get("energy_modules", []))
 
+    if "surface" not in energy_modules:
+        energy_modules.add("surface")
+
     if "target_volume" in body_data and "volume" not in energy_modules:
         energy_modules.add("volume")
-
-    if "surface_energy" not in energy_modules:
-        energy_modules.add("surface_energy")
 
     # Load all modules now
     loaded_modules = {}
