@@ -2,7 +2,6 @@
 
 ## TODO:
 1. add fixed option to vertices 
-1. define energy over facets -> by size of facet
 2. define volume constraints -> leads to pressure
     if volume!=target_volume then pressure arises
     adding "negative surface tension" proportional to the deviation from the
@@ -17,9 +16,6 @@
     how is energy evaluated over fixed components? in SE integrals are not
     evaluated over fixed edges, what about vertices (is energy even evaluted
     over individual vetices???) and facets?
-9. energy functions are implementd through dictionary that calls {"energy":
-   "energy_module"}
-10. global parameters in input file: tension, intrinsic curvature
 11. add tests
 12. different library for visualization, for example:
     12.1 https://docs.pyvista.org/
@@ -30,7 +26,7 @@
 15. when running add -v/--verbose options to print out log messages or just
     put them in the log file
 16. initial energy calculation after loading -> test modules
-17. fix trinagulation -> there should be more facets upon trinagulation!
+18. add interactive mode for refining, minimization, etc.
 
 ## Current limitations
 1. only one object with volume

@@ -24,7 +24,7 @@
         [3, 4]
     ],
     "faces": [
-        [0, 1, 2, 3, {"refine": false, "fixed": true, "energy": "default"}],
+        [0, 1, 2, 3, {"refine": false, "fixed": true, "energy": "default", "surface tension": 1}],
         [0, 1, 6, 5, {"refine": true, "energy": "new_module"}],
         [0, 3, 4, 5],
         [1, 2, 7, 6],
