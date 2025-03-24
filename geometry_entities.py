@@ -20,6 +20,8 @@ class Edge:
 class Facet:
     def __init__(self, indices, options=None):
         """
+        A facet is defined by a set of oriented (for normal direction) edges
+
         Args:
             indices (list or tuple of int): Vertex indices defining the facet.
             options (dict, optional): Dictionary of facet-specific options.
@@ -27,10 +29,12 @@ class Facet:
         self.indices = tuple(indices)
         self.options = options if options is not None else {}
 
-class Volume:
-    def __init__(self, facets=None):
+class Body:
+    def __init__(self, facets=None, target_volume=None):
         # A volume is defined by a collection of facets.
         self.facets = facets if facets is not None else []
+        self.volume = None
+        self.target_volume = None
 
     def calculate_volume(self, vertices):
         """
@@ -70,5 +74,5 @@ class Volume:
 
             # The volume contribution is the projected area times the average height.
             volume += A_proj * z_avg
-        return volume
+        self.volume = volume
 

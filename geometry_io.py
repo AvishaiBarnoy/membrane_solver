@@ -1,9 +1,10 @@
 # geometry_io.py 
 import json
-from geometry_entities import Vertex, Facet, Volume
+from geometry_entities import Vertex, Facet, Body
 import os
 import sys
 from logging_config import setup_logging
+import importlib
 
 def load_geometry(filename):
     """
@@ -42,9 +43,36 @@ def load_geometry(filename):
             indices = face
             options = {}
         facets.append(Facet(indices, options))
-    volume_obj = Volume(facets)
-    initial_volume = volume_obj.calculate_volume(vertices)
-    return vertices, facets, initial_volume
+
+    body_data = data.get("body", {})
+    global_params = data.get("global_parameters", {})
+
+    body = Body(facets)
+    initial_volume = body.calculate_volume(vertices)
+
+    # Default modules logic
+    energy_modules = set(body_data.get("energy_modules", []))
+
+    if "target_volume" in body_data and "volume" not in energy_modules:
+        energy_modules.add("volume")
+
+    if "surface_energy" not in energy_modules:
+        energy_modules.add("surface_energy")
+
+    # Load all modules now
+    loaded_modules = {}
+    for module_name in energy_modules:
+        try:
+            module = module = importlib.import_module(f"modules.{module_name}")
+            loaded_modules[module_name] = module
+            logger.info(f"Loaded module: {module_name}")
+        except ImportError as e:
+            logger.error(f"Module '{module_name}' loading error: {e}")
+
+    if not loaded_modules:
+        raise ValueError("No energy modules loaded. Check input file.")
+
+    return vertices, facets, global_params, body, loaded_modules
 
 def initial_triangulation(vertices, facets):
     """
@@ -52,16 +80,16 @@ def initial_triangulation(vertices, facets):
     Unlike subsequent refinement steps, the initial triangulation always
     subdivides a facet into triangles (even if its options include "refine": False)
     because energy computations are applied only to simplex triangles.
-    
+
     For each n-gon (n > 3), a new vertex is added at the centroid and the facet
     is subdivided into n triangles by connecting each edge of the polygon to the centroid.
-    
-    Child facets inherit a copy of the parent facet’s options.
-    
+
+   Child facets inherit a copy of the parent facet’s options.
+
     Args:
         vertices (list of Vertex): The list of vertices.
         facets (list of Facet): The list of facets.
-        
+
     Returns:
         (vertices, new_facets): The updated list of vertices and a new list of facets.
     """
@@ -137,29 +165,45 @@ def main():
     except IndexError:
         inpfile = "meshes/sample_geometry.json"
 
-    vertices, facets, initial_volume = load_geometry(inpfile)
+    vertices, facets, global_params, body, modules = load_geometry(inpfile)
+    logger.info(f"Number of vertices: {len(vertices)}")
     logger.info("Loaded vertices:")
     for v in vertices:
         logger.info(v.position)
+    logger.info(f"Number of facets: {len(facets)}")
     logger.info("Loaded facets:")
     for facet in facets:
         logger.info(f"{facet.indices} {facet.options}")
+    logger.info("Loaded global parameters:")
+    for param in global_params.keys():
+        logger.info(f"{param} = {global_params[param]}")
 
     # Perform the initial triangulation (always subdividing non-simplex facets).
     vertices, tri_facets = initial_triangulation(vertices, facets)
+    logger.info("\nAfter initial triangulation:")
+    logger.info(f"Number of vertices: {len(vertices)}")
+    for v in vertices:
+        logger.info(v.position)
+    logger.info(f"Number of facets: {len(facets)}")
+    logger.info("Triangulated facets:")
+    for facet in facets:
+        logger.info(f"{facet.indices} {facet.options}")
 
-    volume_obj = Volume(tri_facets)  # or pass your facets list here
-    initial_volume = volume_obj.calculate_volume(vertices)
+    logger.info("Loaded global parameters:")
+    body = Body(tri_facets)  # or pass your facets list here
+    body.calculate_volume(vertices)   # calculates volume at loading
+    try:
+        body.target_volume = Body(["target_volume"][0])
+    except:
+        logger.warning('Potential issue detected: No target volume given.')
 
-    return vertices, tri_facets, initial_volume
+    initial_volume = body.calculate_volume(vertices)
+    logger.info(f"Initial volume of object: {body.volume}")
+
+    return vertices, tri_facets, global_params, body, modules
 
 if __name__ == '__main__':
     logger = setup_logging()
 
-    vertices, facets, volume = main()
-    logger.info("\nAfter initial triangulation:")
-    logger.info(f"Number of vertices: {len(vertices)}")
-    for facet in facets:
-        logger.info(f"{facet.indices} {facet.options}")
-    logger.info(f"Initial volume of object: {volume}")
+    vertices, facets, global_params, body, modules = main()
 

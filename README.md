@@ -25,6 +25,12 @@
     12.1 https://docs.pyvista.org/
     12.2 https://vedo.embl.es/
 13. move scripts to a different folder and leave only main and deploy outside.
+14. add option for "comment" attribute in the json file, maybe change to
+    another format that supports comments.
+15. when running add -v/--verbose options to print out log messages or just
+    put them in the log file
+16. initial energy calculation after loading -> test modules
+17. fix trinagulation -> there should be more facets upon trinagulation!
 
 ## Current limitations
 1. only one object with volume

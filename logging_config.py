@@ -14,6 +14,11 @@ logger.critical('Critical error! Cannot proceed further.')
 
 def setup_logging(log_file='membrane_solver.log'):
     logger = logging.getLogger('membrane_solver')
+
+    if logger.handlers:
+        # Logger is already configured, no need to add handlers again.
+        return logger
+
     logger.setLevel(logging.DEBUG)
 
     # Log format
