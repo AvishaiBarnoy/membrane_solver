@@ -46,7 +46,8 @@ if __name__ == '__main__':
         inpfile = "meshes/sample_geometry.json"
 
     # Load geometry from the input file.
-    vertices, facets, volume = load_geometry(inpfile)
+    # vertices, facets, volume = load_geometry(inpfile)
+    vertices, facets, global_params, body, modules = load_geometry(inpfile)
 
     # Perform the initial triangulation on loaded facets.
     vertices, tri_facets = initial_triangulation(vertices, facets)

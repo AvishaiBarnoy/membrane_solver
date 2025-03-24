@@ -79,7 +79,7 @@ if __name__ == '__main__':
     except IndexError:
         inpfile = "meshes/sample_geometry.json"
 
-    vertices, facets, volume = load_geometry(inpfile)
+    vertices, facets, global_params, body, modules = load_geometry(inpfile)
     logger.info("Loaded vertices:")
     for v in vertices:
         logger.info(v.position)
@@ -91,6 +91,7 @@ if __name__ == '__main__':
     vertices, tri_facets = initial_triangulation(vertices, facets)
     logger.info("\nAfter initial triangulation:")
     logger.info(f"Number of vertices: {len(vertices)}")
+    logger.info("Facets after triangulation:")
     for facet in tri_facets:
         logger.info(f"{facet.indices} {facet.options}")
 
