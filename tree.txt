@@ -1,17 +1,17 @@
 .
 ├── README.md
-├── deploy.sh
 ├── energy.py
 ├── geometry_entities.py
 ├── geometry_io.py
 ├── geometry_refinement.py
+├── logging_config.py
+├── main.py
 ├── meshes
 │   └── sample_geometry.json
+├── minimizer.py
 ├── modules
-│   ├── area.py
+│   ├── __init__.py
+│   ├── surface.py
 │   └── volume.py
-├── read_inputfile.py
 ├── tree.txt
 └── visualize_geometry.py
-
-2 directories, 12 files
