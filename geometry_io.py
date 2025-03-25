@@ -159,11 +159,6 @@ def save_geometry(filename, vertices, facets, volume):
     logger.info(f"Geometry saved to {filename}")
 
 def main():
-    # TODO:
-    # 1. run the read input file
-    # 2. triangulate
-    # 3. calculate volume
-    # 4. return all relevant values
     try:
         inpfile = sys.argv[1]
     except IndexError:

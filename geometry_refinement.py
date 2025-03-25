@@ -1,9 +1,4 @@
 # geometry_refinement.py
-# TODO:
-#   1. refining options:
-#       1.1 center of mass of face - default
-#       1.2  Delaunay algorithm
-# geometry_refinement.py
 
 from geometry_entities  import Vertex, Facet
 from logging_config import setup_logging
