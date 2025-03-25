@@ -17,7 +17,6 @@ class Edge:
         An edge is a one-dimensional geometric element
         """
         # Store vertex indices (or references) for the edge endpoints.
-        # TODO: implement orientability of edge
         self.v1 = v1
         self.v2 = v2
         self.options = options if options is not None else {}
