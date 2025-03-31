@@ -7,7 +7,7 @@ from logging_config import setup_logging
 logger = setup_logging('membrane_solver')
 
 def energy(facets, body, global_params):
-     """
+    """
     Calculate total surface energy as sum of surface tension * area over all facets.
 
     Parameters:

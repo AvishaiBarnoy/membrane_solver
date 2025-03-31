@@ -1,0 +1,59 @@
+vertices:
+  0: [0, 0, 0, {fixed: false}]
+  1: [1, 0, 0]
+  2: [1, 1, 0]
+  3: [0, 1, 0]
+  4: [0, 1, 1]
+  5: [0, 0, 1]
+  6: [1, 0, 1]
+  7: [1, 1, 1]
+
+edges:
+  0: [0, 1, {refine: false, fixed: true}]
+  1: [1, 2]
+  2: [2, 3]
+  3: [3, 0]
+  4: [4, 5]
+  5: [5, 6]
+  6: [6, 7]
+  7: [7, 4]
+  8: [0, 5]
+  9: [1, 6]
+  10: [2, 7]
+  11: [3, 4]
+
+faces:
+  0: [0, 1, 2, 3, {refine: false, fixed: true, energy: "default", surface tension: 1}] # bottom face
+  1: [0, 9, -5, -8, {refine: true, energy: "new_module"}]                              # front face
+  2: [1, 10, -6, -9]    # right face
+  3: [2, 11, -7, -10]   # back faces
+  4: [3, 8, -4, -11]    # left faces
+  5: [-4, -5, -6, -7]   # top face
+
+body:
+  faces:
+    - [0, 1, 2, 3, 4, 5]
+  target_volume:
+    - 1.0
+  energy_modules:
+    - volume
+
+global_parameters:
+  surface tension: 1
+  intrinsic curvature: 0
+  bending modulus: 0
+  gaussian modulus: 0
+  volume stiffness: 1000
+
+instructions:
+  - gradient descent
+  - opt 10
+  - conjugate gradients
+  - opt 50
+  - save_geometry
+  - refine 2
+  - gradient descent
+  - opt 50
+  - refine
+  - opt 20
+
