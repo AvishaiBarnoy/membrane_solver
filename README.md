@@ -1,6 +1,7 @@
 # My try on a SurfaceEvolver-like software
 
 ## TODO:
+1. make sure that refining creates new objects/instances and not just lists
 1. add fixed option to vertices 
 2. define volume constraints -> leads to pressure
     if volume!=target_volume then pressure arises
