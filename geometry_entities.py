@@ -20,6 +20,8 @@ class Edge:
     def __init__(self, tail, head, vector=None, options=None):
         """
         An edge is a one-dimensional geometric element
+        It has an orientation, but the orientation is only important in the
+            sense of of defining a facet, for the facet normal.
         """
         # Store vertex indices (or references) for the edge endpoints.
         self.tail = tail

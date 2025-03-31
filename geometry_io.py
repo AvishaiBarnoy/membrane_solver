@@ -110,49 +110,13 @@ def build_facet_edges(edge_indices, edges):
         current_edge = oriented_edge[i]
         next_edge = oriented_edge[(i + 1) % n]  # wrap-around for closure checkup
         if current_edge.head != next_edge.tail:
+            # TODO: replace with np.allclose for numerical reasone 
             # TODO: add to logger
             raise ValueError(
                 "Facet edge loop is not continuous at edge {i}: "
                 f"{current_edge.head_vertex.position} != {next_edge.tail_vertex.position}"
             )
     return oriented_edges
-
-
-
-
-
-
-    # --- Parse first edge ---
-    for idx, edg_idx in enumerate(facet_edges_idx):
-        # Orient edges in correct direction by positive/negative index
-        if edg_idx < 0:
-            edg_idx = -edg_idx
-        # Take care of edge case
-        if idx == len(facet_edges_idx) - 1:
-            head = edges[idx].head.position
-            tail = edges[facet_edges_idx[0]].tail.position
-        else:
-            head = edges[idx].head.position
-            tail = edges[facet_edges_idx[idx+1]].tail.position
-            # print(f"{head} -> {tail}")
-
-        print(f"head and tail: {head}, {tail}")
-        if not np.allclose(head, tail):
-            logger.critical("""Critical error! Cannot proceed further. Facet
-is not defined as a closed loop""")
-            raise ValueError(f"Edge loop is not continuous on facet, {facet_edges_idx}")
-
-    # Test if facet is closed edge
-    #   for each consecutive pair of edges check if they are continous
-    for idx, edg in enumerate(facet_edges):
-        if idx == len(facet_edges) - 1:
-            # Do logic of last index to first index closed loop
-            pass
-        else:
-            head = facet_edges[i].head
-            tail = facet_edges[i+1].tail
-            # if logic and RaiseError
-    return facet_edges
 
 def build_facets(facets_data, edges):
     facets = []
