@@ -6,7 +6,7 @@ from logging_config import setup_logging
 
 logger = setup_logging('membrane_solver')
 
-def energy(facets, body, global_params):
+def total_surface_energy(facets, body, global_params):
     """
     Calculate total surface energy as sum of surface tension * area over all facets.
 
@@ -25,6 +25,19 @@ def energy(facets, body, global_params):
         area = facet.calculate_area()
         total_energy += surface_tension * area
 
-    logger.debug(f"Calculated surface energy: {total_energy}")
+    logger.debug(f"Calculated total surface energy: {total_energy}")
 
     return surface_energy
+
+def calculate_surface_energy(facet, global_params):
+    # TODO: add documentation
+    gamma = facet.options.get("surface_tension", global_params.surface_tension)
+
+    # Calculate area
+    area = facet.calculate_area()
+
+    # Compute surface energy
+    surface_energy = gamma * area
+
+    return surface_energy
+
