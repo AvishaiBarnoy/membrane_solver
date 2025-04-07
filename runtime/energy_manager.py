@@ -1,5 +1,5 @@
 import importlib
-import logger
+import logging
 
 logger = logging.getLogger("membrane_solver")
 
