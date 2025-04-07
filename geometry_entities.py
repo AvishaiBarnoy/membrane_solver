@@ -1,5 +1,6 @@
 # geometry.py
 import numpy as np
+import sys
 
 class Vertex:
     def __init__(self, position, index, options=None):
@@ -17,7 +18,7 @@ class Vertex:
         return (f"Vertex(idx={self.index}, pos={self.position}), options={self.options})")
 
 class Edge:
-    def __init__(self, tail, head, vector=None, options=None):
+    def __init__(self, tail, head, index, vector=None, options=None):
         """
         An edge is a one-dimensional geometric element
         It has an orientation, but the orientation is only important in the
@@ -26,6 +27,7 @@ class Edge:
         # Store vertex indices (or references) for the edge endpoints.
         self.tail = tail
         self.head = head
+        self.index = index
         self.vector = vector
         self.options = options if options is not None else {}
 
@@ -38,11 +40,11 @@ class Edge:
         return np.linalg.norm(self.vector())
 
     def __repr__(self):
-        edge_repr = f"Edge({self.tail.position.tolist()}→{self.head.position.tolist()}, options={self.options})"
+        edge_repr = f"Edge(idx={self.index}, {self.tail.position.tolist()}→{self.head.position.tolist()}, options={self.options})"
         return edge_repr
 
 class Facet:
-    def __init__(self, edges, options=None):
+    def __init__(self, edges, index, options=None):
         """
         A facet is defined by a set of oriented (for normal direction) edges
 
@@ -50,15 +52,18 @@ class Facet:
             indices (list or tuple of int): Vertex indices defining the facet.
             options (dict, optional): Dictionary of facet-specific options.
         """
-        self.edges = edges  # list of edges instances 
+        self.edges = edges  # list of edges instances
+        self.index = index
         self.area = None
         self.options = options if options is not None else {}
 
     def __repr__(self):
-        # TODO: change to use the Edge.__repr__ instead of redfining it again
         edge_repr = ','.join([f"{e.tail.position.tolist()}→{e.head.position.tolist()}"
                                for e in self.edges])
-        return f"Facet(edges=[{edge_repr}], options={self.options})"
+        edge_indices = ','.join([str(e.index) for e in self.edges])
+        print(edge_indices)
+        # sys.exit(1)
+        return f"Facet(idx={self.index}, edges=[{edge_indices}],\nedges=[{edge_repr}],\noptions={self.options})"
 
     def calculate_area(self, edges):
         """Calculates the area of the facet assuming it is a triangle"""
@@ -72,13 +77,18 @@ class Facet:
         return area
 
 class Body:
-    def __init__(self, facets, volume=None, target_volume=None,
+    def __init__(self, facets, index, volume=None, target_volume=None,
                  surface_area=None, options=None):
         # A volume is defined by a collection of facets.
         self.facets = facets if facets is not None else []
+        self.index = index
         self.options = options if options is not None else {}
-        self.volume = None          # TODO: should be read from option
-        self.target_volume = None   # TODO: should be read from options
+        self.volume = None
+        self.target_volume = None
+
+    def __repr__(self):
+        body_repr = f"facets: {','.join([str(f.index) for f in self.facets])}"
+        return f"Body(idx={self.index}, facets=[{body_repr}], volume={self.volume}, options={self.options})"
 
     def calculate_volume(self):
         """
@@ -100,29 +110,6 @@ class Body:
             float: The calculated volume.
         """
 
-        # TODO: implement old version of volume calculation:
-        """
-        volume = 0.0
-        for facet in self.facets:
-            # Assuming facets are triangular (after initial triangulation)
-            if len(facet.indices) != 3:
-                continue  # or raise an error if non-triangular facets are not allowed
-            i1, i2, i3 = facet.indices
-            v1, v2, v3 = vertices[i1].position, vertices[i2].position, vertices[i3].position
-
-            # Compute the signed area of the triangle's projection onto the xy-plane.
-            # The formula for a triangle with vertices (x1,y1), (x2,y2), (x3,y3) is:
-            # A_proj = 0.5 * [(x1*y2 + x2*y3 + x3*y1) - (y1*x2 + y2*x3 + y3*x1)]
-            A_proj = 0.5 * ((v1[0] * v2[1] + v2[0] * v3[1] + v3[0] * v1[1]) -
-                            (v1[1] * v2[0] + v2[1] * v3[0] + v3[1] * v1[0]))
-
-            # Compute the average z-coordinate of the facet's vertices.
-            z_avg = (v1[2] + v2[2] + v3[2]) / 3.0
-
-            # The volume contribution is the projected area times the average height.
-            volume += A_proj * z_avg
-        self.volume = volume
-        """
         # TODO: change shape in geometry file and recalculate to make sure volume calculation is correct
         volume = 0.0
         for facet in self.facets:
@@ -179,3 +166,4 @@ class Body:
         for facet in self.facets:
             self.surface_area += facet.calculate_area()
         return self.surface_area
+
