@@ -1,6 +1,7 @@
 # geometry_io.py 
 import json, yaml
 from geometry_entities import Vertex, Edge, Facet, Body
+from parameters.global_parameters import GlobalParameters
 import numpy as np
 import os
 import sys
@@ -20,18 +21,24 @@ def load_data(filename):
             ...
         ]
     }"""
+    logger.info(f"######################################")
+    logger.info(f"Loading file: {filename}")
+    logger.info(f"######################################")
     with open(filename, 'r') as f:
         if filename.endswith((".yaml", ".yml")):
             data = yaml.safe_load(f)
+            logger.error("Currently yaml format not supported.")
             raise ValueError("Currently yaml format not supported.")
         elif filename.endswith(".json"):
             data = json.load(f)
         else:
+            logger.error(f"Unsupported file format for: {filename}")
             raise ValueError(f"Unsupported file format for: {filename}")
 
     return data
 
 def build_vertices(vertices_data):
+    # TODO: add documentation
     # construct vertex objects
     vertices = []
     for idx, vertex in enumerate(data["vertices"]):
@@ -40,10 +47,12 @@ def build_vertices(vertices_data):
         if options and not isinstance(options, dict):
             raise ValueError(f"Vertex #{idx} options must be a dictionary: {options}")
         vertex = Vertex(coords, idx, options)    # Pass attributes as keyword args
+        logger.info(f"Build vertex: {vertex}")
         vertices.append(vertex)
     return vertices
 
 def build_edges(edges_data, vertices):
+    # TODO: add documentation
     # construct edges objects
     edge_map = {}  # key = (i, j) → Edge instance, oriented
     edges = []     # flat list of all unique Edge objects
@@ -63,7 +72,8 @@ def build_edges(edges_data, vertices):
         key = (i, j)    # Preserve user-defined orientation 
         if key not in edge_map:
             tail, head = vertices[i], vertices[j]
-            edge = Edge(tail, head, options)
+            edge = Edge(tail, head, idx, options)
+            logger.info(f"Build edge: {edge}")
             edge_map[key] = edge
             edges.append(edge)
             logger.debug(f"Created edge {key} with options: {options}")
@@ -72,53 +82,100 @@ def build_edges(edges_data, vertices):
             logger.debug(f"Duplicate edge {key} found. Skipping.")
     return edges
 
-def build_facet_edges(edge_indices, edges):
+def parse_edge_spec(edge_spec):
     """
-    takes facet data and oriented edges list
-    builds the correct oriented edges for the facet
+    Parses an edge specification.
+    If it's an integer and negative, treat it as reversed and return (abs(index), True).
+    If it's a string starting with 'r' (or 'R'), then the edge is reversed.
+    If it's a string representing a number, convert it accordingly.
+    If it's a list/tuple, expect the form [edge_index, reversed_flag].
+    """
+    if isinstance(edge_spec, int):
+        if edge_spec < 0:
+            return abs(edge_spec), True
+        else:
+            return edge_spec, False
+    elif isinstance(edge_spec, str):
+        # Remove any whitespace
+        s = edge_spec.strip()
+        if s.lower().startswith('r'):
+            return int(s[1:]), True
+        else:
+            val = int(s)
+            if val < 0:
+                return abs(val), True
+            return val, False
+    elif isinstance(edge_spec, (list, tuple)):
+        if len(edge_spec) != 2:
+            raise ValueError(f"Invalid edge specification list: {edge_spec}")
+        edge_index, flag = edge_spec
+        # If the edge index is negative here, also adjust it
+        if int(edge_index) < 0:
+            return abs(int(edge_index)), True
+        return int(edge_index), bool(flag)
+    else:
+        raise TypeError(f"Unknown type for edge specification: {edge_spec}")
 
-    Build a list of edges for a single facet from its edge indices.
-    Negative indices mean the edge is reversed.
-    Orientation matters for defining a consistent normal.
+def build_facet_edges(edge_specs, edges):
     """
-    if not edges_indices:
-        # TODO: add to logger
+    Build a list of oriented edges for a single facet from its edge specifications.
+    Edge specifications can be provided as integers, strings (e.g., "r5"), or lists/tuples.
+    The parse_edge_spec function is used to determine the edge index and whether it should be reversed.
+    Orientation matters for defining a consistent facet normal.
+    """
+    if not edge_specs:
+        logger.error("No edges specified for facet!")
         raise ValueError("No edges specified for facet!")
 
-    oriented_facets = []
-    # First pass: build oriented edges (with reversed direction if needed)
-    for idx in edge_indices:
-        reverse = (idx<0)
-        edge_id = abs(idx)
+    if len(edge_specs) < 3:
+        logger.critical(f"Facet with edges {edge_specs} has fewer than three edges! Please check input file.")
+        raise ValueError(f"Facet with edges {edge_specs} has fewer than three edges!")
 
-        if edge_id >= len(edes):
-            # TODO: add to logger
-            raise IndexError(f"Edge index {idx} out of range.")
-        e = edges[edge_id]
+    oriented_edges = []
+
+    # First pass: build oriented edges using parse_edge_spec
+    for spec in edge_specs:
+        try:
+            edge_id, reverse = parse_edge_spec(spec)
+            logger.debug(f"Parsed edge spec {spec} as edge_id {edge_id} with reverse={reverse}.")
+        except Exception as e:
+            logger.error(f"Failed to parse edge specification {spec}: {e}")
+            raise
+
+        if edge_id < 0 or edge_id >= len(edges):
+            logger.error(f"Edge index {edge_id} out of range. Please check input file.")
+            raise IndexError(f"Edge index {edge_id} out of range.")
+
+        original_edge = edges[edge_id]
         if reverse:
-            # Create a reversed edge
-            new_edge = Edge(e.head_vertex, e.tail_vertex, e.options.copy())
-            # Recompute the vector explicitly (if needed)
-            new_edge.vector = new_edge.head - new_edge.tail
+            # Create a reversed edge: swap tail and head, and update the vector.
+            new_edge = Edge(original_edge.head, original_edge.tail, original_edge.index, original_edge.options.copy())
+            new_edge.vector = new_edge.head.position - new_edge.tail.position
+            oriented_edges.append(new_edge)
+            logger.debug(f"Edge {edge_id} reversed successfully.")
         else:
-            new_edge = e
-        oriented_edges.append(new_edge)
+            oriented_edges.append(original_edge)
+            logger.debug(f"Edge {edge_id} used in normal orientation.")
 
-    # Second pass: verify sequence of oriented edges is continuous
-    n = len(oriented_edes)
+    # Second pass: verify that the sequence of oriented edges is continuous.
+    n = len(oriented_edges)
     for i in range(n):
-        current_edge = oriented_edge[i]
-        next_edge = oriented_edge[(i + 1) % n]  # wrap-around for closure checkup
+        current_edge = oriented_edges[i]
+        next_edge = oriented_edges[(i + 1) % n]  # wrap-around for closure check
         if current_edge.head != next_edge.tail:
-            # TODO: replace with np.allclose for numerical reasone 
-            # TODO: add to logger
+            # TODO: Replace with np.allclose for numerical reasons.
+            logger.error("Facet edges don't create a closed loop.")
             raise ValueError(
-                "Facet edge loop is not continuous at edge {i}: "
-                f"{current_edge.head_vertex.position} != {next_edge.tail_vertex.position}"
+                f"Facet edge loop is not continuous at edge {i}: "
+                f"{current_edge.head.position} != {next_edge.tail.position}\n"
+                f"Failed building facet {edge_specs}"
             )
+
+    logger.info(f"Finished building edges for facet: {edge_specs}")
     return oriented_edges
 
-def build_facets(facets_data, edges):
+def build_facets(facets_data, edges, global_params):
+    # TODO: add documentation
     facets = []
     for idx, facet in enumerate(facets_data):
         if facet and isinstance(facet[-1], dict):
@@ -128,67 +185,30 @@ def build_facets(facets_data, edges):
             facet_edges_idx = facet
             options = {}
 
+        # Merge local options with global defaults
+        full_options = {
+            "surface_tension": global_params.surface_tension,
+            "bending_modulus": global_params.bending_modulus,
+            "gaussian_modulus": global_params.gaussian_modulus,
+            **options  # Local overrides take precedence
+        }
+
         facet_edges = build_facet_edges(facet_edges_idx, edges)
-        # TODO: I am working on this section now
-        """
-        build_facet_edges now gets the indices of its edges, and the full edges
-        list.
-        should take the relevant edges, orient them correctly in space, and
-        check that the shape is closed. Retuen the properly oriented edges.
-        Should I refactor the flip vector so that I can use it later, maybe in
-        the refining functions?
-        """
-        facet = Facet(facet_edges, options)
+        facet = Facet(facet_edges, idx, options)
+        # logger.info(f"Finished building facet: {facet}")
         facets.append(facet)
-    sys.exit("Facet edges break point")
-
-    # construct facets objects
-    facets = []
-
-    for face in data["faces"]:
-        if face and isinstance(face[-1], dict):
-            edge_indices = face[:-1]
-            options = face[-1]
-        else:
-            edge_indices = face
-            options = {}
-
-        facet_edges = []
-
-        # Test if facet is a closed loop
-        first_vertex = edges[edge_indices[0]].tail.position
-        last_vertex = edges[edge_indices[-1]].head.position
-        # Use allclose to take care of numerical errors 
-        if not np.allclose(first_vertex, last_vertex):
-            # continue
-            raise ValueError(f"Edge loop is not continuous on facet, {face}")
-
-        for ei in edge_indices:
-            edges[edge_indices[-1]]
-            reverse = ei < 0
-            edge_index = abs(ei)
-
-            if edge_index >= len(edges):
-                raise IndexError(f"Edge index {ei} out of range for edge list of length {len(edges)}")
-
-            original_edge = edges[edge_index]
-
-            if reverse:
-                # Create a reversed Edge object (new head/tail)
-                reversed_edge = Edge(original_edge.head,
-                                     original_edge.tail, original_edge.options.copy())
-                facet_edges.append(reversed_edge)
-            else:
-                facet_edges.append(original_edge)
-
-        if len(facet_edges) < 3:
-            raise ValueError(f"Facet with edges {edge_indices} has fewer than three edges!")
-
-        facets.append(Facet(facet_edges, options))
-
     return facets
 
-def build_body(body_data, facets):
+def build_bodies(bodies_data, facets):
+    # TODO: add documentation
+    bodies = []
+    for idx, body in enumerate(bodies_data["faces"]):
+        options = {}
+        # TODO: fix for case where target_volume is not given 
+        options["target_volume"] = bodies_data.get("target_volume", None)[idx]
+        body = Body(facets, index=idx, options=options)
+        body.calculate_volume()
+    logger.info(f"Finished building body object: {body}")
     return bodies
 
 def load_geometry(data):
@@ -200,29 +220,28 @@ def load_geometry(data):
         facets (list of Facet): List of Facet objects.
         volume: Calculated volume of object.
     """
+    global_params_data = data.get("global_parameters", {})
+    global_params = GlobalParameters(global_params_data)
+    logger.info(f"Loaded global parameters:\n\t{global_params}")
+
+    # build vertix objects
     vertices = build_vertices(data["vertices"])
-    logger.info(f"Successfuly building vertices.")
+    logger.info(f"--Successfuly built initial vertices--")
 
+    # build edge object 
     edges = build_edges(data["edges"], vertices)
-    logger.info(f"Successfuly building edges.")
+    logger.info(f"--Successfuly built initial edges--")
 
-    facets = build_facets(data["faces"], edges)
-    logger.info(f"Message on facets building")
-    sys.exit(1)
+    # build facets objects 
+    facets = build_facets(data["faces"], edges, global_params)
+    logger.info(f"--Sucessfuly building initial facets--")
 
     # build body object
-    body_data = data.get("body", {})
-    global_params = data.get("global_parameters", {})
+    # Currently working HERE
+    bodies = build_bodies(data["bodies"], facets)
+    logger.info(f"--Sucessfuly building initial bodies--")
 
-    body = Body(facets)
-    body.target_volume = body_data.get("target_volume", 0)[0]
-    body.calculate_volume()
-
-    print("##################################")
-    print(f"body: {body_data}")
-    print(f"Initial volume: {body.volume}")
-    print(f"Target volume: {body.target_volume}")
-    print("##################################")
+    sys.exit(1)
 
     # Default modules logic
     # TODO: other modules should be loaded, not just from body, should be
@@ -248,7 +267,7 @@ def load_geometry(data):
     if not loaded_modules:
         raise ValueError("No energy modules loaded. Check input file.")
 
-    return vertices, facets, global_params, body, loaded_modules
+    return vertices, facets, body, global_params, loaded_modules
 
 def initial_triangulation(vertices, facets):
     """
@@ -372,6 +391,7 @@ def save_geometry(filename, vertices, facets, volume):
     logger.info(f"Geometry saved to {filename}")
 
 def main(data):
+    # TODO: add documentation
     vertices, facets, global_params, body, modules = load_geometry(data=data)
 
     logger.info(f"Number of vertices: {len(vertices)}")

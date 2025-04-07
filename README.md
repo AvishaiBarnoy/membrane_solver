@@ -40,4 +40,5 @@
    a disk?
 4. a plane with a disk and outer perimeter
 5. after implementing mean curvature energy -> membrane between two fixed parallel circels
-   results in a catenoid 
+   results in a catenoid
+   5.1 check how cat.fe treats the fixed surface area of the soapfilm
