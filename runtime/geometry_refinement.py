@@ -3,7 +3,7 @@
 from geometry_entities  import Vertex, Facet
 from logging_config import setup_logging
 
-def refine_mesh(vertices, facets):
+def refine_geometry(vertices, facets, global_params, refine_all=False):
     """
     Refines a triangular mesh by subdividing every edge for each facet whose
     options permit refinement. For each triangle that is refined, a new vertex

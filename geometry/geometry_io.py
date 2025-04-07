@@ -1,6 +1,6 @@
 # geometry_io.py 
 import json, yaml
-from geometry_entities import Vertex, Edge, Facet, Body
+from geometry.geometry_entities import Vertex, Edge, Facet, Body
 from parameters.global_parameters import GlobalParameters
 import numpy as np
 import os
@@ -41,7 +41,7 @@ def build_vertices(vertices_data):
     # TODO: add documentation
     # construct vertex objects
     vertices = []
-    for idx, vertex in enumerate(data["vertices"]):
+    for idx, vertex in enumerate(vertices_data):
         coords = vertex[:3]   # Extract first 3 elements as coordinates
         options = vertex[3] if len(vertex) > 3 else {}
         if options and not isinstance(options, dict):
@@ -274,7 +274,7 @@ def initial_triangulation(vertices, facets):
     For each n-gon (n > 3), a new vertex is added at the centroid and the facet
     is subdivided into n triangles by connecting each edge of the polygon to the centroid.
 
-   Child facets inherit a copy of the parent facet’s options.
+    Child facets inherit a copy of the parent facet’s options.
 
     Args:
         vertices (list of Vertex): The list of vertices.
@@ -314,7 +314,7 @@ def initial_triangulation(vertices, facets):
 
         # --- Step 2: Compute centroid position ---
         centroid_pos = np.mean([v.position for v in vertex_loop], axis=0)
-        centroid_vertex = Vertex(centroid_pos)
+        centroid_vertex = Vertex(centroid_pos, len(vertices))
         vertices.append(centroid_vertex)
 
         # --- Step 3: Determine reference normal ---
@@ -405,10 +405,10 @@ def parse_inputfile(data):
         logger.info(f"{facet} {facet.options}")
     logger.info("Loaded global parameters:")
     logger.info(f"{global_params}")"""
-    sys.exit(1)
 
     # Perform the initial triangulation (always subdividing non-simplex facets).
     vertices, tri_facets = initial_triangulation(vertices, facets)
+    sys.exit(1)
     logger.info("\nAfter initial triangulation:")
     logger.info(f"Number of vertices: {len(vertices)}")
     for v in vertices:
@@ -436,5 +436,5 @@ if __name__ == '__main__':
 
     inpfile = "meshes/sample_geometry.json"
     data = load_data(inpfile)
-    vertices, facets, body, global_params = parse_inputfile(data)
+    vertices, facets, body, global_params = parse_inputfile(data=data)
 
