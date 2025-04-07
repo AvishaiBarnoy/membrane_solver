@@ -190,28 +190,49 @@ def build_facets(facets_data, edges, global_params):
             "surface_tension": global_params.surface_tension,
             "bending_modulus": global_params.bending_modulus,
             "gaussian_modulus": global_params.gaussian_modulus,
+            "energy": options.get("energy", "surface"), # default energy module 
             **options  # Local overrides take precedence
         }
 
         facet_edges = build_facet_edges(facet_edges_idx, edges)
-        facet = Facet(facet_edges, idx, options)
-        # logger.info(f"Finished building facet: {facet}")
+        facet = Facet(facet_edges, idx, options=full_options)
+        logger.info(f"Finished building facet: {facet}")
         facets.append(facet)
     return facets
 
-def build_bodies(bodies_data, facets):
+def build_bodies(bodies_data, facets, global_params):
     # TODO: add documentation
     bodies = []
     for idx, body in enumerate(bodies_data["faces"]):
-        options = {}
-        # TODO: fix for case where target_volume is not given 
-        options["target_volume"] = bodies_data.get("target_volume", None)[idx]
+        # TODO: add extra
+        # TODO: fix for case where target_volume is not given, what is wanted behavior?
+
+        options = {
+            "target_volume": bodies_data.get("target_volume", None)[idx],
+            "volume_stiffness": global_params.volume_stiffness,
+            "energy": bodies_data["energy"][idx]
+        }
+
         body = Body(facets, index=idx, options=options)
         body.calculate_volume()
+        logger.info(f"Finished building body object: {body}")
+        bodies.append(body)
+    return bodies
+
+    bodies = []
+    for idx, face_indices in enumerate(bodies_data["faces"]):
+        options = {
+            "target_volume": bodies_data.get("target_volume", [None])[idx],
+            "volume_stiffness": global_params.volume_stiffness
+        }
+        body_facets = [facets[i] for i in face_indices]
+        body = Body(body_facets, index=idx, options=options)
+        body.calculate_volume()
+        bodies.append(body)
     logger.info(f"Finished building body object: {body}")
     return bodies
 
-def load_geometry(data):
+def parse_geometry(data):
     """
     Takes loaded data from geometry file
 
@@ -226,48 +247,22 @@ def load_geometry(data):
 
     # build vertix objects
     vertices = build_vertices(data["vertices"])
-    logger.info(f"--Successfuly built initial vertices--")
+    logger.info(f"--Successfuly built initial vertices--\n")
 
     # build edge object 
     edges = build_edges(data["edges"], vertices)
-    logger.info(f"--Successfuly built initial edges--")
+    logger.info(f"--Successfuly built initial edges--\n")
 
     # build facets objects 
     facets = build_facets(data["faces"], edges, global_params)
-    logger.info(f"--Sucessfuly building initial facets--")
+    logger.info(f"--Sucessfuly building initial facets--\n")
 
     # build body object
     # Currently working HERE
-    bodies = build_bodies(data["bodies"], facets)
-    logger.info(f"--Sucessfuly building initial bodies--")
+    bodies = build_bodies(data["bodies"], facets, global_params)
+    logger.info(f"--Sucessfuly building initial bodies--\n")
 
-    sys.exit(1)
-
-    # Default modules logic
-    # TODO: other modules should be loaded, not just from body, should be
-    #           appended when each object is loaded/built 
-    energy_modules = set(body_data.get("energy_modules", []))
-
-    if "surface" not in energy_modules:
-        energy_modules.add("surface")
-
-    if "target_volume" in body_data and "volume" not in energy_modules:
-        energy_modules.add("volume")
-
-    # Load all modules now
-    loaded_modules = {}
-    for module_name in energy_modules:
-        try:
-            module = module = importlib.import_module(f"modules.{module_name}")
-            loaded_modules[module_name] = module
-            logger.info(f"Loaded module: {module_name}")
-        except ImportError as e:
-            logger.error(f"Module '{module_name}' loading error: {e}")
-
-    if not loaded_modules:
-        raise ValueError("No energy modules loaded. Check input file.")
-
-    return vertices, facets, body, global_params, loaded_modules
+    return vertices, facets, bodies, global_params
 
 def initial_triangulation(vertices, facets):
     """
@@ -390,21 +385,27 @@ def save_geometry(filename, vertices, facets, volume):
         json.dump(data, f, indent=4)
     logger.info(f"Geometry saved to {filename}")
 
-def main(data):
+def parse_inputfile(data):
     # TODO: add documentation
-    vertices, facets, global_params, body, modules = load_geometry(data=data)
+    vertices, facets, bodies, global_params = parse_geometry(data=data)
 
+    logger.info("########################")
+    logger.info("# Input file containts #")
+    logger.info("########################")
     logger.info(f"Number of vertices: {len(vertices)}")
-    logger.info("Loaded vertices:")
+    logger.info(f"Number of facets: {len(facets)}")
+    logger.info(f"number of bodies: {len(bodies)}, with volume {[body.volume for body in bodies]}")
+
+    # TODO: remove redundant loaded geometry information, change lots of info to debug
+    """logger.info("Loaded vertices:")
     for v in vertices:
         logger.info(v.position)
-    logger.info(f"Number of facets: {len(facets)}")
     logger.info("Loaded facets:")
     for facet in facets:
         logger.info(f"{facet} {facet.options}")
     logger.info("Loaded global parameters:")
-    for param in global_params.keys():
-        logger.info(f"{param} = {global_params[param]}")
+    logger.info(f"{global_params}")"""
+    sys.exit(1)
 
     # Perform the initial triangulation (always subdividing non-simplex facets).
     vertices, tri_facets = initial_triangulation(vertices, facets)
@@ -428,12 +429,12 @@ def main(data):
     except:
         logger.warning('Potential issue detected: No target volume given.')
 
-    return vertices, tri_facets, global_params, body, modules
+    return vertices, tri_facets, bodies, global_params
 
 if __name__ == '__main__':
     logger = setup_logging('membrane_solver.log')
 
     inpfile = "meshes/sample_geometry.json"
     data = load_data(inpfile)
-    vertices, facets, global_params, body, modules = main(data=data)
+    vertices, facets, body, global_params = parse_inputfile(data)
 

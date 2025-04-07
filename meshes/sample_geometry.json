@@ -24,9 +24,9 @@
         [3, 4]
     ],
     "faces": [
-        [0, 1, 2, 3, {"refine": false, "fixed": true, "energy": "default", "surface tension": 1}],
+        [0, 1, 2, 3, {"refine": false, "fixed": true, "energy": "default", "surface_tension": 1}],
         ["r0", 8, 5, "r9", {"refine": true, "energy": "new_module"}],
-        [10, -6, -9, 1],
+        [10, -6, -9, 1, {"surface_tension": 5}],
         [-2, 10, 7, -11],
         [3, 8, -4, -11],
         [-5, -4, -7, -6]
@@ -34,13 +34,13 @@
     "bodies": {
         "faces": [[0, 1, 2, 3, 4, 5]],
         "target_volume": [1.0],
-        "energy_modules": [["volume"]]
+        "energy": [["volume"]]
     },
-    "global_parameters": {"surface tension": 1,
-                        "intrinsic curvature": 0, 
-                        "bending modulus": 0, 
-                        "gaussian modulus": 0,
-                        "volume stiffness": 1000
+    "global_parameters": {"surface_tension": 1.0,
+                        "intrinsic_curvature": 0, 
+                        "bending_modulus": 0, 
+                        "gaussian_modulus": 0,
+                        "volume_stiffness": 1000
     },
     "instructions": [
         "gradient descent",
