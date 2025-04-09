@@ -3,10 +3,6 @@
 ## TODO:
 1. make sure that refining creates new objects/instances and not just lists
 1. add fixed option to vertices 
-2. define volume constraints -> leads to pressure
-    if volume!=target_volume then pressure arises
-    adding "negative surface tension" proportional to the deviation from the
-    target volume
 3. how to calculate mean curvature from facets?
 4. energy minimization algorithms
 6. surface area constraints:
@@ -21,13 +17,14 @@
 12. different library for visualization, for example:
     12.1 https://docs.pyvista.org/
     12.2 https://vedo.embl.es/
-13. move scripts to a different folder and leave only main and deploy outside.
 14. add option for "comment" attribute in the json file, maybe change to
     another format that supports comments.
 15. when running add -v/--verbose options to print out log messages or just
     put them in the log file
 16. initial energy calculation after loading -> test modules
 18. add interactive mode for refining, minimization, etc.
+19. visualization script - exporting to obj, vtk, etc.
+
 
 ## Current limitations
 1. only one object with volume

@@ -1,46 +1,72 @@
 # visualize_geometry.py
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+# visualize_geometry.py
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import sys
 
 # Import functions from your modules.
-from geometry_io import load_geometry, initial_triangulation
-from geometry_refinement import refine_mesh
+from geometry.geometry_io import parse_geometry, load_data
+from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
 
 import logging
 from logging_config import setup_logging
 logger = logging.getLogger('membrane_solver')
 
-def plot_geometry(vertices, facets, title="Triangulated Geometry"):
+# TODO: shading option when rotating
+# TODO: opaque scatter when transparent=False
+
+
+def plot_geometry(vertices, facets, show_indices=False, ax=None,
+                  transparent=False):
     """
-    Creates a 3D plot of the triangulated geometry.
+    Visualizes the triangulated geometry.
 
     Args:
-        vertices (list): List of Vertex objects with a .position attribute.
-        facets (list): List of Facet objects (each facet has an .indices attribute).
-        title (str): Title for the plot.
+        vertices (list of Vertex): geometry vertices.
+        facets (list of Facet): list of triangle facets (must be triangulated).
+        show_indices (bool): show vertex indices.
+        ax (mpl_toolkits.mplot3d.Axes3D): optional matplotlib axis.
     """
-    # Extract vertex positions as lists.
-    points = [v.position for v in vertices]
+    if ax is None:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
 
-    # Build the list of face polygons from vertex positions using each facet's indices.
-    polygons = [[points[idx] for idx in facet.indices] for facet in facets]
+    vertex_positions = [v.position for v in vertices]
+    X, Y, Z = zip(*vertex_positions)
 
-    # Create a 3D plot.
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    poly3d = Poly3DCollection(polygons, edgecolor='k', facecolor='cyan', alpha=0.6)
-    ax.add_collection3d(poly3d)
+    # Plot triangle facets
+    triangles = []
+    for facet in facets:
+        # Reconstruct the triangle from edges
+        if len(facet.edges) != 3:
+            continue
+        tri = [e.tail.position for e in facet.edges]
+        triangles.append(tri)
 
-    # Extract coordinates for scaling the axes.
-    xs = [p[0] for p in points]
-    ys = [p[1] for p in points]
-    zs = [p[2] for p in points]
-    ax.set_xlim(min(xs), max(xs))
-    ax.set_ylim(min(ys), max(ys))
-    ax.set_zlim(min(zs), max(zs))
+    if transparent:
+        alpha = 0.4
+    else:
+        alpha = 1
+    tri_collection = Poly3DCollection(triangles, alpha=alpha, edgecolor='k')
+    tri_collection.set_facecolor((0.6, 0.8, 1.0))
+    ax.add_collection3d(tri_collection)
 
-    ax.set_title(title)
+    # Optional: plot vertices
+    ax.scatter(X, Y, Z, color='r', s=20)
+
+    if show_indices:
+        for v in vertices:
+            ax.text(*v.position, f"{v.index}", color='k', fontsize=8)
+    # TODO: add option to show index of facet
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_title("Refined Geometry")
+    ax.auto_scale_xyz(X, Y, Z)
+    plt.tight_layout()
     plt.show()
 
 if __name__ == '__main__':
@@ -57,14 +83,16 @@ if __name__ == '__main__':
 
     # Load geometry from the input file.
     # vertices, facets, volume = load_geometry(inpfile)
-    vertices, facets, global_params, body, modules = load_geometry(inpfile)
+    data = load_data(inpfile)
+    vertices, edges, facets, bodies, global_params = parse_geometry(data=data)
+    vertices, edges, tri_facets, bodies = refine_polygonal_facets(vertices, edges, facets, bodies, global_params) # initial triangulation
 
     # Perform the initial triangulation on loaded facets.
-    vertices, tri_facets = initial_triangulation(vertices, facets)
+    #vertices, tri_facets = initial_triangulation(vertices, facets)
 
     # Optionally, perform a refinement step.
-    vertices, tri_facets = refine_mesh(vertices, tri_facets)
+    vertices, edges, tri_facets, bodies = refine_triangle_mesh(vertices, edges, tri_facets, bodies)
+    #vertices, edges, tri_facets = refine_triangle_mesh(vertices, edges, tri_facets)
 
     # Visualize the resulting triangulated geometry.
-    plot_geometry(vertices, tri_facets, title="Initial Triangulation")
-
+    plot_geometry(vertices, tri_facets, show_indices=False)
