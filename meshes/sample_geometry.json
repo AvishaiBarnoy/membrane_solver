@@ -44,14 +44,14 @@
     },
     "instructions": [
         "gradient descent",
-        "opt 10",
+        "g 10",
         "conjugate gradients",
-        "opt 50",
+        "g50",
         "save_geometry",
         "refine 2",
-        "gradient descent",
-        "opt 50",
-        "refine",
-        "opt 20"
+        "gd",
+        "g 50",
+        "r",
+        "g 20", "cg", "g5"
     ]
 }

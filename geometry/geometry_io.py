@@ -2,6 +2,7 @@
 import json, yaml
 from geometry.geometry_entities import Vertex, Edge, Facet, Body
 from parameters.global_parameters import GlobalParameters
+from runtime.refinement import refine_polygonal_facets
 import numpy as np
 import os
 import sys
@@ -262,85 +263,10 @@ def parse_geometry(data):
     bodies = build_bodies(data["bodies"], facets, global_params)
     logger.info(f"--Sucessfuly building initial bodies--\n")
 
-    return vertices, facets, bodies, global_params
-
-def initial_triangulation(vertices, facets):
-    """
-    Converts all facets with more than three vertices into triangles.
-    Unlike subsequent refinement steps, the initial triangulation always
-    subdivides a facet into triangles (even if its options include "refine": False)
-    because energy computations are applied only to simplex triangles.
-
-    For each n-gon (n > 3), a new vertex is added at the centroid and the facet
-    is subdivided into n triangles by connecting each edge of the polygon to the centroid.
-
-    Child facets inherit a copy of the parent facet’s options.
-
-    Args:
-        vertices (list of Vertex): The list of vertices.
-        facets (list of Facet): The list of facets.
-
-    Returns:
-        (vertices, new_facets): The updated list of vertices and a new list of facets.
-    """
-    new_facets = []
-    for facet in facets:
-        n = len(facet.edges)
-
-        # Always triangulate if the facet is non-triangle.
-        if n < 3:
-            logger.critical("Facet edges: " + str(facet.edges))
-            logger.critical("""Critical error! Cannot proceed further.
-                            Facet with fewer than three vertices encounterd!""")
-            raise ValueError("Facet with fewer than three vertices encountered!")
-
-        elif n == 3:
-            new_facets.append(facet)
-            continue
-
-        # --- Step 1: Reconstruct ordered vertex loop from edges ---
-        vertex_loop = [facet.edges[0].tail]
-        for edge in facet.edges:
-            if vertex_loop[-1] != edge.tail:
-                raise ValueError(f"Edge loop is not continuous,{edge}")
-            vertex_loop.append(edge.head)
-
-        # Ensure loop is closed
-        if vertex_loop[0] == vertex_loop[-1]:
-            vertex_loop = vertex_loop[:-1]
-
-        if len(vertex_loop) < 3:
-            raise ValueError("Cannot triangulate facet with <3 vertices after loop reconstruction.")
-
-        # --- Step 2: Compute centroid position ---
-        centroid_pos = np.mean([v.position for v in vertex_loop], axis=0)
-        centroid_vertex = Vertex(centroid_pos, len(vertices))
-        vertices.append(centroid_vertex)
-
-        # --- Step 3: Determine reference normal ---
-        v0, v1, v2 = vertex_loop[0].position, vertex_loop[1].position, vertex_loop[2].position
-        ref_normal = np.cross(v1 - v0, v2 - v0)
-
-        # --- Step 4: Fan triangulation with orientation correction ---
-        for i in range(len(vertex_loop)):
-            a = vertex_loop[i]
-            b = vertex_loop[(i + 1) % len(vertex_loop)]
-
-            # Compute triangle normal (a → b → centroid)
-            tri_normal = np.cross(b.position - a.position, centroid_vertex.position - a.position)
-
-            # Flip to match orientation if needed
-            if np.dot(tri_normal, ref_normal) < 0:
-                a, b = b, a
-
-            e1 = Edge(a, b)
-            e2 = Edge(b, centroid_vertex)
-            e3 = Edge(centroid_vertex, a)
-
-            new_facets.append(Facet([e1, e2, e3], options=facet.options.copy()))
-    return vertices, new_facets
+    return vertices, edges, facets, bodies, global_params
 
 def save_geometry(filename, vertices, facets, volume):
+    # TODO: update
     """
     Saves the geometry (vertices, facets, and computed volume) to a JSON file.
     If the filename already exists, prints a warning message and adjusts the output name.
@@ -407,8 +333,8 @@ def parse_inputfile(data):
     logger.info(f"{global_params}")"""
 
     # Perform the initial triangulation (always subdividing non-simplex facets).
-    vertices, tri_facets = initial_triangulation(vertices, facets)
-    sys.exit(1)
+    # vertices, tri_facets = initial_triangulation(vertices, facets)
+    vertices, facets = refine_polygonal_facets(vertices, facets, global_params)
     logger.info("\nAfter initial triangulation:")
     logger.info(f"Number of vertices: {len(vertices)}")
     for v in vertices:
@@ -417,7 +343,8 @@ def parse_inputfile(data):
     logger.info("Triangulated facets:")
     for facet in tri_facets:
         logger.info(f"{facet} {facet.options}")
-
+    sys.exit(1)
+    # TODO: update body to have new facets after refining
     logger.info("Loaded global parameters:")
     body = Body(tri_facets)  # or pass your facets list here
     body.facets = tri_facets
@@ -436,5 +363,5 @@ if __name__ == '__main__':
 
     inpfile = "meshes/sample_geometry.json"
     data = load_data(inpfile)
-    vertices, facets, body, global_params = parse_inputfile(data=data)
+    vertices, edges, facets, bodies, global_params = parse_inputfile(data=data)
 

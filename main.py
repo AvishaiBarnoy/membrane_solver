@@ -2,6 +2,7 @@ import argparse
 from energy import total_energy
 from geometry.geometry_io import load_data, parse_geometry, parse_inputfile
 from runtime.energy_manager import EnergyModuleManager
+from runtime.refinement import refine_polygonal_facets
 from logging_config import setup_logging
 import logging
 
@@ -17,9 +18,23 @@ if __name__ == "__main__":
     filename = "meshes/sample_geometry.json"
     # Loading geometry
     data = load_data(filename)
-    vertices, facets, body, global_params = parse_geometry(data=data)
-    print("Fix parse_inputfile to have initial triangulation")
-    # vertices, facets, body, global_params = parse_inputfile(data=data)
+    vertices, edges, facets, bodies, global_params = parse_geometry(data=data)
+    vertices, edges, tri_facets, bodies = refine_polygonal_facets(vertices,
+                                                                  edges,
+                                                                  facets,
+                                                                  bodies,
+                                                                  global_params)
+    logger.info("\nAfter initial triangulation:")
+    logger.info(f"Number of vertices: {len(vertices)}")
+    for v in vertices:
+        logger.info(v.position)
+    logger.info(f"Number of facets: {len(tri_facets)}")
+    logger.info("Triangulated facets:")
+    for facet in tri_facets:
+        logger.info(f"{facet} {facet.options}")
+
+    min_instructions = data.get("instructions", [])
+    print(min_instructions)
     sys.exit(1)
 
     # 1. Find all energy module names used 
@@ -27,6 +42,7 @@ if __name__ == "__main__":
     for facet in facets:
         used_modules.add(facet.options.get("energy", "surface"))
 
+    sys.exit(1)
     for body in bodies:
         used_modules.add(body.options.get("energy", "volume"))
 
@@ -34,7 +50,7 @@ if __name__ == "__main__":
     manager = EnergyModuleManager(used_modules)
 
     # 3. Calculate initial energy
-    initial_total_energy = total_energy(vertices, facets, global_params, body, modules)
+    initial_total_energy = total_energy(vertices, facets, bodies, global_params, modules)
     print(f"Initial total energy: {initial_total_energy}")
     print("print here initial values")
 
