@@ -2,7 +2,7 @@ import argparse
 from energy import total_energy
 from geometry.geometry_io import load_data, parse_geometry, parse_inputfile
 from runtime.energy_manager import EnergyModuleManager
-from runtime.refinement import refine_polygonal_facets
+from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
 from logging_config import setup_logging
 import logging
 
@@ -26,12 +26,12 @@ if __name__ == "__main__":
                                                                   global_params)
     logger.info("\nAfter initial triangulation:")
     logger.info(f"Number of vertices: {len(vertices)}")
-    for v in vertices:
-        logger.info(v.position)
+    for v in vertices: logger.debug(v.position)
     logger.info(f"Number of facets: {len(tri_facets)}")
-    logger.info("Triangulated facets:")
-    for facet in tri_facets:
-        logger.info(f"{facet} {facet.options}")
+    logger.debug("Triangulated facets:")
+    for facet in tri_facets: logger.debug(f"{facet} {facet.options}")
+
+    vertices, edges, tri_facets, bodies = refine_triangle_mesh(vertices, edges, tri_facets, bodies)
 
     min_instructions = data.get("instructions", [])
     print(min_instructions)

@@ -61,7 +61,6 @@ class Facet:
         edge_repr = ','.join([f"{e.tail.position.tolist()}→{e.head.position.tolist()}"
                                for e in self.edges])
         edge_indices = ','.join([str(e.index) for e in self.edges])
-        print(edge_indices)
         # sys.exit(1)
         return f"Facet(idx={self.index}, edges=[{edge_indices}],\nedges=[{edge_repr}],\noptions={self.options})"
 

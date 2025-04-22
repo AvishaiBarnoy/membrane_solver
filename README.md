@@ -24,18 +24,19 @@
 16. initial energy calculation after loading -> test modules
 18. add interactive mode for refining, minimization, etc.
 19. visualization script - exporting to obj, vtk, etc.
+20. create class Mesh/PolygonalDomain that wraps general functions and keeps
+    track of all lists (vertices, edges, facets, bodies).
 
-
-## Current limitations
-1. only one object with volume
-2.
+## Design thoughts 
+1. Should I keep track of indices after refining facets and/or edges?
+    1.1 Yes: will allow better backtracking and debugging
+    1.2 No: will allow better tracking of current state and number of object
 
 ## roadmap
-1. box that minimizes into a sphere
-2. box that minimizes into a sphere with a dent
-3. a square that minimizes into a disk -> what polygon would be considered
-   a disk?
+1. box that minimizes into a sphere - volume conservation
+2. square that minimizes into circle - area conservation
+3. box that minimizes into a sphere with a dent - fixed/no_refine
 4. a plane with a disk and outer perimeter
 5. after implementing mean curvature energy -> membrane between two fixed parallel circels
-   results in a catenoid
-   5.1 check how cat.fe treats the fixed surface area of the soapfilm
+    results in a catenoid
+    6.1 check how cat.fe treats the fixed surface area of the soapfilm

@@ -86,13 +86,15 @@ if __name__ == '__main__':
     data = load_data(inpfile)
     vertices, edges, facets, bodies, global_params = parse_geometry(data=data)
     vertices, edges, tri_facets, bodies = refine_polygonal_facets(vertices, edges, facets, bodies, global_params) # initial triangulation
+    for v in vertices: print(v.position)
+    #for e in edges: print(e.index)
 
     # Perform the initial triangulation on loaded facets.
     #vertices, tri_facets = initial_triangulation(vertices, facets)
 
     # Optionally, perform a refinement step.
-    vertices, edges, tri_facets, bodies = refine_triangle_mesh(vertices, edges, tri_facets, bodies)
+    #vertices, edges, tri_facets, bodies = refine_triangle_mesh(vertices, edges, tri_facets, bodies)
     #vertices, edges, tri_facets = refine_triangle_mesh(vertices, edges, tri_facets)
 
     # Visualize the resulting triangulated geometry.
-    plot_geometry(vertices, tri_facets, show_indices=False)
+    #plot_geometry(vertices, tri_facets, show_indices=False)
