@@ -30,3 +30,4 @@ evolver_test/
 *.log  # logfiles
 membrane_solver.log
 .DS_Store
+.venv/

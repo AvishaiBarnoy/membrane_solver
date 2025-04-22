@@ -1,5 +1,5 @@
 # geometry_io.py 
-import json, yaml
+import json #, yaml
 from geometry.geometry_entities import Vertex, Edge, Facet, Body
 from parameters.global_parameters import GlobalParameters
 from runtime.refinement import refine_polygonal_facets
@@ -48,7 +48,7 @@ def build_vertices(vertices_data):
         if options and not isinstance(options, dict):
             raise ValueError(f"Vertex #{idx} options must be a dictionary: {options}")
         vertex = Vertex(coords, idx, options)    # Pass attributes as keyword args
-        logger.info(f"Build vertex: {vertex}")
+        logger.debug(f"Build vertex: {vertex}")
         vertices.append(vertex)
     return vertices
 
@@ -73,8 +73,9 @@ def build_edges(edges_data, vertices):
         key = (i, j)    # Preserve user-defined orientation 
         if key not in edge_map:
             tail, head = vertices[i], vertices[j]
+            assert list(tail.position) != list(head.position), "Tail and head should be different vertices."
             edge = Edge(tail, head, idx, options)
-            logger.info(f"Build edge: {edge}")
+            logger.debug(f"Build edge: {edge}")
             edge_map[key] = edge
             edges.append(edge)
             logger.debug(f"Created edge {key} with options: {options}")
@@ -172,7 +173,7 @@ def build_facet_edges(edge_specs, edges):
                 f"Failed building facet {edge_specs}"
             )
 
-    logger.info(f"Finished building edges for facet: {edge_specs}")
+    logger.debug(f"Finished building edges for facet: {edge_specs}")
     return oriented_edges
 
 def build_facets(facets_data, edges, global_params):
@@ -197,7 +198,7 @@ def build_facets(facets_data, edges, global_params):
 
         facet_edges = build_facet_edges(facet_edges_idx, edges)
         facet = Facet(facet_edges, idx, options=full_options)
-        logger.info(f"Finished building facet: {facet}")
+        logger.debug(f"Finished building facet: {facet}")
         facets.append(facet)
     return facets
 
@@ -216,7 +217,7 @@ def build_bodies(bodies_data, facets, global_params):
 
         body = Body(facets, index=idx, options=options)
         body.calculate_volume()
-        logger.info(f"Finished building body object: {body}")
+        logger.debug(f"Finished building body object: {body}")
         bodies.append(body)
     return bodies
 
@@ -230,7 +231,7 @@ def build_bodies(bodies_data, facets, global_params):
         body = Body(body_facets, index=idx, options=options)
         body.calculate_volume()
         bodies.append(body)
-    logger.info(f"Finished building body object: {body}")
+    logger.debug(f"Finished building body object: {body}")
     return bodies
 
 def parse_geometry(data):
@@ -244,7 +245,7 @@ def parse_geometry(data):
     """
     global_params_data = data.get("global_parameters", {})
     global_params = GlobalParameters(global_params_data)
-    logger.info(f"Loaded global parameters:\n\t{global_params}")
+    logger.debug(f"Loaded global parameters:\n\t{global_params}")
 
     # build vertix objects
     vertices = build_vertices(data["vertices"])
@@ -337,15 +338,13 @@ def parse_inputfile(data):
     vertices, facets = refine_polygonal_facets(vertices, facets, global_params)
     logger.info("\nAfter initial triangulation:")
     logger.info(f"Number of vertices: {len(vertices)}")
-    for v in vertices:
-        logger.info(v.position)
+    for v in vertices: logger.debug(v.position)
     logger.info(f"Number of facets: {len(tri_facets)}")
-    logger.info("Triangulated facets:")
-    for facet in tri_facets:
-        logger.info(f"{facet} {facet.options}")
+    logger.debug("Triangulated facets:")
+    for facet in tri_facets: logger.debug(f"{facet} {facet.options}")
     sys.exit(1)
     # TODO: update body to have new facets after refining
-    logger.info("Loaded global parameters:")
+    logger.debug("Loaded global parameters.")
     body = Body(tri_facets)  # or pass your facets list here
     body.facets = tri_facets
     volume = body.calculate_volume()
