@@ -35,7 +35,7 @@ def test_square_refinement_preserves_normals():
     a, b, c = v0.position, v1.position, v2.position
     parent_normal = get_triangle_normal(a, b, c)
 
-    v_ref, e_ref, f_ref, _ = refine_polygonal_facets(vertices, edges, facets, bodies, global_params)
+    v_ref, e_ref, f_ref, _ = refine_polygonal_facets(vertices, edges, facets, bodies)
 
     for i, f in enumerate(f_ref):
         a = f.edges[0].tail.position
