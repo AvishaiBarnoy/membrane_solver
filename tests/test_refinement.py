@@ -31,34 +31,53 @@ def test_triangle_refinement_updates_bodies():
     vertices, edges, facets, bodies = create_quad()
     global_params = GlobalParameters({})
 
-    # Testing initial refinement 
-    v_tri, e_tri, f_tri, b_tri = refine_polygonal_facets(vertices, edges, facets, bodies, global_params)
-    assert len(v_tri) == 5, "Initial triangulation of square should add a vertex at centroid, 5 total."
-    unique_edges = []
-    for e in e_tri:
-        temp = list(e.tail.position)+list(e.head.position)
-        #print(temp)
-        if temp not in unique_edges:
-            unique_edges.append(temp)
-    for u in unique_edges: print(u)
-    print(len(unique_edges))
-
-    assert len(e_tri) == 8, "Initial triangulation of square should end with 8 edges."
+    # Testing polygonal refinement 
+    v_tri, e_tri, f_tri, b_tri = refine_polygonal_facets(vertices, edges, facets, bodies)
+    assert len(v_tri) == len(vertices) + len(facets), "Initial triangulation of square should add a vertex at centroid, 5 total."
+    assert len(e_tri) == len(edges) * 2, "Initial triangulation of square should end with 8 edges."
     assert all(len(f.edges) == 3 for f in f_tri), "All refined facets must be triangles"
-    assert len(f_tri) == 4, "Initial triangulation of square should end with 4 facets."
-    assert all(isinstance(f, Facet) for f in b_ref[0].facets), "All body facets must be Facets"
-    assert len(b_ref[0].facets) == len(f_ref), "Body should include all refined facets"
+    assert len(f_tri) == len(vertices), "Initial triangulation of square should end with 4 facets."
+    assert all(isinstance(f, Facet) for f in b_tri[0].facets), "All body facets must be Facets"
+    assert len(b_tri[0].facets) == len(f_tri), "Body should include all refined facets"
 
-    # Testing refinement
+    # Testing triangular refinement
     v_ref, e_ref, f_ref, b_ref = refine_triangle_mesh(v_tri, e_tri, f_tri, b_tri)
-    # result = refine_triangle_mesh(v_tri, e_tri, f_tri, b_tri)
-    # print(result)  # <-- temporarily print the result structure
 
-    print(f"# of facets in f_ref: {len(f_ref)}")
-    print(f"# of facets in body: {len(b_ref[0].facets)}")
-    print("Facet indices in body:", [f.index for f in b_ref[0].facets])
-
+    assert len(v_ref) == len(v_tri) + len(e_tri), "Refinemenet should add len(edges) new vertex per facet"
+    assert len(e_ref) == 2 * len(e_tri) + 3 * len(f_tri), "Refining splits edges and adds 3 more for each facet"
+    assert len(f_ref) == 2**len(f_tri), "Refiningt increases number of facets by factor of 2^k"
     assert all(len(f.edges) == 3 for f in f_ref), "All refined facets must be triangles"
     assert all(isinstance(f, Facet) for f in b_ref[0].facets), "All body facets must be Facets"
     assert len(b_ref[0].facets) == len(f_ref), "Body should include all refined facets"
 
+def test_child_facets_are_closed_loops():
+    vertices, edges, facets, bodies = create_quad()
+
+    # 1. check loop on initial triangulation 
+    v2, e2, f2, b2 = refine_polygonal_facets(vertices, edges, facets, bodies)
+
+    for facet in f2:
+        # grab the three edges in order
+        # check chaining: edge.head == next_edge.tail (mod 3)
+        for i in range(3):
+            e_curr = facet.edges[i]
+            e_next = facet.edges[(i+1) % 3]
+            assert e_curr.head == e_next.tail, (
+                f"Facet {facet.index} is not a closed loop: "
+                f"edge {e_curr.index}.head={e_curr.head!r} ≠ "
+                f"edge {e_next.index}.tail={e_next.tail!r}"
+            )
+
+    # 2. check loop in runtime triangulation
+    v3, e3, f3, b3 = refine_polygonal_facets(v2, e2, f2, b2)
+
+    for facet in f3:
+        # grab the three edges in order
+        # check chaining: edge.head == next_edge.tail (mod 3)
+        for i in range(3):
+            e_curr = facet.edges[i]
+            e_next = facet.edges[(i+1) % 3]
+            assert e_curr.head == e_next.tail, (
+                f"Facet {facet.index} is not a closed loop: "
+                f"edge {e_curr.index}.head={e_curr.head!r} ≠ "
+                f"edge {e_next.index}.tail={e_next.tail!r}"

@@ -22,7 +22,7 @@ def test_loaded_geometry_is_triangular():
     assert volume_before > 0, f"Volume should be positive, got {volume_before}"
 
     # Triangulate all non-triangles before testing
-    vertices, edges, facets, bodies = refine_polygonal_facets(vertices, edges, facets, bodies, global_params)
+    vertices, edges, facets, bodies = refine_polygonal_facets(vertices, edges, facets, bodies)
 
     assert all(isinstance(f, Facet) for f in facets)
     assert all(len(f.edges) == 3 for f in facets), "All facets must be triangles"

@@ -1,30 +1,11 @@
 import numpy as np
 import logging
-from geometry.geometry_entities import Vertex, Edge, Facet
+from geometry.geometry_entities import Vertex, Edge, Facet, Body
 import sys
 logger = logging.getLogger("membrane_solver")
 
-def get_or_create_edge(u, v, options):
-    nonlocal next_edge_idx, new_edges, edge_lookup
-
-    key = (u, v) if u < v else (v, u)
-    if key in edge_lookup:
-        existing = edge_lookup[key]
-        # if that existing edge already goes exactly u → v, reuse it:
-        if existing.tail == u and existing.head == v:
-            return existing
-        # otherwise, we found it reversed v → u, so return an alias in the right direction
-        return Edge(u, v, index=existing.index, options=existing.options.copy())
-    # if we get here, no edge at all exists between u and v, so create one:
-    e = Edge(u, v, index=next_edge_idx, options=options.copy())
-    next_edge_idx += 1
-    new_edges.append(e)
-    edge_lookup[key] = e
-    return e
-
-def refine_polygonal_facets(vertices, edges, facets, bodies, global_params):
+def refine_polygonal_facets(vertices, edges, facets, bodies):
     # TODO: option for loop "r2" will refine twice
-    # TODO: why is global_params passes through here?
     """
     Refines all non-triangular facets by subdividing them into triangles using
     centroid-based fan triangulation. Triangles remain unchanged.
@@ -35,14 +16,18 @@ def refine_polygonal_facets(vertices, edges, facets, bodies, global_params):
     new_vertices = vertices[:]
     new_edges = edges[:]
     new_facets = []
-    old_to_new_map = {}
+    next_edge_idx = max(e.index for e in new_edges) + 1
+
+    # Prepare a map from old facet idx → list of new child facet idxs:
+    children_map = {facet.index: [] for facet in facets}
 
     for facet in facets:
+        # 1. Leave triangles alone
         if len(facet.edges) == 3:
             new_facets.append(facet)
             continue
 
-        # Reconstruct vertex loop
+        # 2. Reconstruct the boundary loop of vertex‐indice
         vertex_loop = [facet.edges[0].tail]
         for edge in facet.edges:
             if vertex_loop[-1] != edge.tail:
@@ -50,42 +35,83 @@ def refine_polygonal_facets(vertices, edges, facets, bodies, global_params):
             vertex_loop.append(edge.head)
 
         if vertex_loop[0] == vertex_loop[-1]:
-            vertex_loop = vertex_loop[:-1]
+            vertex_loop.pop()
 
         if len(vertex_loop) < 3:
             logger.warning(f"Facet {facet.index} has <3 vertices after reconstruction.")
             continue
 
-        # Created centroid
+        # 3. Create centroid
         centroid_pos = np.mean([v.position for v in vertex_loop], axis=0)
-        centroid_vertex = Vertex(position=centroid_pos, index=len(new_vertices))
+        centroid_idx = len(new_vertices)
+        centroid_vertex = Vertex(position=centroid_pos, index=centroid_idx)
         new_vertices.append(centroid_vertex)
 
-        # Create child facets
-        child_facets = []
+        # 4. build exactly one spoke edge per vertex in that loop
+        spokes = {} # maps vertex_idx -> the Edge( vertex -> centroid )
+        for vi in vertex_loop:
+            # TODO: deal with how edges inherit options from facets
+            e = Edge(vi, centroid_vertex, index=next_edge_idx,
+                    options=facet.options.copy())
+            next_edge_idx += 1
+            new_edges.append(e)
+            spokes[vi] = e
+
+        # 5. now fan‐triangulate: each triangle uses
+        #    - the old boundary edge
+        #    - the spoke from b -> centroid
+        #    - the spoke from centroid -> a  (just flip the first spoke)
         n = len(vertex_loop)
         for i in range(n):
             a = vertex_loop[i]
             b = vertex_loop[(i + 1) % n]
 
-            # Create new edges 
-            e1 = Edge(a, b, index=len(new_edges), options=facet.options.copy())
-            e2 = Edge(b, centroid_vertex, index=len(new_edges) + 1, options=facet.options.copy())
-            e3 = Edge(centroid_vertex, a, index=len(new_edges) + 2, options=facet.options.copy())
-            child_edges = [e1, e2, e3]
+            # find the original boundary edge object
+            # (it’s in facet.edges[i], by construction)
+            boundary_edge = facet.edges[i]
 
-            new_edges.extend(child_edges)
+            # the two spokes: b→centroid and centroid→a
+            spoke_b = spokes[b]
+            spoke_a = spokes[a]
+            # make sure the second spoke is oriented centroid→a:
+            # TODO: POSSIBLE PROBLEM WITH USING ABSOLUTE VALUE FOR INDEX AND NOT REVERSED
+            rev_spoke_a = Edge(new_vertices[centroid_idx], a,
+                           index=spoke_a.index,
+                           options=spoke_a.options.copy())
 
-            # Create child facet
+            # build the new facet’s edge‐list **in the correct orientation**:
+            child_edges = [boundary_edge, spoke_b, rev_spoke_a]
+            child_idx = len(new_facets)
             child_options = facet.options.copy()
-            child_options.pop("refine", None)   # TODO: Why? to not use edge options on facet?
             child_options["parent_facet"] = facet.index
 
-            child_facet = Facet(child_edges, index=len(new_facets), options=child_options)
+            child_facet = Facet(child_edges,
+                                    index=child_idx,
+                                    options=child_options)
             new_facets.append(child_facet)
+            # Record that this child belongs to the same bodies
+            children_map[facet.index].append(child_idx)
+
+    # TODO: Associate facets with bodies! If no body exists skip
+    new_bodies = []
+    for body in bodies:
+        new_list = []
+        for facet in body.facets:
+            #print(f"f_idx: {f_idx}")
+            if facet.index in children_map:
+                # replaced by its child facets
+                new_list.extend(children_map[facet.index])
+            else:
+                # the facet stayed the same (triangles)
+                new_list.append(facet)
+
+        # ideally your Body ctor also carries over volume, constraints, etc.
+        new_facet_list = [new_facets[i] for i in new_list]
+        new_bodies.append( Body(new_facet_list, index=body.index,
+                                options=body.options.copy()) )
 
     assert all(isinstance(f, Facet) for f in new_facets), "new_facets still nested!"
-    return new_vertices, new_edges, new_facets, bodies
+    return new_vertices, new_edges, new_facets, new_bodies
 
 def refine_triangle_mesh(vertices, edges, facets, bodies):
     """
@@ -99,20 +125,25 @@ def refine_triangle_mesh(vertices, edges, facets, bodies):
     Returns:
         (new_vertices, new_facets)
     """
-    # TODO: Don't refie no_refine objects!
+    # TODO: Don't refine no_refine objects!
     # TODO: check refined instances inherit options, how do new edges and new
     #           vertices behave. E.g, vertex in mid-point of fixed edge inherts
     #           some behavior -> check SE manual
+
     new_vertices = vertices[:]
     new_edges = edges[:]
     new_facets = []
     facet_index = len(facets) # Start index at 0 or len(facets) if you prefer continuity
-    old_to_new_map = {}
+    next_edge_idx = max(e.index for e in new_edges) + 1
+
+    # 1. map old facet → list of new child facets
+    children_map = {f.index: [] for f in facets}
+
     midpoint_cache = {}  # maps (min_i, max_j) -> midpoint vertex
 
+    # 2. subdivide each facet
     for facet in facets:
-        if len(facet.edges) != 3:
-            raise ValueError(f"Facet {facet.index} is not a triangle.")
+        assert len(facet.edges) == 3, "refine_triangle_mesh only handles triangles"
 
         # Step 1: Identify the original triangle vertices
         v0 = facet.edges[0].tail
@@ -200,6 +231,6 @@ def update_bodies_after_refinement(bodies, old_to_new_map):
             else:
                 new_facet_list.append(facet)
         body.facets = new_facet_list
-    for body in bodies:
-        print(f"Updated body {body.index}: {[f.index for f in body.facets]}")
+    #for body in bodies:
+    #    print(f"Updated body {body.index}: {[f.index for f in body.facets]}")
 
