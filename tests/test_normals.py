@@ -37,6 +37,8 @@ def test_square_refinement_preserves_normals():
 
     v_ref, e_ref, f_ref, _ = refine_polygonal_facets(vertices, edges, facets, bodies)
 
+    v_tri, e_tri, f_tri, _ = refine_polygonal_facets(vertices, edges, facets, bodies)
+    v_ref, e_ref, f_ref, _ = refine_triangle_mesh(v_tri, e_tri, f_tri, bodies)
     for i, f in enumerate(f_ref):
         a = f.edges[0].tail.position
         b = f.edges[0].head.position
@@ -66,7 +68,9 @@ def test_triangle_refinement_preserves_normals():
     # Normal of parent
     parent_normal = get_triangle_normal(v0.position, v1.position, v2.position)
 
-    v_ref, e_ref, f_ref, _ = refine_triangle_mesh(vertices, edges, facets, bodies)
+    v_tri, e_tri, f_tri, _ = refine_polygonal_facets(vertices, edges, facets, bodies)
+    assert len(f_tri) == len(facets), "refine polygonal should not affect triangle facets"
+    v_ref, e_ref, f_ref, _ = refine_triangle_mesh(v_tri, e_tri, f_tri, bodies)
 
     for i, f in enumerate(f_ref):
         a = f.edges[0].tail.position

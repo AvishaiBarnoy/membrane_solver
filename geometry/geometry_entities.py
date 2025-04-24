@@ -4,9 +4,10 @@ import sys
 
 class Vertex:
     def __init__(self, position, index, options=None):
+        assert isinstance(index, int), f"Expected int index, got {index}"
+        self.index = index
         self.position = np.array(position, dtype=float)
         self.options = options if options is not None else {}
-        self.index = index
 
         self.force = np.zeros(3, dtype=float)
         # For conjugate gradient updates:
@@ -18,15 +19,17 @@ class Vertex:
         return (f"Vertex(idx={self.index}, pos={self.position}), options={self.options})")
 
 class Edge:
-    def __init__(self, tail, head, index, vector=None, options=None):
+    def __init__(self, tail, head, index, reverse=False, vector=None, options=None):
         """
         An edge is a one-dimensional geometric element
         It has an orientation, but the orientation is only important in the
             sense of of defining a facet, for the facet normal.
         """
         # Store vertex indices (or references) for the edge endpoints.
-        self.tail = tail
-        self.head = head
+        # TODO: add asserts that tail and head are Vertex instances
+        self.reverse = reverse
+        self.tail = tail if not reverse else head
+        self.head = head if not reverse else tail
         self.index = index
         self.vector = vector
         self.options = options if options is not None else {}
@@ -52,6 +55,7 @@ class Facet:
             indices (list or tuple of int): Vertex indices defining the facet.
             options (dict, optional): Dictionary of facet-specific options.
         """
+        # TODO: add asserts that all edges are Edge instances
         self.edges = edges  # list of edges instances
         self.index = index
         self.area = None
@@ -79,6 +83,7 @@ class Body:
     def __init__(self, facets, index, volume=None, target_volume=None,
                  surface_area=None, options=None):
         # A volume is defined by a collection of facets.
+        # TODO: add asserts that all facets are Facet instances
         self.facets = facets if facets is not None else []
         self.index = index
         self.options = options if options is not None else {}

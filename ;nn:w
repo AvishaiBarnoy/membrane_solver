@@ -111,91 +111,116 @@ def refine_polygonal_facets(vertices, edges, facets, bodies):
 
     assert all(isinstance(f, Facet) for f in new_facets), "new_facets still nested!"
     return new_vertices, new_edges, new_facets, new_bodies
-
 def refine_triangle_mesh(vertices, edges, facets, bodies):
-    new_vertices = vertices[:]
-    new_edges = []
-    new_facets = []
+    """
+    Refines each triangular Facet into four smaller triangles by:
+      1) inserting one new Vertex at the midpoint of each Edge
+      2) re-using or creating exactly one new Edge between every pair of
+         (old-vertex, midpoint) or (midpoint, midpoint)
+      3) assembling four new Facet instances to replace the old one
+      4) rewiring Bodies so all old‐facet indices are replaced by their 4 children
+    """
+    # 1) make shallow copies of input lists
+    new_vertices = list(vertices)
+    new_edges    = list(edges)
+    new_facets   = []
+    next_edge_idx = max((e.index for e in new_edges), default=-1) + 1
 
-    edge_midpoints = {}  # (min_idx, max_idx) → midpoint Vertex
-    edge_lookup = {}     # (min_idx, max_idx) → Edge
-    facet_to_new_facets = {}  # facet.index → [Facet, ...]
+    # 2) compute one midpoint-vertex per existing edge
+    #    store in a dict:   old_edge -> new Vertex instance
+    edge_midpoint = {}
+    for e in new_edges:
+        # skip if already done
+        if e in edge_midpoint:
+            continue
+        v_tail = new_vertices[e.tail.index]
+        v_head = new_vertices[e.head.index]
+        midpos = (v_tail.position + v_head.position) / 2
+        mid_idx = len(new_vertices)
+        midpoint = Vertex(position=midpos, index=mid_idx)
+        new_vertices.append(midpoint)
+        edge_midpoint[e] = midpoint
 
-    def get_or_create_edge(v_from, v_to):
-        key = (min(v_from.index, v_to.index), max(v_from.index, v_to.index))
-        if key in edge_lookup:
-            return edge_lookup[key]
-        edge = Edge(v_from, v_to, len(new_edges))
-        new_edges.append(edge)
-        edge_lookup[key] = edge
-        return edge
+    # 3) helper to get or create exactly one Edge instance between two vertex-indices
+    def get_or_create_edge(tail_idx, head_idx):
+        nonlocal next_edge_idx
+        # search existing (either orientation)
+        for e in new_edges:
+            if (e.tail, e.head) == (tail_idx, head_idx) or \
+               (e.tail, e.head) == (head_idx, tail_idx):
+                return e
+        # not found => append a new one
+        e = Edge(
+            tail   = tail_idx,
+            head   = head_idx,
+            index  = next_edge_idx,
+            options= {}               # or copy your default facet.options
+        )
+        new_edges.append(e)
+        next_edge_idx += 1
+        return e
 
-    # Step 1: Compute midpoint vertices and split each edge
-    for edge in edges:
-        v1, v2 = edge.tail, edge.head
-        key = (min(v1.index, v2.index), max(v1.index, v2.index))
-        if key not in edge_midpoints:
-            midpoint_position = 0.5 * (v1.position + v2.position)
-            midpoint = Vertex(midpoint_position, index=len(new_vertices))
-            new_vertices.append(midpoint)
-            edge_midpoints[key] = midpoint
+    # 4) we'll need to know which new facets came from each old one
+    children_map = {f.index: [] for f in facets}
 
-    # Step 2: Subdivide each triangle into four smaller triangles
+    # 5) now fan‐triangulate each old triangle into four small ones
     for facet in facets:
-        v0, v1, v2 = [e.tail for e in facet.edges]
+        assert len(facet.edges) == 3, "refine_triangle_mesh only handles triangle facets"
 
-        m01 = edge_midpoints[(min(v0.index, v1.index), max(v0.index, v1.index))]
-        m12 = edge_midpoints[(min(v1.index, v2.index), max(v1.index, v2.index))]
-        m20 = edge_midpoints[(min(v2.index, v0.index), max(v2.index, v0.index))]
+        # rebuild the vertex‐loop [a,b,c]
+        loop = [facet.edges[0].tail]
+        for e in facet.edges:
+            if loop[-1] != e.tail:
+                raise ValueError(f"Facet {facet.index} has broken edge loop")
+            loop.append(e.head)
+        if loop[0] == loop[-1]:
+            loop.pop()
+        a, b, c = loop  # exactly three
 
-        child_facets = []
+        # pull out our three midpoint vertices
+        Mab = edge_midpoint[facet.edges[0]]
+        Mbc = edge_midpoint[facet.edges[1]]
+        Mca = edge_midpoint[facet.edges[2]]
 
-        # Triangle 1: v0, m01, m20
-        e1 = get_or_create_edge(v0, m01)
-        e2 = get_or_create_edge(m01, m20)
-        e3 = get_or_create_edge(m20, v0)
-        f1 = Facet([e1, e2, e3], len(new_facets))
-        f1.parent_facet = facet.index
-        new_facets.append(f1)
-        child_facets.append(f1)
+        # now define the four child triangles by their vertex‐triples
+        tris = [
+            ( a,   Mab.index, Mca.index),
+            ( b,   Mbc.index, Mab.index),
+            ( c,   Mca.index, Mbc.index),
+            (Mab.index, Mbc.index, Mca.index),
+        ]
 
-        # Triangle 2: v1, m12, m01
-        e1 = get_or_create_edge(v1, m12)
-        e2 = get_or_create_edge(m12, m01)
-        e3 = get_or_create_edge(m01, v1)
-        f2 = Facet([e1, e2, e3], len(new_facets))
-        f2.parent_facet = facet.index
-        new_facets.append(f2)
-        child_facets.append(f2)
+        # build them
+        for v0, v1, v2 in tris:
+            e0 = get_or_create_edge(v0, v1)
+            e1 = get_or_create_edge(v1, v2)
+            e2 = get_or_create_edge(v2, v0)
 
-        # Triangle 3: v2, m20, m12
-        e1 = get_or_create_edge(v2, m20)
-        e2 = get_or_create_edge(m20, m12)
-        e3 = get_or_create_edge(m12, v2)
-        f3 = Facet([e1, e2, e3], len(new_facets))
-        f3.parent_facet = facet.index
-        new_facets.append(f3)
-        child_facets.append(f3)
+            child_idx = len(new_facets)
+            opts = facet.options.copy()
+            opts["parent_facet"] = facet.index
 
-        # Triangle 4 (center): m01, m12, m20
-        e1 = get_or_create_edge(m01, m12)
-        e2 = get_or_create_edge(m12, m20)
-        e3 = get_or_create_edge(m20, m01)
-        f4 = Facet([e1, e2, e3], len(new_facets))
-        f4.parent_facet = facet.index
-        new_facets.append(f4)
-        child_facets.append(f4)
+            new_f = Facet(edges=[e0, e1, e2],
+                          index=child_idx,
+                          options=opts)
+            new_facets.append(new_f)
+            children_map[facet.index].append(child_idx)
 
-        facet_to_new_facets[facet.index] = child_facets
-
-    # Step 3: Build updated bodies
+    # 6) rebuild bodies: every old facet index is replaced by its 4 children
     new_bodies = []
     for body in bodies:
-        new_body_facets = []
-        for old_facet in body.facets:
-            if old_facet.index in facet_to_new_facets:
-                new_body_facets.extend(facet_to_new_facets[old_facet.index])
-        new_bodies.append(Body(new_body_facets, len(new_bodies)))
+        new_list = []
+        for old_fidx in body.facets:
+            if old_fidx in children_map:
+                new_list.extend(children_map[old_fidx])
+            else:
+                new_list.append(old_fidx)
+        # build the updated Body
+        new_bodies.append(
+            Body(new_list,
+                 index   = body.index,
+                 options = body.options.copy())
+        )
 
     return new_vertices, new_edges, new_facets, new_bodies
 
