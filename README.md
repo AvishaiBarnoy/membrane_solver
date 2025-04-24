@@ -1,7 +1,6 @@
 # My try on a SurfaceEvolver-like software
 
 ## TODO:
-1. make sure that refining creates new objects/instances and not just lists
 1. add fixed option to vertices 
 3. how to calculate mean curvature from facets?
 4. energy minimization algorithms
@@ -13,7 +12,6 @@
     how is energy evaluated over fixed components? in SE integrals are not
     evaluated over fixed edges, what about vertices (is energy even evaluted
     over individual vetices???) and facets?
-11. add tests
 12. different library for visualization, for example:
     12.1 https://docs.pyvista.org/
     12.2 https://vedo.embl.es/
