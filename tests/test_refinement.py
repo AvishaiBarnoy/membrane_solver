@@ -3,86 +3,107 @@ import pytest
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from geometry.geometry_entities import Vertex, Edge, Facet, Body
+from geometry.entities import Vertex, Edge, Facet, Body, Mesh
 from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
 from parameters.global_parameters import GlobalParameters
 
 def create_quad():
+
+    mesh = Mesh()
+
     # A unit square in the XY plane
-    v0 = Vertex([0, 0, 0], 0)
-    v1 = Vertex([1, 0, 0], 1)
-    v2 = Vertex([1, 1, 0], 2)
-    v3 = Vertex([0, 1, 0], 3)
+    v0 = Vertex(0, np.array([0, 0, 0]))
+    v1 = Vertex(1, np.array([1 , 0, 0]))
+    v2 = Vertex(2, np.array([1 , 1, 0]))
+    v3 = Vertex(3, np.array([0, 1, 0]))
     vertices = [v0, v1, v2, v3]
 
-    e0 = Edge(v0, v1, 0)
-    e1 = Edge(v1, v2, 1)
-    e2 = Edge(v2, v3, 2)
-    e3 = Edge(v3, v0, 3)
+    e0 = Edge(1, v0.index, v1.index)
+    e1 = Edge(2, v1.index, v2.index)
+    e2 = Edge(3, v2.index, v3.index)
+    e3 = Edge(4, v3.index, v0.index)
     edges = [e0, e1, e2, e3]
 
-    facet = Facet([e0, e1, e2, e3], 0)
+    facet = Facet(0, [e0.index, e1.index, e2.index, e3.index])
     facets = [facet]
 
-    body = Body(facets, index=0, options={"target_volume": 0})
-    return vertices, edges, facets, [body]
+    body = Body(0, [facets[0].index], options={"target_volume": 0})
+    bodies = [body]
+
+    mesh = Mesh()
+    for i in vertices: mesh.vertices[i.index] = i
+    for i in edges: mesh.edges[i.index] = i
+    for i in facets: mesh.facets[i.index] = i
+    for i in bodies: mesh.bodies[i.index] = i
+
+    return mesh
 
 def test_triangle_refinement_updates_bodies():
-    vertices, edges, facets, bodies = create_quad()
+    mesh = create_quad()
     global_params = GlobalParameters({})
 
     # Testing polygonal refinement 
-    v_tri, e_tri, f_tri, b_tri = refine_polygonal_facets(vertices, edges, facets, bodies)
-    assert len(v_tri) == len(vertices) + len(facets), "Initial triangulation of square should add a vertex at centroid, 5 total."
-    assert len(e_tri) == len(edges) * 2, "Initial triangulation of square should end with 8 edges."
-    assert all(len(f.edges) == 3 for f in f_tri), "All refined facets must be triangles"
-    assert len(f_tri) == len(vertices), "Initial triangulation of square should end with 4 facets."
-    assert all(isinstance(f, Facet) for f in b_tri[0].facets), "All body facets must be Facets"
-    assert len(b_tri[0].facets) == len(f_tri), "Body should include all refined facets"
+    mesh_tri = refine_polygonal_facets(mesh)
+    assert len(mesh_tri.vertices) == len(mesh.vertices) + len(mesh.facets), "Initial triangulation of square should add a vertex at centroid, 5 total."
+    assert len(mesh_tri.edges) == len(mesh.edges) * 2, "Initial triangulation of square should end with 8 edges."
+    assert all(len(mesh_tri.facets[f_idx].edge_indices) == 3 for f_idx in mesh_tri.facets.keys()), "All refined facets must be triangles"
+    assert len(mesh_tri.facets) == len(mesh.vertices), "Initial triangulation of square should end with 4 facets."
+    #assert all(isinstance(f, Facet) for f in mesh.b_tri[0].facets), "All body facets must be Facets"
+    assert len(mesh_tri.bodies[0].facet_indices) == len(mesh_tri.facets), "Body should include all refined facets"
+
 
     # Testing triangular refinement
-    v_ref, e_ref, f_ref, b_ref = refine_triangle_mesh(v_tri, e_tri, f_tri, b_tri)
+    mesh_ref = refine_triangle_mesh(mesh_tri)
+    #sys.exit()
 
-    print("########")
-    #print(f"len(e_ref): {len(e_ref)}")
-    #for i in e_ref: print(i)
-    print("########")
-    assert len(v_ref) == len(v_tri) + len(e_tri), "Refinemenet should add len(edges) new vertex per facet"
-    assert len(e_ref) == 2 * len(e_tri) + 3 * len(f_tri), "Refining splits edges and adds 3 more for each facet"
-    assert len(f_ref) == 2**len(f_tri), "Refiningt increases number of facets by factor of 2^k"
-    assert all(len(f.edges) == 3 for f in f_ref), "All refined facets must be triangles"
-    assert all(isinstance(f, Facet) for f in b_ref[0].facets), "All body facets must be Facets"
-    assert len(b_ref[0].facets) == len(f_ref), "Body should include all refined facets"
+    assert len(mesh_ref.vertices) == len(mesh_tri.vertices) + len(mesh_tri.edges), "Refinemenet should add len(edges) new vertex per facet"
+    assert len(mesh_ref.edges) == 2 * len(mesh_tri.edges) + 3 * len(mesh_tri.facets), "Refining splits edges and adds 3 more for each facet"
+    assert len(mesh_ref.facets) == 2**len(mesh_tri.facets), "Refiningt increases number of facets by factor of 2^k"
+    assert all(len(mesh_ref.facets[f_idx].edge_indices) == 3 for f_idx in mesh_ref.facets.keys()), "All refined facets must be triangles"
+    #assert all(isinstance(f, Facet) for f in b_ref[0].facets), "All body facets must be Facets"
+    assert len(mesh_ref.bodies[0].facet_indices) == len(mesh_ref.facets), "Body should include all refined facets"
 
 def test_child_facets_are_closed_loops():
-    vertices, edges, facets, bodies = create_quad()
+    mesh = create_quad()
 
     # 1. check loop on initial triangulation 
-    v2, e2, f2, b2 = refine_polygonal_facets(vertices, edges, facets, bodies)
-
-    for facet in f2:
+    mesh2 = refine_polygonal_facets(mesh)
+    #print(mesh2.facets.keys())
+    for facet_idx in mesh2.facets.keys():
         # grab the three edges in order
         # check chaining: edge.head == next_edge.tail (mod 3)
+        facet = mesh2.facets[facet_idx]
+        #print(f"facet {facet}, {facet_idx}")
+        #print(mesh2.edges)
+        #for e_idx in facet.edge_indices:
+            #print(f"e_idx: {e_idx}")
+            #print(f"mesh2.edges[e_idx] {mesh2.edges[e_idx]}")
+            #print(f"edge {e_idx}: {mesh2.edges[e_idx]}")
+
         for i in range(3):
-            e_curr = facet.edges[i]
-            e_next = facet.edges[(i+1) % 3]
-            assert e_curr.head == e_next.tail, (
+            e_curr = mesh2.get_edge(facet.edge_indices[i])
+            e_next = mesh2.get_edge(facet.edge_indices[(i + 1) % 3])
+            assert e_curr.head_index == e_next.tail_index, (
                 f"Facet {facet.index} is not a closed loop: "
-                f"edge {e_curr.index}.head={e_curr.head!r} ≠ "
-                f"edge {e_next.index}.tail={e_next.tail!r}"
+                f"edge {e_curr.index}.head={e_curr.head_index!r} ≠ "
+                f"edge {e_next.index}.tail={e_next.tail_index!r}"
             )
+
 
     # 2. check loop in runtime triangulation
-    v3, e3, f3, b3 = refine_polygonal_facets(v2, e2, f2, b2)
+    mesh3 = refine_polygonal_facets(mesh2)
 
-    for facet in f3:
+    for facet_idx in mesh3.facets.keys():
         # grab the three edges in order
         # check chaining: edge.head == next_edge.tail (mod 3)
+        #print(f"facet {facet}")
+        facet = mesh2.facets[facet_idx]
         for i in range(3):
-            e_curr = facet.edges[i]
-            e_next = facet.edges[(i+1) % 3]
-            assert e_curr.head == e_next.tail, (
+            e_curr = mesh3.get_edge(facet.edge_indices[i])
+            e_next = mesh3.get_edge(facet.edge_indices[(i + 1) % 3])
+            assert e_curr.head_index == e_next.tail_index, (
                 f"Facet {facet.index} is not a closed loop: "
-                f"edge {e_curr.index}.head={e_curr.head!r} ≠ "
-                f"edge {e_next.index}.tail={e_next.tail!r}"
+                f"edge {e_curr.index}.head={e_curr.head_index!r} ≠ "
+                f"edge {e_next.index}.tail={e_next.tail_index!r}"
             )
+    #sys.exit()

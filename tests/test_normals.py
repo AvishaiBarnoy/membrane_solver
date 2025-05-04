@@ -3,7 +3,7 @@ import pytest
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from geometry.geometry_entities import Vertex, Edge, Facet, Body
+from geometry.entities import Vertex, Edge, Facet, Body, Mesh
 from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
 from parameters.global_parameters import GlobalParameters
 
@@ -12,71 +12,106 @@ def get_triangle_normal(a, b, c):
     return n / np.linalg.norm(n)
 
 def test_square_refinement_preserves_normals():
-    v0 = Vertex([0, 0, 0], 0)
-    v1 = Vertex([1, 0, 0], 1)
-    v2 = Vertex([1, 1, 0], 2)
-    v3 = Vertex([0, 1, 0], 3)
+    v0 = Vertex(0, np.array([0, 0, 0]))
+    v1 = Vertex(1, np.array([1, 0, 0]))
+    v2 = Vertex(2, np.array([1, 1, 0]))
+    v3 = Vertex(3, np.array([0, 1, 0]))
     vertices = [v0, v1, v2, v3]
 
-    e0 = Edge(v0, v1, 0)
-    e1 = Edge(v1, v2, 1)
-    e2 = Edge(v2, v3, 2)
-    e3 = Edge(v3, v0, 3)
+    e0 = Edge(1, v0.index, v1.index)
+    e1 = Edge(2, v1.index, v2.index)
+    e2 = Edge(3, v2.index, v3.index)
+    e3 = Edge(4, v3.index, v0.index)
     edges = [e0, e1, e2, e3]
 
-    facet = Facet([e0, e1, e2, e3], index=0)
-    body = Body([facet], index=0)
+    facet = Facet(0, [e0.index, e1.index, e2.index, e3.index])
+    #print(f"facet {facet}")
     facets = [facet]
+    body = Body(0, [f.index for f in facets])
     bodies = [body]
 
     global_params = GlobalParameters({})
 
+    mesh = Mesh()
+    for i in vertices: mesh.vertices[i.index] = i
+    for i in edges: mesh.edges[i.index] = i
+    for i in facets: mesh.facets[i.index] = i
+    for i in bodies: mesh.bodies[i.index] = i
+    mesh.global_parameters = global_params
     # Normal of parent
     a, b, c = v0.position, v1.position, v2.position
     parent_normal = get_triangle_normal(a, b, c)
-
-    v_ref, e_ref, f_ref, _ = refine_polygonal_facets(vertices, edges, facets, bodies)
-
-    v_tri, e_tri, f_tri, _ = refine_polygonal_facets(vertices, edges, facets, bodies)
-    v_ref, e_ref, f_ref, _ = refine_triangle_mesh(v_tri, e_tri, f_tri, bodies)
-    for i, f in enumerate(f_ref):
-        a = f.edges[0].tail.position
-        b = f.edges[0].head.position
-        c = f.edges[1].head.position
+    #print(f"parent normal {parent_normal}")
+    mesh_tri = refine_polygonal_facets(mesh)
+    for f_idx in mesh_tri.facets.keys():
+        facet = mesh_tri.facets[f_idx]
+        a = mesh_tri.vertices[mesh_tri.get_edge(facet.edge_indices[0]).tail_index].position
+        b = mesh_tri.vertices[mesh_tri.get_edge(facet.edge_indices[0]).head_index].position
+        c = mesh_tri.vertices[mesh_tri.get_edge(facet.edge_indices[1]).head_index].position
         n = get_triangle_normal(a, b, c)
+        #print(f"n_tri: {n}")
         dot = np.dot(n, parent_normal)
-        assert dot > 0.99, f"Refined facet {i} normal is flipped (dot={dot:.3f})"
+        assert dot > 0.99, f"Refined facet {mesh_tri.facets[f_idx]} normal is flipped (dot={dot:.3f})"
+
+    mesh_ref = refine_triangle_mesh(mesh_tri)
+    #print(f"mesh_tri {mesh_tri.facets}")
+    for f_idx in mesh_ref.facets.keys():
+        facet = mesh_ref.facets[f_idx]
+        a = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[0]).tail_index].position
+        b = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[0]).head_index].position
+        c = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[1]).head_index].position
+        n = get_triangle_normal(a, b, c)
+        print(f"a, b, c, n: {a}, {b}, {c}, {n}")
+        dot = np.dot(n, parent_normal)
+        assert dot > 0.99, f"Refined facet {mesh_ref.facets[f_idx]} normal is flipped (dot={dot:.3f})"
+    #sys.exit()
 
 def test_triangle_refinement_preserves_normals():
-    v0 = Vertex([0, 0, 0], 0)
-    v1 = Vertex([1, 0, 0], 1)
-    v2 = Vertex([0.5, 1, 0], 2)
+    v0 = Vertex(0, np.array([0, 0, 0]))
+    v1 = Vertex(1, np.array([1, 0, 0]))
+    v2 = Vertex(2, np.array([0.5, 1, 0]))
     vertices = [v0, v1, v2]
 
-    e0 = Edge(v0, v1, 0)
-    e1 = Edge(v1, v2, 1)
-    e2 = Edge(v2, v0, 2)
+    e0 = Edge(1, v0.index, v1.index)
+    e1 = Edge(2, v1.index, v2.index)
+    e2 = Edge(3, v2.index, v0.index)
     edges = [e0, e1, e2]
 
-    facet = Facet([e0, e1, e2], index=0)
-    body = Body([facet], index=0)
+    facet = Facet(0, [e0.index, e1.index, e2.index])
     facets = [facet]
+    body = Body(0, [f.index for f in facets])
     bodies = [body]
 
     global_params = GlobalParameters({})
+
+    mesh = Mesh()
+    for i in vertices: mesh.vertices[i.index] = i
+    for i in edges: mesh.edges[i.index] = i
+    for i in facets: mesh.facets[i.index] = i
+    for i in bodies: mesh.bodies[i.index] = i
+    mesh.global_parameters = global_params
 
     # Normal of parent
     parent_normal = get_triangle_normal(v0.position, v1.position, v2.position)
 
-    v_tri, e_tri, f_tri, _ = refine_polygonal_facets(vertices, edges, facets, bodies)
-    assert len(f_tri) == len(facets), "refine polygonal should not affect triangle facets"
-    v_ref, e_ref, f_ref, _ = refine_triangle_mesh(v_tri, e_tri, f_tri, bodies)
+    mesh_tri = refine_polygonal_facets(mesh)
+    assert len(mesh_tri.facets) == len(facets), "refine polygonal should not affect triangle facets"
+    mesh_ref = refine_triangle_mesh(mesh_tri)
+    #sys.exit()
 
-    for i, f in enumerate(f_ref):
-        a = f.edges[0].tail.position
-        b = f.edges[0].head.position
-        c = f.edges[1].head.position
+    #print(f"mesh_ref: {mesh_ref.vertices}")
+    for f_idx in mesh_ref.facets.keys():
+        facet = mesh_ref.facets[f_idx]
+        #print(f"facet {facet}")
+        a = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[0]).tail_index].position
+        b = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[0]).head_index].position
+        c = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[1]).head_index].position
+        #print(mesh_ref.get_edge(facet.edge_indices[0]))
+        #print(mesh_ref.get_edge(facet.edge_indices[1]))
+
+        #print(f"a, b, c: {a}, {b}, {c}")
         n = get_triangle_normal(a, b, c)
+        #print(f"n: {n}, parent_normal: {parent_normal}")
         dot = np.dot(n, parent_normal)
-        assert dot > 0.99, f"Refined triangle {i} normal flipped (dot={dot:.3f})"
-
+        #print(f"dot {dot}")
+        assert dot > 0.99, f"Refined facet {mesh_ref.facets[f_idx]} normal is flipped (dot={dot:.3f})"
