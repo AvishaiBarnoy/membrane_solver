@@ -67,13 +67,10 @@ def test_facet_vertex_sequence_is_consistent():
 def test_body_volume_is_positive():
     data = load_data(SAMPLE_FILE)
     mesh = parse_geometry(data)
-    #sys.exit()
 
     body = mesh.bodies[0]
     volume = body.compute_volume(mesh)  # to be implemented
     # TODO: fix volume calculation currently gives wrong answer
-    #print(f"volume: {volume}")
-    #sys.exit()
     assert volume > 0, f"Expected positive volume, got {volume}"
 
 def test_body_surface_area_positive():
@@ -82,6 +79,4 @@ def test_body_surface_area_positive():
 
     area = mesh.bodies[0].compute_surface_area(mesh)
     # TODO: fix area calculation currently gives wrong answer
-    #print(f"area: {area}")
-    #sys.exit()
     assert area > 0, f"Surface area should be positive, got {area}"

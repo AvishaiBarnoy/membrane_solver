@@ -56,22 +56,14 @@ class Facet:
             raise ValueError("Cannot compute normal with fewer than 3 edges.")
 
         verts = []
-        #print(f"facet: {self.index}")
-        #print(f"edge_indices {self.edge_indices}")
         for signed_index in self.edge_indices[:3]:
-            #print(f"signed_index, head, tail: {signed_index}, {mesh.get_edge(signed_index).head_index}, {mesh.get_edge(signed_index).tail_index}")
-            #print(f"signed_index {signed_index}")
-            #edge = mesh.edges[abs(signed_index)]
             edge = mesh.get_edge(signed_index)
-            #print(signed_index, ":", edge)
 
             tail, head = edge.tail_index, edge.head_index
-            #print(f"edge {edge.index}: {tail}, {head}")
             if not verts:
                 verts.append(tail)
             if head != verts[-1]:   # Prevent duplicates
                 verts.append(head)
-        #print("################\n")
 
         # Only need first 3 vertices to define normal
         v0, v1, v2 = (mesh.vertices[i].position for i in verts[:3])

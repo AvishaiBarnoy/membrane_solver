@@ -116,7 +116,6 @@ def save_geometry(mesh: Mesh, path: str = "temp_output_file.json"):
         "instructions": mesh.instructions
     }
     dfaces = data["faces"]
-    print(f"data[faces] {dfaces}")
     with open(path, "w") as f:
         json.dump(data, f, indent=4)
 
