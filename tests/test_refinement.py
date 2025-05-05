@@ -54,7 +54,6 @@ def test_triangle_refinement_updates_bodies():
 
     # Testing triangular refinement
     mesh_ref = refine_triangle_mesh(mesh_tri)
-    #sys.exit()
 
     assert len(mesh_ref.vertices) == len(mesh_tri.vertices) + len(mesh_tri.edges), "Refinemenet should add len(edges) new vertex per facet"
     assert len(mesh_ref.edges) == 2 * len(mesh_tri.edges) + 3 * len(mesh_tri.facets), "Refining splits edges and adds 3 more for each facet"
@@ -68,17 +67,10 @@ def test_child_facets_are_closed_loops():
 
     # 1. check loop on initial triangulation 
     mesh2 = refine_polygonal_facets(mesh)
-    #print(mesh2.facets.keys())
     for facet_idx in mesh2.facets.keys():
         # grab the three edges in order
         # check chaining: edge.head == next_edge.tail (mod 3)
         facet = mesh2.facets[facet_idx]
-        #print(f"facet {facet}, {facet_idx}")
-        #print(mesh2.edges)
-        #for e_idx in facet.edge_indices:
-            #print(f"e_idx: {e_idx}")
-            #print(f"mesh2.edges[e_idx] {mesh2.edges[e_idx]}")
-            #print(f"edge {e_idx}: {mesh2.edges[e_idx]}")
 
         for i in range(3):
             e_curr = mesh2.get_edge(facet.edge_indices[i])
@@ -96,7 +88,6 @@ def test_child_facets_are_closed_loops():
     for facet_idx in mesh3.facets.keys():
         # grab the three edges in order
         # check chaining: edge.head == next_edge.tail (mod 3)
-        #print(f"facet {facet}")
         facet = mesh2.facets[facet_idx]
         for i in range(3):
             e_curr = mesh3.get_edge(facet.edge_indices[i])
@@ -106,4 +97,3 @@ def test_child_facets_are_closed_loops():
                 f"edge {e_curr.index}.head={e_curr.head_index!r} ≠ "
                 f"edge {e_next.index}.tail={e_next.tail_index!r}"
             )
-    #sys.exit()
