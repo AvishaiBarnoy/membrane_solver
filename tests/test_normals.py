@@ -59,7 +59,6 @@ def test_square_refinement_preserves_normals():
         n = get_triangle_normal(a, b, c)
         dot = np.dot(n, parent_normal)
         assert dot > 0.99, f"Refined facet {mesh_ref.facets[f_idx]} normal is flipped (dot={dot:.3f})"
-    #sys.exit()
 
 def test_triangle_refinement_preserves_normals():
     v0 = Vertex(0, np.array([0, 0, 0]))
@@ -103,3 +102,29 @@ def test_triangle_refinement_preserves_normals():
         n = get_triangle_normal(a, b, c)
         dot = np.dot(n, parent_normal)
         assert dot > 0.99, f"Refined facet {mesh_ref.facets[f_idx]} normal is flipped (dot={dot:.3f})"
+
+def test_facet_normal_reversal():
+    # Create triangle vertices
+    v0 = Vertex(index=0, position=np.array([0.0, 0.0, 0.0]))
+    v1 = Vertex(index=1, position=np.array([1.0, 0.0, 0.0]))
+    v2 = Vertex(index=2, position=np.array([0.0, 1.0, 0.0]))
+    vertices = {0: v0, 1: v1, 2: v2}
+
+    # Create edges and reversed edges
+    e0 = Edge(index=1, tail_index=0, head_index=1)
+    e1 = Edge(index=2, tail_index=1, head_index=2)
+    e2 = Edge(index=3, tail_index=2, head_index=0)
+    edges = {1: e0, 2: e1, 3: e2}
+
+    mesh = Mesh()
+    mesh.vertices = vertices
+    mesh.edges = edges
+
+    facet = Facet(index=0, edge_indices=[1, 2, 3])
+    reversed_facet = Facet(index=1, edge_indices=[-3, -2, -1])
+
+    n1 = facet.normal(mesh)
+    n2 = reversed_facet.normal(mesh)
+
+    assert np.allclose(n1, -n2), "Reversed facet should flip normal"
+

@@ -5,6 +5,55 @@ from parameters.global_parameters import GlobalParameters
 import sys
 logger = logging.getLogger("membrane_solver")
 
+def orient_edges_cycle(edge_idxs: list[int], mesh: Mesh) -> list[int]:
+    """
+    Given three edge indices (signed or unsigned), return a reordered list
+    of _signed_ indices that form a proper tail→head cycle.
+    """
+    # build a map: vertex → list of (orig_idx, tail, head)
+    conn = {}
+    for orig in edge_idxs:
+        ed = mesh.get_edge(abs(orig))
+        t, h = (ed.tail_index, ed.head_index) if orig > 0 else (ed.head_index, ed.tail_index)
+        conn.setdefault(t, []).append((orig, t, h))
+        # also record the reversed orientation as a possibility,
+        # so we can flip edges if necessary
+        conn.setdefault(h, []).append((-orig, h, t))
+
+    # pick one of the three edges to start
+    start_raw = edge_idxs[0]
+    # determine its tail→head in signed form
+    first = None
+    for signed, t, h in conn.get(mesh.get_edge(abs(start_raw)).tail_index, []):
+        if abs(signed) == abs(start_raw):
+            first = (signed, t, h)
+            break
+    if first is None:
+        # fallback: just use raw as‐is
+        first = (start_raw, *(
+            (mesh.get_edge(start_raw).tail_index,
+             mesh.get_edge(start_raw).head_index)
+            if start_raw>0 else
+            (mesh.get_edge(-start_raw).head_index,
+             mesh.get_edge(-start_raw).tail_index)
+        ))
+    ordered = [first]
+    used = {abs(first[0])}
+
+    # now stitch the other two
+    while len(ordered) < 3:
+        _, _, cur_head = ordered[-1]
+        for signed, t, h in sum(conn.get(cur_head, []), []):
+            if abs(signed) in used:
+                continue
+            # this signed edge starts where we ended
+            ordered.append((signed, t, h))
+            used.add(abs(signed))
+            break
+
+    # return just the signed indices
+    return [signed for signed,_,_ in ordered]
+
 def refine_polygonal_facets(mesh):
     """
     Refines all non-triangular facets by subdividing them into triangles using
@@ -119,8 +168,7 @@ def refine_polygonal_facets(mesh):
     new_mesh.facets = new_facets
     new_mesh.bodies = new_bodies
     new_mesh.global_parameters = mesh.global_parameters
-    #sys.exit(1)
-    return new_mesh # new_vertices, new_edges, new_facets, new_bodies
+    return new_mesh
 
 def refine_triangle_mesh(mesh):
     # TODO: option for loop "r2" will refine twice
@@ -129,7 +177,6 @@ def refine_triangle_mesh(mesh):
     new_vertices = mesh.vertices.copy()
     new_edges = {}
     new_facets = {}
-
     edge_midpoints = {}  # (min_idx, max_idx) → midpoint Vertex
     edge_lookup = {}     # (min_idx, max_idx) → Edge
     facet_to_new_facets = {}  # facet.index → [Facet, ...]
@@ -157,7 +204,7 @@ def refine_triangle_mesh(mesh):
             edge_midpoints[key] = midpoint
 
     new_mesh.vertices = new_vertices
-    new_mesh.edges = new_edges
+    #new_mesh.edges = new_edges
 
     # Step 2: Subdivide each triangle into four smaller triangles
     for f_idx in mesh.facets.keys():
@@ -176,57 +223,110 @@ def refine_triangle_mesh(mesh):
 
         # compute normal to make sure orientation of edges in child  facet is correct
         parent_normal = facet.normal(mesh)
+        #print(f"parent normal {parent_normal}")
 
+        #print(f"new_facets {new_facets}, len {len(new_facets)}")
         # Triangle 1: v0, m01, m20
         e1 = get_or_create_edge(v0, m01)
         e2 = get_or_create_edge(m01, m20)
         e3 = get_or_create_edge(m20, v0)
+        new_mesh.edges.update(new_edges)
         f1 = Facet(len(new_facets), [e1.index, e2.index, e3.index])
-        if np.dot(f1.normal(new_mesh), parent_normal) < 0.99:
-            f1.edge_indices = [-e1.index, -e2.index, -e3.index]
-        else:
-            continue
-        new_facets[f1.index] = f1
-        child_facets.append(f1.index)
+        new_facets[len(new_facets)] = f1
 
         # Triangle 2: v1, m12, m01
         e1 = get_or_create_edge(v1, m12)
         e2 = get_or_create_edge(m12, m01)
         e3 = get_or_create_edge(m01, v1)
-        if np.dot(f2.normal(new_mesh), parent_normal) < 0.99:
-            f2.edge_indices = [-e1.index, -e2.index, -e3.index]
-        else:
-            continue
+        new_mesh.edges.update(new_edges)
         f2 = Facet(len(new_facets), [e1.index, e2.index, e3.index])
-        new_facets[f2.index] = f2
-        child_facets.append(f2.index)
+        new_facets[len(new_facets)] = f2
 
         # Triangle 3: v2, m20, m12
         e1 = get_or_create_edge(v2, m20)
         e2 = get_or_create_edge(m20, m12)
         e3 = get_or_create_edge(m12, v2)
+        new_mesh.edges.update(new_edges)
         f3 = Facet(len(new_facets), [e1.index, e2.index, e3.index])
-        if np.dot(f3.normal(new_mesh), parent_normal) < 0.99:
-            f3.edge_indices = [-e1.index, -e2.index, -e3.index]
-        else:
-            continue
-        print(f"f3 {f3}")
-        new_facets[f3.index] = f3
-        child_facets.append(f3.index)
+        new_facets[len(new_facets)] = f3
 
         # Triangle 4 (center): m01, m12, m20
         e1 = get_or_create_edge(m01, m12)
-        e2 = get_or_create_edge(m12, m20)
+        e2m = get_or_create_edge(m12, m20)
         e3 = get_or_create_edge(m20, m01)
-        f4 = Facet(len(new_facets), [-e1.index, -e2.index, -e3.index])
-        if f4.normal(mesh) == parent_normal:
-            continue
-        else:
-            f4.edge_indices = [-e1.index, -e2.index, -e3.index]
+        new_mesh.edges.update(new_edges)
+        f4 = Facet(len(new_facets), [e1.index, e3.index, e2.index])
+        new_facets[len(new_facets)] = f4
+
+        #–– debug interior edges ––
+        # 1) create each interior edge and give it a clear name
+        edge_mid01_mid12 = get_or_create_edge(m01, m12)
+        edge_mid12_mid20 = get_or_create_edge(m12, m20)
+        edge_mid20_mid01 = get_or_create_edge(m20, m01)
+
+        # 3) pull out the numeric indices
+        mid01_idx = edge_mid01_mid12.index
+        mid12_idx = edge_mid12_mid20.index
+        mid20_idx = edge_mid20_mid01.index
+
+        for name, idx in [("mid01", mid01_idx),
+                          ("mid12", mid12_idx),
+                          ("mid20", mid20_idx)]:
+            ed = new_mesh.get_edge(idx)
+            print(f"Interior {name}: edge {idx} goes "
+                  f"{ed.tail_index}→{ed.head_index}")
+        print("About to build central facet f4 with edges:",
+              [mid01_idx, mid12_idx, mid20_idx])
+        #–– end debug ––
+
+        #new_mesh.edges = new_edges
+
+        # Debugging block: dump edge and vertex info for each new facet
+        for name, f in zip(("f1","f2","f3","f4"), (f1, f2, f3, f4)):
+            print(f"--- Debug {name} (index={f.index}) ---")
+            print("  edge_indices:", f.edge_indices)
+            # fetch the three vertices used in normal computation
+            e0 = new_mesh.get_edge(f.edge_indices[0])
+            e1 = new_mesh.get_edge(f.edge_indices[1])
+            a_idx, b_idx, c_idx = e0.tail_index, e0.head_index, e1.head_index
+            a = new_mesh.vertices[a_idx].position
+            b = new_mesh.vertices[b_idx].position
+            c = new_mesh.vertices[c_idx].position
+            print(f"  vertex indices: a={a_idx}, b={b_idx}, c={c_idx}")
+            print(f"  positions:\n    a={a}\n    b={b}\n    c={c}")
+            n_unnormed = f.compute_normal(new_mesh)
+            norm = np.linalg.norm(n_unnormed)
+            print(f"  unnormalized normal = {n_unnormed},  |n| = {norm}")
+            print()
+        # end debug block
+
+
+
+        f1_norm = f1.normal(new_mesh)
+        if np.dot(f1_norm, parent_normal) < 0:
+            f1.edge_indices = [-idx for idx in reversed(f1.edge_indices)]
+            #print(f"f1_flipped: {f1.normal(new_mesh)}")
+        new_facets[f1.index] = f1
+        child_facets.append(f1.index)
+        facet_to_new_facets[facet.index] = child_facets
+
+        if np.dot(f2.normal(new_mesh), parent_normal) < 0:
+            f2.edge_indices = [-idx for idx in reversed(f2.edge_indices)]
+            #print(f"f2_flipped: {f2.normal(new_mesh)}")
+        new_facets[f2.index] = f2
+        child_facets.append(f2.index)
+
+        if np.dot(f3.normal(new_mesh), parent_normal) < 0:
+            f3.edge_indices = [-idx for idx in reversed(f3.edge_indices)]
+            #print(f"f3_flipped: {f3.normal(new_mesh)}")
+        new_facets[f3.index] = f3
+        child_facets.append(f3.index)
+
+        if np.dot(f4.normal(new_mesh), parent_normal) < 0:
+            f4.edge_indices = [-idx for idx in reversed(f4.edge_indices)]
+            #print(f"f4_flipped: {f4.normal(new_mesh)}")
         new_facets[f4.index] = f4
         child_facets.append(f4.index)
-
-        facet_to_new_facets[facet.index] = child_facets
 
     # Step 3: Build updated bodies
     new_bodies = {}
@@ -236,17 +336,10 @@ def refine_triangle_mesh(mesh):
             if mesh.facets[old_facet_idx].index in facet_to_new_facets:
                 new_body_facets.extend(facet_to_new_facets[old_facet_idx])
         new_bodies[len(new_bodies)] = Body(len(new_bodies), new_body_facets)
-
     new_mesh.vertices = new_vertices
-    new_mesh.edges = new_edges
     new_mesh.facets = new_facets
     new_mesh.bodies = new_bodies
     new_mesh.global_parameters = mesh.global_parameters
 
     return new_mesh
-
-def compute_normal(v0, v1, v2):
-    u = v1 - v0
-    v = v2 - v0
-    return np.cross(u, v)
 

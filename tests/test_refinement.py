@@ -59,7 +59,6 @@ def test_triangle_refinement_updates_bodies():
     assert len(mesh_ref.edges) == 2 * len(mesh_tri.edges) + 3 * len(mesh_tri.facets), "Refining splits edges and adds 3 more for each facet"
     assert len(mesh_ref.facets) == 2**len(mesh_tri.facets), "Refiningt increases number of facets by factor of 2^k"
     assert all(len(mesh_ref.facets[f_idx].edge_indices) == 3 for f_idx in mesh_ref.facets.keys()), "All refined facets must be triangles"
-    #assert all(isinstance(f, Facet) for f in b_ref[0].facets), "All body facets must be Facets"
     assert len(mesh_ref.bodies[0].facet_indices) == len(mesh_ref.facets), "Body should include all refined facets"
 
 def test_child_facets_are_closed_loops():
