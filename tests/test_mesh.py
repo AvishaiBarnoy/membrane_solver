@@ -26,3 +26,13 @@ def test_get_edge_directionality():
     # Ensure it's not the same object (unless you're using proxy)
     #assert edge_fwd is not edge_rev
 
+def test_types_in_mesh():
+    # load file
+    # refine polygonal
+    # refine triangular
+    mesh = Mesh()
+
+    assert type(v) == "Vertex" for e in mesh.vertices.values(), "Not all vertices are Vertex instances"
+    assert type(e) == "Edge" for e in mesh.edges.values(), "Not all edges are Edge instances"
+    assert type(f) == "Facet" for e in mesh.facets.values(), "Not all facets are Facet instances"
+    assert type(b) == "Body" for e in mesh.bodies.values(), "Not all bodies are Body instances"
