@@ -22,14 +22,18 @@ def create_quad():
     facet = Facet(0, [e0.index, e1.index, e2.index, e3.index])
     facets = [facet]
 
-    body = Body(0, [facets[0].index], options={"target_volume": 0})
+    body = Body(0, [facet.index], options={"target_volume": 0})
     bodies = [body]
 
     mesh = Mesh()
-    for i in vertices: mesh.vertices[i.index] = i
-    for i in edges: mesh.edges[i.index] = i
-    for i in facets: mesh.facets[i.index] = i
-    for i in bodies: mesh.bodies[i.index] = i
+    for v in vertices:
+        mesh.vertices[v.index] = v
+    for e in edges:
+        mesh.edges[e.index] = e
+    for f in facets:
+        mesh.facets[f.index] = f
+    for b in bodies:
+        mesh.bodies[b.index] = b
 
     return mesh
 
@@ -52,25 +56,59 @@ def test_get_edge_directionality():
     assert edge_rev.tail_index == 1
     assert edge_rev.head_index == 0
     assert edge_rev.refine is True
-    assert edge_rev.head_index == edge_fwd.tail_index
-    assert edge_rev.tail_index == edge_fwd.head_index
-
-    # Ensure it's not the same object (unless you're using proxy)
-    #assert edge_fwd is not edge_rev
 
 def test_types_in_mesh():
     mesh = create_quad()
 
     # testing initial loading
-    assert all(type(v) == Vertex for v in mesh.vertices.values()), "Not all vertices are Vertex instances"
-    assert all(type(e) == Edge for e in mesh.edges.values()), "Not all edges are Edge instances"
-    assert all(type(f) == Facet for f in mesh.facets.values()), "Not all facets are Facet instances"
-    assert all(type(b) == Body for b in mesh.bodies.values()), "Not all bodies are Body instances"
+    assert all(type(v) == Vertex for v in mesh.vertices.values()),  "Not all vertices are Vertex instances"
+    assert all(type(e) == Edge for e in mesh.edges.values()),       "Not all edges are Edge instances"
+    assert all(type(f) == Facet for f in mesh.facets.values()),     "Not all facets are Facet instances"
+    assert all(type(b) == Body for b in mesh.bodies.values()),      "Not all bodies are Body instances"
 
     # testing after polygonal refinement
-    # refine polygonal
-    # TODO: add this
+    mesh_poly = refine_polygonal_facets(mesh)
+    assert all(type(v) == Vertex for v in mesh_poly.vertices.values()), "Vertices corrupted by polygonal refinement"
+    assert all(type(e) == Edge   for e in mesh_poly.edges.values()),    "Edges corrupted by polygonal refinement"
+    assert all(type(f) == Facet  for f in mesh_poly.facets.values()),   "Facets corrupted by polygonal refinement"
+    assert all(type(b) == Body   for b in mesh_poly.bodies.values()),   "Bodies corrupted by polygonal refinement"
 
-    # testing after triangular refinement 
-    # refine triangular
-    # TODO: add this
+    # testing after triangular refinement
+    mesh_tri = refine_triangle_mesh(mesh_poly)
+    assert all(type(v) == Vertex for v in mesh_tri.vertices.values()),  "Vertices corrupted by triangular refinement"
+    assert all(type(e) == Edge   for e in mesh_tri.edges.values()),     "Edges corrupted by triangular refinement"
+    assert all(type(f) == Facet  for f in mesh_tri.facets.values()),    "Facets corrupted by triangular refinement"
+    assert all(type(b) == Body   for b in mesh_tri.bodies.values()),    "Bodies corrupted by triangular refinement"
+
+def test_indices_match_keys():
+    mesh = create_quad()
+
+    # Every dictionary key must equal the object's .index
+    for vid, v in mesh.vertices.items():
+        assert vid == v.index, f"Vertex key {vid} != Vertex.index {v.index}"
+    for eid, e in mesh.edges.items():
+        assert eid == e.index, f"Edge key {eid} != Edge.index {e.index}"
+    for fid, f in mesh.facets.items():
+        assert fid == f.index, f"Facet key {fid} != Facet.index {f.index}"
+    for bid, b in mesh.bodies.items():
+        assert bid == b.index, f"Body key {bid} != Body.index {b.index}"
+
+    mesh_poly = refine_polygonal_facets(mesh)
+    for vid, v in mesh_poly.vertices.items():
+        assert vid == v.index, f"Vertex key {vid} != Vertex.index {v.index}"
+    for eid, e in mesh_poly.edges.items():
+        assert eid == e.index, f"Edge key {eid} != Edge.index {e.index}"
+    for fid, f in mesh_poly.facets.items():
+        assert fid == f.index, f"Facet key {fid} != Facet.index {f.index}"
+    for bid, b in mesh_poly.bodies.items():
+        assert bid == b.index, f"Body key {bid} != Body.index {b.index}"
+
+    mesh_tri = refine_triangle_mesh(mesh_poly)
+    for vid, v in mesh_tri.vertices.items():
+        assert vid == v.index, f"Vertex key {vid} != Vertex.index {v.index}"
+    for eid, e in mesh_tri.edges.items():
+        assert eid == e.index, f"Edge key {eid} != Edge.index {e.index}"
+    for fid, f in mesh_tri.facets.items():
+        assert fid == f.index, f"Facet key {fid} != Facet.index {f.index}"
+    for bid, b in mesh_tri.bodies.items():
+        assert bid == b.index, f"Body key {bid} != Body.index {b.index}"
