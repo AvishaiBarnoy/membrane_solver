@@ -49,8 +49,36 @@ class Facet:
     edge_indices: List[int]  # Signed indices: +n = forward, -n = reversed (including -1 for "r0")
     options: Dict[str, Any] = field(default_factory=dict)
 
-    # TODO: add func: compute_area
-    def compute_area(self, mesh):
+    # TODO: add func: compute_normal
+    def compute_normal(self, mesh) -> np.ndarray:
+        """Compute (non-normalized) normal vector using right-hand rule from first three vertices."""
+        if len(self.edge_indices) < 3:
+            raise ValueError("Cannot compute normal with fewer than 3 edges.")
+
+        verts = []
+        for signed_index in self.edge_indices[:3]:
+            edge = mesh.get_edge(signed_index)
+            tail, head = edge.tail_index, edge.head_index
+            if not verts:
+                verts.append(tail)
+            verts.append(head)
+
+        # Only need first 3 vertices to define normal
+        v0, v1, v2 = (mesh.vertices[i].position for i in verts[:3])
+        u = v1 - v0
+        v = v2 - v0
+
+        return np.cross(u, v)
+
+    def normal(self, mesh) -> np.ndarray:
+        """Compute normalized normal vector"""
+        n = self.compute_normal(mesh)
+        norm = np.linalg.norm(n)
+        if norm == 0:
+            raise ValueError("Degenerate facet with zero normal.")
+        return n / norm
+
+    def compute_area(self, mesh: "Mesh") -> float:
         """
         Compute area by decomposing the polygon into triangles fan-based at vertex 0.
         Supports arbitrary n-gon.

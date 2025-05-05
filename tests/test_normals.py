@@ -25,7 +25,6 @@ def test_square_refinement_preserves_normals():
     edges = [e0, e1, e2, e3]
 
     facet = Facet(0, [e0.index, e1.index, e2.index, e3.index])
-    #print(f"facet {facet}")
     facets = [facet]
     body = Body(0, [f.index for f in facets])
     bodies = [body]
@@ -41,7 +40,6 @@ def test_square_refinement_preserves_normals():
     # Normal of parent
     a, b, c = v0.position, v1.position, v2.position
     parent_normal = get_triangle_normal(a, b, c)
-    #print(f"parent normal {parent_normal}")
     mesh_tri = refine_polygonal_facets(mesh)
     for f_idx in mesh_tri.facets.keys():
         facet = mesh_tri.facets[f_idx]
@@ -49,19 +47,16 @@ def test_square_refinement_preserves_normals():
         b = mesh_tri.vertices[mesh_tri.get_edge(facet.edge_indices[0]).head_index].position
         c = mesh_tri.vertices[mesh_tri.get_edge(facet.edge_indices[1]).head_index].position
         n = get_triangle_normal(a, b, c)
-        #print(f"n_tri: {n}")
         dot = np.dot(n, parent_normal)
         assert dot > 0.99, f"Refined facet {mesh_tri.facets[f_idx]} normal is flipped (dot={dot:.3f})"
 
     mesh_ref = refine_triangle_mesh(mesh_tri)
-    #print(f"mesh_tri {mesh_tri.facets}")
     for f_idx in mesh_ref.facets.keys():
         facet = mesh_ref.facets[f_idx]
         a = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[0]).tail_index].position
         b = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[0]).head_index].position
         c = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[1]).head_index].position
         n = get_triangle_normal(a, b, c)
-        print(f"a, b, c, n: {a}, {b}, {c}, {n}")
         dot = np.dot(n, parent_normal)
         assert dot > 0.99, f"Refined facet {mesh_ref.facets[f_idx]} normal is flipped (dot={dot:.3f})"
     #sys.exit()
@@ -99,19 +94,12 @@ def test_triangle_refinement_preserves_normals():
     mesh_ref = refine_triangle_mesh(mesh_tri)
     #sys.exit()
 
-    #print(f"mesh_ref: {mesh_ref.vertices}")
     for f_idx in mesh_ref.facets.keys():
         facet = mesh_ref.facets[f_idx]
-        #print(f"facet {facet}")
         a = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[0]).tail_index].position
         b = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[0]).head_index].position
         c = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[1]).head_index].position
-        #print(mesh_ref.get_edge(facet.edge_indices[0]))
-        #print(mesh_ref.get_edge(facet.edge_indices[1]))
 
-        #print(f"a, b, c: {a}, {b}, {c}")
         n = get_triangle_normal(a, b, c)
-        #print(f"n: {n}, parent_normal: {parent_normal}")
         dot = np.dot(n, parent_normal)
-        #print(f"dot {dot}")
         assert dot > 0.99, f"Refined facet {mesh_ref.facets[f_idx]} normal is flipped (dot={dot:.3f})"
