@@ -10,49 +10,43 @@ def orient_edges_cycle(edge_idxs: list[int], mesh: Mesh) -> list[int]:
     Given three edge indices (signed or unsigned), return a reordered list
     of _signed_ indices that form a proper tail→head cycle.
     """
-    # build a map: vertex → list of (orig_idx, tail, head)
-    conn = {}
+    # 1) build adjacency: vertex → list of (signed_idx, tail, head)
+    conn: dict[int, list[tuple[int,int,int]]] = {}
     for orig in edge_idxs:
         ed = mesh.get_edge(abs(orig))
         t, h = (ed.tail_index, ed.head_index) if orig > 0 else (ed.head_index, ed.tail_index)
-        conn.setdefault(t, []).append((orig, t, h))
-        # also record the reversed orientation as a possibility,
-        # so we can flip edges if necessary
+        conn.setdefault(t, []).append(( orig, t, h))
         conn.setdefault(h, []).append((-orig, h, t))
 
-    # pick one of the three edges to start
-    start_raw = edge_idxs[0]
-    # determine its tail→head in signed form
+    # 2) pick the first edge in its correct signed orientation
+    start = edge_idxs[0]
     first = None
-    for signed, t, h in conn.get(mesh.get_edge(abs(start_raw)).tail_index, []):
-        if abs(signed) == abs(start_raw):
+    for signed, t, h in conn.get(mesh.get_edge(abs(start)).tail_index, []):
+        if abs(signed) == abs(start):
             first = (signed, t, h)
             break
     if first is None:
-        # fallback: just use raw as‐is
-        first = (start_raw, *(
-            (mesh.get_edge(start_raw).tail_index,
-             mesh.get_edge(start_raw).head_index)
-            if start_raw>0 else
-            (mesh.get_edge(-start_raw).head_index,
-             mesh.get_edge(-start_raw).tail_index)
-        ))
+        # fallback: take the raw orientation
+        ed = mesh.get_edge(abs(start))
+        first = (start,
+                 ed.tail_index if start>0 else ed.head_index,
+                 ed.head_index if start>0 else ed.tail_index)
+
     ordered = [first]
     used = {abs(first[0])}
 
-    # now stitch the other two
+    # 3) stitch the remaining two edges
     while len(ordered) < 3:
         _, _, cur_head = ordered[-1]
-        for signed, t, h in sum(conn.get(cur_head, []), []):
+        for signed, t, h in conn.get(cur_head, []):
             if abs(signed) in used:
                 continue
-            # this signed edge starts where we ended
             ordered.append((signed, t, h))
             used.add(abs(signed))
             break
 
-    # return just the signed indices
-    return [signed for signed,_,_ in ordered]
+    # 4) return just the signed indices in cycle order
+    return [signed for signed, _, _ in ordered]
 
 def refine_polygonal_facets(mesh):
     """
@@ -231,7 +225,10 @@ def refine_triangle_mesh(mesh):
         e2 = get_or_create_edge(m01, m20)
         e3 = get_or_create_edge(m20, v0)
         new_mesh.edges.update(new_edges)
-        f1 = Facet(len(new_facets), [e1.index, e2.index, e3.index])
+        #f1 = Facet(len(new_facets), [e1.index, e2.index, e3.index])
+        raw1 = [e1.index, e2.index, e3.index]
+        cyc1 = orient_edges_cycle(raw1, new_mesh)
+        f1 = Facet(len(new_facets), cyc1)
         new_facets[len(new_facets)] = f1
 
         # Triangle 2: v1, m12, m01
@@ -239,7 +236,10 @@ def refine_triangle_mesh(mesh):
         e2 = get_or_create_edge(m12, m01)
         e3 = get_or_create_edge(m01, v1)
         new_mesh.edges.update(new_edges)
-        f2 = Facet(len(new_facets), [e1.index, e2.index, e3.index])
+        #f2 = Facet(len(new_facets), [e1.index, e2.index, e3.index])
+        raw2 = [e1.index, e2.index, e3.index]
+        cyc2 = orient_edges_cycle(raw2, new_mesh)
+        f2 = Facet(len(new_facets), cyc2)
         new_facets[len(new_facets)] = f2
 
         # Triangle 3: v2, m20, m12
@@ -247,7 +247,10 @@ def refine_triangle_mesh(mesh):
         e2 = get_or_create_edge(m20, m12)
         e3 = get_or_create_edge(m12, v2)
         new_mesh.edges.update(new_edges)
-        f3 = Facet(len(new_facets), [e1.index, e2.index, e3.index])
+        #f3 = Facet(len(new_facets), [e1.index, e2.index, e3.index])
+        raw3 = [e1.index, e2.index, e3.index]
+        cyc3 = orient_edges_cycle(raw3, new_mesh)
+        f3 = Facet(len(new_facets), cyc3)
         new_facets[len(new_facets)] = f3
 
         # Triangle 4 (center): m01, m12, m20
@@ -255,7 +258,10 @@ def refine_triangle_mesh(mesh):
         e2m = get_or_create_edge(m12, m20)
         e3 = get_or_create_edge(m20, m01)
         new_mesh.edges.update(new_edges)
-        f4 = Facet(len(new_facets), [e1.index, e3.index, e2.index])
+        raw4 = [e1.index, e2.index, e3.index]
+        cyc4 = orient_edges_cycle(raw4, new_mesh)
+        f4 = Facet(len(new_facets), cyc4)
+        #f4 = Facet(len(new_facets), [e1.index, e3.index, e2.index])
         new_facets[len(new_facets)] = f4
 
         #–– debug interior edges ––
@@ -299,8 +305,6 @@ def refine_triangle_mesh(mesh):
             print(f"  unnormalized normal = {n_unnormed},  |n| = {norm}")
             print()
         # end debug block
-
-
 
         f1_norm = f1.normal(new_mesh)
         if np.dot(f1_norm, parent_normal) < 0:
