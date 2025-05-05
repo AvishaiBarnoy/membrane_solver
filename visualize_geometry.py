@@ -7,7 +7,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import sys
 
 # Import functions from your modules.
-from geometry.geometry_io import parse_geometry, load_data
+from geometry.geom_io import parse_geometry, load_data
 from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
 
 import logging
@@ -17,8 +17,7 @@ logger = logging.getLogger('membrane_solver')
 # TODO: shading option when rotating
 # TODO: opaque scatter when transparent=False
 
-
-def plot_geometry(vertices, facets, show_indices=False, ax=None,
+def plot_geometry(mesh, show_indices=False, ax=None,
                   transparent=False):
     """
     Visualizes the triangulated geometry.
@@ -33,16 +32,19 @@ def plot_geometry(vertices, facets, show_indices=False, ax=None,
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
 
-    vertex_positions = [v.position for v in vertices]
+    vertex_positions = [mesh.vertices[v].position for v in mesh.vertices.keys()]
     X, Y, Z = zip(*vertex_positions)
 
     # Plot triangle facets
     triangles = []
-    for facet in facets:
+    for facet in mesh.facets.values():
         # Reconstruct the triangle from edges
-        if len(facet.edges) != 3:
+        if len(facet.edge_indices) < 3:
+            logger.warning(f"Skipping facet {facet.index}: too few edges")
             continue
-        tri = [e.tail.position for e in facet.edges]
+
+        tri = [mesh.vertices[mesh.get_edge(e).tail_index].position for e in
+               facet.edge_indices]
         triangles.append(tri)
 
     if transparent:
@@ -80,17 +82,22 @@ if __name__ == '__main__':
             raise FileNotFoundError(f"Input file '{inpfile}' not found!")
     except IndexError:
         inpfile = "meshes/sample_geometry.json"
+        inpfile = "meshes/cube.json"
 
     # Load geometry from the input file.
     # vertices, facets, volume = load_geometry(inpfile)
     data = load_data(inpfile)
-    vertices, edges, facets, bodies, global_params = parse_geometry(data=data)
+    mesh = parse_geometry(data=data)
+    #plot_geometry(mesh, show_indices=False)
+
     # Perform the initial triangulation on loaded facets.
-    vertices, edges, tri_facets, bodies = refine_polygonal_facets(vertices, edges, facets, bodies) # initial triangulation
+    mesh_tri = refine_polygonal_facets(mesh) # initial triangulation
+    plot_geometry(mesh_tri, show_indices=False)
 
     # Optionally, perform a refinement step.
-    #vertices, edges, tri_facets, bodies = refine_triangle_mesh(vertices, edges, tri_facets, bodies)
-    #vertices, edges, tri_facets = refine_triangle_mesh(vertices, edges, tri_facets, bodies)
+    mesh_ref = refine_triangle_mesh(mesh_tri)
+    mesh_ref2 = refine_triangle_mesh(mesh_ref)
 
     # Visualize the resulting triangulated geometry.
-    plot_geometry(vertices, tri_facets, show_indices=False)
+    plot_geometry(mesh_ref, show_indices=False)
+    plot_geometry(mesh_ref2, show_indices=False)

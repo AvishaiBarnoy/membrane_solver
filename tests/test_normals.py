@@ -90,9 +90,8 @@ def test_triangle_refinement_preserves_normals():
 
     mesh_tri = refine_polygonal_facets(mesh)
     assert len(mesh_tri.facets) == len(facets), "refine polygonal should not affect triangle facets"
-    mesh_ref = refine_triangle_mesh(mesh_tri)
-    #sys.exit()
 
+    mesh_ref = refine_triangle_mesh(mesh_tri)
     for f_idx in mesh_ref.facets.keys():
         facet = mesh_ref.facets[f_idx]
         a = mesh_ref.vertices[mesh_ref.get_edge(facet.edge_indices[0]).tail_index].position
