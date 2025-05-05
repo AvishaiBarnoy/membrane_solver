@@ -2,7 +2,7 @@
 import json #, yaml
 from geometry.entities import Vertex, Edge, Facet, Body, Mesh
 from parameters.global_parameters import GlobalParameters
-#from runtime.refinement import refine_polygonal_facets
+from runtime.refinement import refine_polygonal_facets
 import importlib
 import numpy as np
 import logging
@@ -55,7 +55,6 @@ def parse_geometry(data: dict) -> Mesh:
 
     # Facets
     for i, entry in enumerate(data["faces"]):
-        # TODO: should accept lsot data["facets"]
         *raw_edges, options = entry if isinstance(entry[-1], dict) else (*entry, {})
         def parse_edge(e):
             if isinstance(e, str) and e.startswith("r"):
@@ -64,7 +63,6 @@ def parse_geometry(data: dict) -> Mesh:
             if i >= 0: return i + 1     # 0 -> 1, 1 -> 2, etc.
             elif i < 0: return i - 1    # -11 -> -12
         edge_indices = [parse_edge(e) for e in raw_edges]
-        # TODO: here do refine_polygonal_facets 
         mesh.facets[i] = Facet(index=i, edge_indices=edge_indices,
                                  options=options)
 
@@ -79,6 +77,8 @@ def parse_geometry(data: dict) -> Mesh:
     # Global parameters and instructions
     mesh.global_parameters = data.get("global_parameters", {})
     mesh.instructions = data.get("instructions", [])
+
+    new_mesh = refine_polygonal_facets(mesh)
     return mesh
 
 def save_geometry(mesh: Mesh, path: str = "temp_output_file.json"):
@@ -88,11 +88,9 @@ def save_geometry(mesh: Mesh, path: str = "temp_output_file.json"):
         return i - 1                    # 1 → 0
 
     data = {
-        #"vertices": [[*v.position.tolist(), v.options] if v.options else v.position.tolist() for v in mesh.vertices],
         "vertices": [[*mesh.vertices[v].position.tolist(),
                         mesh.vertices[v].options] if mesh.vertices[v].options else
                         mesh.vertices[v].position.tolist() for v in mesh.vertices.keys()],
-        #"edges": [[e.tail_index, e.head_index, e.options] if e.options else [e.tail_index, e.head_index] for e in mesh.edges],
         "edges": [[mesh.edges[e].tail_index, mesh.edges[e].head_index,
                    mesh.edges[e].options] if mesh.edges[e].options else
                   [mesh.edges[e].tail_index, mesh.edges[e].head_index] for e in mesh.edges.keys()],
@@ -102,11 +100,6 @@ def save_geometry(mesh: Mesh, path: str = "temp_output_file.json"):
             list(map(export_edge_index, mesh.facets[facet_idx].edge_indices))
             for facet_idx in mesh.facets.keys()
         ],
-        #"faces": [
-        #    [*map(export_edge_index, facet.edge_indices), facet.options] if facet.options else
-        #    list(map(export_edge_index, facet.edge_indices))
-        #    for facet in mesh.facets
-        #],
         "bodies": {
             "faces": [mesh.bodies[b].facet_indices for b in mesh.bodies.keys()],
             "target_volume": [mesh.bodies[b].target_volume for b in mesh.bodies.keys()],

@@ -41,7 +41,6 @@ class Edge:
         tail = mesh.vertices[self.tail_index]
         head = mesh.vertices[self.head_index]
         return np.linalg.norm(head.position - tail.position)
-    # TODO: add func: compute_vector
 
 @dataclass
 class Facet:
@@ -49,7 +48,6 @@ class Facet:
     edge_indices: List[int]  # Signed indices: +n = forward, -n = reversed (including -1 for "r0")
     options: Dict[str, Any] = field(default_factory=dict)
 
-    # TODO: add func: compute_normal
     def compute_normal(self, mesh) -> np.ndarray:
         """Compute (non-normalized) normal vector using right-hand rule from first three vertices."""
         if len(self.edge_indices) < 3:
@@ -87,14 +85,14 @@ class Facet:
         """
         verts = []
         for signed_index in self.edge_indices:
-            edge = mesh.edges[abs(signed_edges)]
+            edge = mesh.edges[abs(signed_index)]
             tail, head = (edge.tail_index, edge.head_index) if signed_index > 0 else (edge.head_index, edge.tail_index)
             if not verts:
                 verts.append(tail)
             verts.append(head)
 
         verts = [mesh.vertices[i].position for i in verts[:-1]] # remove duplicate closing vertex
-        v1, v2, v3 = verts
+        v0, v1, v2 = verts
         area = 0.5 * np.linalg.norm(np.cross(v1 - v0, v2 - v0))
         return area
 
@@ -109,14 +107,21 @@ class Body:
         volume = 0.0
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
+            # collect the true cyclic list of vertex‐indices around this facet:
             v_ids = []
             for signed_ei in facet.edge_indices:
                 edge = mesh.edges[abs(signed_ei)]
                 tail = edge.tail_index if signed_ei > 0 else edge.head_index
                 if not v_ids or v_ids[-1] != tail:
                     v_ids.append(tail)
-            v0, v1, v2 = (mesh.vertices[i].position for i in v_ids[:3])
-            volume += np.dot(v0, np.cross(v1, v2)) / 6.0
+            # now v_ids is the ordered boundary of your facet (length >= 3)
+            v_pos = [mesh.vertices[i].position for i in v_ids]
+            v0 = v_pos[0]
+            # triangulate into (v0, v_i, v_{i+1}) for i=1..len−2
+            for i in range(1, len(v_pos)-1):
+                v1 = v_pos[i]
+                v2 = v_pos[i+1]
+                volume += np.dot(v0, np.cross(v1, v2)) / 6.0
         return abs(volume)
 
     def compute_surface_area(self, mesh) -> float:
@@ -129,8 +134,12 @@ class Body:
                 tail = edge.tail_index if signed_ei > 0 else edge.head_index
                 if not v_ids or v_ids[-1] != tail:
                     v_ids.append(tail)
-            v0, v1, v2 = (mesh.vertices[i].position for i in v_ids[:3])
-            area += 0.5 * np.linalg.norm(np.cross(v1 - v0, v2 - v0))
+            v_pos = [mesh.vertices[i].position for i in v_ids]
+            v0 = v_pos[0]
+            for i in range(1, len(v_pos)-1):
+                v1 = v_pos[i]
+                v2 = v_pos[i+1]
+                area += 0.5 * np.linalg.norm(np.cross(v1 - v0, v2 - v0))
         return area
 
 @dataclass
@@ -151,10 +160,10 @@ class Mesh:
             raise ValueError(f"Edge index {index} cannot be zero.")
 
     def compute_total_surface_area(self) -> float:
-        return sum(facet.compute_area(self) for facet in self.facets)
+        return sum(facet.compute_area(self) for facet in self.facets.values())
 
     def compute_total_volume(self) -> float:
-        return sum(body.compute_volume(self) for body in self.bodies)
+        return sum(body.compute_volume(self) for body in self.bodies.values())
 
     def validate_triangles(self):
         """Validate that all facets are triangles (have exactly 3 oriented edges).

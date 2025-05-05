@@ -9,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry, save_geometry
 from geometry.entities import Mesh
+from runtime.refinement import refine_polygonal_facets
 
 SAMPLE_FILE = os.path.join("meshes", "sample_geometry.json")
 TEMP_FILE = os.path.join("meshes", "temp_geometry_output.json")
@@ -69,14 +70,20 @@ def test_body_volume_is_positive():
     mesh = parse_geometry(data)
 
     body = mesh.bodies[0]
-    volume = body.compute_volume(mesh)  # to be implemented
-    # TODO: fix volume calculation currently gives wrong answer
-    assert volume > 0, f"Expected positive volume, got {volume}"
+    volume = body.compute_volume(mesh)
+    assert round(volume, 3) == 1.0, f"Expected positive volume, got {volume}"
+
+    mesh_volume = mesh.compute_total_volume()
+    assert round(mesh_volume, 3) == 1.0, f"Expected positive volume, got {mesh_volume}"
 
 def test_body_surface_area_positive():
     data = load_data(SAMPLE_FILE)
     mesh = parse_geometry(data)
 
     area = mesh.bodies[0].compute_surface_area(mesh)
-    # TODO: fix area calculation currently gives wrong answer
-    assert area > 0, f"Surface area should be positive, got {area}"
+    assert round(area, 3) == 6.0, f"Surface area should be positive, got {area}"
+
+    mesh_tri = refine_polygonal_facets(mesh)
+    mesh_area = mesh_tri.compute_total_surface_area()
+    assert round(mesh_area, 3) == 6.0, f"Surface area should be positive, got {mesh_area}"
+
