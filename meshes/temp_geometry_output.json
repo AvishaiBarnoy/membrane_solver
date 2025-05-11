@@ -127,7 +127,11 @@
             "r10",
             "r1",
             {
-                "surface_tension": 5
+                "surface_tension": 5,
+                "constraints": [
+                    "pin_to_plane",
+                    "fix_facet_area"
+                ]
             }
         ],
         [
@@ -173,10 +177,12 @@
     },
     "global_parameters": {
         "surface_tension": 1.0,
+        "volume_stiffness": 1000,
+        "time_step": 0.01,
         "intrinsic_curvature": 0,
         "bending_modulus": 0,
         "gaussian_modulus": 0,
-        "volume_stiffness": 1000
+        "algorithm": "cg"
     },
     "instructions": [
         "gradient descent",

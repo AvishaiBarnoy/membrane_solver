@@ -5,7 +5,6 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Vertex, Edge, Facet, Body, Mesh
 from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
-from parameters.global_parameters import GlobalParameters
 
 def get_triangle_normal(a, b, c):
     n = np.cross(b - a, c - a)
@@ -29,14 +28,12 @@ def test_square_refinement_preserves_normals():
     body = Body(0, [f.index for f in facets])
     bodies = [body]
 
-    global_params = GlobalParameters({})
 
     mesh = Mesh()
     for i in vertices: mesh.vertices[i.index] = i
     for i in edges: mesh.edges[i.index] = i
     for i in facets: mesh.facets[i.index] = i
     for i in bodies: mesh.bodies[i.index] = i
-    mesh.global_parameters = global_params
     # Normal of parent
     a, b, c = v0.position, v1.position, v2.position
     parent_normal = get_triangle_normal(a, b, c)
@@ -76,14 +73,12 @@ def test_triangle_refinement_preserves_normals():
     body = Body(0, [f.index for f in facets])
     bodies = [body]
 
-    global_params = GlobalParameters({})
 
     mesh = Mesh()
     for i in vertices: mesh.vertices[i.index] = i
     for i in edges: mesh.edges[i.index] = i
     for i in facets: mesh.facets[i.index] = i
     for i in bodies: mesh.bodies[i.index] = i
-    mesh.global_parameters = global_params
 
     # Normal of parent
     parent_normal = get_triangle_normal(v0.position, v1.position, v2.position)

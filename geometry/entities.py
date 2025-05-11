@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
+from parameters.global_parameters import GlobalParameters
 import numpy as np
 import sys
 
@@ -17,6 +18,12 @@ class Vertex:
     index: int
     position: np.ndarray
     options: Dict[str, Any] = field(default_factory=dict)
+
+    def project_position(self, pos: np.ndarray) -> np.ndarray:
+        ...
+
+    def project_gradient(self, grad: np.ndarray) -> np.ndarray:
+        ...
 
 @dataclass
 class Edge:
@@ -148,7 +155,8 @@ class Mesh:
     edges: Dict[int, "Edge"] = field(default_factory=dict)
     facets: Dict[int, "Facet"] = field(default_factory=dict)
     bodies: Dict[int, "Body"] = field(default_factory=dict)
-    global_parameters: Dict[str, Any] = field(default_factory=dict)
+    #global_parameters: Dict[str, Any] = field(default_factory=dict)
+    global_parameters: "GlobalParameters" = None  # Use the class here
     instructions: List[str] = field(default_factory=list)
 
     def get_edge(self, index: int) -> "Edge":

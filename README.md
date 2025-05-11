@@ -22,8 +22,6 @@
 16. initial energy calculation after loading -> test modules
 18. add interactive mode for refining, minimization, etc.
 19. visualization script - exporting to obj, vtk, etc.
-20. create class Mesh/PolygonalDomain that wraps general functions and keeps
-    track of all lists (vertices, edges, facets, bodies).
 
 ## Design thoughts 
 1. Should I keep track of indices after refining facets and/or edges?
@@ -31,10 +29,18 @@
     1.2 No: will allow better tracking of current state and number of object
 
 ## roadmap
-1. box that minimizes into a sphere - volume conservation
+1. cube that minimizes into a sphere - volume conservation
 2. square that minimizes into circle - area conservation
-3. box that minimizes into a sphere with a dent - fixed/no_refine
-4. a plane with a disk and outer perimeter
-5. after implementing mean curvature energy -> membrane between two fixed parallel circels
+3. capillary bridge (catenoid) - two circles at fixed distance, tests surface
+        tension and volume constraint
+4. Pinned hemisphere under tension to yield spherical caps - boundary constraints 
+        and mean curvature-pressure balance
+5. Pure Gaussian curvature - check no change under constant topology
+6. Tilt source decay - Should form a “dimple” or invagination
+7. Dimpled sphere with one embedded caveolin disk - 
+8. box that minimizes into a sphere with a dent - fixed/no_refine
+9. a plane with a disk and outer perimeter
+10. after implementing mean curvature energy -> membrane between two fixed parallel circels
     results in a catenoid
-    6.1 check how cat.fe treats the fixed surface area of the soapfilm
+    10.1 check how cat.fe treats the fixed surface area of the soapfilm
+11. a flat sheet that folds to its spontaneous curvature
