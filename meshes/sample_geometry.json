@@ -26,7 +26,7 @@
     "faces": [
         [0, 1, 2, 3, {"refine": false, "fixed": true, "energy": "default", "surface_tension": 1}],
         ["r0", 8, 5, "r9", {"refine": true, "energy": "new_module"}],
-        [9, 6, -10, -1, {"surface_tension": 5}],
+        [9, 6, -10, -1, {"surface_tension": 5, "constraints": ["pin_to_plane","fix_facet_area"]}],
         [-2, 10, 7, -11],
         [3, 8, -4, -11],
         [-5, -4, -7, -6]
@@ -40,7 +40,8 @@
                         "intrinsic_curvature": 0, 
                         "bending_modulus": 0, 
                         "gaussian_modulus": 0,
-                        "volume_stiffness": 1000
+                        "volume_stiffness": 1000,
+                        "algorithm": "cg"
     },
     "instructions": [
         "gradient descent",

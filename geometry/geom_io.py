@@ -39,6 +39,14 @@ def load_data(filename):
 def parse_geometry(data: dict) -> Mesh:
     mesh = Mesh()
 
+    # Initialize global parameters
+    mesh.global_parameters = GlobalParameters()
+
+    # Override global parameters with values from the input file
+    input_global_params = data.get("global_parameters", {})
+    mesh.global_parameters.update(input_global_params)
+
+
     # TODO: add option to read both lowercase and uppercase title Vertices/vertices
     # Vertices
     for i, entry in enumerate(data["vertices"]):
@@ -74,8 +82,7 @@ def parse_geometry(data: dict) -> Mesh:
         for i, (facet_indices, volume, energy) in enumerate(zip(face_groups, volumes, energies)):
             mesh.bodies[i] = Body(index=i, facet_indices=facet_indices, target_volume=volume, options={"energy": energy})
 
-    # Global parameters and instructions
-    mesh.global_parameters = data.get("global_parameters", {})
+    # Instructions
     mesh.instructions = data.get("instructions", [])
 
     new_mesh = refine_polygonal_facets(mesh)
@@ -105,7 +112,7 @@ def save_geometry(mesh: Mesh, path: str = "temp_output_file.json"):
             "target_volume": [mesh.bodies[b].target_volume for b in mesh.bodies.keys()],
             "energy": [mesh.bodies[b].options.get("energy", {}) for b in mesh.bodies.keys()]
         },
-        "global_parameters": mesh.global_parameters,
+        "global_parameters": mesh.global_parameters.to_dict(),
         "instructions": mesh.instructions
     }
     dfaces = data["faces"]

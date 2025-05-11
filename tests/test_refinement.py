@@ -5,7 +5,6 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Vertex, Edge, Facet, Body, Mesh
 from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
-from parameters.global_parameters import GlobalParameters
 
 def create_quad():
 
@@ -40,7 +39,6 @@ def create_quad():
 
 def test_triangle_refinement_updates_bodies():
     mesh = create_quad()
-    global_params = GlobalParameters({})
 
     # Testing polygonal refinement 
     mesh_tri = refine_polygonal_facets(mesh)
