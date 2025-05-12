@@ -1,7 +1,7 @@
 # modules/surface.py
 # Here goes energy functions relevant for area of facets
 
-from geometry_entities import Mesh
+from geometry.entities import Mesh
 from logging_config import setup_logging
 import numpy as np
 
@@ -30,7 +30,7 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver):
     for facet in mesh.facets.values():
         g = param_resolver.get(facet, 'surface_tension')
         # compute area A, then E += γ*A
-        E += g * facet.compute_area()
+        E += g * facet.compute_area(mesh)
         # compute ∇A wrt each vertex in facet → add to grad
         ...
     return E, grad

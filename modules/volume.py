@@ -1,6 +1,7 @@
-# volume.py
+# modules/volume.py
 
-from geometry_entities import Body
+from geometry.entities import Body
+import numpy as np
 from logging_config import setup_logging
 
 logger = setup_logging('membrane_solver')
@@ -26,3 +27,15 @@ def calculate_volume_energy(body, global_params):
     logger.info(f"[volume.py] Volume energy contribution: {volume_energy}")
 
     return volume_energy
+
+def compute_energy_and_gradient(mesh, global_params, param_resolver):
+    E = 0.0
+    grad: Dict[int,np.ndarray] = {i: np.zeros(3) for i in mesh.vertices}
+
+    for body in mesh.bodies.values():
+        g = param_resolver.get(body, 'volume_stiffness')
+        # compute area A, then E += γ*A
+        E += g * body.compute_volume(mesh)
+        # compute ∇A wrt each vertex in facet → add to grad
+        ...
+    return E, grad

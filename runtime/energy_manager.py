@@ -16,6 +16,7 @@ class EnergyModuleManager:
                 raise
 
     def get_energy_function(self, name, object_type):
+        # TODO: is this needed? mostly moved to compute_energy_and_gradient() formulation
         """
         Given a module name and object type ('facet', 'body'), return an appropriate energy function.
         Prioritized lookup:
@@ -28,8 +29,8 @@ class EnergyModuleManager:
             return getattr(mod, "calculate_energy")
 
         fn_map = {
-            "facet": "calculate_surface_energy",
-            "body": "calculate_volume_energy"
+            "surface": "calculate_surface_energy",
+            "volume": "calculate_volume_energy"
         }
 
         fn_name = fn_map.get(object_type)

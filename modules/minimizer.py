@@ -1,25 +1,34 @@
-# modules/minimizer.py
+#( modules/minimizer.py
 
+import sys
 import os
 import importlib
 import numpy as np
 from typing import Dict
 from importlib import import_module
 from .steppers.base import BaseStepper
+from runtime.energy_manager import EnergyModuleManager
 
 class ParameterResolver:
     def __init__(self, global_params):
         self.global_params = global_params
 
-    def get(self, facet, name: str):
+        #print(f"global_params {self.global_params}, type {type(self.global_params)}")
+
+    def get(self, obj, name: str):
         # look for facet-specific override, else global
-        return facet.options.get(name, getattr(self.global_params, name))
+        #print(f" obj {obj}, name {name}")
+        #sys.exit()
+        #print(obj.options.get(self, self.global_params.get(name)))
+        return obj.options.get(name, self.global_params.get(name))
 
 class Minimizer:
     def __init__(self,
                  mesh,
                  global_params,
+                 energy_manager,
                  stepper: BaseStepper,
+                 energy_modules: list = [],
                  step_size: float = 1e-3,
                  tol: float = 1e-6,
                  max_iter: int = 1000):
@@ -30,20 +39,39 @@ class Minimizer:
         self.tol = tol
         self.max_iter = max_iter
 
-        # dynamically discover all energy modules in modules/
-        self.energy_modules = self._discover_modules('modules')
-
+        # Use module_names from the mesh to initialize the energy manager
+        self.energy_manager = EnergyModuleManager(self.mesh.energy_modules)
+        self.energy_modules = energy_modules
+        #print(f"energy_manager: {self.energy_manager}")
 
         # TODO: is this section needed? 
-        modules_dir = os.path.join(os.path.dirname(__file__), 'modules')
+        modules_dir = os.path.join(os.path.dirname(__file__))
 
-        for fname in os.listdir(modules_dir):
-            if fname.endswith('.py') and not fname.startswith('__'):
-                name = fname[:-3]
-                mod = importlib.import_module(f"modules.{name}")
-                self.energy_modules.append(mod)
+        #for fname in os.listdir(modules_dir):
+        module_list_dir = os.listdir(modules_dir)
+        for fname in self.energy_manager.modules.values():
+            #mod = importlib.import_module(f"modules.{fname}")
+
+
+            # IN THIS FORMULATION I mod.compute_energy_and_gradient() STILL WORK?
+            self.energy_modules.append(fname)
+            #if fname.endswith('.py') and not fname.startswith('__'):
+                #name = fname[:-3]
+                #mod = importlib.import_module(f"modules.{name}")
+                #self.energy_modules.append(mod)
 
         self.param_resolver = ParameterResolver(global_params)
+        #print(self.param_resolver)
+        #sys.exit()
+
+    def __repr__(self):
+        msg = f"""### MINIMIZER ###
+MESH:\t {self.mesh}
+GLOBAL PARAMETERS:\t {self.global_params}
+STEPPER:\t {self.stepper}
+STEP SIZE:\t {self.step_size}
+############"""
+        return msg
 
     def compute_energy_and_gradient(self):
         total_energy = 0.0
@@ -66,7 +94,6 @@ class Minimizer:
 
         return total_energy, grad
 
-    ###### I am going over this line now
     def project_constraints(self, grad: Dict[int, np.ndarray]):
 
         # TODO: HOW IS instance.contraint.project_gradient(...) TAKING CARE OF
@@ -86,7 +113,7 @@ class Minimizer:
                 # project the gradient into tangent space of constraint
                 grad[eidx] = edge.constraint.project_gradient(grad[eidx])
 
-        for fidx, edge in self.mesh.facets.items():
+        for fidx, facet in self.mesh.facets.items():
             # If has fixed attribute uncomment and change hasattr to elif
             # if geattr(facet, 'fixed', False): grad[fidx][:] = 0.0
             if hasattr(facet, 'constraint'):

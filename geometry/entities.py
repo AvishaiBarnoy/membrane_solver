@@ -157,6 +157,7 @@ class Mesh:
     bodies: Dict[int, "Body"] = field(default_factory=dict)
     #global_parameters: Dict[str, Any] = field(default_factory=dict)
     global_parameters: "GlobalParameters" = None  # Use the class here
+    energy_modules: List[str] = field(default_factory=list)
     instructions: List[str] = field(default_factory=list)
 
     def get_edge(self, index: int) -> "Edge":

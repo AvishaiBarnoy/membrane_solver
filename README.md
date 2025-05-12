@@ -35,7 +35,7 @@
         tension and volume constraint
 4. Pinned hemisphere under tension to yield spherical caps - boundary constraints 
         and mean curvature-pressure balance
-5. Pure Gaussian curvature - check no change under constant topology
+5. Pure Gaussian curvature - check no change under constant topology, and no edge
 6. Tilt source decay - Should form a “dimple” or invagination
 7. Dimpled sphere with one embedded caveolin disk - 
 8. box that minimizes into a sphere with a dent - fixed/no_refine
@@ -44,3 +44,4 @@
     results in a catenoid
     10.1 check how cat.fe treats the fixed surface area of the soapfilm
 11. a flat sheet that folds to its spontaneous curvature
+12. final(?) - a single caveolin with outside membrane decays

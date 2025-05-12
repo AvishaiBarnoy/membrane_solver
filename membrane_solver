@@ -1,0 +1,426 @@
+2025-05-12 10:07:38,230 - INFO - Loaded energy module: surface
+2025-05-12 10:08:40,099 - INFO - Loaded energy module: surface
+2025-05-12 10:18:42,532 - INFO - Loaded energy module: surface
+2025-05-12 10:18:42,533 - ERROR - Could not load module 'volume': No module named 'geometry_entities'
+2025-05-12 10:19:26,601 - INFO - Loaded energy module: surface
+2025-05-12 10:19:26,602 - INFO - Loaded energy module: volume
+2025-05-12 10:21:24,061 - INFO - Loaded energy module: surface
+2025-05-12 10:21:24,062 - INFO - Loaded energy module: volume
+2025-05-12 10:22:16,736 - INFO - Loaded energy module: surface
+2025-05-12 10:22:16,736 - INFO - Loaded energy module: volume
+2025-05-12 10:22:22,412 - INFO - Loaded energy module: surface
+2025-05-12 10:22:22,413 - INFO - Loaded energy module: volume
+2025-05-12 10:22:22,424 - INFO - ######################################
+2025-05-12 10:22:22,424 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 10:22:22,425 - INFO - ######################################
+2025-05-12 10:22:22,425 - INFO - ######################################
+2025-05-12 10:22:22,425 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 10:22:22,426 - INFO - ######################################
+2025-05-12 10:22:22,426 - INFO - ######################################
+2025-05-12 10:22:22,426 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 10:22:22,426 - INFO - ######################################
+2025-05-12 10:22:22,427 - INFO - ######################################
+2025-05-12 10:22:22,427 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 10:22:22,427 - INFO - ######################################
+2025-05-12 10:22:22,428 - INFO - ######################################
+2025-05-12 10:22:22,428 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 10:22:22,428 - INFO - ######################################
+2025-05-12 10:22:22,428 - INFO - ######################################
+2025-05-12 10:22:22,428 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 10:22:22,428 - INFO - ######################################
+2025-05-12 10:22:22,429 - INFO - ######################################
+2025-05-12 10:22:22,429 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 10:22:22,429 - INFO - ######################################
+2025-05-12 10:22:22,430 - INFO - ######################################
+2025-05-12 10:22:22,430 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 10:22:22,430 - INFO - ######################################
+2025-05-12 10:22:26,045 - INFO - Loaded energy module: surface
+2025-05-12 10:22:26,046 - INFO - Loaded energy module: volume
+2025-05-12 10:27:46,613 - INFO - Loaded energy module: surface
+2025-05-12 10:27:46,613 - INFO - Loaded energy module: volume
+2025-05-12 10:28:05,416 - INFO - Loaded energy module: surface
+2025-05-12 10:28:05,417 - INFO - Loaded energy module: volume
+2025-05-12 10:28:36,805 - INFO - Loaded energy module: surface
+2025-05-12 10:28:36,805 - INFO - Loaded energy module: volume
+2025-05-12 10:29:55,726 - INFO - Loaded energy module: surface
+2025-05-12 10:29:55,726 - INFO - Loaded energy module: volume
+2025-05-12 10:30:12,629 - INFO - Loaded energy module: surface
+2025-05-12 10:30:12,629 - INFO - Loaded energy module: volume
+2025-05-12 10:30:41,267 - INFO - Loaded energy module: surface
+2025-05-12 10:30:41,268 - INFO - Loaded energy module: volume
+2025-05-12 10:30:57,859 - INFO - Loaded energy module: surface
+2025-05-12 10:30:57,860 - INFO - Loaded energy module: volume
+2025-05-12 10:31:13,680 - INFO - Loaded energy module: surface
+2025-05-12 10:31:13,680 - INFO - Loaded energy module: volume
+2025-05-12 10:54:24,123 - INFO - Loaded energy module: surface
+2025-05-12 10:54:24,124 - INFO - Loaded energy module: volume
+2025-05-12 10:54:33,319 - INFO - Loaded energy module: surface
+2025-05-12 10:54:33,319 - INFO - Loaded energy module: volume
+2025-05-12 10:54:39,604 - INFO - Loaded energy module: surface
+2025-05-12 10:54:39,605 - INFO - Loaded energy module: volume
+2025-05-12 10:55:54,227 - INFO - Loaded energy module: surface
+2025-05-12 10:55:54,228 - INFO - Loaded energy module: volume
+2025-05-12 10:56:05,505 - INFO - Loaded energy module: surface
+2025-05-12 10:56:05,505 - INFO - Loaded energy module: volume
+2025-05-12 10:57:25,089 - INFO - Loaded energy module: surface
+2025-05-12 10:57:25,090 - INFO - Loaded energy module: volume
+2025-05-12 11:25:27,455 - INFO - Loaded energy module: surface
+2025-05-12 11:25:27,456 - INFO - Loaded energy module: volume
+2025-05-12 11:25:30,277 - INFO - Loaded energy module: surface
+2025-05-12 11:25:30,277 - INFO - Loaded energy module: volume
+2025-05-12 11:25:30,289 - INFO - ######################################
+2025-05-12 11:25:30,289 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:25:30,289 - INFO - ######################################
+2025-05-12 11:25:30,290 - INFO - ######################################
+2025-05-12 11:25:30,290 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:25:30,290 - INFO - ######################################
+2025-05-12 11:25:30,290 - INFO - ######################################
+2025-05-12 11:25:30,290 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:25:30,290 - INFO - ######################################
+2025-05-12 11:25:30,291 - INFO - ######################################
+2025-05-12 11:25:30,291 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:25:30,291 - INFO - ######################################
+2025-05-12 11:25:30,292 - INFO - ######################################
+2025-05-12 11:25:30,292 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 11:25:30,292 - INFO - ######################################
+2025-05-12 11:25:30,292 - INFO - ######################################
+2025-05-12 11:25:30,292 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:25:30,292 - INFO - ######################################
+2025-05-12 11:25:30,293 - INFO - ######################################
+2025-05-12 11:25:30,293 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:25:30,293 - INFO - ######################################
+2025-05-12 11:25:30,294 - INFO - ######################################
+2025-05-12 11:25:30,294 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:25:30,294 - INFO - ######################################
+2025-05-12 11:38:41,665 - INFO - Loaded energy module: surface
+2025-05-12 11:38:41,666 - INFO - Loaded energy module: volume
+2025-05-12 11:38:41,717 - INFO - ######################################
+2025-05-12 11:38:41,717 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:38:41,718 - INFO - ######################################
+2025-05-12 11:38:41,718 - INFO - ######################################
+2025-05-12 11:38:41,719 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:38:41,719 - INFO - ######################################
+2025-05-12 11:38:41,719 - INFO - ######################################
+2025-05-12 11:38:41,719 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:38:41,719 - INFO - ######################################
+2025-05-12 11:38:41,720 - INFO - ######################################
+2025-05-12 11:38:41,720 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:38:41,720 - INFO - ######################################
+2025-05-12 11:38:41,721 - INFO - ######################################
+2025-05-12 11:38:41,721 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 11:38:41,721 - INFO - ######################################
+2025-05-12 11:38:41,721 - INFO - ######################################
+2025-05-12 11:38:41,721 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:38:41,721 - INFO - ######################################
+2025-05-12 11:38:41,722 - INFO - ######################################
+2025-05-12 11:38:41,722 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:38:41,722 - INFO - ######################################
+2025-05-12 11:38:41,723 - INFO - ######################################
+2025-05-12 11:38:41,723 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 11:38:41,723 - INFO - ######################################
+2025-05-12 11:38:44,865 - INFO - Loaded energy module: surface
+2025-05-12 11:38:44,865 - INFO - Loaded energy module: volume
+2025-05-12 11:42:56,195 - INFO - Loaded energy module: surface
+2025-05-12 11:42:56,196 - INFO - Loaded energy module: volume
+2025-05-12 11:43:45,626 - INFO - Loaded energy module: surface
+2025-05-12 11:43:45,626 - INFO - Loaded energy module: volume
+2025-05-12 11:44:33,526 - INFO - Loaded energy module: surface
+2025-05-12 11:44:33,526 - INFO - Loaded energy module: volume
+2025-05-12 11:44:44,255 - INFO - Loaded energy module: surface
+2025-05-12 11:44:44,255 - INFO - Loaded energy module: volume
+2025-05-12 11:44:50,295 - INFO - Loaded energy module: surface
+2025-05-12 11:44:50,296 - INFO - Loaded energy module: volume
+2025-05-12 11:44:58,955 - INFO - Loaded energy module: surface
+2025-05-12 11:44:58,956 - INFO - Loaded energy module: volume
+2025-05-12 12:05:09,524 - INFO - Loaded energy module: surface
+2025-05-12 12:05:09,525 - INFO - Loaded energy module: volume
+2025-05-12 12:06:18,652 - INFO - Loaded energy module: surface
+2025-05-12 12:06:18,653 - INFO - Loaded energy module: volume
+2025-05-12 12:24:26,609 - INFO - Loaded energy module: surface
+2025-05-12 12:24:26,610 - INFO - Loaded energy module: volume
+2025-05-12 12:24:45,229 - INFO - Loaded energy module: surface
+2025-05-12 12:24:45,230 - INFO - Loaded energy module: volume
+2025-05-12 12:24:59,625 - INFO - Loaded energy module: surface
+2025-05-12 12:24:59,626 - INFO - Loaded energy module: volume
+2025-05-12 12:26:46,686 - INFO - Loaded energy module: surface
+2025-05-12 12:26:46,687 - INFO - Loaded energy module: volume
+2025-05-12 12:27:17,686 - INFO - Loaded energy module: surface
+2025-05-12 12:27:17,686 - INFO - Loaded energy module: volume
+2025-05-12 12:29:02,747 - INFO - Loaded energy module: surface
+2025-05-12 12:29:02,747 - INFO - Loaded energy module: volume
+2025-05-12 12:29:10,388 - INFO - Loaded energy module: surface
+2025-05-12 12:29:10,388 - INFO - Loaded energy module: volume
+2025-05-12 12:29:24,320 - INFO - Loaded energy module: surface
+2025-05-12 12:29:24,321 - INFO - Loaded energy module: volume
+2025-05-12 12:29:31,617 - INFO - Loaded energy module: surface
+2025-05-12 12:29:31,617 - INFO - Loaded energy module: volume
+2025-05-12 12:29:57,662 - INFO - Loaded energy module: surface
+2025-05-12 12:29:57,662 - INFO - Loaded energy module: volume
+2025-05-12 12:30:28,855 - INFO - Loaded energy module: surface
+2025-05-12 12:30:28,856 - INFO - Loaded energy module: volume
+2025-05-12 13:41:48,858 - INFO - Loaded energy module: surface
+2025-05-12 13:41:48,858 - INFO - Loaded energy module: volume
+2025-05-12 13:42:12,199 - INFO - Loaded energy module: surface
+2025-05-12 13:42:12,200 - INFO - Loaded energy module: volume
+2025-05-12 13:42:41,170 - INFO - Loaded energy module: surface
+2025-05-12 13:42:41,171 - INFO - Loaded energy module: volume
+2025-05-12 14:45:02,267 - INFO - Loaded energy module: surface
+2025-05-12 14:45:02,268 - INFO - Loaded energy module: volume
+2025-05-12 14:45:02,282 - INFO - ######################################
+2025-05-12 14:45:02,282 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 14:45:02,282 - INFO - ######################################
+2025-05-12 14:45:02,283 - INFO - ######################################
+2025-05-12 14:45:02,283 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 14:45:02,283 - INFO - ######################################
+2025-05-12 14:45:02,283 - INFO - ######################################
+2025-05-12 14:45:02,283 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 14:45:02,283 - INFO - ######################################
+2025-05-12 14:45:02,284 - INFO - ######################################
+2025-05-12 14:45:02,284 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 14:45:02,284 - INFO - ######################################
+2025-05-12 14:45:02,284 - INFO - ######################################
+2025-05-12 14:45:02,284 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 14:45:02,284 - INFO - ######################################
+2025-05-12 14:45:02,285 - INFO - ######################################
+2025-05-12 14:45:02,285 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 14:45:02,285 - INFO - ######################################
+2025-05-12 14:45:02,286 - INFO - ######################################
+2025-05-12 14:45:02,286 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 14:45:02,286 - INFO - ######################################
+2025-05-12 14:45:02,286 - INFO - ######################################
+2025-05-12 14:45:02,287 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 14:45:02,287 - INFO - ######################################
+2025-05-12 15:19:50,018 - INFO - Loaded energy module: surface
+2025-05-12 15:19:50,018 - INFO - Loaded energy module: volume
+2025-05-12 15:19:50,033 - INFO - ######################################
+2025-05-12 15:19:50,033 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:19:50,033 - INFO - ######################################
+2025-05-12 15:19:50,034 - INFO - ######################################
+2025-05-12 15:19:50,034 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:19:50,034 - INFO - ######################################
+2025-05-12 15:19:50,035 - INFO - ######################################
+2025-05-12 15:19:50,035 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:19:50,035 - INFO - ######################################
+2025-05-12 15:19:50,035 - INFO - ######################################
+2025-05-12 15:19:50,035 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:19:50,035 - INFO - ######################################
+2025-05-12 15:19:50,036 - INFO - ######################################
+2025-05-12 15:19:50,036 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 15:19:50,036 - INFO - ######################################
+2025-05-12 15:19:50,037 - INFO - ######################################
+2025-05-12 15:19:50,037 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:19:50,037 - INFO - ######################################
+2025-05-12 15:19:50,037 - INFO - ######################################
+2025-05-12 15:19:50,037 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:19:50,037 - INFO - ######################################
+2025-05-12 15:19:50,038 - INFO - ######################################
+2025-05-12 15:19:50,038 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:19:50,038 - INFO - ######################################
+2025-05-12 15:20:54,387 - INFO - Loaded energy module: surface
+2025-05-12 15:20:54,387 - INFO - Loaded energy module: volume
+2025-05-12 15:20:54,401 - INFO - ######################################
+2025-05-12 15:20:54,401 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:20:54,401 - INFO - ######################################
+2025-05-12 15:20:54,402 - INFO - ######################################
+2025-05-12 15:20:54,402 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:20:54,402 - INFO - ######################################
+2025-05-12 15:20:54,403 - INFO - ######################################
+2025-05-12 15:20:54,403 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:20:54,403 - INFO - ######################################
+2025-05-12 15:20:54,403 - INFO - ######################################
+2025-05-12 15:20:54,403 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:20:54,403 - INFO - ######################################
+2025-05-12 15:20:54,407 - INFO - ######################################
+2025-05-12 15:20:54,407 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 15:20:54,407 - INFO - ######################################
+2025-05-12 15:20:54,409 - INFO - ######################################
+2025-05-12 15:20:54,409 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:20:54,409 - INFO - ######################################
+2025-05-12 15:20:54,410 - INFO - ######################################
+2025-05-12 15:20:54,411 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:20:54,411 - INFO - ######################################
+2025-05-12 15:20:54,414 - INFO - ######################################
+2025-05-12 15:20:54,414 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:20:54,414 - INFO - ######################################
+2025-05-12 15:21:02,088 - INFO - Loaded energy module: surface
+2025-05-12 15:21:02,088 - INFO - Loaded energy module: volume
+2025-05-12 15:21:02,101 - INFO - ######################################
+2025-05-12 15:21:02,101 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:02,101 - INFO - ######################################
+2025-05-12 15:21:02,102 - INFO - ######################################
+2025-05-12 15:21:02,102 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:02,102 - INFO - ######################################
+2025-05-12 15:21:02,102 - INFO - ######################################
+2025-05-12 15:21:02,103 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:02,103 - INFO - ######################################
+2025-05-12 15:21:02,103 - INFO - ######################################
+2025-05-12 15:21:02,103 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:02,103 - INFO - ######################################
+2025-05-12 15:21:02,104 - INFO - ######################################
+2025-05-12 15:21:02,104 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 15:21:02,104 - INFO - ######################################
+2025-05-12 15:21:02,104 - INFO - ######################################
+2025-05-12 15:21:02,104 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:02,104 - INFO - ######################################
+2025-05-12 15:21:02,105 - INFO - ######################################
+2025-05-12 15:21:02,105 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:02,105 - INFO - ######################################
+2025-05-12 15:21:02,106 - INFO - ######################################
+2025-05-12 15:21:02,106 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:02,106 - INFO - ######################################
+2025-05-12 15:21:12,429 - INFO - Loaded energy module: surface
+2025-05-12 15:21:12,430 - INFO - Loaded energy module: volume
+2025-05-12 15:21:12,450 - INFO - ######################################
+2025-05-12 15:21:12,450 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:12,450 - INFO - ######################################
+2025-05-12 15:21:12,451 - INFO - ######################################
+2025-05-12 15:21:12,451 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:12,451 - INFO - ######################################
+2025-05-12 15:21:12,451 - INFO - ######################################
+2025-05-12 15:21:12,451 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:12,452 - INFO - ######################################
+2025-05-12 15:21:12,452 - INFO - ######################################
+2025-05-12 15:21:12,452 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:12,452 - INFO - ######################################
+2025-05-12 15:21:12,453 - INFO - ######################################
+2025-05-12 15:21:12,453 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 15:21:12,453 - INFO - ######################################
+2025-05-12 15:21:12,453 - INFO - ######################################
+2025-05-12 15:21:12,453 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:12,453 - INFO - ######################################
+2025-05-12 15:21:12,454 - INFO - ######################################
+2025-05-12 15:21:12,454 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:12,454 - INFO - ######################################
+2025-05-12 15:21:12,458 - INFO - ######################################
+2025-05-12 15:21:12,458 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:21:12,458 - INFO - ######################################
+2025-05-12 15:42:40,198 - INFO - Loaded energy module: surface
+2025-05-12 15:42:40,199 - INFO - Loaded energy module: volume
+2025-05-12 15:42:40,213 - INFO - ######################################
+2025-05-12 15:42:40,213 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:42:40,213 - INFO - ######################################
+2025-05-12 15:42:40,214 - INFO - ######################################
+2025-05-12 15:42:40,214 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:42:40,214 - INFO - ######################################
+2025-05-12 15:42:40,215 - INFO - ######################################
+2025-05-12 15:42:40,215 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:42:40,215 - INFO - ######################################
+2025-05-12 15:42:40,215 - INFO - ######################################
+2025-05-12 15:42:40,215 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:42:40,215 - INFO - ######################################
+2025-05-12 15:42:40,216 - INFO - ######################################
+2025-05-12 15:42:40,216 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 15:42:40,216 - INFO - ######################################
+2025-05-12 15:42:40,217 - INFO - ######################################
+2025-05-12 15:42:40,217 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:42:40,217 - INFO - ######################################
+2025-05-12 15:42:40,218 - INFO - ######################################
+2025-05-12 15:42:40,218 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:42:40,218 - INFO - ######################################
+2025-05-12 15:42:40,218 - INFO - ######################################
+2025-05-12 15:42:40,218 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:42:40,218 - INFO - ######################################
+2025-05-12 15:43:30,063 - INFO - Loaded energy module: surface
+2025-05-12 15:43:30,063 - INFO - Loaded energy module: volume
+2025-05-12 15:43:30,076 - INFO - ######################################
+2025-05-12 15:43:30,077 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:43:30,077 - INFO - ######################################
+2025-05-12 15:43:30,077 - INFO - ######################################
+2025-05-12 15:43:30,077 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:43:30,077 - INFO - ######################################
+2025-05-12 15:43:30,078 - INFO - ######################################
+2025-05-12 15:43:30,078 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:43:30,078 - INFO - ######################################
+2025-05-12 15:43:30,079 - INFO - ######################################
+2025-05-12 15:43:30,079 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:43:30,079 - INFO - ######################################
+2025-05-12 15:43:30,079 - INFO - ######################################
+2025-05-12 15:43:30,079 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 15:43:30,079 - INFO - ######################################
+2025-05-12 15:43:30,080 - INFO - ######################################
+2025-05-12 15:43:30,080 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:43:30,080 - INFO - ######################################
+2025-05-12 15:43:30,080 - INFO - ######################################
+2025-05-12 15:43:30,080 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:43:30,080 - INFO - ######################################
+2025-05-12 15:43:30,081 - INFO - ######################################
+2025-05-12 15:43:30,081 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:43:30,081 - INFO - ######################################
+2025-05-12 15:44:55,979 - INFO - Loaded energy module: surface
+2025-05-12 15:44:55,979 - INFO - Loaded energy module: volume
+2025-05-12 15:44:55,991 - INFO - ######################################
+2025-05-12 15:44:55,991 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:44:55,991 - INFO - ######################################
+2025-05-12 15:44:55,991 - INFO - ######################################
+2025-05-12 15:44:55,992 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:44:55,992 - INFO - ######################################
+2025-05-12 15:44:55,992 - INFO - ######################################
+2025-05-12 15:44:55,992 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:44:55,992 - INFO - ######################################
+2025-05-12 15:44:55,993 - INFO - ######################################
+2025-05-12 15:44:55,993 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:44:55,994 - INFO - ######################################
+2025-05-12 15:44:55,995 - INFO - ######################################
+2025-05-12 15:44:55,995 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 15:44:55,995 - INFO - ######################################
+2025-05-12 15:44:55,996 - INFO - ######################################
+2025-05-12 15:44:55,996 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:44:55,996 - INFO - ######################################
+2025-05-12 15:44:55,996 - INFO - ######################################
+2025-05-12 15:44:55,997 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:44:55,997 - INFO - ######################################
+2025-05-12 15:44:55,997 - INFO - ######################################
+2025-05-12 15:44:55,998 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:44:55,998 - INFO - ######################################
+2025-05-12 15:54:28,515 - INFO - Loaded energy module: surface
+2025-05-12 15:54:28,516 - INFO - Loaded energy module: volume
+2025-05-12 15:54:28,530 - INFO - ######################################
+2025-05-12 15:54:28,530 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:28,530 - INFO - ######################################
+2025-05-12 15:54:28,531 - INFO - ######################################
+2025-05-12 15:54:28,531 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:28,531 - INFO - ######################################
+2025-05-12 15:54:28,532 - INFO - ######################################
+2025-05-12 15:54:28,532 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:28,532 - INFO - ######################################
+2025-05-12 15:54:28,532 - INFO - ######################################
+2025-05-12 15:54:28,532 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:28,532 - INFO - ######################################
+2025-05-12 15:54:28,533 - INFO - ######################################
+2025-05-12 15:54:28,533 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 15:54:28,533 - INFO - ######################################
+2025-05-12 15:54:28,534 - INFO - ######################################
+2025-05-12 15:54:28,534 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:28,534 - INFO - ######################################
+2025-05-12 15:54:28,534 - INFO - ######################################
+2025-05-12 15:54:28,535 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:28,535 - INFO - ######################################
+2025-05-12 15:54:28,535 - INFO - ######################################
+2025-05-12 15:54:28,536 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:28,536 - INFO - ######################################
+2025-05-12 15:54:57,143 - INFO - Loaded energy module: surface
+2025-05-12 15:54:57,143 - INFO - Loaded energy module: volume
+2025-05-12 15:54:57,155 - INFO - ######################################
+2025-05-12 15:54:57,155 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:57,155 - INFO - ######################################
+2025-05-12 15:54:57,156 - INFO - ######################################
+2025-05-12 15:54:57,156 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:57,156 - INFO - ######################################
+2025-05-12 15:54:57,157 - INFO - ######################################
+2025-05-12 15:54:57,157 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:57,157 - INFO - ######################################
+2025-05-12 15:54:57,158 - INFO - ######################################
+2025-05-12 15:54:57,158 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:57,158 - INFO - ######################################
+2025-05-12 15:54:57,159 - INFO - ######################################
+2025-05-12 15:54:57,159 - INFO - Loading file: meshes/temp_geometry_output.json
+2025-05-12 15:54:57,159 - INFO - ######################################
+2025-05-12 15:54:57,159 - INFO - ######################################
+2025-05-12 15:54:57,159 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:57,159 - INFO - ######################################
+2025-05-12 15:54:57,160 - INFO - ######################################
+2025-05-12 15:54:57,160 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:57,160 - INFO - ######################################
+2025-05-12 15:54:57,161 - INFO - ######################################
+2025-05-12 15:54:57,161 - INFO - Loading file: meshes/sample_geometry.json
+2025-05-12 15:54:57,161 - INFO - ######################################
