@@ -11,12 +11,22 @@
         [
             1,
             0,
-            0
+            0,
+            {
+                "constraints": "constraint1",
+                "energy": "new_module"
+            }
         ],
         [
             1,
             0,
-            1
+            1,
+            {
+                "constraint1": [
+                    "constraint1",
+                    "constraint2"
+                ]
+            }
         ],
         [
             0,
@@ -55,7 +65,13 @@
         ],
         [
             1,
-            2
+            2,
+            {
+                "energy": [
+                    "line_tension1",
+                    "edge1"
+                ]
+            }
         ],
         [
             2,
@@ -107,7 +123,9 @@
             {
                 "refine": false,
                 "fixed": true,
-                "energy": "default",
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1
             }
         ],
@@ -118,7 +136,9 @@
             "r9",
             {
                 "refine": true,
-                "energy": "new_module"
+                "energy": [
+                    "new_module"
+                ]
             }
         ],
         [
@@ -131,6 +151,9 @@
                 "constraints": [
                     "pin_to_plane",
                     "fix_facet_area"
+                ],
+                "energy": [
+                    "surface"
                 ]
             }
         ],
@@ -138,19 +161,34 @@
             "r2",
             10,
             7,
-            "r11"
+            "r11",
+            {
+                "energy": [
+                    "surface"
+                ]
+            }
         ],
         [
             3,
             8,
             "r4",
-            "r11"
+            "r11",
+            {
+                "energy": [
+                    "surface"
+                ]
+            }
         ],
         [
             "r5",
             "r4",
             "r7",
-            "r6"
+            "r6",
+            {
+                "energy": [
+                    "surface"
+                ]
+            }
         ]
     ],
     "bodies": {

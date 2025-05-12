@@ -19,9 +19,10 @@ if gp.get("algorithm", "cg"):
 else:
     stepper = GradientDescent()
 
-print(stepper)
+print(gp)
+#print(stepper)
 
-engine = Minimizer(mesh, gp, stepper=stepper, step_size=gp.step_size)
+engine = Minimizer(mesh, gp, stepper=stepper, step_size=gp.get("step_size"))
 print(engine)
 sys.exit()
 engine.minimize()
@@ -31,5 +32,3 @@ engine.minimize()
 engine.stepper = ConjugateGradient()
 engine.step_size = 1e-2
 engine.minimize(max_iter=200)
-
-

@@ -46,6 +46,8 @@ def parse_geometry(data: dict) -> Mesh:
     input_global_params = data.get("global_parameters", {})
     mesh.global_parameters.update(input_global_params)
 
+    # Initialize module_name list
+    module_names = []
 
     # TODO: add option to read both lowercase and uppercase title Vertices/vertices
     # Vertices
@@ -54,12 +56,39 @@ def parse_geometry(data: dict) -> Mesh:
         mesh.vertices[i] = Vertex(index=i, position=np.array(position),
                                     options=options)
 
+        if "energy" in options:
+            if isinstance(options["energy"], list):
+                module_names.extend(options["energy"])
+            elif isinstance(options["energy"], str):
+                module_names.append(options["energy"])
+            else:
+                err_msg = "energy modules should be in a list or a single string"
+                logger.error(err_msg)
+                raise err_msg
+        # Uncomment to add a default energy moduel to Vertices 
+        #elif "energy" not in options:
+            #mesh.vertices[i].options["energy"] = ["surface"]
+
     # Edges
     for i, entry in enumerate(data["edges"]):
         tail_index, head_index, *opts = entry
         options = opts[0] if opts else {}
         mesh.edges[i+1] = Edge(index=i+1, tail_index=tail_index,
                                head_index=head_index, options=options)
+
+        if "energy" in options:
+            if isinstance(options["energy"], list):
+                module_names.extend(options["energy"])
+
+            elif isinstance(options["energy"], str):
+                module_names.append(options["energy"])
+            else:
+                err_msg = "energy modules should be in a list or a single string"
+                logger.error(err_msg)
+                raise err_msg
+        # Uncomment to add a default energy moduel to Edges
+        #elif "energy" not in options:
+            #mesh.edges[i+1].options["energy"] = ["surface"]
 
     # Facets
     for i, entry in enumerate(data["faces"]):
@@ -74,16 +103,45 @@ def parse_geometry(data: dict) -> Mesh:
         mesh.facets[i] = Facet(index=i, edge_indices=edge_indices,
                                  options=options)
 
+        if "energy" in options:
+            if isinstance(options["energy"], list):
+                module_names.extend(options["energy"])
+            elif isinstance(options["energy"], str):
+                module_names.append(options["energy"])
+                mesh.facets[i].options["energy"] = [mesh.facets[i].options["energy"]]
+            else:
+                err_msg = "energy modules should be in a list or a single string"
+                logger.error(err_msg)
+                raise err_msg
+        elif "energy" not in options:
+            mesh.facets[i].options["energy"] = ["surface"]
+
     # Bodies
     if "bodies" in data:
         face_groups = data["bodies"]["faces"]
         volumes = data["bodies"].get("target_volume"), [None] * len(face_groups)
-        energies = data["bodies"].get("energy", [{}] * len(face_groups))
-        for i, (facet_indices, volume, energy) in enumerate(zip(face_groups, volumes, energies)):
-            mesh.bodies[i] = Body(index=i, facet_indices=facet_indices, target_volume=volume, options={"energy": energy})
+        options = data["bodies"].get("energy", [{}] * len(face_groups))
+        for i, (facet_indices, volume, options) in enumerate(zip(face_groups, volumes, options)):
+            mesh.bodies[i] = Body(index=i, facet_indices=facet_indices,
+                                  target_volume=volume, options={"energy": options})
+
+            if "energy" in options:
+                if isinstance(options["energy"], list):
+                    module_names.extend(options["energy"])
+                elif isinstance(options["energy"], str):
+                    module_names.append(options["energy"])
+                    mesh.bodies[i].options["energy"] = [mesh.bodies[i].options["energy"]]
+                else:
+                    err_msg = "energy modules should be in a list or a single string"
+                    logger.error(err_msg)
+                    raise err_msg
+            elif "energy" not in options:
+                mesh.bodies[i].options["energy"] = ["volume"]
 
     # Instructions
     mesh.instructions = data.get("instructions", [])
+    mesh.module_names = list(set(module_names))
+
 
     new_mesh = refine_polygonal_facets(mesh)
     return mesh
