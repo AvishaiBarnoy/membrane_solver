@@ -7,10 +7,11 @@ from modules.steppers.gradient_descent import GradientDescent
 from geometry.entities import Mesh, Vertex, Edge, Facet, Body
 from parameters.global_parameters import GlobalParameters
 from runtime.refinement import refine_polygonal_facets
+from runtime.energy_manager import EnergyModuleManager
 import numpy as np
+import pytest
 
 def create_quad():
-
     mesh = Mesh()
 
     # A unit square in the XY plane
@@ -46,14 +47,21 @@ def test_minimizer_with_mock_energy_manager():
     # Mock mesh and global parameters
     mock_mesh = create_quad()
     mock_mesh = refine_polygonal_facets(mock_mesh)
-    print("Facets after refinement:", mock_mesh.facets)
-
     mock_global_params = GlobalParameters()
     mock_mesh.energy_modules = ["surface", "volume"]
 
     # Mock energy manager
     mock_energy_manager = MagicMock()
-    mock_energy_manager.get_energy_function.return_value = lambda obj, params: (0.0, {})
+    #mock_energy_manager.get_energy_function.return_value = lambda obj, params: (0.0, {})
+
+    # Mock energy functions
+    mock_surface_energy_function = lambda obj, params: (1.0, {0: np.array([0.1, 0.1, 0.1])})
+    mock_volume_energy_function = lambda obj, params: (2.0, {1: np.array([0.2, 0.2, 0.2])})
+
+    # Mock get_module to return the mocked energy functions
+    mock_energy_manager.get_module.side_effect = lambda mod: (
+        mock_surface_energy_function if mod == "surface" else mock_volume_energy_function
+    )
 
     # Mock stepper
     mock_stepper = GradientDescent()
@@ -66,6 +74,62 @@ def test_minimizer_with_mock_energy_manager():
 
     # Assertions
     assert result is not None, "Minimizer should return a result"
-    assert mock_energy_manager.get_energy_function.call_count > 0, (
-        "Expected 'get_energy_function' to have been called"
+    assert mock_energy_manager.get_module.call_count > 0, (
+        "Expected 'get_module' to have been called"
     )
+
+def test_get_module():
+    # Mock module names
+    module_names = ["line_tension1", "line_tension2", "edge1"]
+
+    # Initialize the EnergyModuleManager
+    energy_manager = EnergyModuleManager(module_names)
+
+    print(energy_manager.modules)
+    # Test retrieving loaded modules
+    for module_name in module_names:
+        module = energy_manager.get_module(module_name)
+        print(module)
+        assert module is not None, f"Module '{module_name}' should be loaded"
+        assert hasattr(module, "compute_energy_and_gradient"), (
+            f"Module '{module_name}' should have a 'compute_energy_and_gradient' function"
+        )
+
+    # Test retrieving a non-existent module
+    with pytest.raises(KeyError, match="Energy module 'non_existent' not found."):
+        energy_manager.get_module("non_existent")
+
+def test_get_energy_function():
+    # Mock module names
+    module_names = ["surface", "volume"]
+
+    # Mock modules with different energy functions
+    mock_surface_module = MagicMock()
+    mock_surface_module.calculate_energy = MagicMock(return_value="surface_energy")
+    mock_surface_module.compute_energy_and_gradient = MagicMock(return_value="surface_gradient")
+
+    mock_volume_module = MagicMock()
+    mock_volume_module.calculate_energy = MagicMock(return_value="volume_energy")
+
+    # Initialize the EnergyModuleManager
+    energy_manager = EnergyModuleManager(module_names)
+    energy_manager.modules = {
+        "surface": mock_surface_module,
+        "volume": mock_volume_module
+    }
+
+    # Test retrieving generic energy function
+    energy_function = energy_manager.get_energy_function("surface", "facet")
+    assert energy_function() == "surface_energy", "Expected 'calculate_energy' to be used for 'surface'"
+
+    # Test retrieving type-specific energy function
+    energy_function = energy_manager.get_energy_function("volume", "body")
+    assert energy_function() == "volume_energy", "Expected 'calculate_volume_energy' to be used for 'volume'"
+
+    # Test fallback to 'compute_energy_and_gradient'
+    #energy_function = energy_manager.get_energy_function("surface", "facet")
+    #assert energy_function() == "surface_gradient", "Expected 'compute_energy_and_gradient' to be used for 'surface'"
+
+    # Test missing energy function
+    #with pytest.raises(AttributeError, match="Module 'volume' must define either 'calculate_energy' or 'calculate_volume_energy' for type 'volume'"):
+    #    energy_manager.get_energy_function("volume", "facet")

@@ -14,6 +14,13 @@ class EnergyModuleManager:
             except ImportError as e:
                 logger.error(f"Could not load module '{name}': {e}")
                 raise
+    def get_module(self, name):
+        """
+        Retrieve a loaded energy module by name.
+        """
+        if name in self.modules:
+            return self.modules[name]
+        raise KeyError(f"Energy module '{name}' not found.")
 
     def get_energy_function(self, name, object_type):
         # TODO: is this needed? mostly moved to compute_energy_and_gradient() formulation
@@ -27,6 +34,8 @@ class EnergyModuleManager:
 
         if hasattr(mod, "calculate_energy"):
             return getattr(mod, "calculate_energy")
+        elif hasattr(mod, "compute_energy_and_gradient"):
+            return getattr(mod, "compute_energy_and_gradient")
 
         fn_map = {
             "surface": "calculate_surface_energy",
