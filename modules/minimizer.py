@@ -26,23 +26,24 @@ class Minimizer:
     def __init__(self,
                  mesh,
                  global_params,
-                 energy_manager,
                  stepper: BaseStepper,
+                 energy_manager,
                  energy_modules: list = [],
                  step_size: float = 1e-3,
                  tol: float = 1e-6,
-                 max_iter: int = 1000):
+                 max_iter: int = 500):
         self.mesh = mesh
         self.global_params = global_params
+        self.energy_manager = energy_manager
         self.stepper = BaseStepper
         self.step_size = step_size
         self.tol = tol
         self.max_iter = max_iter
 
         # Use module_names from the mesh to initialize the energy manager
-        self.energy_manager = EnergyModuleManager(self.mesh.energy_modules)
-        self.energy_modules = energy_modules
-        #print(f"energy_manager: {self.energy_manager}")
+        self.energy_modules = [
+            self.energy_manager.get_module(mod) for mod in mesh.energy_modules
+            ]
 
         # TODO: is this section needed? 
         modules_dir = os.path.join(os.path.dirname(__file__))
@@ -85,12 +86,16 @@ STEP SIZE:\t {self.step_size}
             # TODO: documentation:
             # write that in new energy modules compute_energy_and_gradient is
             #   a mandatory name
-            E_mod, g_mod = mod.compute_energy_and_gradient(
-                self.mesh, self.global_params, self.param_resolver
-            )
-            total_energy += E_mod
-            for vidx, gvec in g_mod.items():
-                grad[vidx] += gvec
+            #E_mod, g_mod = mod.compute_energy_and_gradient(
+            #    self.mesh, self.global_params, self.param_resolver
+            #)
+            for energy_function in self.energy_modules:
+                #import sys
+                #sys.exit()
+                E_mod, g_mod = energy_function(self.mesh, self.global_params)
+                total_energy += E_mod
+                for vidx, gvec in g_mod.items():
+                    grad[vidx] += gvec
 
         return total_energy, grad
 

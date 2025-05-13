@@ -19,7 +19,6 @@ def calculate_surface_energy(mesh, global_params):
 
     # Compute surface energy
     surface_energy = gamma * area
-    logger.warning("DEPRACTED")
     return surface_energy
 
 
