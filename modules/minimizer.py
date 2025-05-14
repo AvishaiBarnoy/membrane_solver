@@ -41,19 +41,12 @@ class Minimizer:
             ]
 
         for fname in self.energy_manager.modules.values():
-            # IN THIS FORMULATION I mod.compute_energy_and_gradient() STILL WORK?
             self.energy_modules.append(fname)
-            #if fname.endswith('.py') and not fname.startswith('__'):
-                #name = fname[:-3]
-                #mod = importlib.import_module(f"modules.{name}")
-                #self.energy_modules.append(mod)
 
         print(f"[DEBUG] Loaded energy modules: {self.energy_manager.modules.keys()}")
         print(f"[DEBUG] Mesh energy_modules: {self.mesh.energy_modules}")
 
         self.param_resolver = ParameterResolver(global_params)
-        #print(self.param_resolver)
-        #sys.exit()
 
     def __repr__(self):
         msg = f"""### MINIMIZER ###
@@ -80,8 +73,6 @@ STEP SIZE:\t {self.step_size}
             #    self.mesh, self.global_params, self.param_resolver
             #)
             for energy_function in self.energy_modules:
-                #import sys
-                #sys.exit()
                 E_mod, g_mod = energy_function(self.mesh, self.global_params)
                 total_energy += E_mod
                 for vidx, gvec in g_mod.items():
