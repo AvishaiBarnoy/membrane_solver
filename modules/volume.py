@@ -36,9 +36,25 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver):
     grad: Dict[int,np.ndarray] = {i: np.zeros(3) for i in mesh.vertices}
 
     for body in mesh.bodies.values():
-        g = param_resolver.get(body, 'volume_stiffness')
-        # compute area A, then E += γ*A
-        E += g * body.compute_volume(mesh)
-        # compute ∇A wrt each vertex in facet → add to grad
-        ...
+        k = param_resolver.get(body, 'volume_stiffness')
+        if k is None:
+            k = global_params.volume_stiffness
+
+        V0 = body.options.get("target_volume", 0)
+        V = body.compute_volume(mesh)
+
+
+        # Energy: 0.5 * k * (V - V0)**2
+        E += 0.5 * k * (V - V0)**2
+        
+        # Gradient: k * (V - V0) * ∇V
+        volume_gradient = body.compute_volume_gradient(mesh)
+        for vertex_index, gradient_vector in volume_gradient.items():
+            # Add the gradient contribution to the total gradient
+            grad[vertex_index] += k * (V - V0) * volume_gradient[vertex_index]
+        # Log the computed energy and gradient
+        logger.debug(f"Computed volume energy: {E}")
+        logger.debug(f"Computed volume energy gradient: {grad}")
+        
+    # Return the total energy and gradient
     return E, grad

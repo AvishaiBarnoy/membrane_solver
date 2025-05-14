@@ -143,26 +143,35 @@ def refine_polygonal_facets(mesh):
 
             child_facet = Facet(child_idx, cycled_edges,
                                     options=child_options)
+
+            # After creating child_facet:
+            # Get the parent normal
+            parent_normal = facet.normal(mesh)
+            # Get the child normal
+            child_normal = child_facet.normal(new_mesh)
+            # If the child normal is not aligned with the parent, flip the child facet
+            if np.dot(child_normal, parent_normal) < 0:
+                child_facet.edge_indices = [-idx for idx in reversed(child_facet.edge_indices)]
             new_facets[child_idx] = child_facet
             # Record that this child belongs to the same bodies
             children_map[facet.index].append(child_idx)
 
     # TODO: Associate facets with bodies! If no body exists skip
+    # Step 3: Build updated bodies
     new_bodies = {}
     for body_idx in mesh.bodies.keys():
         body = mesh.bodies[body_idx]
-        new_list = []
-        for facet_idx in body.facet_indices:
-            if facet_idx in children_map[body_idx]:
-                # replaced by its child facets
-                new_list.extend(children_map[facet_idx])
+        new_body_facets = []
+        for old_facet_idx in body.facet_indices:
+            # Instead of checking "if mesh.facets[old_facet_idx].index in facet_to_new_facets",
+            # use children_map directly.
+            if old_facet_idx in children_map and len(children_map[old_facet_idx]) > 0:
+                new_body_facets.extend(children_map[old_facet_idx])
             else:
-                # the facet stayed the same (triangles)
-                new_list.append(facet_idx)
-        # ideally your Body ctor also carries over volume, constraints, etc.
-        new_facet_list = [new_facets[idx].index for idx in new_list]
-        new_bodies[body.index] = Body(body.index, new_facet_list,
+                new_body_facets.append(old_facet_idx)
+        new_bodies[len(new_bodies)] = Body(len(new_bodies), new_body_facets,
                                 options=body.options.copy())
+    new_mesh.bodies = new_bodies
 
     new_mesh.facets = new_facets
     new_mesh.bodies = new_bodies

@@ -1,4 +1,6 @@
-# My try on a SurfaceEvolver-like software
+# Membrane Solver
+
+Membrane Solver is a simulation platform inspired by Surface Evolver, designed to model and minimize the energy of geometric structures such as membranes and surfaces. It supports volume and surface area constraints, dynamic refinement of meshes, and customizable energy modules for physical effects like surface tension and curvature. The project aims to provide a flexible and extensible framework for exploring complex geometries and their energy-driven evolution.
 
 ## TODO:
 1. add fixed option to vertices 

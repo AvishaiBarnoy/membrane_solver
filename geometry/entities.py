@@ -102,6 +102,36 @@ class Facet:
         v0, v1, v2 = verts
         area = 0.5 * np.linalg.norm(np.cross(v1 - v0, v2 - v0))
         return area
+    
+    def compute_area_gradient(self, mesh: "Mesh") -> Dict[int, np.ndarray]:
+        """
+        Compute area gradient with respect to each vertex in the facet.
+        Returns a dictionary where keys are vertex indices and values are gradient vectors.
+        """
+        # Get the vertices of the facet
+        verts = []
+        for signed_index in self.edge_indices:
+            edge = mesh.get_edge(signed_index)
+            if not verts:
+                verts.append(edge.tail_index)
+            verts.append(edge.head_index)
+
+        # Remove duplicates and convert to vertex positions
+        vertex_indices = verts[:-1]
+        if len(verts) < 3:
+            raise ValueError("Cannot compute area gradient with fewer than 3 vertices.")    
+        
+        # Compute the area of the facet
+        v0, v1, v2 = [mesh.vertices[i].position for i in vertex_indices]
+        # Compute the gradient of the area with respect to each vertex
+        grad = {}
+        grad[vertex_indices[0]] = 0.5 * np.cross(v1 - v0, v2 - v0) / np.linalg.norm(np.cross(v1 - v0, v2 - v0))
+        grad[vertex_indices[1]] = 0.5 * np.cross(v2 - v1, v0 - v1) / np.linalg.norm(np.cross(v2 - v1, v0 - v1))
+        grad[vertex_indices[2]] = 0.5 * np.cross(v0 - v2, v1 - v2) / np.linalg.norm(np.cross(v0 - v2, v1 - v2))
+
+        # Map gradients back to vertex indices
+        #vertex_indices = [self.edge_indices[0], self.edge_indices[1], self.edge_indices[2]]
+        return grad
 
 @dataclass
 class Body:
@@ -130,6 +160,39 @@ class Body:
                 v2 = v_pos[i+1]
                 volume += np.dot(v0, np.cross(v1, v2)) / 6.0
         return abs(volume)
+
+    def compute_volume_gradient(self, mesh: "Mesh") -> Dict[int, np.ndarray]:
+        """
+        Compute the gradient of the volume with respect to each vertex in the body.
+        Returns a dictionary mapping vertex indices to gradient vectors (np.ndarray).
+        """
+        grad: Dict[int, np.ndarray] = {i: np.zeros(3) for i in mesh.vertices}
+
+        # Loop over all facets of the body
+        for facet_idx in self.facet_indices:
+            facet = mesh.facets[facet_idx]
+            # Get the vertex indices for this facet
+            verts = []
+            for signed_index in facet.edge_indices:
+                edge = mesh.get_edge(signed_index)
+                if not verts:
+                    verts.append(edge.tail_index)
+                verts.append(edge.head_index)
+            vertex_indices = verts[:-1]
+            if len(vertex_indices) != 3:
+                continue  # Only handle triangles for now
+
+            v0, v1, v2 = [mesh.vertices[i].position for i in vertex_indices]
+
+            # The gradient of the signed volume of a tetrahedron (v0, v1, v2, origin) w.r.t. each vertex
+            # dV/dv0 = 1/6 * (v1 x v2)
+            # dV/dv1 = 1/6 * (v2 x v0)
+            # dV/dv2 = 1/6 * (v0 x v1)
+            grad[vertex_indices[0]] += np.cross(v1, v2) / 6.0
+            grad[vertex_indices[1]] += np.cross(v2, v0) / 6.0
+            grad[vertex_indices[2]] += np.cross(v0, v1) / 6.0
+
+        return grad
 
     def compute_surface_area(self, mesh) -> float:
         area = 0.0
