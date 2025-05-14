@@ -4,6 +4,7 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Vertex, Edge, Facet, Body, Mesh
+from geometry.geom_io import load_data, parse_geometry
 from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
 
 def get_triangle_normal(a, b, c):
@@ -122,3 +123,31 @@ def test_facet_normal_reversal():
 
     assert np.allclose(n1, -n2), "Reversed facet should flip normal"
 
+def test_refined_facets_are_oriented_outward():
+    data = load_data("meshes/sample_geometry.json")
+    #data = load_data("meshes/cube.json")
+    mesh = parse_geometry(data)
+    # Refine to get triangles
+    mesh_tri = refine_polygonal_facets(mesh)
+
+    # Compute the centroid of the mesh (approximate center)
+    centroid = np.mean([v.position for v in mesh_tri.vertices.values()], axis=0)
+
+    for facet in mesh_tri.facets.values():
+        # Get the triangle's vertices
+        verts = []
+        for signed_index in facet.edge_indices:
+            edge = mesh_tri.get_edge(signed_index)
+            if not verts:
+                verts.append(edge.tail_index)
+            verts.append(edge.head_index)
+        vertex_indices = verts[:-1]
+        v0, v1, v2 = [mesh_tri.vertices[i].position for i in vertex_indices]
+        # Compute normal (right-hand rule)
+        normal = np.cross(v1 - v0, v2 - v0)
+        # Compute vector from centroid to triangle center
+        tri_center = (v0 + v1 + v2) / 3
+        to_outside = tri_center - centroid
+        # The normal should point outward: dot product should be positive
+        dot = np.dot(normal, to_outside)
+        assert dot > 0, f"Facet {facet.index} normal does not point outward (dot={dot})"

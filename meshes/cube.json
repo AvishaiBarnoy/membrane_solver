@@ -26,9 +26,9 @@
     "faces": [
         [0, 1, 2, 3],
         ["r0", 8, 5, "r9"],
-        [10, -6, -9, 1], 
+        [9, 6, -10, -1], 
         [-2, 10, 7, -11],
-        [3, 8, -4, -11],
+        [11, 4, -8, -3],
         [-5, -4, -7, -6]
     ],
     "bodies": {
@@ -38,6 +38,7 @@
                         "intrinsic_curvature": 0,
                         "bending_modulus": 0,
                         "gaussian_modulus": 0,
-                        "volume_stiffness": 1000
-    }
+                        "volume_stiffness": 100
+    },
+    "instructions": ["r", "g5"]
 }

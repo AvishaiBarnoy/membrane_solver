@@ -20,9 +20,6 @@ def load_data(filename):
             ...
         ]
     }"""
-    logger.info(f"######################################")
-    logger.info(f"Loading file: {filename}")
-    logger.info(f"######################################")
     with open(filename, 'r') as f:
         if filename.endswith((".yaml", ".yml")):
             data = yaml.safe_load(f)
@@ -144,7 +141,7 @@ def parse_geometry(data: dict) -> Mesh:
 
 
     new_mesh = refine_polygonal_facets(mesh)
-    return mesh
+    return new_mesh
 
 def save_geometry(mesh: Mesh, path: str = "temp_output_file.json"):
     def export_edge_index(i):

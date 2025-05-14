@@ -4,7 +4,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 # visualize_geometry.py
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-import sys
+import os, sys
 
 # Import functions from your modules.
 from geometry.geom_io import parse_geometry, load_data
@@ -76,7 +76,7 @@ if __name__ == '__main__':
 
     try:
         inpfile = sys.argv[1]
-        if not inpfile.endwith('.json'):
+        if not inpfile.endswith('.json'):
             raise ValueError("Input file must be a JSON file (.json).")
         if not os.path.isfile(inpfile):
             raise FileNotFoundError(f"Input file '{inpfile}' not found!")
@@ -88,16 +88,16 @@ if __name__ == '__main__':
     # vertices, facets, volume = load_geometry(inpfile)
     data = load_data(inpfile)
     mesh = parse_geometry(data=data)
-    #plot_geometry(mesh, show_indices=False)
+    plot_geometry(mesh, show_indices=False)
 
     # Perform the initial triangulation on loaded facets.
-    mesh_tri = refine_polygonal_facets(mesh) # initial triangulation
-    plot_geometry(mesh_tri, show_indices=False)
+    #mesh_tri = refine_polygonal_facets(mesh) # initial triangulation
+    #plot_geometry(mesh_tri, show_indices=False)
 
     # Optionally, perform a refinement step.
-    mesh_ref = refine_triangle_mesh(mesh_tri)
-    mesh_ref2 = refine_triangle_mesh(mesh_ref)
+    #mesh_ref = refine_triangle_mesh(mesh_tri)
+    #mesh_ref2 = refine_triangle_mesh(mesh_ref)
 
     # Visualize the resulting triangulated geometry.
-    plot_geometry(mesh_ref, show_indices=False)
-    plot_geometry(mesh_ref2, show_indices=False)
+    #plot_geometry(mesh_ref, show_indices=False)
+    #plot_geometry(mesh_ref2, show_indices=False)

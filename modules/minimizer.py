@@ -13,13 +13,8 @@ class ParameterResolver:
     def __init__(self, global_params):
         self.global_params = global_params
 
-        #print(f"global_params {self.global_params}, type {type(self.global_params)}")
-
     def get(self, obj, name: str):
         # look for facet-specific override, else global
-        #print(f" obj {obj}, name {name}")
-        #sys.exit()
-        #print(obj.options.get(self, self.global_params.get(name)))
         return obj.options.get(name, self.global_params.get(name))
 
 class Minimizer:
@@ -45,21 +40,16 @@ class Minimizer:
             self.energy_manager.get_module(mod) for mod in mesh.energy_modules
             ]
 
-        # TODO: is this section needed? 
-        modules_dir = os.path.join(os.path.dirname(__file__))
-
-        #for fname in os.listdir(modules_dir):
-        module_list_dir = os.listdir(modules_dir)
         for fname in self.energy_manager.modules.values():
-            #mod = importlib.import_module(f"modules.{fname}")
-
-
             # IN THIS FORMULATION I mod.compute_energy_and_gradient() STILL WORK?
             self.energy_modules.append(fname)
             #if fname.endswith('.py') and not fname.startswith('__'):
                 #name = fname[:-3]
                 #mod = importlib.import_module(f"modules.{name}")
                 #self.energy_modules.append(mod)
+
+        print(f"[DEBUG] Loaded energy modules: {self.energy_manager.modules.keys()}")
+        print(f"[DEBUG] Mesh energy_modules: {self.mesh.energy_modules}")
 
         self.param_resolver = ParameterResolver(global_params)
         #print(self.param_resolver)
@@ -136,11 +126,14 @@ STEP SIZE:\t {self.step_size}
         for vidx, vertex in self.mesh.vertices.items():
             if getattr(vertex, 'fixed', False):
                 continue
+            old_pos = vertex.position.copy()
             new_pos = vertex.position - self.step_size * grad[vidx]
             # if there's a constraint object, project position back onto it
             if hasattr(vertex, 'constraint'):
                 new_pos = vertex.constraint.project_position(new_pos)
             vertex.position[:] = new_pos
+            # Debug: Print vertex movement
+            print(f"[DEBUG] Vertex {vidx}: moved {np.linalg.norm(new_pos - old_pos):.6e}")
 
     def minimize(self):
         for i in range(1, self.max_iter + 1):
@@ -148,9 +141,15 @@ STEP SIZE:\t {self.step_size}
             self.project_constraints(grad)
 
             # check convergence by gradient norm
-            norm = np.sqrt(sum(np.dot(g, g) for g in grad.values()))
-            if norm < self.tol:
-                print(f"Converged in {i} iterations; |∇E|={norm:.3e}")
+            grad_norm = np.sqrt(sum(np.dot(g, g) for g in grad.values()))
+            print(f"[DEBUG] Iter {i}: Energy={E:.6f}, grad norm={grad_norm:.6e}")
+            # Print a few gradient values
+            for idx, g in list(grad.items())[:3]:
+                print(f"[DEBUG] grad[{idx}] = {g}")
+
+            if grad_norm < self.tol:
+                print("[DEBUG] Converged: gradient norm below tolerance.")
+                print(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
                 break
 
             self.take_step(grad)
