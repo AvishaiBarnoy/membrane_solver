@@ -102,42 +102,43 @@ class Facet:
         v0, v1, v2 = verts
         area = 0.5 * np.linalg.norm(np.cross(v1 - v0, v2 - v0))
         return area
-    
+
     def compute_area_gradient(self, mesh: "Mesh") -> Dict[int, np.ndarray]:
         """
         Compute area gradient with respect to each vertex in the facet.
         Returns a dictionary where keys are vertex indices and values are gradient vectors.
         """
-        # Get the vertices of the facet
-        verts = []
-        for signed_index in self.edge_indices:
-            edge = mesh.get_edge(signed_index)
-            if not verts:
-                verts.append(edge.tail_index)
-            verts.append(edge.head_index)
+        # ordered vertex loop
+        v_ids = []
+        for signed_ei in self.edge_indices:
+            edge = mesh.get_edge(signed_ei)
+            tail = edge.tail_index
+            if not v_ids or v_ids[-1] != tail:
+                v_ids.append(tail)
 
-        # Remove duplicates and convert to vertex positions
-        vertex_indices = verts[:-1]
-        if len(verts) < 3:
-            raise ValueError("Cannot compute area gradient with fewer than 3 vertices.")    
-        
-        # Compute the area of the facet
-        v0, v1, v2 = [mesh.vertices[i].position for i in vertex_indices]
-        # Compute the gradient of the area with respect to each vertex
-        grad = {}
-        grad[vertex_indices[0]] = 0.5 * np.cross(v1 - v0, v2 - v0) / np.linalg.norm(np.cross(v1 - v0, v2 - v0))
-        grad[vertex_indices[1]] = 0.5 * np.cross(v2 - v1, v0 - v1) / np.linalg.norm(np.cross(v2 - v1, v0 - v1))
-        grad[vertex_indices[2]] = 0.5 * np.cross(v0 - v2, v1 - v2) / np.linalg.norm(np.cross(v0 - v2, v1 - v2))
+        # triangulate facet around v0
+        grad = {i: np.zeros(3) for i in v_ids}
+        v0 = mesh.vertices[v_ids[0]].position
 
-        # Map gradients back to vertex indices
-        #vertex_indices = [self.edge_indices[0], self.edge_indices[1], self.edge_indices[2]]
+        for i in range(1, len(v_ids) - 1):
+            a, b = v_ids[i], v_ids[i + 1]
+            va, vb = mesh.vertices[a].position, mesh.vertices[b].position
+            n = np.cross(va - v0, vb - v0)
+            A = np.linalg.norm(n)
+            if A < 1e-12:          # skip nearly-degenerate triangle
+                continue
+            n_hat = n / A          # unit normal
+            grad[v_ids[0]] += 0.5 * np.cross(va - v0, n_hat)
+            grad[a]                += 0.5 * np.cross(vb - va, n_hat)
+            grad[b]                += 0.5 * np.cross(v0 - vb, n_hat)
+
         return grad
 
 @dataclass
 class Body:
     index: int
     facet_indices: List[int]
-    target_volume: Optional[float] = None
+    target_volume: Optional[float] = 0.0
     options: Dict[str, Any] = field(default_factory=dict)
 
     def compute_volume(self, mesh) -> float:
@@ -159,7 +160,10 @@ class Body:
                 v1 = v_pos[i]
                 v2 = v_pos[i+1]
                 volume += np.dot(v0, np.cross(v1, v2)) / 6.0
-        return abs(volume)
+        return volume
+
+
+
     def compute_volume_gradient(self, mesh: "Mesh") -> Dict[int, np.ndarray]:
         """
         Compute the gradient of the volume with respect to each vertex in the body.
@@ -167,36 +171,29 @@ class Body:
         This version subtracts the body’s centroid so that the tetrahedron formula is applied
         relative to the body’s center rather than the origin.
         """
-        grad: Dict[int, np.ndarray] = {i: np.zeros(3) for i in mesh.vertices}
+        # entities.py  – Body.compute_volume_gradient
+        grad = {i: np.zeros(3) for i in mesh.vertices}
 
-        # Compute a reference point (centroid) for the body
-        # (or you could use a fixed reference for the entire mesh)
-        all_positions = [v.position for v in mesh.vertices.values()]
-        c = np.mean(all_positions, axis=0)
-
-        # Loop over facets in this body
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
-            verts = []
-            for signed_index in facet.edge_indices:
-                edge = mesh.get_edge(signed_index)
-                if not verts:
-                    verts.append(edge.tail_index)
-                verts.append(edge.head_index)
-            vertex_indices = verts[:-1]
-            if len(vertex_indices) != 3:
-                continue  # Only handle triangles for now
 
-            # Get original vertex positions
-            v0, v1, v2 = [mesh.vertices[i].position for i in vertex_indices]
-            # Compute local positions relative to the centroid c.
-            r0, r1, r2 = v0 - c, v1 - c, v2 - c
+            # Re-create the ordered vertex loop exactly as you do in compute_volume
+            v_ids = []
+            for signed_ei in facet.edge_indices:
+                edge = mesh.edges[abs(signed_ei)]
+                tail = edge.tail_index if signed_ei > 0 else edge.head_index
+                if not v_ids or v_ids[-1] != tail:
+                    v_ids.append(tail)
 
-            # Use the tetrahedron-gradient formula on the relative positions.
-            grad[vertex_indices[0]] += np.cross(r1, r2) / 6.0
-            grad[vertex_indices[1]] += np.cross(r2, r0) / 6.0
-            grad[vertex_indices[2]] += np.cross(r0, r1) / 6.0
+            v0 = mesh.vertices[v_ids[0]].position
+            for i in range(1, len(v_ids)-1):          # triangulate (v0,vi,vi+1)
+                a, b = v_ids[i], v_ids[i+1]
+                va, vb = mesh.vertices[a].position, mesh.vertices[b].position
 
+                # ∂V/∂v equals cross-product of the opposite edge, divided by 6
+                grad[v_ids[0]] += np.cross(va, vb) / 6
+                grad[a]        += np.cross(vb, v0) / 6
+                grad[b]        += np.cross(v0, va) / 6
         return grad
 
     def compute_surface_area(self, mesh) -> float:

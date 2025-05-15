@@ -63,7 +63,7 @@ def test_global_parameters_loading():
     assert mesh.global_parameters.get("custom_param") == 42.0, "custom_param should be added with value 42.0"
 
     # Check that default parameters are preserved
-    assert mesh.global_parameters.get("time_step") == 0.01, "time_step should retain its default value"
+    assert mesh.global_parameters.get("step_size") == 1e-4, "step_size should retain its default value"
 
 def test_global_parameters_defaults():
     # Initialize GlobalParameters without any input
@@ -72,7 +72,7 @@ def test_global_parameters_defaults():
     # Check default values
     assert gp.get("surface_tension") == 1.0, "Default surface_tension should be 1.0"
     assert gp.get("volume_stiffness") == 1000.0, "Default volume_stiffness should be 1000.0"
-    assert gp.get("time_step") == 0.01, "Default time_step should be 0.01"
+    assert gp.get("step_size") == 1e-4, "Default step_size should be 1e-4"
 
 def test_global_parameters_update():
     # Initialize GlobalParameters with some defaults

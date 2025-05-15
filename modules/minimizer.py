@@ -26,7 +26,7 @@ class Minimizer:
                  energy_modules: list = [],
                  step_size: float = 1e-3,
                  tol: float = 1e-6,
-                 max_iter: int = 500):
+                 max_iter: int = 100):
         self.mesh = mesh
         self.global_params = global_params
         self.energy_manager = energy_manager
@@ -36,10 +36,8 @@ class Minimizer:
         self.max_iter = max_iter
 
         # Use module_names from the mesh to initialize the energy manager
-        self.energy_modules = [
-            self.energy_manager.get_module(mod) for mod in mesh.energy_modules
-            ]
-
+        #self.energy_modules = [self.energy_manager.get_module(mod) for mod in mesh.energy_modules]]
+        self.energy_modules = mesh.energy_modules
         for fname in self.energy_manager.modules.values():
             self.energy_modules.append(fname)
 
@@ -59,34 +57,33 @@ STEP SIZE:\t {self.step_size}
 
     def compute_energy_and_gradient(self):
         total_energy = 0.0
-        # initialize per-vertex gradient dict
         grad: Dict[int, np.ndarray] = {
             idx: np.zeros(3) for idx in self.mesh.vertices
         }
 
-        for mod in self.energy_modules:
-            # E_mod - energy module, g_mod - gradient module
-            # TODO: documentation:
-            # write that in new energy modules compute_energy_and_gradient is
-            #   a mandatory name
-            #E_mod, g_mod = mod.compute_energy_and_gradient(
-            #    self.mesh, self.global_params, self.param_resolver
-            #)
-            volume_energy_list = []
-            surface_energy_list = []
-            for module in self.energy_modules:
-                E_mod, g_mod = module.compute_energy_and_gradient(self.mesh,
-                                                                  self.global_params,
-                                                                  self.param_resolver)
+        volume_energy_list = []
+        surface_energy_list = []
 
-                if module.__name__ == "modules.volume": volume_energy_list.append(E_mod)
-                elif module.__name__ == "modules.surface": surface_energy_list.append(E_mod)
-                total_energy += E_mod
-                for vidx, gvec in g_mod.items():
-                    grad[vidx] += gvec
+        for module_name in self.energy_modules:
+            module = self.energy_manager.get_module(module_name)
+            E_mod, g_mod = module.compute_energy_and_gradient(
+                self.mesh, self.global_params, self.param_resolver
+            )
 
-            print(f"[DEBUG] Surface energy: {surface_energy_list},\
-                  Volume energy: {volume_energy_list}")
+            if module_name == "volume":
+                volume_energy_list.append(E_mod)
+            elif module_name == "surface":
+                surface_energy_list.append(E_mod)
+
+            total_energy += E_mod
+            for vidx, gvec in g_mod.items():
+                grad[vidx] += gvec
+
+        V = self.mesh.compute_total_volume()
+        Es = surface_energy_list[-1] if surface_energy_list else 0.0
+        Ev = volume_energy_list[-1] if volume_energy_list else 0.0
+        print(f"step i:2d : V = {V:6.4f}  energy_surf = {Es:7.4f}  energy_vol = {Ev:7.4f}")
+
         return total_energy, grad
 
     def project_constraints(self, grad: Dict[int, np.ndarray]):
@@ -136,7 +133,7 @@ STEP SIZE:\t {self.step_size}
             #print(f"[DEBUG] Vertex {vidx}: moved {np.linalg.norm(new_pos - old_pos):.6e}")
 
     def minimize(self):
-        for i in range(1, self.max_iter + 1):
+        for i in range(0, self.max_iter + 1):
             E, grad = self.compute_energy_and_gradient()
             self.project_constraints(grad)
 
@@ -144,8 +141,8 @@ STEP SIZE:\t {self.step_size}
             grad_norm = np.sqrt(sum(np.dot(g, g) for g in grad.values()))
             #print(f"[DEBUG] Iter {i}: Energy={E:.6f}, grad norm={grad_norm:.6e}")
             # Print a few gradient values
-            for idx, g in list(grad.items())[:3]:
-                print(f"[DEBUG] grad[{idx}] = {g}")
+            #for idx, g in list(grad.items())[:3]:
+                #print(f"[DEBUG] grad[{idx}] = {g}")
 
             if grad_norm < self.tol:
                 print("[DEBUG] Converged: gradient norm below tolerance.")
@@ -153,9 +150,9 @@ STEP SIZE:\t {self.step_size}
                 break
 
             old_volume = self.mesh.compute_total_volume()
-            print(f"[DEBUG] Previous volume: {old_volume}")
+            #print(f"[DEBUG] Previous volume: {old_volume}")
             self.take_step(grad)
-            print(f"[DEBUG] Current volume: {self.mesh.compute_total_volume()}")
+            #print(f"[DEBUG] Current volume: {self.mesh.compute_total_volume()}")
 
         return {"energy": E, "mesh": self.mesh}
 

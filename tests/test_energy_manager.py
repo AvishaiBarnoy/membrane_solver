@@ -52,15 +52,27 @@ def test_minimizer_with_mock_energy_manager():
 
     # Mock energy manager
     mock_energy_manager = MagicMock()
-    #mock_energy_manager.get_energy_function.return_value = lambda obj, params: (0.0, {})
 
     # Mock energy functions
     mock_surface_energy_function = lambda obj, params: (1.0, {0: np.array([0.1, 0.1, 0.1])})
     mock_volume_energy_function = lambda obj, params: (2.0, {1: np.array([0.2, 0.2, 0.2])})
 
+    # Mock modules with different energy functions
+    mock_surface_module = MagicMock()
+    mock_surface_module.calculate_energy = MagicMock(return_value="surface_energy")
+    mock_surface_module.compute_energy_and_gradient = MagicMock(return_value=
+            (1.0, {0: np.array([0.1, 0.1, 0.1])}))
+    mock_surface_module.__name__ = "modules.surface"
+
+    mock_volume_module = MagicMock()
+    mock_volume_module.calculate_energy = MagicMock(return_value="volume_energy")
+    mock_volume_module.compute_energy_and_gradient = MagicMock(return_value=
+            (1.0, {0: np.array([0.1, 0.1, 0.1])}))
+    mock_volume_module.__name__ = "modules.volume"
+
     # Mock get_module to return the mocked energy functions
     mock_energy_manager.get_module.side_effect = lambda mod: (
-        mock_surface_energy_function if mod == "surface" else mock_volume_energy_function
+        mock_surface_module if mod == "surface" else mock_surface_module
     )
 
     # Mock stepper
@@ -106,10 +118,13 @@ def test_get_energy_function():
     # Mock modules with different energy functions
     mock_surface_module = MagicMock()
     mock_surface_module.calculate_energy = MagicMock(return_value="surface_energy")
-    mock_surface_module.compute_energy_and_gradient = MagicMock(return_value="surface_gradient")
+    mock_surface_module.compute_energy_and_gradient = MagicMock(return_value=
+            (1.0, {0: np.array([0.1, 0.1, 0.1])}))
 
     mock_volume_module = MagicMock()
     mock_volume_module.calculate_energy = MagicMock(return_value="volume_energy")
+    mock_volume_module.compute_energy_and_gradient = MagicMock(return_value=
+            (1.0, {0: np.array([0.1, 0.1, 0.1])}))
 
     # Initialize the EnergyModuleManager
     energy_manager = EnergyModuleManager(module_names)

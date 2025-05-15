@@ -1,8 +1,8 @@
 {
     "vertices": [
         [0, 0, 0, {"fixed": false}],
-        [1, 0, 0],
-        [1, 0, 1],
+        [1, 0, 0, {"fixed": false}],
+        [1, 0, 1, {"fixed": false}],
         [0, 0, 1],
         [0, 1, 1],
         [0, 1, 0],
@@ -40,8 +40,9 @@
                         "bending_modulus": 0,
                         "gaussian_modulus": 0,
                         "volume_stiffness": 1e6,
-                        "time_step": 1e-9
+                        "step_size": 1e-6
     },
-    "instructions": ["g1"]
+    "instructions": ["g10"]
+
 
 }

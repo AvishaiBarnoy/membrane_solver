@@ -19,7 +19,9 @@ def calculate_volume_energy(mesh, global_params):
 
     for body in mesh.bodies:
         V = body.calculate_volume()
-        V0 = body.options.get("target_volume", 0)
+        V0 = (body.target_volume
+              if body.target_volume is not None
+              else body.options.get("target_volume", 0))
         logger.debut(f"Default target_volume is 0!")
         k = body.options.get("volume_stiffness", global_params.volume_stiffness)
 
@@ -40,9 +42,13 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver):
         if k is None:
             k = global_params.volume_stiffness
 
-        V0 = body.options.get("target_volume", 0)
+        #V0 = body.options.get("target_volume", 0)
+        #print(f"[DEBUG] Body entity: {body}")
+        V0 = (body.target_volume
+              if body.target_volume is not None
+              else body.options.get("target_volume", 0))
+        #print(f"[DEBUG] V0 {V0}")
         V = body.compute_volume(mesh)
-
 
         # Energy: 0.5 * k * (V - V0)**2
         E += 0.5 * k * (V - V0)**2

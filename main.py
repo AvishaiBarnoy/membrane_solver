@@ -61,9 +61,11 @@ def main():
     # Load mesh and parameters
     data = load_data(args.input)
     mesh = parse_geometry(data)
+    print(f"[DEBUG] Loaded bodies:\n {mesh.bodies}")
 
     fixed_count = sum(1 for v in mesh.vertices.values() if getattr(v, 'fixed', False))
     print(f"[DEBUG] Number of fixed vertices: {fixed_count} / {len(mesh.vertices)}")
+    print(f"[DEBUG] Target volume of body: {mesh.bodies[0].options['target_volume']}")
 
     global_params = mesh.global_parameters
     param_resolver = ParameterResolver(global_params)
@@ -88,13 +90,15 @@ def main():
             logger.info(f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}")
             minimizer = Minimizer(mesh, global_params, stepper, energy_manager)
             minimizer.max_iter = int(cmd[1:])
+            minimizer.step_size = global_params.get("step_size", 1e-4)
+
             print(f"[DEBUG] Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}")
             result = minimizer.minimize()
             mesh = result["mesh"]
             logger.info(f"Minimization complete. Final energy: {result['energy'] if result else 'N/A'}")
         elif cmd == 'r':
             logger.info("Refining mesh...")
-            mesh = refine_triangle_mesh(mesh)
+            new_mesh = refine_triangle_mesh(mesh)
         elif cmd == 'cg':
             logger.info("Switching to Conjugate Gradient stepper.")
             stepper = ConjugateGradient()

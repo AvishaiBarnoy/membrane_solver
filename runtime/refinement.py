@@ -97,7 +97,10 @@ def refine_polygonal_facets(mesh):
         # 3. Create centroid
         centroid_pos = np.mean([mesh.vertices[v].position for v in vertex_loop], axis=0)
         centroid_idx = len(new_vertices)
-        centroid_vertex = Vertex(position=centroid_pos, index=centroid_idx)
+        centroid_vertex = Vertex(index=centroid_idx,
+                                 position=np.asarray(centroid_pos,
+                                                     dtype=float))
+        #print(midpoint_position, type(midpoint_position))
         new_vertices[centroid_idx] = centroid_vertex
 
         new_mesh.vertices = new_vertices.copy()
@@ -159,8 +162,8 @@ def refine_polygonal_facets(mesh):
     # TODO: Associate facets with bodies! If no body exists skip
     # Step 3: Build updated bodies
     new_bodies = {}
-    for body_idx in mesh.bodies.keys():
-        body = mesh.bodies[body_idx]
+    for body_idx, body in mesh.bodies.items():
+        #body = mesh.bodies[body_idx]
         new_body_facets = []
         for old_facet_idx in body.facet_indices:
             # Instead of checking "if mesh.facets[old_facet_idx].index in facet_to_new_facets",
@@ -170,7 +173,8 @@ def refine_polygonal_facets(mesh):
             else:
                 new_body_facets.append(old_facet_idx)
         new_bodies[len(new_bodies)] = Body(len(new_bodies), new_body_facets,
-                                options=body.options.copy())
+                                options=body.options.copy(),
+                                target_volume=body.target_volume)
     new_mesh.bodies = new_bodies
 
     new_mesh.facets = new_facets
@@ -210,7 +214,9 @@ def refine_triangle_mesh(mesh):
         if key not in edge_midpoints:
             midpoint_position = 0.5 * (mesh.vertices[v1].position + mesh.vertices[v2].position)
             midpoint_idx = len(new_vertices)
-            midpoint = Vertex(midpoint_idx, midpoint_position)
+            print(midpoint_position, type(midpoint_position))
+            midpoint = Vertex(midpoint_idx,
+                              np.asarray(midpoint_position, dtype=float))
             new_vertices[midpoint_idx] = midpoint
             edge_midpoints[key] = midpoint
 
@@ -312,12 +318,13 @@ def refine_triangle_mesh(mesh):
 
     # Step 3: Build updated bodies
     new_bodies = {}
-    for body in mesh.bodies.keys():
+    for body_idx, body in mesh.bodies.items():
         new_body_facets = []
-        for old_facet_idx in mesh.bodies[body].facet_indices:
+        for old_facet_idx in body.facet_indices:
             if mesh.facets[old_facet_idx].index in facet_to_new_facets:
                 new_body_facets.extend(facet_to_new_facets[old_facet_idx])
-        new_bodies[len(new_bodies)] = Body(len(new_bodies), new_body_facets)
+        new_bodies[len(new_bodies)] = Body(len(new_bodies), new_body_facets,
+                                           target_volume=body.target_volume)
     new_mesh.vertices = new_vertices
     new_mesh.facets = new_facets
     new_mesh.bodies = new_bodies
