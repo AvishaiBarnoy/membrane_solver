@@ -112,6 +112,7 @@ def parse_geometry(data: dict) -> Mesh:
                 raise err_msg
         elif "energy" not in options:
             mesh.facets[i].options["energy"] = ["surface"]
+            module_names.append("surface")
 
     # Bodies
     if "bodies" in data:
@@ -134,13 +135,18 @@ def parse_geometry(data: dict) -> Mesh:
                     raise err_msg
             elif "energy" not in options:
                 mesh.bodies[i].options["energy"] = ["volume"]
+                module_names.append("volume")
 
     # Instructions
     mesh.instructions = data.get("instructions", [])
-    mesh.module_names = list(set(module_names))
-
+    mesh.energy_modules= list(set(module_names))
+    #for i in mesh.facets.values(): print(i.options)
 
     new_mesh = refine_polygonal_facets(mesh)
+    #for i in new_mesh.facets.values(): print(i.options)
+    #for i in new_mesh.bodies.values(): print(i.options)
+    #print(new_mesh.energy_modules)
+    #import sys; sys.exit()
     return new_mesh
 
 def save_geometry(mesh: Mesh, path: str = "temp_output_file.json"):

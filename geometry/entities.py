@@ -160,18 +160,23 @@ class Body:
                 v2 = v_pos[i+1]
                 volume += np.dot(v0, np.cross(v1, v2)) / 6.0
         return abs(volume)
-
     def compute_volume_gradient(self, mesh: "Mesh") -> Dict[int, np.ndarray]:
         """
         Compute the gradient of the volume with respect to each vertex in the body.
         Returns a dictionary mapping vertex indices to gradient vectors (np.ndarray).
+        This version subtracts the body’s centroid so that the tetrahedron formula is applied
+        relative to the body’s center rather than the origin.
         """
         grad: Dict[int, np.ndarray] = {i: np.zeros(3) for i in mesh.vertices}
 
-        # Loop over all facets of the body
+        # Compute a reference point (centroid) for the body
+        # (or you could use a fixed reference for the entire mesh)
+        all_positions = [v.position for v in mesh.vertices.values()]
+        c = np.mean(all_positions, axis=0)
+
+        # Loop over facets in this body
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
-            # Get the vertex indices for this facet
             verts = []
             for signed_index in facet.edge_indices:
                 edge = mesh.get_edge(signed_index)
@@ -182,15 +187,15 @@ class Body:
             if len(vertex_indices) != 3:
                 continue  # Only handle triangles for now
 
+            # Get original vertex positions
             v0, v1, v2 = [mesh.vertices[i].position for i in vertex_indices]
+            # Compute local positions relative to the centroid c.
+            r0, r1, r2 = v0 - c, v1 - c, v2 - c
 
-            # The gradient of the signed volume of a tetrahedron (v0, v1, v2, origin) w.r.t. each vertex
-            # dV/dv0 = 1/6 * (v1 x v2)
-            # dV/dv1 = 1/6 * (v2 x v0)
-            # dV/dv2 = 1/6 * (v0 x v1)
-            grad[vertex_indices[0]] += np.cross(v1, v2) / 6.0
-            grad[vertex_indices[1]] += np.cross(v2, v0) / 6.0
-            grad[vertex_indices[2]] += np.cross(v0, v1) / 6.0
+            # Use the tetrahedron-gradient formula on the relative positions.
+            grad[vertex_indices[0]] += np.cross(r1, r2) / 6.0
+            grad[vertex_indices[1]] += np.cross(r2, r0) / 6.0
+            grad[vertex_indices[2]] += np.cross(r0, r1) / 6.0
 
         return grad
 
@@ -218,7 +223,6 @@ class Mesh:
     edges: Dict[int, "Edge"] = field(default_factory=dict)
     facets: Dict[int, "Facet"] = field(default_factory=dict)
     bodies: Dict[int, "Body"] = field(default_factory=dict)
-    #global_parameters: Dict[str, Any] = field(default_factory=dict)
     global_parameters: "GlobalParameters" = None  # Use the class here
     energy_modules: List[str] = field(default_factory=list)
     instructions: List[str] = field(default_factory=list)
@@ -236,6 +240,7 @@ class Mesh:
 
     def compute_total_volume(self) -> float:
         return sum(body.compute_volume(self) for body in self.bodies.values())
+
 
     def validate_triangles(self):
         """Validate that all facets are triangles (have exactly 3 oriented edges).

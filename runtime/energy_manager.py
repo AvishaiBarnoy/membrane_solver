@@ -14,6 +14,7 @@ class EnergyModuleManager:
             except ImportError as e:
                 logger.error(f"Could not load module '{name}': {e}")
                 raise
+
     def get_module(self, name):
         """
         Retrieve a loaded energy module by name.
