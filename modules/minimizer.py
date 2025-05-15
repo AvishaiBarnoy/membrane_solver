@@ -38,8 +38,8 @@ class Minimizer:
         # Use module_names from the mesh to initialize the energy manager
         #self.energy_modules = [self.energy_manager.get_module(mod) for mod in mesh.energy_modules]]
         self.energy_modules = mesh.energy_modules
-        for fname in self.energy_manager.modules.values():
-            self.energy_modules.append(fname)
+        #for fname in self.energy_manager.modules.values():
+        #    self.energy_modules.append(fname)
 
         print(f"[DEBUG] Loaded energy modules: {self.energy_manager.modules.keys()}")
         print(f"[DEBUG] Mesh energy_modules: {self.mesh.energy_modules}")
