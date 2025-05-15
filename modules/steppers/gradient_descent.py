@@ -5,6 +5,10 @@ from .base import BaseStepper
 
 class GradientDescent(BaseStepper):
     def step(self, mesh, grad, step_size):
+        l2 = np.linalg.norm(grad[vidx])
+        if l2 > 1e-2:   # cap to 1% of edge length per step
+            grad[vidx] = 1e-2 / l2
+
         for vidx, vertex in mesh.vertices.items():
             if getattr(vertex, 'fixed', False):
                 continue

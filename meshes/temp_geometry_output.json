@@ -1,26 +1,26 @@
 {
     "vertices": [
         [
-            0,
-            0,
-            0,
+            0.0,
+            0.0,
+            0.0,
             {
                 "fixed": false
             }
         ],
         [
-            1,
-            0,
-            0,
+            1.0,
+            0.0,
+            0.0,
             {
                 "constraints": "constraint1",
                 "energy": "new_module"
             }
         ],
         [
-            1,
-            0,
-            1,
+            1.0,
+            0.0,
+            1.0,
             {
                 "constraint1": [
                     "constraint1",
@@ -29,29 +29,29 @@
             }
         ],
         [
-            0,
-            0,
-            1
+            0.0,
+            0.0,
+            1.0
         ],
         [
-            0,
-            1,
-            1
+            0.0,
+            1.0,
+            1.0
         ],
         [
-            0,
-            1,
-            0
+            0.0,
+            1.0,
+            0.0
         ],
         [
-            1,
-            1,
-            0
+            1.0,
+            1.0,
+            0.0
         ],
         [
-            1,
-            1,
-            1
+            1.0,
+            1.0,
+            1.0
         ],
         [
             0.5,
@@ -728,7 +728,7 @@
             ]
         ],
         "target_volume": [
-            null
+            1.0
         ],
         "energy": [
             [
@@ -739,7 +739,7 @@
     "global_parameters": {
         "surface_tension": 1.0,
         "volume_stiffness": 1000,
-        "time_step": 0.01,
+        "step_size": 0.0001,
         "intrinsic_curvature": 0,
         "bending_modulus": 0,
         "gaussian_modulus": 0,

@@ -15,13 +15,13 @@ class EnergyModuleManager:
                 logger.error(f"Could not load module '{name}': {e}")
                 raise
 
-    def get_module(self, name):
+    def get_module(self, mod):
         """
         Retrieve a loaded energy module by name.
         """
-        if name in self.modules:
-            return self.modules[name]
-        raise KeyError(f"Energy module '{name}' not found.")
+        if mod in self.modules.keys():
+            return self.modules[mod]
+        raise KeyError(f"Energy module '{mod}' not found.")
 
     def get_energy_function(self, name, object_type):
         # TODO: is this needed? mostly moved to compute_energy_and_gradient() formulation

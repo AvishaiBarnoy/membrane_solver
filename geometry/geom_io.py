@@ -50,8 +50,8 @@ def parse_geometry(data: dict) -> Mesh:
     # Vertices
     for i, entry in enumerate(data["vertices"]):
         *position, options = entry if isinstance(entry[-1], dict) else (*entry, {})
-        mesh.vertices[i] = Vertex(index=i, position=np.array(position),
-                                    options=options)
+        mesh.vertices[i] = Vertex(index=i, position=np.asarray(position,
+                                                               dtype=float), options=options)
 
         if "energy" in options:
             if isinstance(options["energy"], list):
@@ -120,9 +120,12 @@ def parse_geometry(data: dict) -> Mesh:
         volumes = data["bodies"].get("target_volume"), [None] * len(face_groups)
         options = data["bodies"].get("energy", [{}] * len(face_groups))
         for i, (facet_indices, volume, options) in enumerate(zip(face_groups, volumes, options)):
-            mesh.bodies[i] = Body(index=i, facet_indices=facet_indices,
-                                  target_volume=volume, options={"energy": options})
-
+            body = Body(index=i, facet_indices=facet_indices,
+                                  target_volume=volume[0], options={"energy": options})
+            body.options["target_volume"] = float(volume[0])
+            #print(body.options["target_volume"])
+            #import sys; sys.exit()
+            mesh.bodies[i] = body
             if "energy" in options:
                 if isinstance(options["energy"], list):
                     module_names.extend(options["energy"])
@@ -147,6 +150,10 @@ def parse_geometry(data: dict) -> Mesh:
     #for i in new_mesh.bodies.values(): print(i.options)
     #print(new_mesh.energy_modules)
     #import sys; sys.exit()
+
+    #print(mesh.bodies)
+    #import sys; sys.exit()
+
     return new_mesh
 
 def save_geometry(mesh: Mesh, path: str = "temp_output_file.json"):
