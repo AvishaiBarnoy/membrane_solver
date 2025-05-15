@@ -32,13 +32,16 @@
         [-5, -4, -7, -6]
     ],
     "bodies": {
-        "faces": [[0, 1, 2, 3, 4, 5]]
+        "faces": [[0, 1, 2, 3, 4, 5]],
+        "target_volume": [1.0]
     },
     "global_parameters": {"surface_tension": 1.0,
                         "intrinsic_curvature": 0,
                         "bending_modulus": 0,
                         "gaussian_modulus": 0,
-                        "volume_stiffness": 100
+                        "volume_stiffness": 1e6,
+                        "time_step": 1e-9
     },
-    "instructions": ["r", "g5"]
+    "instructions": ["g1"]
+
 }

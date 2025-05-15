@@ -46,7 +46,7 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver):
 
         # Energy: 0.5 * k * (V - V0)**2
         E += 0.5 * k * (V - V0)**2
-        
+
         # Gradient: k * (V - V0) * ∇V
         volume_gradient = body.compute_volume_gradient(mesh)
         for vertex_index, gradient_vector in volume_gradient.items():
@@ -55,6 +55,6 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver):
         # Log the computed energy and gradient
         logger.debug(f"Computed volume energy: {E}")
         logger.debug(f"Computed volume energy gradient: {grad}")
-        
+
     # Return the total energy and gradient
     return E, grad

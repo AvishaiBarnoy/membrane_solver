@@ -10,6 +10,7 @@ from modules.steppers.gradient_descent import GradientDescent
 from modules.steppers.conjugate_gradient import ConjugateGradient
 from runtime.energy_manager import EnergyModuleManager
 from runtime.refinement import refine_triangle_mesh
+from visualize_geometry import plot_geometry
 
 logger = setup_logging('membrane_solver')
 
@@ -39,6 +40,9 @@ def parse_instructions(instr):
             result.append('cg')
         elif cmd == 'gd':
             result.append('gd')
+        elif cmd == "visualize":
+            result.append('visualize')
+            #plot_geometry(mesh, show_indices=False)
         else:
             logger.warning(f"Unknown instruction: {cmd}")
     return result
@@ -79,12 +83,14 @@ def main():
     for cmd in instructions:
         if cmd.startswith('g'):
             cmd = cmd.replace(" ", "")  # remove whitespaces
+            if cmd == "g": cmd = "g1"
             assert cmd[1:].isnumeric(), "#n steps should be in the form of 'g 5' or 'g5'"
             logger.info(f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}")
             minimizer = Minimizer(mesh, global_params, stepper, energy_manager)
             minimizer.max_iter = int(cmd[1:])
             print(f"[DEBUG] Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}")
             result = minimizer.minimize()
+            mesh = result["mesh"]
             logger.info(f"Minimization complete. Final energy: {result['energy'] if result else 'N/A'}")
         elif cmd == 'r':
             logger.info("Refining mesh...")
@@ -95,6 +101,8 @@ def main():
         elif cmd == 'gd':
             logger.info("Switching to Gradient Descent stepper.")
             stepper = GradientDescent()
+        elif cmd == "visualize":
+            plot_geometry(mesh, show_indices=False)
         else:
             logger.warning(f"Unknown instruction: {cmd}")
 

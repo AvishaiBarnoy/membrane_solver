@@ -72,12 +72,21 @@ STEP SIZE:\t {self.step_size}
             #E_mod, g_mod = mod.compute_energy_and_gradient(
             #    self.mesh, self.global_params, self.param_resolver
             #)
-            for energy_function in self.energy_modules:
-                E_mod, g_mod = energy_function(self.mesh, self.global_params)
+            volume_energy_list = []
+            surface_energy_list = []
+            for module in self.energy_modules:
+                E_mod, g_mod = module.compute_energy_and_gradient(self.mesh,
+                                                                  self.global_params,
+                                                                  self.param_resolver)
+
+                if module.__name__ == "modules.volume": volume_energy_list.append(E_mod)
+                elif module.__name__ == "modules.surface": surface_energy_list.append(E_mod)
                 total_energy += E_mod
                 for vidx, gvec in g_mod.items():
                     grad[vidx] += gvec
 
+            print(f"[DEBUG] Surface energy: {surface_energy_list},\
+                  Volume energy: {volume_energy_list}")
         return total_energy, grad
 
     def project_constraints(self, grad: Dict[int, np.ndarray]):
@@ -124,7 +133,7 @@ STEP SIZE:\t {self.step_size}
                 new_pos = vertex.constraint.project_position(new_pos)
             vertex.position[:] = new_pos
             # Debug: Print vertex movement
-            print(f"[DEBUG] Vertex {vidx}: moved {np.linalg.norm(new_pos - old_pos):.6e}")
+            #print(f"[DEBUG] Vertex {vidx}: moved {np.linalg.norm(new_pos - old_pos):.6e}")
 
     def minimize(self):
         for i in range(1, self.max_iter + 1):
@@ -133,7 +142,7 @@ STEP SIZE:\t {self.step_size}
 
             # check convergence by gradient norm
             grad_norm = np.sqrt(sum(np.dot(g, g) for g in grad.values()))
-            print(f"[DEBUG] Iter {i}: Energy={E:.6f}, grad norm={grad_norm:.6e}")
+            #print(f"[DEBUG] Iter {i}: Energy={E:.6f}, grad norm={grad_norm:.6e}")
             # Print a few gradient values
             for idx, g in list(grad.items())[:3]:
                 print(f"[DEBUG] grad[{idx}] = {g}")
@@ -143,15 +152,10 @@ STEP SIZE:\t {self.step_size}
                 print(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
                 break
 
+            old_volume = self.mesh.compute_total_volume()
+            print(f"[DEBUG] Previous volume: {old_volume}")
             self.take_step(grad)
+            print(f"[DEBUG] Current volume: {self.mesh.compute_total_volume()}")
 
-        return self.mesh
-
-# a convenience function
-def minimize(mesh, global_params, **kwargs):
-    """
-    Standalone function if you prefer functional style.
-    """
-    engine = Minimizer(mesh, global_params, **kwargs)
-    return engine.minimize()
+        return {"energy": E, "mesh": self.mesh}
 
