@@ -42,7 +42,10 @@ def parse_instructions(instr):
             result.append('gd')
         elif cmd == "visualize":
             result.append('visualize')
-            #plot_geometry(mesh, show_indices=False)
+        elif cmd.startswith('t'):
+            result.append(cmd)
+        elif cmd == "save":
+            result.append(cmd)
         else:
             logger.warning(f"Unknown instruction: {cmd}")
     return result
@@ -81,6 +84,7 @@ def main():
     instructions = parse_instructions(instr)
     print(f"[DEBUG] Instructions to execute: {instructions}")
 
+    minimizer = Minimizer(mesh, global_params, stepper, energy_manager)
     # Simulation loop
     for cmd in instructions:
         if cmd.startswith('g'):
@@ -88,7 +92,6 @@ def main():
             if cmd == "g": cmd = "g1"
             assert cmd[1:].isnumeric(), "#n steps should be in the form of 'g 5' or 'g5'"
             logger.info(f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}")
-            minimizer = Minimizer(mesh, global_params, stepper, energy_manager)
             minimizer.max_iter = int(cmd[1:])
             minimizer.step_size = global_params.get("step_size", 1e-4)
 
@@ -96,9 +99,13 @@ def main():
             result = minimizer.minimize()
             mesh = result["mesh"]
             logger.info(f"Minimization complete. Final energy: {result['energy'] if result else 'N/A'}")
+        elif cmd.startswith('t'):
+            new_ts = cmd.replace(' ', '')
+            assert float(new_ts[1:]), "New step size should be a float or 1e-3 format"
+            minimizer.step_size = new_ts[1:]
         elif cmd == 'r':
             logger.info("Refining mesh...")
-            new_mesh = refine_triangle_mesh(mesh)
+            mesh = refine_triangle_mesh(mesh)
         elif cmd == 'cg':
             logger.info("Switching to Conjugate Gradient stepper.")
             stepper = ConjugateGradient()
@@ -107,6 +114,9 @@ def main():
             stepper = GradientDescent()
         elif cmd == "visualize":
             plot_geometry(mesh, show_indices=False)
+        elif cmd == "save":
+            save_geometry(mesh, args.input + ".temp")
+            logger.info(f"Saved geometry to {args.input}.temp")
         else:
             logger.warning(f"Unknown instruction: {cmd}")
 

@@ -20,10 +20,30 @@ class Vertex:
     options: Dict[str, Any] = field(default_factory=dict)
 
     def project_position(self, pos: np.ndarray) -> np.ndarray:
-        ...
+        """
+        Project the given position onto the constraint, if any.
+        If no constraint is defined, return the position unchanged.
+        """
+        if 'constraint' in self.options:
+            constraint = self.options['constraint']
+            return constraint.project_position(pos)
+        return pos
 
     def project_gradient(self, grad: np.ndarray) -> np.ndarray:
-        ...
+        """
+        Project the given gradient into the tangent space of the constraint, if any.
+        If no constraint is defined, return the gradient unchanged.
+        """
+        if 'constraint' in self.options:
+            constraint = self.options['constraint']
+            return constraint.project_gradient(grad)
+        return grad
+    
+    def compute_distance(self, other: "Vertex") -> float:
+        """
+        Compute the distance to another vertex.
+        """
+        return np.linalg.norm(self.position - other.position)
 
 @dataclass
 class Edge:
@@ -162,8 +182,6 @@ class Body:
                 volume += np.dot(v0, np.cross(v1, v2)) / 6.0
         return volume
 
-
-
     def compute_volume_gradient(self, mesh: "Mesh") -> Dict[int, np.ndarray]:
         """
         Compute the gradient of the volume with respect to each vertex in the body.
@@ -238,7 +256,6 @@ class Mesh:
     def compute_total_volume(self) -> float:
         return sum(body.compute_volume(self) for body in self.bodies.values())
 
-
     def validate_triangles(self):
         """Validate that all facets are triangles (have exactly 3 oriented edges).
         should only be called after initial triangulation."""
@@ -266,4 +283,49 @@ class Mesh:
         # 3. (optional future checks: vertex connectivity, bodies, etc.)
         # Pass for now
         return True
+    
+    def __post_init__(self):
+        if self.global_parameters is None:
+            self.global_parameters = GlobalParameters()
 
+    def __str__(self):
+        return f"Mesh with {len(self.vertices)} vertices, {len(self.edges)} edges, {len(self.facets)} facets, and {len(self.bodies)} bodies."
+    def __repr__(self):
+        return f"Mesh(vertices={self.vertices}, edges={self.edges}, facets={self.facets}, bodies={self.bodies})"
+    def __len__(self):
+        return len(self.vertices) + len(self.edges) + len(self.facets) + len(self.bodies)
+    def __getitem__(self, index):
+        if index in self.vertices:
+            return self.vertices[index]
+        elif index in self.edges:
+            return self.edges[index]
+        elif index in self.facets:
+            return self.facets[index]
+        elif index in self.bodies:
+            return self.bodies[index]
+        else:
+            raise KeyError(f"Index {index} not found in mesh.")
+    def __setitem__(self, index, value):
+        if isinstance(value, Vertex):
+            self.vertices[index] = value
+        elif isinstance(value, Edge):
+            self.edges[index] = value
+        elif isinstance(value, Facet):
+            self.facets[index] = value
+        elif isinstance(value, Body):
+            self.bodies[index] = value
+        else:
+            raise TypeError(f"Value {value} is not a valid mesh entity.")
+    def __delitem__(self, index):
+        if index in self.vertices:
+            del self.vertices[index]
+        elif index in self.edges:
+            del self.edges[index]
+        elif index in self.facets:
+            del self.facets[index]
+        elif index in self.bodies:
+            del self.bodies[index]
+        else:
+            raise KeyError(f"Index {index} not found in mesh.")
+    def __contains__(self, index):
+        return index in self.vertices or index in self.edges or index in self.facets or index in self.bodies
