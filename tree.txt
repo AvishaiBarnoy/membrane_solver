@@ -1,32 +1,60 @@
 .
 ├── README.md
+├── cube_output.json
 ├── deploy.sh
-├── energy.py
 ├── geometry
 │   ├── __init__.py
-│   ├── geometry_entities.py
-│   └── geometry_io.py
+│   ├── entities.py
+│   └── geom_io.py
 ├── logging_config.py
 ├── main.py
+├── manual.md
 ├── membrane_solver.log
 ├── meshes
+│   ├── cube.json
+│   ├── pyramid.json
 │   ├── sample_geometry.json
 │   ├── sample_geometry.yaml
-│   └── test_geometries
-│       ├── test_cube.json
-│       └── test_pyramid.json
-├── minimizer.py
+│   └── temp_geometry_output.json
 ├── modules
 │   ├── __init__.py
+│   ├── constraints
+│   │   ├── edge.py
+│   │   ├── fix_facet_area.py
+│   │   ├── fix_vertex_position.py
+│   │   ├── fixed_volume.py
+│   │   ├── pin_to_plane.py
+│   │   └── volume.py
+│   ├── energy
+│   │   ├── dummy_module.py
+│   │   ├── surface.py
+│   │   ├── tilt.py
+│   │   └── volume.py
 │   ├── gaussan_curvature.py
 │   ├── mean_curvature.py
-│   ├── surface.py
-│   └── volume.py
+│   ├── mean_curvature_tilt.py
+│   ├── minimizer.py
+│   └── steppers
+│       ├── base.py
+│       ├── conjugate_gradient.py
+│       ├── gradient_descent.py
+│       └── old_gradient_descent.py
 ├── parameters
+│   ├── __init__.py
 │   └── global_parameters.py
 ├── runtime
+│   ├── constraint_manager.py
 │   ├── energy_manager.py
-│   └── geometry_refinement.py
+│   └── refinement.py
 ├── tests
+│   ├── test_energy_manager.py
+│   ├── test_facet_area_gradient.py
+│   ├── test_geom_io.py
+│   ├── test_global_parameters.py
+│   ├── test_mesh.py
+│   ├── test_normals.py
+│   ├── test_refinement.py
+│   ├── test_surface.py
+│   └── test_volume.py
 ├── tree.txt
 └── visualize_geometry.py
