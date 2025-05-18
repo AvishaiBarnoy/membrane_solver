@@ -4,7 +4,7 @@ import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Mesh, Vertex, Edge, Facet
 from parameters.global_parameters import GlobalParameters
-from modules.surface import compute_energy_and_gradient
+from modules.energy.surface import compute_energy_and_gradient
 from modules.minimizer import ParameterResolver
 
 def test_compute_energy_and_gradient():

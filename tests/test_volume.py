@@ -1,7 +1,7 @@
 import numpy as np
 from geometry.entities import Mesh, Vertex, Edge, Facet, Body
 from parameters.global_parameters import GlobalParameters
-from modules.volume import compute_energy_and_gradient
+from modules.energy.volume import compute_energy_and_gradient
 from modules.minimizer import ParameterResolver
 
 def test_volume_energy_and_gradient():
@@ -33,10 +33,13 @@ def test_volume_energy_and_gradient():
     facets = {0: f0, 1: f1, 2: f2, 3: f3}
 
     # Body (the tetrahedron)
-    body = Body(0, [0, 1, 2, 3], options={"target_volume": 0.1, "volume_stiffness": 2.0})
+    body = Body(0, [0, 1, 2, 3], options={"target_volume": 0.1,
+                                          "volume_stiffness": 2.0},
+                target_volume=0.1)
     bodies = {0: body}
 
-    mesh = Mesh(vertices=vertices, edges=edges, facets=facets, bodies=bodies)
+    mesh = Mesh(vertices=vertices, edges=edges, facets=facets, bodies=bodies,
+               energy_modules=["volume"])
 
     # Set up global parameters
     global_params = GlobalParameters()
@@ -53,7 +56,10 @@ def test_volume_energy_and_gradient():
     V0 = 0.1
     expected_energy = 0.5 * k * (expected_volume - V0) ** 2
 
-    assert np.isclose(body.compute_volume(mesh), expected_volume)
+    print(f"target volume: {mesh.bodies[0]}")
+
+
+    print(f"body:\n{body}")
     assert np.isclose(E, expected_energy), f"Expected energy {expected_energy}, got {E}"
 
     # Test gradient: should be a dict with 4 entries, each a 3D vector

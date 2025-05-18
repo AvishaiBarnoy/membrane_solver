@@ -17,7 +17,7 @@ logger = logging.getLogger('membrane_solver')
 # TODO: shading option when rotating
 # TODO: opaque scatter when transparent=False
 
-def plot_geometry(mesh, show_indices=False, ax=None,
+def plot_geometry(mesh, show_indices=False, scatter=False, ax=None,
                   transparent=False):
     """
     Visualizes the triangulated geometry.
@@ -56,7 +56,8 @@ def plot_geometry(mesh, show_indices=False, ax=None,
     ax.add_collection3d(tri_collection)
 
     # Optional: plot vertices
-    ax.scatter(X, Y, Z, color='r', s=20)
+    if scatter:
+        ax.scatter(X, Y, Z, color='r', s=20)
 
     if show_indices:
         for v in vertices:

@@ -1,8 +1,8 @@
 {
     "vertices": [
         [0, 0, 0, {"fixed": false}],
-        [1, 0, 0, {"constraints": "constraint1", "energy": "new_module"}],
-        [1, 0, 1, {"constraint1": ["constraint1", "constraint2"]}],
+        [1, 0, 0, {"constraints": "constraint1", "energy": "dummy_module"}],
+        [1, 0, 1, {"fixed": true }], 
         [0, 0, 1],
         [0, 1, 1],
         [0, 1, 0],
@@ -11,7 +11,7 @@
     ],
     "edges": [
         [0, 1, {"refine": false, "fixed": true}],
-        [1, 2, {"energy": ["line_tension1", "edge1"]}],
+        [1, 2, {"energy": ["line_tension"]}],
         [2, 3],
         [3, 0],
         [4, 5],
@@ -25,7 +25,7 @@
     ],
     "faces": [
         [0, 1, 2, 3, {"refine": false, "fixed": true, "energy": ["surface"], "surface_tension": 1}],
-        ["r0", 8, 5, "r9", {"refine": true, "energy": "new_module"}],
+        ["r0", 8, 5, "r9", {"refine": true, "energy": "surface"}],
         [9, 6, -10, -1, {"surface_tension": 5, "constraints": ["pin_to_plane","fix_facet_area"]}],
         [-2, 10, 7, -11],
         [11, 4, -8, -3],

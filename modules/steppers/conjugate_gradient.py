@@ -2,9 +2,6 @@
 import numpy as np
 from .base import BaseStepper
 
-import numpy as np
-from .base import BaseStepper
-
 class ConjugateGradient(BaseStepper):
     def __init__(self, restart_interval=10, precondition=False):
         self.prev_grad = {}
@@ -56,4 +53,3 @@ class ConjugateGradient(BaseStepper):
 
         self.iter_count += 1
 
-        def __repr__(self): ...

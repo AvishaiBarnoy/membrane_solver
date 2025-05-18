@@ -1,4 +1,4 @@
-#( modules/minimizer.py
+# modules/minimizer.py
 
 import sys
 import os
@@ -36,10 +36,12 @@ class Minimizer:
         self.max_iter = max_iter
 
         # Use module_names from the mesh to initialize the energy manager
-        #self.energy_modules = [self.energy_manager.get_module(mod) for mod in mesh.energy_modules]]
-        self.energy_modules = mesh.energy_modules
-        #for fname in self.energy_manager.modules.values():
-        #    self.energy_modules.append(fname)
+        self.energy_modules = [
+            self.energy_manager.get_module(mod) for mod in mesh.energy_modules
+            ]
+
+        for fname in self.energy_manager.modules.values():
+            self.energy_modules.append(fname)
 
         print(f"[DEBUG] Loaded energy modules: {self.energy_manager.modules.keys()}")
         print(f"[DEBUG] Mesh energy_modules: {self.mesh.energy_modules}")
@@ -57,33 +59,38 @@ STEP SIZE:\t {self.step_size}
 
     def compute_energy_and_gradient(self):
         total_energy = 0.0
+        # initialize per-vertex gradient dict
         grad: Dict[int, np.ndarray] = {
             idx: np.zeros(3) for idx in self.mesh.vertices
         }
 
-        volume_energy_list = []
-        surface_energy_list = []
+        for mod in self.energy_modules:
+            # E_mod - energy module, g_mod - gradient module
+            # TODO: documentation:
+            # write that in new energy modules compute_energy_and_gradient is
+            #   a mandatory name
+            #E_mod, g_mod = mod.compute_energy_and_gradient(
+            #    self.mesh, self.global_params, self.param_resolver
+            #)
+            for module in self.energy_modules:
+                E_mod, g_mod = module.compute_energy_and_gradient(self.mesh,
+                                                                  self.global_params,
+                                                                  self.param_resolver)
 
-        for module_name in self.energy_modules:
-            module = self.energy_manager.get_module(module_name)
-            E_mod, g_mod = module.compute_energy_and_gradient(
-                self.mesh, self.global_params, self.param_resolver
-            )
+                volume_energy_list = []
+                surface_energy_list = []
+                if module.__name__ == "modules.volume": volume_energy_list.append(E_mod)
+                elif module.__name__ == "modules.surface": surface_energy_list.append(E_mod)
+        #print(f"[DEBUG] Surface energy: {surface_energy_list}, Volume energy: {volume_energy_list}")
+                total_energy += E_mod
+                for vidx, gvec in g_mod.items():
+                    grad[vidx] += gvec
 
-            if module_name == "volume":
-                volume_energy_list.append(E_mod)
-            elif module_name == "surface":
-                surface_energy_list.append(E_mod)
-
-            total_energy += E_mod
-            for vidx, gvec in g_mod.items():
-                grad[vidx] += gvec
-
-        V = self.mesh.compute_total_volume()
+        #if i == 0:
+        V  = self.mesh.compute_total_volume()
         Es = surface_energy_list[-1] if surface_energy_list else 0.0
-        Ev = volume_energy_list[-1] if volume_energy_list else 0.0
+        Ev = volume_energy_list[-1]  if volume_energy_list  else 0.0
         print(f"step i:2d : V = {V:6.4f}  energy_surf = {Es:7.4f}  energy_vol = {Ev:7.4f}")
-
         return total_energy, grad
 
     def project_constraints(self, grad: Dict[int, np.ndarray]):

@@ -68,7 +68,7 @@ def main():
 
     fixed_count = sum(1 for v in mesh.vertices.values() if getattr(v, 'fixed', False))
     print(f"[DEBUG] Number of fixed vertices: {fixed_count} / {len(mesh.vertices)}")
-    print(f"[DEBUG] Target volume of body: {mesh.bodies[0].options['target_volume']}")
+    #print(f"[DEBUG] Target volume of body: {mesh.bodies[0].options['target_volume']}")
 
     global_params = mesh.global_parameters
     param_resolver = ParameterResolver(global_params)
@@ -106,6 +106,8 @@ def main():
         elif cmd == 'r':
             logger.info("Refining mesh...")
             mesh = refine_triangle_mesh(mesh)
+            minimizer = Minimizer(mesh, global_params, stepper, energy_manager)
+            logger.info("Mesh refinement complete.")
         elif cmd == 'cg':
             logger.info("Switching to Conjugate Gradient stepper.")
             stepper = ConjugateGradient()

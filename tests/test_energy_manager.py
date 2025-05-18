@@ -92,7 +92,7 @@ def test_minimizer_with_mock_energy_manager():
 
 def test_get_module():
     # Mock module names
-    module_names = ["line_tension1", "line_tension2", "edge1"]
+    module_names = ["volume", "dummy_module", "surface"]
 
     # Initialize the EnergyModuleManager
     energy_manager = EnergyModuleManager(module_names)
