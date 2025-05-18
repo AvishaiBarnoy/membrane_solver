@@ -9,7 +9,7 @@ class EnergyModuleManager:
         self.modules = {}
         for name in module_names:
             try:
-                self.modules[name] = importlib.import_module(f"modules.{name}")
+                self.modules[name] = importlib.import_module(f"modules.energy.{name}")
                 logger.info(f"Loaded energy module: {name}")
             except ImportError as e:
                 logger.error(f"Could not load module '{name}': {e}")
