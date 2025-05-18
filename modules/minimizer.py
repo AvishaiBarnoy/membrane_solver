@@ -72,15 +72,15 @@ STEP SIZE:\t {self.step_size}
             #E_mod, g_mod = mod.compute_energy_and_gradient(
             #    self.mesh, self.global_params, self.param_resolver
             #)
-            for module in self.energy_modules:
-                E_mod, g_mod = module.compute_energy_and_gradient(self.mesh,
-                                                                  self.global_params,
-                                                                  self.param_resolver)
+            #volume_energy_list = []
+            #surface_energy_list = []
 
-                volume_energy_list = []
-                surface_energy_list = []
-                if module.__name__ == "modules.volume": volume_energy_list.append(E_mod)
-                elif module.__name__ == "modules.surface": surface_energy_list.append(E_mod)
+            for module in self.energy_modules:
+                E_mod, g_mod = module.compute_energy_and_gradient(
+                    self.mesh, self.global_params, self.param_resolver)
+
+                #if   module.__name__ ==   "modules.energy.volume": volume_energy_list.append(E_mod)
+                #elif module.__name__ == "modules.energy.surface": surface_energy_list.append(E_mod)
         #print(f"[DEBUG] Surface energy: {surface_energy_list}, Volume energy: {volume_energy_list}")
                 total_energy += E_mod
                 for vidx, gvec in g_mod.items():
@@ -88,9 +88,9 @@ STEP SIZE:\t {self.step_size}
 
         #if i == 0:
         V  = self.mesh.compute_total_volume()
-        Es = surface_energy_list[-1] if surface_energy_list else 0.0
-        Ev = volume_energy_list[-1]  if volume_energy_list  else 0.0
-        print(f"step i:2d : V = {V:6.4f}  energy_surf = {Es:7.4f}  energy_vol = {Ev:7.4f}")
+        #Es = surface_energy_list[-1] if surface_energy_list else 0.0
+        #Ev = volume_energy_list[-1]  if volume_energy_list  else 0.0
+        #print(f"step i:2d : V = {V:6.4f}  energy_surf = {Es:7.4f}  energy_vol = {Ev:7.4f}")
         return total_energy, grad
 
     def project_constraints(self, grad: Dict[int, np.ndarray]):
@@ -142,6 +142,8 @@ STEP SIZE:\t {self.step_size}
     def minimize(self):
         for i in range(0, self.max_iter + 1):
             E, grad = self.compute_energy_and_gradient()
+            #print(f"[DEBUG]")
+            #print(f"step i:2d : V = {V:6.4f}  energy_surf = {Es:7.4f}  energy_vol = {Ev:7.4f}")
             self.project_constraints(grad)
 
             # check convergence by gradient norm
@@ -156,8 +158,12 @@ STEP SIZE:\t {self.step_size}
                 print(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
                 break
 
-            old_volume = self.mesh.compute_total_volume()
-            #print(f"[DEBUG] Previous volume: {old_volume}")
+            # Compute total area
+            total_area = sum(facet.compute_area(self.mesh) for facet in self.mesh.facets.values())
+
+            # Print step details
+            print(f"Step {i:4d}: Area = {total_area:.6f}, Energy = {E:.6f}, Step Size  = {self.step_size:.2e}")
+
             self.take_step(grad)
             #print(f"[DEBUG] Current volume: {self.mesh.compute_total_volume()}")
 

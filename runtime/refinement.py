@@ -214,7 +214,6 @@ def refine_triangle_mesh(mesh):
         if key not in edge_midpoints:
             midpoint_position = 0.5 * (mesh.vertices[v1].position + mesh.vertices[v2].position)
             midpoint_idx = len(new_vertices)
-            print(midpoint_position, type(midpoint_position))
             midpoint = Vertex(midpoint_idx,
                               np.asarray(midpoint_position, dtype=float))
             new_vertices[midpoint_idx] = midpoint

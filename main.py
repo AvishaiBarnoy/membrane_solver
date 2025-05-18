@@ -64,11 +64,11 @@ def main():
     # Load mesh and parameters
     data = load_data(args.input)
     mesh = parse_geometry(data)
-    print(f"[DEBUG] Loaded bodies:\n {mesh.bodies}")
+    #print(f"[DEBUG] Loaded bodies:\n {mesh.bodies}")
 
     fixed_count = sum(1 for v in mesh.vertices.values() if getattr(v, 'fixed', False))
     print(f"[DEBUG] Number of fixed vertices: {fixed_count} / {len(mesh.vertices)}")
-    #print(f"[DEBUG] Target volume of body: {mesh.bodies[0].options['target_volume']}")
+    print(f"[DEBUG] Target volume of body: {mesh.bodies[0].options['target_volume']}")
 
     global_params = mesh.global_parameters
     param_resolver = ParameterResolver(global_params)
@@ -85,15 +85,21 @@ def main():
     print(f"[DEBUG] Instructions to execute: {instructions}")
 
     minimizer = Minimizer(mesh, global_params, stepper, energy_manager)
+    print(global_params)
+    #sys.exit()
+    minimizer.step_size = global_params.get("step_size", 0.001)
+
     # Simulation loop
     for cmd in instructions:
         if cmd.startswith('g'):
             cmd = cmd.replace(" ", "")  # remove whitespaces
             if cmd == "g": cmd = "g1"
             assert cmd[1:].isnumeric(), "#n steps should be in the form of 'g 5' or 'g5'"
+            print(f"[DEBUG] {minimizer.step_size}")
+            #sys.exit()
+            #minimizer.step_size = global_params.get("step_size", 0.001)
             logger.info(f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}")
             minimizer.max_iter = int(cmd[1:])
-            minimizer.step_size = global_params.get("step_size", 1e-4)
 
             print(f"[DEBUG] Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}")
             result = minimizer.minimize()
@@ -101,12 +107,16 @@ def main():
             logger.info(f"Minimization complete. Final energy: {result['energy'] if result else 'N/A'}")
         elif cmd.startswith('t'):
             new_ts = cmd.replace(' ', '')
-            assert float(new_ts[1:]), "New step size should be a float or 1e-3 format"
-            minimizer.step_size = new_ts[1:]
+            try:
+                minimizer.step_size = float(new_ts[1:])
+            except ValueError:
+                raise ValueError(f"Invalid step size format {new_ts[1:]}")
+            logger.info(f"Updated step size to {minimizer.step_size}")
         elif cmd == 'r':
             logger.info("Refining mesh...")
             mesh = refine_triangle_mesh(mesh)
-            minimizer = Minimizer(mesh, global_params, stepper, energy_manager)
+            minimizer.mesh = mesh
+            #minimizer = Minimizer(mesh, global_params, stepper, energy_manager)
             logger.info("Mesh refinement complete.")
         elif cmd == 'cg':
             logger.info("Switching to Conjugate Gradient stepper.")
