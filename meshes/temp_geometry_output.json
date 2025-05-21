@@ -13,7 +13,9 @@
             0.0,
             0.0,
             {
-                "constraints": "constraint1",
+                "constraints": [
+                    "dummy_module"
+                ],
                 "energy": "dummy_module"
             }
         ],

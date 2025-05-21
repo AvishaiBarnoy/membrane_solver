@@ -31,10 +31,13 @@ Membrane Solver is a simulation platform inspired by Surface Evolver, designed t
     1.2 No: will allow better tracking of current state and number of object
 
 ## roadmap
-1. cube that minimizes into a sphere - volume conservation
-2. square that minimizes into circle - area conservation
-3. capillary bridge (catenoid) - two circles at fixed distance, tests surface
-        tension and volume constraint
+1. cube that minimizes into a sphere
+  :white_check_mark:  1.1 soft constraint - volume energy
+    1.2 hard constraint - lagrange multiplier
+2. square that minimizes into circle
+    2.1 soft constraint - surface area energy
+    2.2 hard constraint - lagrange multiplier
+3. capillary bridge (catenoid) - two circles at fixed distance, tests surface - tension and volume constraint
 4. Pinned hemisphere under tension to yield spherical caps - boundary constraints 
         and mean curvature-pressure balance
 5. Pure Gaussian curvature - check no change under constant topology, and no edge

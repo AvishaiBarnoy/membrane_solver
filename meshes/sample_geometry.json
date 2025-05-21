@@ -1,7 +1,7 @@
 {
     "vertices": [
         [0, 0, 0, {"fixed": false}],
-        [1, 0, 0, {"constraints": "constraint1", "energy": "dummy_module"}],
+        [1, 0, 0, {"constraints": "dummy_module", "energy": "dummy_module"}],
         [1, 0, 1, {"fixed": true }], 
         [0, 0, 1],
         [0, 1, 1],

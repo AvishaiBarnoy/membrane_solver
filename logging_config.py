@@ -27,7 +27,7 @@ def setup_logging(log_file='membrane_solver.log'):
     # File handler
     file_handler = logging.handlers.RotatingFileHandler(log_file,
                                                         maxBytes=5_000_000,
-                                                        backupCount=3)
+                                                        backupCount=0)
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
 

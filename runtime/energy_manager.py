@@ -1,10 +1,11 @@
+# runtime/energy_manager.py
+
 import importlib
 import logging
 
 logger = logging.getLogger("membrane_solver")
 
 class EnergyModuleManager:
-    # TODO: add documentation
     def __init__(self, module_names):
         self.modules = {}
         for name in module_names:
@@ -12,7 +13,7 @@ class EnergyModuleManager:
                 self.modules[name] = importlib.import_module(f"modules.energy.{name}")
                 logger.info(f"Loaded energy module: {name}")
             except ImportError as e:
-                logger.error(f"Could not load module '{name}': {e}")
+                logger.error(f"Could not load energy module '{name}': {e}")
                 raise
 
     def get_module(self, mod):
