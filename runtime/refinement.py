@@ -181,6 +181,7 @@ def refine_polygonal_facets(mesh):
     new_mesh.bodies = new_bodies
     new_mesh.global_parameters = mesh.global_parameters
     new_mesh.energy_modules = mesh.energy_modules
+    new_mesh.constraint_modules= mesh.constraint_modules
     new_mesh.instructions = mesh.instructions
 
     return new_mesh

@@ -17,6 +17,7 @@ import sys
 class Vertex:
     index: int
     position: np.ndarray
+    fixed: bool = False
     options: Dict[str, Any] = field(default_factory=dict)
 
     def project_position(self, pos: np.ndarray) -> np.ndarray:
@@ -38,7 +39,7 @@ class Vertex:
             constraint = self.options['constraint']
             return constraint.project_gradient(grad)
         return grad
-    
+
     def compute_distance(self, other: "Vertex") -> float:
         """
         Compute the distance to another vertex.
@@ -240,6 +241,7 @@ class Mesh:
     bodies: Dict[int, "Body"] = field(default_factory=dict)
     global_parameters: "GlobalParameters" = None  # Use the class here
     energy_modules: List[str] = field(default_factory=list)
+    constraint_modules: List[str] = field(default_factory=list)
     instructions: List[str] = field(default_factory=list)
 
     def get_edge(self, index: int) -> "Edge":

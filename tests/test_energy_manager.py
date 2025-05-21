@@ -8,6 +8,7 @@ from geometry.entities import Mesh, Vertex, Edge, Facet, Body
 from parameters.global_parameters import GlobalParameters
 from runtime.refinement import refine_polygonal_facets
 from runtime.energy_manager import EnergyModuleManager
+from runtime.constraint_manager import ConstraintModuleManager
 import numpy as np
 import pytest
 
@@ -75,11 +76,18 @@ def test_minimizer_with_mock_energy_manager():
         mock_surface_module if mod == "surface" else mock_surface_module
     )
 
+    # Mock get_module to return the mocked constraint fuctions
+    mock_constraint_manager = MagicMock()
+    mock_constraint_manager.get_module.side_effect = lambda mods: (
+        mock_volume_module if mod == "volume" else pin_to_place_module
+    )
+
     # Mock stepper
     mock_stepper = GradientDescent()
 
     # Initialize minimizer
-    minimizer = Minimizer(mock_mesh, mock_global_params, mock_stepper, mock_energy_manager)
+    minimizer = Minimizer(mock_mesh, mock_global_params, mock_stepper,
+                          mock_energy_manager, mock_constraint_manager)
 
     # Run minimization
     result = minimizer.minimize()

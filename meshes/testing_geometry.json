@@ -1,0 +1,1 @@
+{"vertices": [[0, 0, 0, {"fixed": "true"}], [1, 0, 0, {"constraints": ["pin_to_plane"]}], [1, 1, 0, {"constraints": ["fixed"]}], [0, 1, 0]], "edges": [[0, 1, {"constraints": "pin_to_plane"}], [1, 2], [2, 3], [3, 0]], "faces": [[0, 1, 2, 3, {"constraints": ["fix_facet_area"]}]], "bodies": {"faces": [[0]], "target_volume": [1.0]}, "global_parameters": {}, "instructions": []}

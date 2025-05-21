@@ -8,6 +8,7 @@ from typing import Dict
 from importlib import import_module
 from .steppers.base import BaseStepper
 from runtime.energy_manager import EnergyModuleManager
+from runtime.constraint_manager import ConstraintModuleManager
 
 class ParameterResolver:
     def __init__(self, global_params):
@@ -23,21 +24,30 @@ class Minimizer:
                  global_params,
                  stepper: BaseStepper,
                  energy_manager,
+                 constraint_manager,
                  energy_modules: list = [],
+                 constraint_modules: list = [],
                  step_size: float = 1e-3,
                  tol: float = 1e-6,
-                 max_iter: int = 100):
+                 n_steps: int = 100):
         self.mesh = mesh
         self.global_params = global_params
         self.energy_manager = energy_manager
+        self.constraint_manager = constraint_manager
+        self.constraint_modules = constraint_manager
         self.stepper = BaseStepper
         self.step_size = step_size
         self.tol = tol
-        self.max_iter = max_iter
+        self.n_steps = n_steps
 
         # Use module_names from the mesh to initialize the energy manager
         self.energy_modules = [
             self.energy_manager.get_module(mod) for mod in mesh.energy_modules
+            ]
+
+        self.constraint_modules = [
+            self.constraint_manager.get_constraint(constraint) for constraint
+            in mesh.constraint_modules
             ]
 
         for fname in self.energy_manager.modules.values():
@@ -140,7 +150,7 @@ STEP SIZE:\t {self.step_size}
             #print(f"[DEBUG] Vertex {vidx}: moved {np.linalg.norm(new_pos - old_pos):.6e}")
 
     def minimize(self):
-        for i in range(0, self.max_iter + 1):
+        for i in range(0, self.n_steps + 1):
             E, grad = self.compute_energy_and_gradient()
             #print(f"[DEBUG]")
             #print(f"step i:2d : V = {V:6.4f}  energy_surf = {Es:7.4f}  energy_vol = {Ev:7.4f}")

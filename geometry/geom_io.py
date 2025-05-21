@@ -7,6 +7,7 @@ import importlib
 import numpy as np
 import logging
 from logging_config import setup_logging
+import sys
 logger = logging.getLogger('membrane_solver')
 
 def load_data(filename):
@@ -44,7 +45,8 @@ def parse_geometry(data: dict) -> Mesh:
     mesh.global_parameters.update(input_global_params)
 
     # Initialize module_name list
-    module_names = []
+    energy_module_names = []
+    constraint_module_names = []
 
     # TODO: add option to read both lowercase and uppercase title Vertices/vertices
     # Vertices
@@ -55,9 +57,9 @@ def parse_geometry(data: dict) -> Mesh:
 
         if "energy" in options:
             if isinstance(options["energy"], list):
-                module_names.extend(options["energy"])
+                energy_module_names.extend(options["energy"])
             elif isinstance(options["energy"], str):
-                module_names.append(options["energy"])
+                energy_module_names.append(options["energy"])
             else:
                 err_msg = "energy modules should be in a list or a single string"
                 logger.error(err_msg)
@@ -65,6 +67,22 @@ def parse_geometry(data: dict) -> Mesh:
         # Uncomment to add a default energy moduel to Vertices 
         #elif "energy" not in options:
             #mesh.vertices[i].options["energy"] = ["surface"]
+
+        # Vertex constraint modules
+        if "constraints" in options:
+            if isinstance(options["constraints"], list):
+                constraint_module_names.extend(options["constraints"])
+            elif isinstance(options["constraints"], str):
+                constraint_module_names.append(options["constraints"])
+                mesh.vertices[i].options["constraints"] = [mesh.vertices[i].options["constraints"]]
+            else:
+                err_msg = "constraint modules should be in a list or a single string"
+                logger.error(err_msg)
+                raise err_msg
+            if "fixed" in options["constraints"]:
+                constraint_module_names.append("fixed")
+        if options.get("fixed", False):
+            constraint_module_names.append("fixed")
 
     # Edges
     for i, entry in enumerate(data["edges"]):
@@ -75,10 +93,10 @@ def parse_geometry(data: dict) -> Mesh:
 
         if "energy" in options:
             if isinstance(options["energy"], list):
-                module_names.extend(options["energy"])
+                energy_module_names.extend(options["energy"])
 
             elif isinstance(options["energy"], str):
-                module_names.append(options["energy"])
+                energy_module_names.append(options["energy"])
             else:
                 err_msg = "energy modules should be in a list or a single string"
                 logger.error(err_msg)
@@ -86,6 +104,22 @@ def parse_geometry(data: dict) -> Mesh:
         # Uncomment to add a default energy moduel to Edges
         #elif "energy" not in options:
             #mesh.edges[i+1].options["energy"] = ["surface"]
+
+        # Edges constraint modules
+        if "constraints" in options:
+            if isinstance(options["constraints"], list):
+                constraint_module_names.extend(options["constraints"])
+            elif isinstance(options["constraints"], str):
+                constraint_module_names.append(options["constraints"])
+                mesh.edges[i+1].options["constraints"] = [mesh.edges[i+1].options["constraints"]]
+            else:
+                err_msg = "constraint modules should be in a list or a single string"
+                logger.error(err_msg)
+                raise err_msg
+            if "fixed" in options["constraints"]:
+                constraint_module_names.append("fixed")
+        if options.get("fixed", False):
+            constraint_module_names.append("fixed")
 
     # Facets
     for i, entry in enumerate(data["faces"]):
@@ -102,9 +136,9 @@ def parse_geometry(data: dict) -> Mesh:
 
         if "energy" in options:
             if isinstance(options["energy"], list):
-                module_names.extend(options["energy"])
+                energy_module_names.extend(options["energy"])
             elif isinstance(options["energy"], str):
-                module_names.append(options["energy"])
+                energy_module_names.append(options["energy"])
                 mesh.facets[i].options["energy"] = [mesh.facets[i].options["energy"]]
             else:
                 err_msg = "energy modules should be in a list or a single string"
@@ -112,8 +146,20 @@ def parse_geometry(data: dict) -> Mesh:
                 raise err_msg
         elif "energy" not in options:
             mesh.facets[i].options["energy"] = ["surface"]
-            module_names.append("surface")
+            energy_module_names.append("surface")
+        # Facets constraint modules
+        if "constraints" in options:
+            if isinstance(options["constraints"], list):
+                constraint_module_names.extend(options["constraints"])
+            elif isinstance(options["constraints"], str):
+                constraint_module_names.append(options["constraints"])
+                mesh.facets[i].options["constraints"] = [mesh.facets[i].options["constraints"]]
+            else:
+                err_msg = "constraint modules should be in a list or a single string"
+                logger.error(err_msg)
+                raise err_msg
 
+    # Instructions
     # Bodies
     if "bodies" in data:
         face_groups = data["bodies"]["faces"]
@@ -123,36 +169,42 @@ def parse_geometry(data: dict) -> Mesh:
             body = Body(index=i, facet_indices=facet_indices,
                                   target_volume=volume[0], options={"energy": options})
             body.options["target_volume"] = float(volume[0])
-            #print(body.options["target_volume"])
-            #import sys; sys.exit()
             mesh.bodies[i] = body
+            # Energy modules
             if "energy" in options:
                 if isinstance(options["energy"], list):
-                    module_names.extend(options["energy"])
+                    energy_module_names.extend(options["energy"])
                 elif isinstance(options["energy"], str):
-                    module_names.append(options["energy"])
+                    energy_module_names.append(options["energy"])
                     mesh.bodies[i].options["energy"] = [mesh.bodies[i].options["energy"]]
                 else:
                     err_msg = "energy modules should be in a list or a single string"
                     logger.error(err_msg)
                     raise err_msg
             elif "energy" not in options:
-                mesh.bodies[i].options["energy"] = ["volume"]
-                module_names.append("volume")
+                if len(mesh.bodies) > 0:
+                    mesh.bodies[i].options["energy"] = ["volume"]
+                    energy_module_names.append("volume")
+            # Body constraint modules
+            if "constraints" in options:
+                if isinstance(options["energy"], list):
+                    energy_module_names.extend(options["energy"])
+                elif isinstance(options["energy"], str):
+                    energy_module_names.append(options["energy"])
+                    mesh.bodies[i].options["energy"] = [mesh.bodies[i].options["energy"]]
+                else:
+                    err_msg = "constraint modules should be in a list or a single string"
+                    logger.error(err_msg)
+                    raise err_msg
 
     # Instructions
     mesh.instructions = data.get("instructions", [])
-    mesh.energy_modules= list(set(module_names))
-    #for i in mesh.facets.values(): print(i.options)
+    # Energy modules
+    mesh.energy_modules= list(set(energy_module_names))
+    # Constraint modules
+    mesh.constraint_modules = list(set(constraint_module_names))
 
     new_mesh = refine_polygonal_facets(mesh)
-    #for i in new_mesh.facets.values(): print(i.options)
-    #for i in new_mesh.bodies.values(): print(i.options)
-    #print(new_mesh.energy_modules)
-    #import sys; sys.exit()
-
-    #print(mesh.bodies)
-    #import sys; sys.exit()
 
     return new_mesh
 

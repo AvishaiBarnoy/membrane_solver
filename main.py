@@ -99,7 +99,7 @@ def main():
             #sys.exit()
             #minimizer.step_size = global_params.get("step_size", 0.001)
             logger.info(f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}")
-            minimizer.max_iter = int(cmd[1:])
+            minimizer.n_steps = int(cmd[1:])
 
             print(f"[DEBUG] Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}")
             result = minimizer.minimize()
