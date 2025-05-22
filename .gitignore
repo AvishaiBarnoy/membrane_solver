@@ -27,6 +27,7 @@ venv.bak/
 *.sage.py
 
 evolver_test/
+*.docx
 *.log  # logfiles
 membrane_solver.log
 .DS_Store

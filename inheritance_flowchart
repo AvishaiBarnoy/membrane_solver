@@ -1,0 +1,26 @@
+digraph {
+	fontsize=12 rankdir=TB
+	Start [label="Refinement or Triangulation Event" fillcolor=lightblue shape=ellipse style=filled]
+	Facet [label=Facet fillcolor=lightyellow shape=box style=filled]
+	"Edge" [label="Edge" fillcolor=lightyellow shape=box style=filled]
+	Vertex [label=Vertex fillcolor=lightyellow shape=box style=filled]
+	MP_fixed [label="Midpoint/Center Vertex
+marked as fixed" fillcolor=lightgreen shape=box style=filled]
+	MP_not_fixed [label="Midpoint/Center Vertex
+NOT fixed" fillcolor=mistyrose shape=box style=filled]
+	MP_on_constraint [label="Midpoint/Center Vertex
+on constraint (projected)" fillcolor=lightgreen shape=box style=filled]
+	MP_not_constrained [label="Midpoint/Center Vertex
+not constrained" fillcolor=mistyrose shape=box style=filled]
+	Start -> Facet
+	Start -> "Edge"
+	Start -> Vertex
+	Facet -> MP_on_constraint [label="Facet has constraint"]
+	Facet -> MP_not_constrained [label="Facet has no constraint"]
+	Facet -> MP_fixed [label="Facet has constraint AND is fixed"]
+	Facet -> MP_not_fixed [label="Facet not fixed"]
+	"Edge" -> MP_fixed [label="Edge fixed AND both endpoints fixed"]
+	"Edge" -> MP_not_fixed [label="Edge not fixed OR one endpoint free"]
+	Vertex -> MP_not_fixed [label="Vertices fixed but edge not fixed"]
+	Vertex -> MP_not_constrained [label="No edge or facet constraint"]
+}

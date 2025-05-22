@@ -65,7 +65,13 @@
         [
             1.0,
             0.5,
-            0.5
+            0.5,
+            {
+                "constraints": [
+                    "pin_to_plane",
+                    "fix_facet_area"
+                ]
+            }
         ],
         [
             0.5,
