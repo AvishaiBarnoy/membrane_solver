@@ -81,6 +81,7 @@ def parse_geometry(data: dict) -> Mesh:
                 raise err_msg
             if "fixed" in options["constraints"]:
                 constraint_module_names.append("fixed")
+                mesh.vertices[i].fixed = True
         if options.get("fixed", False):
             constraint_module_names.append("fixed")
 
@@ -101,7 +102,7 @@ def parse_geometry(data: dict) -> Mesh:
                 err_msg = "energy modules should be in a list or a single string"
                 logger.error(err_msg)
                 raise err_msg
-        # Uncomment to add a default energy moduel to Edges
+        # Uncomment to add a default energy moduel for Edges
         #elif "energy" not in options:
             #mesh.edges[i+1].options["energy"] = ["surface"]
 
@@ -118,6 +119,7 @@ def parse_geometry(data: dict) -> Mesh:
                 raise err_msg
             if "fixed" in options["constraints"]:
                 constraint_module_names.append("fixed")
+                mesh.edges[i+1].fixed = True
         if options.get("fixed", False):
             constraint_module_names.append("fixed")
 
@@ -158,6 +160,11 @@ def parse_geometry(data: dict) -> Mesh:
                 err_msg = "constraint modules should be in a list or a single string"
                 logger.error(err_msg)
                 raise err_msg
+            if "fixed" in options["constraints"]:
+                constraint_module_names.append("fixed")
+                mesh.facets[i].fixed = True
+        if options.get("fixed", False):
+            constraint_module_names.append("fixed")
 
     # Instructions
     # Bodies

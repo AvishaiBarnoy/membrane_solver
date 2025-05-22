@@ -74,6 +74,7 @@ class Edge:
 class Facet:
     index: int
     edge_indices: List[int]  # Signed indices: +n = forward, -n = reversed (including -1 for "r0")
+    fixed: bool = False
     options: Dict[str, Any] = field(default_factory=dict)
 
     def compute_normal(self, mesh) -> np.ndarray:

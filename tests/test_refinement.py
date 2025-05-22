@@ -94,3 +94,61 @@ def test_child_facets_are_closed_loops():
                 f"edge {e_curr.index}.head={e_curr.head_index!r} ≠ "
                 f"edge {e_next.index}.tail={e_next.tail_index!r}"
             )
+
+def test_edge_and_vertex_options_inheritance_triangle_refinement():
+    mesh = create_quad()
+    # Set constraints and fixed on an edge and its vertices
+    mesh.edges[1].options["constraints"] = ["test_constraint"]
+    mesh.edges[1].fixed = True
+    mesh.vertices[0].options["constraints"] = ["test_constraint"]
+    mesh.vertices[1].options["constraints"] = ["test_constraint"]
+    mesh.vertices[0].fixed = True
+    mesh.vertices[1].fixed = True
+
+    mesh_tri = refine_polygonal_facets(mesh)
+    mesh_ref = refine_triangle_mesh(mesh_tri)
+
+    # Find the midpoint vertex created on edge 1 (between v0 and v1)
+    v0, v1 = mesh.vertices[0], mesh.vertices[1]
+    midpoint = None
+    for v in mesh_ref.vertices.values():
+        if np.allclose(v.position, 0.5 * (v0.position + v1.position)):
+            midpoint = v
+            break
+    assert midpoint is not None, "Midpoint vertex not found"
+    # Should inherit the constraint and be fixed
+    assert "test_constraint" in midpoint.options.get("constraints", []), "Midpoint should inherit constraint"
+    assert midpoint.fixed, "Midpoint should be fixed"
+
+    # Check that new edges splitting edge 1 inherit options and fixed
+    found = False
+    for e in mesh_ref.edges.values():
+        if (e.tail_index, e.head_index) in [(v0.index, midpoint.index), (midpoint.index, v1.index)] or \
+           (e.head_index, e.tail_index) in [(v0.index, midpoint.index), (midpoint.index, v1.index)]:
+            found = True
+            assert "test_constraint" in e.options.get("constraints", []), "Child edge should inherit constraint"
+            assert e.fixed, "Child edge should be fixed"
+    assert found, "Child edges of split should be present"
+
+def test_facet_options_inheritance_polygonal_refinement():
+    mesh = create_quad()
+    # Set a constraint and energy on the facet
+    mesh.facets[0].options["constraints"] = ["facet_constraint"]
+    mesh.facets[0].options["energy"] = ["facet_energy"]
+
+    mesh_tri = refine_polygonal_facets(mesh)
+    # All child facets should inherit the parent's options
+    for f in mesh_tri.facets.values():
+        assert "facet_constraint" in f.options.get("constraints", []), "Child facet should inherit constraint"
+        assert "facet_energy" in f.options.get("energy", []), "Child facet should inherit energy"
+
+def test_middle_edge_inherits_facet_constraint_polygonal_refinement():
+    mesh = create_quad()
+    mesh.facets[0].options["constraints"] = ["facet_constraint"]
+
+    mesh_tri = refine_polygonal_facets(mesh)
+    # Middle edges are those that connect to the centroid (index 4)
+    centroid_idx = 4
+    for e in mesh_tri.edges.values():
+        if centroid_idx in (e.tail_index, e.head_index):
+            assert "facet_constraint" in e.options.get("constraints", []), "Middle edge should inherit facet constraint"
