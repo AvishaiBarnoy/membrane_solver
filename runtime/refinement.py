@@ -108,7 +108,6 @@ def refine_polygonal_facets(mesh):
         # 4. build exactly one spoke edge per vertex in that loop
         spokes = {} # maps vertex_idx -> the Edge( vertex -> centroid )
         for vi in vertex_loop:
-            # TODO: deal with how edges inherit options from facets
             e = Edge(next_edge_idx, vi, centroid_vertex.index,
                      fixed=facet.fixed,
                      options=facet.options.copy())
@@ -126,7 +125,7 @@ def refine_polygonal_facets(mesh):
             a = vertex_loop[i]
             b = vertex_loop[(i + 1) % n]
             # find the original boundary edge object
-            boundary_edge = mesh.get_edge(facet.edge_indices[i]) 
+            boundary_edge = mesh.get_edge(facet.edge_indices[i])
             spoke_b = spokes[b]
             spoke_a = spokes[a]
 
@@ -212,24 +211,11 @@ def refine_triangle_mesh(mesh):
         if key not in edge_midpoints:
             midpoint_position = 0.5 * (mesh.vertices[v1].position + mesh.vertices[v2].position)
             midpoint_idx = len(new_vertices)
-            # --- Inheritance logic start ---
-            parent1 = mesh.vertices[v1]
-            parent2 = mesh.vertices[v2]
-            inherit_constraint = False
-            # Check i both parents have the same constraint(s)
-            parent1_constraints = set(parent1.options.get("constraints", []))
-            parent2_constraints = set(parent2.options.get("constraints", []))
-            common_constraints = parent1_constraints & parent2_constraints
             # Check if edge is fixed
-            edge_fixed = getattr(edge, "fixed", False) or edge.options.get("constraints", {}).get("fixed", False)
-            options = {}
-            if common_constraints and edge_fixed:
-                options["constraints"] = list(common_constraints)
-            # --- Inheritance logic end ---
             midpoint = Vertex(midpoint_idx,
-                              np.asarray(midpoint_position, dtype=float))
-            midpoint.options = options
-            midpoint.fixed = edge_fixed and parent1.fixed and parent2.fixed
+                              np.asarray(midpoint_position, dtype=float),
+                              fixed=edge.fixed,
+                              options=edge.options)
             # Add the midpoint vertex to the new vertices
             new_vertices[midpoint_idx] = midpoint
             edge_midpoints[key] = midpoint

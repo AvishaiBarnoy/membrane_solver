@@ -19,7 +19,14 @@ Here will be notes for the manual...
     4.3 middle edges generated in the parent facet (between new vertices) only
         inherit constraints defined at the facet level, since they are brand
         new (also applies to facets generated during polygonal refinement)
-    4.4 new midpoint vertices will inherit constraints (including fixed) if and only if
-        both parent vertices have the constraint and the edge has the fixed
-        flag. During polygonal refinement the middle vertex will only inherit
-        constraints (including fixed) defined at the facet level.
+    4.4 new midpoint vertices will inherit constraints (including fixed) from
+        their parent edge or facet. So fixed on edges and facets define the
+        fixed attribute of their child vertices. 
+
+5. options structure for input file, python dictionary:
+    {"refine": true/false}
+    {"constraints": ["constraint1", "constraint2"]} or {"constraints": "constraint1"}
+    {"energy": ["energy1", "energy2"]} or {"energy": "energy"}
+    Parameters can also be adjusted, e.g., {"surface_tension": 5} will override
+        the default surface tension value of 1.0.
+
