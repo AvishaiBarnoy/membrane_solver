@@ -3,9 +3,8 @@
 Membrane Solver is a simulation platform inspired by Surface Evolver, designed to model and minimize the energy of geometric structures such as membranes and surfaces. It supports volume and surface area constraints, dynamic refinement of meshes, and customizable energy modules for physical effects like surface tension and curvature. The project aims to provide a flexible and extensible framework for exploring complex geometries and their energy-driven evolution.
 
 ## TODO:
-1. add fixed option to vertices 
+1. add fixed option 
 3. how to calculate mean curvature from facets?
-4. energy minimization algorithms
 6. surface area constraints:
     1. local - specific faces
     2. global - total area conservation -> maybe replace volume constraint?
@@ -24,6 +23,8 @@ Membrane Solver is a simulation platform inspired by Surface Evolver, designed t
 16. initial energy calculation after loading -> test modules
 18. add interactive mode for refining, minimization, etc.
 19. visualization script - exporting to obj, vtk, etc.
+20. remove "options" and have specific categories and attributes.
+        i.e., a constraints category, energy category, etc.
 
 ## Design thoughts 
 1. Should I keep track of indices after refining facets and/or edges?
@@ -32,7 +33,7 @@ Membrane Solver is a simulation platform inspired by Surface Evolver, designed t
 
 ## roadmap
 1. cube that minimizes into a sphere
-  :white_check_mark:  1.1 soft constraint - volume energy
+    1.1 soft constraint - volume energy - DONE
     1.2 hard constraint - lagrange multiplier
 2. square that minimizes into circle
     2.1 soft constraint - surface area energy

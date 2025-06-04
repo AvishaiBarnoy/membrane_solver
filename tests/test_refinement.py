@@ -118,7 +118,8 @@ def test_edge_and_vertex_options_inheritance_triangle_refinement():
     assert midpoint is not None, "Midpoint vertex not found"
     # Should inherit the constraint and be fixed
     assert "test_constraint" in midpoint.options.get("constraints", []), "Midpoint should inherit constraint"
-    assert midpoint.fixed, "Midpoint should be fixed"
+    # Should be fixed if the edge is fixed, regardless of parent vertices
+    assert midpoint.fixed, "Midpoint should be fixed if edge is fixed, regardless of parent vertices"
 
     # Check that new edges splitting edge 1 inherit options and fixed
     found = False
@@ -152,3 +153,23 @@ def test_middle_edge_inherits_facet_constraint_polygonal_refinement():
     for e in mesh_tri.edges.values():
         if centroid_idx in (e.tail_index, e.head_index):
             assert "facet_constraint" in e.options.get("constraints", []), "Middle edge should inherit facet constraint"
+
+def test_midpoint_fixed_if_edge_fixed_even_if_vertices_not_fixed():
+    mesh = create_quad()
+    # Only the edge is fixed, not the vertices
+    mesh.edges[1].options["constraints"] = ["test_constraint"]
+    mesh.edges[1].fixed = True
+    mesh.vertices[0].fixed = False
+    mesh.vertices[1].fixed = False
+
+    mesh_tri = refine_polygonal_facets(mesh)
+    mesh_ref = refine_triangle_mesh(mesh_tri)
+
+    v0, v1 = mesh.vertices[0], mesh.vertices[1]
+    midpoint = None
+    for v in mesh_ref.vertices.values():
+        if np.allclose(v.position, 0.5 * (v0.position + v1.position)):
+            midpoint = v
+            break
+    assert midpoint is not None, "Midpoint vertex not found"
+    assert midpoint.fixed, "Midpoint should be fixed if edge is fixed, even if parent vertices are not"
