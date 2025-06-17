@@ -25,6 +25,7 @@ Membrane Solver is a simulation platform inspired by Surface Evolver, designed t
 19. visualization script - exporting to obj, vtk, etc.
 20. remove "options" and have specific categories and attributes.
         i.e., a constraints category, energy category, etc.
+21. look at the Evolver manual pp.235 at the 16.8 Iteration chapter
 
 ## Design thoughts 
 1. Should I keep track of indices after refining facets and/or edges?
