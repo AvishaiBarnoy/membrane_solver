@@ -19,9 +19,6 @@ def calculate_volume_energy(mesh, global_params):
     volume_energy = 0.0
 
     for body in mesh.bodies.values():
-        # Body provides a ``compute_volume`` method, but this function
-        # accidentally called ``calculate_volume`` which does not exist.
-        # Use the correct method so energy is computed properly.
         V = body.compute_volume(mesh)
         V0 = (body.target_volume
               if body.target_volume is not None
