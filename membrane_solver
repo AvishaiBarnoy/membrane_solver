@@ -677,3 +677,17 @@
 2025-06-04 12:49:55,553 - INFO - Loaded energy module: volume
 2025-06-04 12:49:55,573 - DEBUG - Computed surface energy: 1.0
 2025-06-04 12:49:55,573 - DEBUG - Computed surface energy gradient: {0: array([ 0., -1.,  0.]), 1: array([1., 1., 0.]), 2: array([-1.,  0.,  0.])}
+2025-06-17 21:17:30,598 - INFO - Loaded energy module: volume
+2025-06-17 21:17:30,599 - INFO - Loaded energy module: dummy_module
+2025-06-17 21:17:30,599 - INFO - Loaded energy module: surface
+2025-06-17 21:17:30,600 - INFO - Loaded energy module: surface
+2025-06-17 21:17:30,600 - INFO - Loaded energy module: volume
+2025-06-17 21:17:30,622 - DEBUG - Computed surface energy: 1.0
+2025-06-17 21:17:30,622 - DEBUG - Computed surface energy gradient: {0: array([ 0., -1.,  0.]), 1: array([1., 1., 0.]), 2: array([-1.,  0.,  0.])}
+2025-06-17 21:17:34,331 - INFO - Loaded energy module: volume
+2025-06-17 21:17:34,331 - INFO - Loaded energy module: dummy_module
+2025-06-17 21:17:34,331 - INFO - Loaded energy module: surface
+2025-06-17 21:17:34,332 - INFO - Loaded energy module: surface
+2025-06-17 21:17:34,332 - INFO - Loaded energy module: volume
+2025-06-17 21:17:34,366 - DEBUG - Computed surface energy: 1.0
+2025-06-17 21:17:34,366 - DEBUG - Computed surface energy gradient: {0: array([ 0., -1.,  0.]), 1: array([1., 1., 0.]), 2: array([-1.,  0.,  0.])}
