@@ -1,7 +1,7 @@
 # modules/surface.py
 # Here goes energy functions relevant for area of facets
 
-from geometry.entities import Mesh
+from geometry.entities import Mesh, Facet
 from logging_config import setup_logging
 import numpy as np
 
