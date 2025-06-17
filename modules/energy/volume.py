@@ -1,6 +1,7 @@
 # modules/volume.py
 
 from geometry.entities import Body
+from typing import Dict
 import numpy as np
 from logging_config import setup_logging
 
@@ -17,12 +18,12 @@ def calculate_volume_energy(mesh, global_params):
     """
     volume_energy = 0.0
 
-    for body in mesh.bodies:
+    for body in mesh.bodies.values():
         V = body.calculate_volume()
         V0 = (body.target_volume
               if body.target_volume is not None
               else body.options.get("target_volume", 0))
-        logger.debut(f"Default target_volume is 0!")
+        logger.debug(f"Default target_volume is 0!")
         k = body.options.get("volume_stiffness", global_params.volume_stiffness)
 
         volume_energy += 0.5 * k * (V - V0)**2
