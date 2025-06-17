@@ -17,12 +17,12 @@ def calculate_volume_energy(mesh, global_params):
     """
     volume_energy = 0.0
 
-    for body in mesh.bodies:
-        V = body.calculate_volume()
+    for body in mesh.bodies.values():
+        V = body.compute_volume(mesh)
         V0 = (body.target_volume
               if body.target_volume is not None
               else body.options.get("target_volume", 0))
-        logger.debut(f"Default target_volume is 0!")
+        logger.debug(f"Default target_volume is 0!")
         k = body.options.get("volume_stiffness", global_params.volume_stiffness)
 
         volume_energy += 0.5 * k * (V - V0)**2

@@ -1,25 +1,25 @@
 # modules/surface.py
 # Here goes energy functions relevant for area of facets
 
-from geometry.entities import Mesh
+from geometry.entities import Mesh, Facet
 from logging_config import setup_logging
 import numpy as np
 
 logger = setup_logging('membrane_solver')
 
-def calculate_surface_energy(mesh, global_params):
-    """
-    Compute surface energy as gamma * area.
-    - `gamma` can be defined locally in facet.options or defaults to global.
+def calculate_surface_energy(facet: Facet, mesh: Mesh, global_params):
+    """Return the surface energy of a single facet.
+
+    The energy is ``γ * A`` where ``γ`` is the surface tension.  ``γ`` can be
+    specified per facet via ``facet.options['surface_tension']`` or defaults to
+    ``global_params.surface_tension``.
     """
     gamma = facet.options.get("surface_tension", global_params.surface_tension)
 
-    # Calculate area
-    area = facet.calculate_area()
+    # Calculate area of the facet
+    area = facet.compute_area(mesh)
 
-    # Compute surface energy
-    surface_energy = gamma * area
-    return surface_energy
+    return gamma * area
 
 
 def compute_energy_and_gradient(mesh, global_params, param_resolver):
