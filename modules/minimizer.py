@@ -34,8 +34,7 @@ class Minimizer:
         self.global_params = global_params
         self.energy_manager = energy_manager
         self.constraint_manager = constraint_manager
-        self.constraint_modules = constraint_manager
-        self.stepper = BaseStepper
+        self.stepper = stepper
         self.step_size = step_size
         self.tol = tol
         self.n_steps = n_steps
@@ -74,27 +73,14 @@ STEP SIZE:\t {self.step_size}
             idx: np.zeros(3) for idx in self.mesh.vertices
         }
 
-        for mod in self.energy_modules:
-            # E_mod - energy module, g_mod - gradient module
-            # TODO: documentation:
-            # write that in new energy modules compute_energy_and_gradient is
-            #   a mandatory name
-            #E_mod, g_mod = mod.compute_energy_and_gradient(
-            #    self.mesh, self.global_params, self.param_resolver
-            #)
-            #volume_energy_list = []
-            #surface_energy_list = []
+        for module in self.energy_modules:
+            # Each energy module must implement compute_energy_and_gradient
+            E_mod, g_mod = module.compute_energy_and_gradient(
+                self.mesh, self.global_params, self.param_resolver)
 
-            for module in self.energy_modules:
-                E_mod, g_mod = module.compute_energy_and_gradient(
-                    self.mesh, self.global_params, self.param_resolver)
-
-                #if   module.__name__ ==   "modules.energy.volume": volume_energy_list.append(E_mod)
-                #elif module.__name__ == "modules.energy.surface": surface_energy_list.append(E_mod)
-        #print(f"[DEBUG] Surface energy: {surface_energy_list}, Volume energy: {volume_energy_list}")
-                total_energy += E_mod
-                for vidx, gvec in g_mod.items():
-                    grad[vidx] += gvec
+            total_energy += E_mod
+            for vidx, gvec in g_mod.items():
+                grad[vidx] += gvec
 
         #if i == 0:
         V  = self.mesh.compute_total_volume()
