@@ -7,8 +7,8 @@ import numpy as np
 from typing import Dict
 from importlib import import_module
 from .steppers.base import BaseStepper
-from runtime.energy_manager import EnergyModuleManager
-from runtime.constraint_manager import ConstraintModuleManager
+#from runtime.energy_manager import EnergyModuleManager
+#from runtime.constraint_manager import ConstraintModuleManager
 
 class ParameterResolver:
     def __init__(self, global_params):
@@ -49,9 +49,6 @@ class Minimizer:
             in mesh.constraint_modules
             ]
 
-        for fname in self.energy_manager.modules.values():
-            self.energy_modules.append(fname)
-
         print(f"[DEBUG] Loaded energy modules: {self.energy_manager.modules.keys()}")
         print(f"[DEBUG] Mesh energy_modules: {self.mesh.energy_modules}")
 
@@ -73,6 +70,7 @@ STEP SIZE:\t {self.step_size}
             idx: np.zeros(3) for idx in self.mesh.vertices
         }
 
+        #self.energy_modules = set(self.energy_modules)
         for module in self.energy_modules:
             # Each energy module must implement compute_energy_and_gradient
             E_mod, g_mod = module.compute_energy_and_gradient(
@@ -93,6 +91,7 @@ STEP SIZE:\t {self.step_size}
 
         # TODO: HOW IS instance.contraint.project_gradient(...) TAKING CARE OF
         # ALL RELEVANT CONSTRAINTS?
+
         # zero out fixed vertices and project others
         for vidx, vertex in self.mesh.vertices.items():
             if getattr(vertex, 'fixed', False):
@@ -122,32 +121,79 @@ STEP SIZE:\t {self.step_size}
                 # project the gradient into tangent space of constraint
                 grad[bidx] = body.constraint.project_gradient(grad[bidx])
 
-    def take_step(self, grad: Dict[int, np.ndarray]):
+    def take_step_with_backtracking(self, grad: Dict[int, np.ndarray],
+                                    max_iter=10, alpha_init=None, beta=0.5,
+                                    c=1e-4, gamma=1.2, alpha_max_factor=10):
+        """
+        Performs a single descent with Armijo backtracking line search.
+
+        Parameters:
+            - grad: dict of vertex_id -> gradient vector
+            - max_iter: max backtracking iterations
+            - alpha_init: starting step size (defaults to self.step_size)
+            - beta: step size reduction facotr (e.g., 0.5)
+            - c: Armijo condition parameter (e.g., 1e-4)
+            - gamma: step size growth factor (e.g., 1.2)
+        """
+        # Store original positions
+        original_positions = {vidx: v.position.copy() for vidx, v in
+                              self.mesh.vertices.items() if not getattr(v,
+                                                                       'fixed',
+                                                                       False)}
+
+        # Compute original energy
+        # TODO: uncorrelate energy and gradient calculations
+        E0, _ = self.compute_energy_and_gradient()
+
+        # Compute squared norm of full gradient
+        grad_norm_squared = sum(np.dot(g, g) for g in grad.values())
+        if grad_norm_squared < 1e-20:
+            print(f"[DEBUG] Gradient norm too small; skipping step.")
+            return
+
+        alpha = alpha_init if alpha_init is not None else self.step_size
+        alpha_max = alpha_max_factor * self.step_size
+
+        for i in range(max_iter):
+            # Trial step
+            for vidx, vertex in self.mesh.vertices.items():
+                if getattr(vertex, 'fixed', False):
+                    continue
+                vertex.position[:] = original_positions[vidx] - alpha * grad[vidx]
+                if hasattr(vertex, 'constraint'):
+                    vertex.position[:] = vertex.constraint.project_position(vertex.position)
+
+            # Compute energy after trial step
+            E_trial, _ = self.compute_energy_and_gradient()
+
+            if E_trial <= E0 - c * alpha * grad_norm_squared:
+                print(f"[DEBUG] Line search accepted step size {alpha:.3e}")
+                self.step_size = min(alpha * gamma, alpha_max)
+                return # Accept step
+
+            alpha *= beta
+
+        print(f"[DEBUG] Line search failed to satisfy Armijo after {max_iter} iterations. Reverting.")
+        # Revert to original positions if no acceptable step found
         for vidx, vertex in self.mesh.vertices.items():
             if getattr(vertex, 'fixed', False):
                 continue
-            old_pos = vertex.position.copy()
-            new_pos = vertex.position - self.step_size * grad[vidx]
-            # if there's a constraint object, project position back onto it
-            if hasattr(vertex, 'constraint'):
-                new_pos = vertex.constraint.project_position(new_pos)
-            vertex.position[:] = new_pos
-            # Debug: Print vertex movement
-            #print(f"[DEBUG] Vertex {vidx}: moved {np.linalg.norm(new_pos - old_pos):.6e}")
+            vertex.position[:] = original_positions[vidx]
+
+        # Report diagnostic
+        print("[DIAGNOSTIC] Zero-step detected: no trial step reduced energy.")
+        print(f"[DIAGNOSTIC] Current step_size = {self.step_size:.2e}")
+        if self.step_size < 1e-8:
+            print("[DIAGNOSTIC] Step size is very small - consider increasing tolerance or refining geometry.")
 
     def minimize(self):
         for i in range(0, self.n_steps + 1):
             E, grad = self.compute_energy_and_gradient()
-            #print(f"[DEBUG]")
-            #print(f"step i:2d : V = {V:6.4f}  energy_surf = {Es:7.4f}  energy_vol = {Ev:7.4f}")
+
             self.project_constraints(grad)
 
             # check convergence by gradient norm
             grad_norm = np.sqrt(sum(np.dot(g, g) for g in grad.values()))
-            #print(f"[DEBUG] Iter {i}: Energy={E:.6f}, grad norm={grad_norm:.6e}")
-            # Print a few gradient values
-            #for idx, g in list(grad.items())[:3]:
-                #print(f"[DEBUG] grad[{idx}] = {g}")
 
             if grad_norm < self.tol:
                 print("[DEBUG] Converged: gradient norm below tolerance.")
@@ -160,8 +206,7 @@ STEP SIZE:\t {self.step_size}
             # Print step details
             print(f"Step {i:4d}: Area = {total_area:.6f}, Energy = {E:.6f}, Step Size  = {self.step_size:.2e}")
 
-            self.take_step(grad)
-            #print(f"[DEBUG] Current volume: {self.mesh.compute_total_volume()}")
+            self.take_step_with_backtracking(grad)
 
         return {"energy": E, "mesh": self.mesh}
 

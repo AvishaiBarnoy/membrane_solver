@@ -40,7 +40,7 @@
                         "bending_modulus": 0,
                         "gaussian_modulus": 0,
                         "volume_stiffness": 1e3,
-                        "step_size": 1e-4
+                        "step_size": 0.5 
     },
-    "instructions": ["g500", "r", "g500", "r", "g100", "3e-5", "g100", "visualize"] 
+    "instructions": ["g100", "r", "g100", "r", "g100", "r", "g100", "visualize"] 
 }

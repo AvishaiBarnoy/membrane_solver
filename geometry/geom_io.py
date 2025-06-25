@@ -45,7 +45,7 @@ def parse_geometry(data: dict) -> Mesh:
     mesh.global_parameters.update(input_global_params)
 
     # Initialize module_name list
-    energy_module_names = []
+    energy_module_names = set()
     constraint_module_names = []
 
     # TODO: add option to read both lowercase and uppercase title Vertices/vertices
@@ -57,9 +57,9 @@ def parse_geometry(data: dict) -> Mesh:
 
         if "energy" in options:
             if isinstance(options["energy"], list):
-                energy_module_names.extend(options["energy"])
+                energy_module_names.update(options["energy"])
             elif isinstance(options["energy"], str):
-                energy_module_names.append(options["energy"])
+                energy_module_names.add(options["energy"])
             else:
                 err_msg = "energy modules should be in a list or a single string"
                 logger.error(err_msg)
@@ -94,10 +94,10 @@ def parse_geometry(data: dict) -> Mesh:
 
         if "energy" in options:
             if isinstance(options["energy"], list):
-                energy_module_names.extend(options["energy"])
+                energy_module_names.update(options["energy"])
 
             elif isinstance(options["energy"], str):
-                energy_module_names.append(options["energy"])
+                energy_module_names.add(options["energy"])
             else:
                 err_msg = "energy modules should be in a list or a single string"
                 logger.error(err_msg)
@@ -138,9 +138,9 @@ def parse_geometry(data: dict) -> Mesh:
 
         if "energy" in options:
             if isinstance(options["energy"], list):
-                energy_module_names.extend(options["energy"])
+                energy_module_names.update(options["energy"])
             elif isinstance(options["energy"], str):
-                energy_module_names.append(options["energy"])
+                energy_module_names.add(options["energy"])
                 mesh.facets[i].options["energy"] = [mesh.facets[i].options["energy"]]
             else:
                 err_msg = "energy modules should be in a list or a single string"
@@ -148,7 +148,7 @@ def parse_geometry(data: dict) -> Mesh:
                 raise err_msg
         elif "energy" not in options:
             mesh.facets[i].options["energy"] = ["surface"]
-            energy_module_names.append("surface")
+            energy_module_names.add("surface")
         # Facets constraint modules
         if "constraints" in options:
             if isinstance(options["constraints"], list):
@@ -170,19 +170,19 @@ def parse_geometry(data: dict) -> Mesh:
     # Bodies
     if "bodies" in data:
         face_groups = data["bodies"]["faces"]
-        volumes = data["bodies"].get("target_volume"), [None] * len(face_groups)
+        volumes = data["bodies"].get("target_volume", [None] * len(face_groups))
         options = data["bodies"].get("energy", [{}] * len(face_groups))
         for i, (facet_indices, volume, options) in enumerate(zip(face_groups, volumes, options)):
             body = Body(index=i, facet_indices=facet_indices,
-                                  target_volume=volume[0], options={"energy": options})
-            body.options["target_volume"] = float(volume[0])
+                                  target_volume=volume, options={"energy": options})
+            body.options["target_volume"] = float(volume)
             mesh.bodies[i] = body
             # Energy modules
             if "energy" in options:
                 if isinstance(options["energy"], list):
-                    energy_module_names.extend(options["energy"])
+                    energy_module_names.update(options["energy"])
                 elif isinstance(options["energy"], str):
-                    energy_module_names.append(options["energy"])
+                    energy_module_names.add(options["energy"])
                     mesh.bodies[i].options["energy"] = [mesh.bodies[i].options["energy"]]
                 else:
                     err_msg = "energy modules should be in a list or a single string"
@@ -191,13 +191,13 @@ def parse_geometry(data: dict) -> Mesh:
             elif "energy" not in options:
                 if len(mesh.bodies) > 0:
                     mesh.bodies[i].options["energy"] = ["volume"]
-                    energy_module_names.append("volume")
+                    energy_module_names.add("volume")
             # Body constraint modules
             if "constraints" in options:
                 if isinstance(options["energy"], list):
-                    energy_module_names.extend(options["energy"])
+                    constraint_module_names.update(options["energy"])
                 elif isinstance(options["energy"], str):
-                    energy_module_names.append(options["energy"])
+                    constraint_module_names.add(options["energy"])
                     mesh.bodies[i].options["energy"] = [mesh.bodies[i].options["energy"]]
                 else:
                     err_msg = "constraint modules should be in a list or a single string"
@@ -206,8 +206,10 @@ def parse_geometry(data: dict) -> Mesh:
 
     # Instructions
     mesh.instructions = data.get("instructions", [])
+
     # Energy modules
-    mesh.energy_modules= list(set(energy_module_names))
+    mesh.energy_modules= list(energy_module_names)
+
     # Constraint modules
     mesh.constraint_modules = list(set(constraint_module_names))
 

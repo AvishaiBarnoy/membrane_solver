@@ -9,6 +9,7 @@ from modules.minimizer import Minimizer, ParameterResolver
 from modules.steppers.gradient_descent import GradientDescent
 from modules.steppers.conjugate_gradient import ConjugateGradient
 from runtime.energy_manager import EnergyModuleManager
+from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_triangle_mesh
 from visualize_geometry import plot_geometry
 
@@ -73,6 +74,12 @@ def main():
     global_params = mesh.global_parameters
     param_resolver = ParameterResolver(global_params)
     energy_manager = EnergyModuleManager(mesh.energy_modules)
+
+    print("###########")
+    print(mesh.energy_modules)
+    print("###########")
+
+    constraint_manager = ConstraintModuleManager(mesh.constraint_modules)
     stepper = GradientDescent()
 
     # Load instructions
@@ -84,9 +91,10 @@ def main():
     instructions = parse_instructions(instr)
     print(f"[DEBUG] Instructions to execute: {instructions}")
 
-    minimizer = Minimizer(mesh, global_params, stepper, energy_manager)
+    minimizer = Minimizer(mesh, global_params, stepper, energy_manager,
+                          constraint_manager)
     print(global_params)
-    #sys.exit()
+
     minimizer.step_size = global_params.get("step_size", 0.001)
 
     # Simulation loop
@@ -96,8 +104,7 @@ def main():
             if cmd == "g": cmd = "g1"
             assert cmd[1:].isnumeric(), "#n steps should be in the form of 'g 5' or 'g5'"
             print(f"[DEBUG] {minimizer.step_size}")
-            #sys.exit()
-            #minimizer.step_size = global_params.get("step_size", 0.001)
+
             logger.info(f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}")
             minimizer.n_steps = int(cmd[1:])
 
@@ -116,7 +123,6 @@ def main():
             logger.info("Refining mesh...")
             mesh = refine_triangle_mesh(mesh)
             minimizer.mesh = mesh
-            #minimizer = Minimizer(mesh, global_params, stepper, energy_manager)
             logger.info("Mesh refinement complete.")
         elif cmd == 'cg':
             logger.info("Switching to Conjugate Gradient stepper.")

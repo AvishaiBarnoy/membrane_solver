@@ -49,3 +49,35 @@ def test_compute_energy_and_gradient():
         assert gradient_vector.shape == (3,), f"Gradient for vertex {vertex_index} should be a 3D vector"
         # Gradient values are harder to assert directly, but we can ensure they are finite
         assert np.all(np.isfinite(gradient_vector)), f"Gradient for vertex {vertex_index} contains invalid values"
+
+def test_surface_energy_known_values():
+    #from energy_modules.surface import SurfaceEnergy
+    from modules.energy.surface import compute_energy_and_gradient
+
+    # Define a single triangle of area = 0.5 (right triangle with legs 1)
+    v0 = Vertex(0, np.array([0.0, 0.0, 0.0]))
+    v1 = Vertex(1, np.array([1.0, 0.0, 0.0]))
+    v2 = Vertex(2, np.array([0.0, 1.0, 0.0]))
+    vertices = {0: v0, 1: v1, 2: v2}
+
+    e0 = Edge(1, 0, 1)
+    e1 = Edge(2, 1, 2)
+    e2 = Edge(3, 2, 0)
+    edges = {1: e0, 2: e1, 3: e2}
+
+    facet = Facet(0, [1, 2, 3], options={"surface_tension": 2.0})
+    facets = {0: facet}
+
+    mesh = Mesh(vertices=vertices, edges=edges, facets=facets)
+    global_params = GlobalParameters()
+    global_params.surface_tension = 1.0  # Default surface tension
+    param_resolver = ParameterResolver(global_params)
+
+    # Uniform surface tension of 2.0
+    for f in mesh.facets.values():
+        f.options['surface_tension'] = 2.0
+
+    energy, _ = compute_energy_and_gradient(mesh, global_params, param_resolver)
+
+    expected_energy = 0.5 * 2.0  # area * tension
+    assert abs(energy - expected_energy) < 1e-12, f"Expected {expected_energy}, got {energy}"

@@ -1,0 +1,16 @@
+2025-06-25 22:34:27,807 - INFO - Loaded energy module: volume
+2025-06-25 22:34:27,808 - INFO - Loaded energy module: dummy_module
+2025-06-25 22:34:27,808 - INFO - Loaded energy module: surface
+2025-06-25 22:34:27,809 - INFO - Loaded energy module: surface
+2025-06-25 22:34:27,809 - INFO - Loaded energy module: volume
+2025-06-25 22:34:27,850 - DEBUG - Computed surface energy: 1.0
+2025-06-25 22:34:27,850 - DEBUG - Computed surface energy gradient: {0: array([ 0., -1.,  0.]), 1: array([1., 1., 0.]), 2: array([-1.,  0.,  0.])}
+2025-06-25 22:34:27,852 - DEBUG - Default target_volume is 0!
+2025-06-25 22:35:11,064 - INFO - Loaded energy module: volume
+2025-06-25 22:35:11,065 - INFO - Loaded energy module: dummy_module
+2025-06-25 22:35:11,065 - INFO - Loaded energy module: surface
+2025-06-25 22:35:11,066 - INFO - Loaded energy module: surface
+2025-06-25 22:35:11,066 - INFO - Loaded energy module: volume
+2025-06-25 22:35:11,114 - DEBUG - Computed surface energy: 1.0
+2025-06-25 22:35:11,114 - DEBUG - Computed surface energy gradient: {0: array([ 0., -1.,  0.]), 1: array([1., 1., 0.]), 2: array([-1.,  0.,  0.])}
+2025-06-25 22:35:11,116 - DEBUG - Default target_volume is 0!

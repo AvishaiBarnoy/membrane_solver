@@ -21,7 +21,6 @@ def calculate_surface_energy(mesh, global_params):
     surface_energy = gamma * area
     return surface_energy
 
-
 def compute_energy_and_gradient(mesh, global_params, param_resolver):
     E = 0.0
     grad: Dict[int,np.ndarray] = {i: np.zeros(3) for i in mesh.vertices}
@@ -37,17 +36,16 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver):
         area = facet.compute_area(mesh)
 
         # compute area A, then E += γ*A
-        E += surface_tension* area
+        E += surface_tension * area
 
         # compute ∇A wrt each vertex in facet → add to grad
         area_gradient = facet.compute_area_gradient(mesh)
         for vertex_index, gradient_vector in area_gradient.items():
             # Add the gradient contribution to the total gradient
             grad[vertex_index] += surface_tension * area_gradient[vertex_index]
+
     # Log the computed energy and gradient
     logger.debug(f"Computed surface energy: {E}")
     logger.debug(f"Computed surface energy gradient: {grad}")
-    # Return the total energy and gradient
-    # Note: grad is a dictionary where keys are vertex indices and values are gradients
-    # (3D vectors)
+
     return E, grad
