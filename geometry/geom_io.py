@@ -8,7 +8,8 @@ import numpy as np
 import logging
 from logging_config import setup_logging
 import sys
-logger = logging.getLogger('membrane_solver')
+
+logger = setup_logging('membrane_solver.log')
 
 def load_data(filename):
     """Load geometry from a JSON file.

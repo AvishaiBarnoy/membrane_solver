@@ -13,7 +13,7 @@ from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_triangle_mesh
 from visualize_geometry import plot_geometry
 
-logger = setup_logging('membrane_solver')
+logger = setup_logging('membrane_solver.log')
 
 def load_mesh_from_json(path):
     with open(path, 'r') as f:
