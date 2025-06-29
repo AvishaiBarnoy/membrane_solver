@@ -204,7 +204,15 @@ class Body:
         relative to the body’s center rather than the origin.
         """
         # entities.py  – Body.compute_volume_gradient
-        grad = {i: np.zeros(3) for i in mesh.vertices}
+        vertex_indices: set[int] = set()
+        for facet_idx in self.facet_indices:
+            facet = mesh.facets[facet_idx]
+            for signed_ei in facet.edge_indices:
+                edge = mesh.edges[abs(signed_ei)]
+                tail = edge.tail_index if signed_ei > 0 else edge.head_index
+                vertex_indices.add(tail)
+
+        grad = {i: np.zeros(3) for i in vertex_indices}
 
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
