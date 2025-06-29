@@ -142,17 +142,27 @@ class Facet:
         grad = {i: np.zeros(3) for i in v_ids}
         v0 = mesh.vertices[v_ids[0]].position
 
-        for i in range(1, len(v_ids) - 1):
-            a, b = v_ids[i], v_ids[i + 1]
-            va, vb = mesh.vertices[a].position, mesh.vertices[b].position
-            n = np.cross(va - v0, vb - v0)
-            A = np.linalg.norm(n)
-            if A < 1e-12:          # skip nearly-degenerate triangle
-                continue
-            n_hat = n / A          # unit normal
-            grad[v_ids[0]] += 0.5 * np.cross(va - v0, n_hat)
-            grad[a]                += 0.5 * np.cross(vb - va, n_hat)
-            grad[b]                += 0.5 * np.cross(v0 - vb, n_hat)
+        if len(v_ids) < 3:
+            return grad
+
+        v_pos = np.array([mesh.vertices[i].position for i in v_ids])
+        va = v_pos[1:-1] - v0
+        vb = v_pos[2:] - v0
+
+        n = np.cross(va, vb)
+        A = np.linalg.norm(n, axis=1)
+        mask = A >= 1e-12
+        if not np.any(mask):
+            return grad
+        n_hat = n[mask] / A[mask][:, None]
+
+        grad[v_ids[0]] += 0.5 * np.cross(va[mask], n_hat).sum(axis=0)
+
+        cross_vb_va = np.cross(vb[mask] - va[mask], n_hat)
+        cross_v0_vb = np.cross(-vb[mask], n_hat)  # v0 - vb since va,vb diff from v0
+        for idx, (a, b) in enumerate(zip(np.array(v_ids[1:-1])[mask], np.array(v_ids[2:])[mask])):
+            grad[a] += 0.5 * cross_vb_va[idx]
+            grad[b] += 0.5 * cross_v0_vb[idx]
 
         return grad
 
@@ -167,21 +177,23 @@ class Body:
         volume = 0.0
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
-            # collect the true cyclic list of vertex‐indices around this facet:
+            # collect the true cyclic list of vertex-indices around this facet
             v_ids = []
             for signed_ei in facet.edge_indices:
                 edge = mesh.edges[abs(signed_ei)]
                 tail = edge.tail_index if signed_ei > 0 else edge.head_index
                 if not v_ids or v_ids[-1] != tail:
                     v_ids.append(tail)
-            # now v_ids is the ordered boundary of your facet (length >= 3)
-            v_pos = [mesh.vertices[i].position for i in v_ids]
+
+            # ordered vertex positions
+            v_pos = np.array([mesh.vertices[i].position for i in v_ids])
             v0 = v_pos[0]
-            # triangulate into (v0, v_i, v_{i+1}) for i=1..len−2
-            for i in range(1, len(v_pos)-1):
-                v1 = v_pos[i]
-                v2 = v_pos[i+1]
-                volume += np.dot(v0, np.cross(v1, v2)) / 6.0
+
+            # triangulate into (v0, v_i, v_{i+1}) for i=1..len-2 using vectorized operations
+            v1 = v_pos[1:-1]
+            v2 = v_pos[2:]
+            cross_prod = np.cross(v1, v2)
+            volume += np.dot(cross_prod, v0).sum() / 6.0
         return volume
 
     def compute_volume_gradient(self, mesh: "Mesh") -> Dict[int, np.ndarray]:
@@ -205,15 +217,23 @@ class Body:
                 if not v_ids or v_ids[-1] != tail:
                     v_ids.append(tail)
 
-            v0 = mesh.vertices[v_ids[0]].position
-            for i in range(1, len(v_ids)-1):          # triangulate (v0,vi,vi+1)
-                a, b = v_ids[i], v_ids[i+1]
-                va, vb = mesh.vertices[a].position, mesh.vertices[b].position
+            if len(v_ids) < 3:
+                continue
 
-                # ∂V/∂v equals cross-product of the opposite edge, divided by 6
-                grad[v_ids[0]] += np.cross(va, vb) / 6
-                grad[a]        += np.cross(vb, v0) / 6
-                grad[b]        += np.cross(v0, va) / 6
+            v_pos = np.array([mesh.vertices[i].position for i in v_ids])
+            v0 = v_pos[0]
+            va = v_pos[1:-1]
+            vb = v_pos[2:]
+
+            cross_va_vb = np.cross(va, vb)
+            grad[v_ids[0]] += cross_va_vb.sum(axis=0) / 6
+
+            cross_vb_v0 = np.cross(vb, v0)
+            cross_v0_va = np.cross(v0, va)
+
+            for idx, (a, b) in enumerate(zip(v_ids[1:-1], v_ids[2:])):
+                grad[a] += cross_vb_v0[idx] / 6
+                grad[b] += cross_v0_va[idx] / 6
         return grad
 
     def compute_surface_area(self, mesh) -> float:
@@ -226,12 +246,13 @@ class Body:
                 tail = edge.tail_index if signed_ei > 0 else edge.head_index
                 if not v_ids or v_ids[-1] != tail:
                     v_ids.append(tail)
-            v_pos = [mesh.vertices[i].position for i in v_ids]
+
+            v_pos = np.array([mesh.vertices[i].position for i in v_ids])
             v0 = v_pos[0]
-            for i in range(1, len(v_pos)-1):
-                v1 = v_pos[i]
-                v2 = v_pos[i+1]
-                area += 0.5 * np.linalg.norm(np.cross(v1 - v0, v2 - v0))
+            v1 = v_pos[1:-1] - v0
+            v2 = v_pos[2:] - v0
+            cross = np.cross(v1, v2)
+            area += 0.5 * np.linalg.norm(cross, axis=1).sum()
         return area
 
 @dataclass
