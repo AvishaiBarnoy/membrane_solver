@@ -34,33 +34,31 @@ def calculate_volume_energy(mesh, global_params):
 
     return volume_energy
 
-def compute_energy_and_gradient(mesh, global_params, param_resolver):
+def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_gradient: bool = True):
     E = 0.0
-    grad: Dict[int,np.ndarray] = {i: np.zeros(3) for i in mesh.vertices}
+    grad: Dict[int, np.ndarray] | None = {i: np.zeros(3) for i in mesh.vertices} if compute_gradient else None
     for body in mesh.bodies.values():
-        #print(f"############# volume energy and gradient ############")
         k = param_resolver.get(body, 'volume_stiffness')
         if k is None:
             k = global_params.volume_stiffness
 
-        #V0 = body.options.get("target_volume", 0)
-        #print(f"[DEBUG] Body entity: {body}")
         V0 = (body.target_volume
               if body.target_volume is not None
-              else body.options.get("target_volume", 0))
-        #print(f"[DEBUG] V0 {V0}")
+              else body.options.get('target_volume', 0))
         V = body.compute_volume(mesh)
 
-        # Energy: 0.5 * k * (V - V0)**2
         E += 0.5 * k * (V - V0)**2
-        # Gradient: k * (V - V0) * ∇V
-        volume_gradient = body.compute_volume_gradient(mesh)
-        for vertex_index, gradient_vector in volume_gradient.items():
-            # Add the gradient contribution to the total gradient
-            grad[vertex_index] += k * (V - V0) * volume_gradient[vertex_index]
+
+        if compute_gradient:
+            volume_gradient = body.compute_volume_gradient(mesh)
+            for vertex_index, gradient_vector in volume_gradient.items():
+                grad[vertex_index] += k * (V - V0) * gradient_vector
         # Log the computed energy and gradient
         #logger.info(f"Computed volume energy: {E}")
         #logger.info(f"Computed volume energy gradient: {grad}")
 
     # Return the total energy and gradient
-    return E, grad
+    if compute_gradient:
+        return E, grad
+    else:
+        return E, {}

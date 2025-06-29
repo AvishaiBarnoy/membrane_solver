@@ -87,6 +87,15 @@ STEP SIZE:\t {self.step_size}
         #print(f"step i:2d : V = {V:6.4f}  energy_surf = {Es:7.4f}  energy_vol = {Ev:7.4f}")
         return total_energy, grad
 
+    def compute_energy(self):
+        total_energy = 0.0
+        for module in self.energy_modules:
+            E_mod, _ = module.compute_energy_and_gradient(
+                self.mesh, self.global_params, self.param_resolver, compute_gradient=False
+            )
+            total_energy += E_mod
+        return total_energy
+
     def project_constraints(self, grad: Dict[int, np.ndarray]):
 
         # TODO: HOW IS instance.contraint.project_gradient(...) TAKING CARE OF
@@ -141,9 +150,8 @@ STEP SIZE:\t {self.step_size}
                                                                        'fixed',
                                                                        False)}
 
-        # Compute original energy
-        # TODO: uncorrelate energy and gradient calculations
-        E0, _ = self.compute_energy_and_gradient()
+        # Compute original energy without gradient for efficiency
+        E0 = self.compute_energy()
 
         # Compute squared norm of full gradient
         grad_norm_squared = sum(np.dot(g, g) for g in grad.values())
@@ -163,8 +171,8 @@ STEP SIZE:\t {self.step_size}
                 if hasattr(vertex, 'constraint'):
                     vertex.position[:] = vertex.constraint.project_position(vertex.position)
 
-            # Compute energy after trial step
-            E_trial, _ = self.compute_energy_and_gradient()
+            # Compute energy after trial step without recomputing gradient
+            E_trial = self.compute_energy()
 
             if E_trial <= E0 - c * alpha * grad_norm_squared:
                 print(f"[DEBUG] Line search accepted step size {alpha:.3e}")
