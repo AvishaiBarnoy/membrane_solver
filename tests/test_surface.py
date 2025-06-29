@@ -4,7 +4,7 @@ import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Mesh, Vertex, Edge, Facet
 from parameters.global_parameters import GlobalParameters
-from modules.energy.surface import compute_energy_and_gradient
+from modules.energy.surface import compute_energy_and_gradient, calculate_surface_energy
 from modules.minimizer import ParameterResolver
 
 def test_compute_energy_and_gradient():
@@ -81,3 +81,25 @@ def test_surface_energy_known_values():
 
     expected_energy = 0.5 * 2.0  # area * tension
     assert abs(energy - expected_energy) < 1e-12, f"Expected {expected_energy}, got {energy}"
+
+
+def test_calculate_surface_energy():
+    v0 = Vertex(0, np.array([0.0, 0.0, 0.0]))
+    v1 = Vertex(1, np.array([1.0, 0.0, 0.0]))
+    v2 = Vertex(2, np.array([0.0, 1.0, 0.0]))
+    vertices = {0: v0, 1: v1, 2: v2}
+
+    e0 = Edge(1, 0, 1)
+    e1 = Edge(2, 1, 2)
+    e2 = Edge(3, 2, 0)
+    edges = {1: e0, 2: e1, 3: e2}
+
+    facet = Facet(0, [1, 2, 3], options={"surface_tension": 2.0})
+    facets = {0: facet}
+
+    mesh = Mesh(vertices=vertices, edges=edges, facets=facets)
+    global_params = GlobalParameters()
+
+    energy = calculate_surface_energy(mesh, global_params)
+    expected_energy = 0.5 * 2.0
+    assert np.isclose(energy, expected_energy)

@@ -2,6 +2,7 @@
 
 from geometry.entities import Body
 from typing import Dict
+from collections import defaultdict
 import numpy as np
 from logging_config import setup_logging
 
@@ -36,7 +37,9 @@ def calculate_volume_energy(mesh, global_params):
 
 def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_gradient: bool = True):
     E = 0.0
-    grad: Dict[int, np.ndarray] | None = {i: np.zeros(3) for i in mesh.vertices} if compute_gradient else None
+    grad: Dict[int, np.ndarray] | None = (
+        defaultdict(lambda: np.zeros(3)) if compute_gradient else None
+    )
     for body in mesh.bodies.values():
         k = param_resolver.get(body, 'volume_stiffness')
         if k is None:
@@ -46,19 +49,21 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_
               if body.target_volume is not None
               else body.options.get('target_volume', 0))
         V = body.compute_volume(mesh)
+        delta = V - V0
 
-        E += 0.5 * k * (V - V0)**2
+        E += 0.5 * k * delta ** 2
 
         if compute_gradient:
             volume_gradient = body.compute_volume_gradient(mesh)
+            factor = k * delta
             for vertex_index, gradient_vector in volume_gradient.items():
-                grad[vertex_index] += k * (V - V0) * gradient_vector
+                grad[vertex_index] += factor * gradient_vector
         # Log the computed energy and gradient
         #logger.info(f"Computed volume energy: {E}")
         #logger.info(f"Computed volume energy gradient: {grad}")
 
     # Return the total energy and gradient
     if compute_gradient:
-        return E, grad
+        return E, dict(grad)
     else:
         return E, {}

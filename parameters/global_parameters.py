@@ -9,7 +9,7 @@ class GlobalParameters:
         self._params = {
             "surface_tension": 1.0,  # Default value
             "volume_stiffness": 1000.0,  # Default value
-            "step_size": 5e-1,
+            "step_size": 1e-4,
             "intrinsic_curvature": 0.0,
             "bending_modulus": 0.0,
             "gaussian_modulus": 0.0
