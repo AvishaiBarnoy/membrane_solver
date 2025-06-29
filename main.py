@@ -106,10 +106,10 @@ def main():
             print(f"[DEBUG] {minimizer.step_size}")
 
             logger.info(f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}")
-            minimizer.n_steps = int(cmd[1:])
+            n_steps = int(cmd[1:])
 
             print(f"[DEBUG] Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}")
-            result = minimizer.minimize()
+            result = minimizer.minimize(n_steps=n_steps)
             mesh = result["mesh"]
             logger.info(f"Minimization complete. Final energy: {result['energy'] if result else 'N/A'}")
         elif cmd.startswith('t'):

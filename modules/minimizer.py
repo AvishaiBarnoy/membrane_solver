@@ -28,8 +28,7 @@ class Minimizer:
                  energy_modules: list = [],
                  constraint_modules: list = [],
                  step_size: float = 1e-3,
-                 tol: float = 1e-6,
-                 n_steps: int = 100):
+                 tol: float = 1e-6):
         self.mesh = mesh
         self.global_params = global_params
         self.energy_manager = energy_manager
@@ -37,7 +36,6 @@ class Minimizer:
         self.stepper = stepper
         self.step_size = step_size
         self.tol = tol
-        self.n_steps = n_steps
 
         # Use module_names from the mesh to initialize the energy manager
         self.energy_modules = [
@@ -80,11 +78,7 @@ STEP SIZE:\t {self.step_size}
             for vidx, gvec in g_mod.items():
                 grad[vidx] += gvec
 
-        #if i == 0:
         V  = self.mesh.compute_total_volume()
-        #Es = surface_energy_list[-1] if surface_energy_list else 0.0
-        #Ev = volume_energy_list[-1]  if volume_energy_list  else 0.0
-        #print(f"step i:2d : V = {V:6.4f}  energy_surf = {Es:7.4f}  energy_vol = {Ev:7.4f}")
         return total_energy, grad
 
     def compute_energy(self):
@@ -177,7 +171,7 @@ STEP SIZE:\t {self.step_size}
             if E_trial <= E0 - c * alpha * grad_norm_squared:
                 print(f"[DEBUG] Line search accepted step size {alpha:.3e}")
                 self.step_size = min(alpha * gamma, alpha_max)
-                return # Accept step
+                return True    # Accept step
 
             alpha *= beta
 
@@ -194,27 +188,44 @@ STEP SIZE:\t {self.step_size}
         if self.step_size < 1e-8:
             print("[DIAGNOSTIC] Step size is very small - consider increasing tolerance or refining geometry.")
 
-    def minimize(self):
-        for i in range(0, self.n_steps + 1):
-            E, grad = self.compute_energy_and_gradient()
+        return False  # Signal to minimize() that step was not accepted
 
+    def minimize(self, n_steps=1):
+        zero_step_counter = 0
+
+        max_zero_steps = 5  # You can tune this
+
+        for i in range(0, n_steps + 1):
+            E, grad = self.compute_energy_and_gradient()
             self.project_constraints(grad)
 
             # check convergence by gradient norm
             grad_norm = np.sqrt(sum(np.dot(g, g) for g in grad.values()))
-
             if grad_norm < self.tol:
                 print("[DEBUG] Converged: gradient norm below tolerance.")
                 print(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
-                break
+                return {"energy": E, "gradient": grad, "mesh": self.mesh,
+                        "step_success": True, "iterations": i + 1,
+                        "terminated_early": True}
 
             # Compute total area
             total_area = sum(facet.compute_area(self.mesh) for facet in self.mesh.facets.values())
-
             # Print step details
-            print(f"Step {i:4d}: Area = {total_area:.6f}, Energy = {E:.6f}, Step Size  = {self.step_size:.2e}")
+            print(f"Step {i:4d}: Area = {total_area:.5f}, Energy = {E:.5f}, Step Size  = {self.step_size:.2e}")
 
-            self.take_step_with_backtracking(grad)
+            step_success = self.take_step_with_backtracking(grad)
 
-        return {"energy": E, "mesh": self.mesh}
+            if not step_success:
+                zero_step_counter += 1
+                if zero_step_counter >= max_zero_steps:
+                    print(f"[INFO] Terminating early after {zero_step_counter} consecutive zero-steps.")
+                    return {"energy": E, "gradient": grad, "mesh": self.mesh,
+                            "step_success": False, "iterations": i + 1,
+                            "terminated_early": True}
+            else:
+                zero_step_counter = 0
+
+        return {"energy": E, "gradient": grad, "mesh": self.mesh,
+                "step_success": step_success, "iterations": n_steps,
+                "terminated_early": False}
 

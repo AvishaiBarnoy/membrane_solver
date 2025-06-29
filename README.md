@@ -6,30 +6,27 @@ Membrane Solver is a simulation platform inspired by Surface Evolver, designed t
 1. equiangulation
 2. vertex averaging
 3. optimize optimization computations 
-1. add fixed option 
-3. how to calculate mean curvature from facets?
+4. add fixed option 
+5. how to calculate mean curvature from facets?
 6. surface area constraints:
     1. local - specific faces
     2. global - total area conservation -> maybe replace volume constraint?
-7. rigid facets -> all edges move together?
-8. fixed option -> vertix: don't move, edges: don't change length, facets: does anything?
-    how is energy evaluated over fixed components? in SE integrals are not
-    evaluated over fixed edges, what about vertices (is energy even evaluted
-    over individual vetices???) and facets?
-12. different library for visualization, for example:
+6. different library for visualization, for example:
     12.1 https://docs.pyvista.org/
     12.2 https://vedo.embl.es/
-14. add option for "comment" attribute in the json file, maybe change to
+7. add option for "comment" attribute in the json file, maybe change to
     another format that supports comments.
-15. when running add -v/--verbose options to print out log messages or just
+8. when running add -v/--verbose options to print out log messages or just
     put them in the log file
-16. initial energy calculation after loading -> test modules
-18. add interactive mode for refining, minimization, etc.
-19. visualization script - exporting to obj, vtk, etc.
-20. remove "options" and have specific categories and attributes.
+9. add "quiet" mode for minimization
+10. initial energy calculation after loading -> test modules
+11. add interactive mode for refining, minimization, etc.
+12. visualization script - exporting to obj, vtk, etc.
+13. remove "options" and have specific categories and attributes.
         i.e., a constraints category, energy category, etc.
-21. look at the Evolver manual pp.235 at the 16.8 Iteration chapter
-22. automatic time-step as 5% of the system size or maybe other small value
+14. look at the Evolver manual pp.235 at the 16.8 Iteration chapter
+15. automatic time-step as 5% of the system size or maybe other small value
+16. add "gyration radius"
 
 ## Design thoughts 
 1. Should I keep track of indices after refining facets and/or edges?
