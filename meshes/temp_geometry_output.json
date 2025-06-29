@@ -743,7 +743,7 @@
     "global_parameters": {
         "surface_tension": 1.0,
         "volume_stiffness": 1000,
-        "step_size": 0.0001,
+        "step_size": 0.5,
         "intrinsic_curvature": 0,
         "bending_modulus": 0,
         "gaussian_modulus": 0,
