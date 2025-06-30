@@ -1,11 +1,18 @@
 .
+├── AGENTS.md
 ├── README.md
 ├── cube_output.json
 ├── deploy.sh
+├── evolver_test
+│   ├── cube.fe
+│   ├── pentagon.fe
+│   ├── square.fe
+│   └── triangle.fe
 ├── geometry
 │   ├── __init__.py
 │   ├── entities.py
 │   └── geom_io.py
+├── inheritance_flowchart
 ├── logging_config.py
 ├── main.py
 ├── manual.md
@@ -15,10 +22,12 @@
 │   ├── pyramid.json
 │   ├── sample_geometry.json
 │   ├── sample_geometry.yaml
-│   └── temp_geometry_output.json
+│   ├── temp_geometry_output.json
+│   └── testing_geometry.json
 ├── modules
 │   ├── __init__.py
 │   ├── constraints
+│   │   ├── dummy_module.py
 │   │   ├── edge.py
 │   │   ├── fix_facet_area.py
 │   │   ├── fix_vertex_position.py
@@ -33,20 +42,24 @@
 │   ├── gaussan_curvature.py
 │   ├── mean_curvature.py
 │   ├── mean_curvature_tilt.py
-│   ├── minimizer.py
 │   └── steppers
 │       ├── base.py
 │       ├── conjugate_gradient.py
-│       ├── gradient_descent.py
-│       └── old_gradient_descent.py
+│       └── gradient_descent.py
 ├── parameters
 │   ├── __init__.py
-│   └── global_parameters.py
+│   ├── global_parameters.py
+│   └── resolver.py
+├── requirements.txt
 ├── runtime
+│   ├── __init__.py
 │   ├── constraint_manager.py
 │   ├── energy_manager.py
+│   ├── minimizer.py
 │   └── refinement.py
 ├── tests
+│   ├── membrane_solver
+│   ├── test_constraint_manager.py
 │   ├── test_energy_manager.py
 │   ├── test_facet_area_gradient.py
 │   ├── test_geom_io.py
@@ -58,3 +71,4 @@
 │   └── test_volume.py
 ├── tree.txt
 └── visualize_geometry.py
+
