@@ -31,5 +31,6 @@ evolver_test/
 *.pdf
 *.log  # logfiles
 membrane_solver.log
+*output*.json
 .DS_Store
 .venv/

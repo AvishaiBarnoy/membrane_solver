@@ -218,7 +218,7 @@ def parse_geometry(data: dict) -> Mesh:
 
     return new_mesh
 
-def save_geometry(mesh: Mesh, path: str = "temp_output_file.json"):
+def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
     def export_edge_index(i):
         if i < 0:
             return f"r{abs(i) - 1}"     # -1 → "r0"
