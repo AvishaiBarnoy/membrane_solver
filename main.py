@@ -111,13 +111,24 @@ def main():
 
     # Simulation loop
     for cmd in instructions:
-        if cmd.startswith('g'):
+        if cmd == 'cg':
+            logger.info("Switching to Conjugate Gradient stepper.")
+            stepper = ConjugateGradient()
+            minimizer.stepper = stepper
+        elif cmd == 'gd':
+            logger.info("Switching to Gradient Descent stepper.")
+            stepper = GradientDescent()
+            minimizer.stepper = stepper
+        elif cmd.startswith('g'):
             cmd = cmd.replace(" ", "")  # remove whitespaces
-            if cmd == "g": cmd = "g1"
+            if cmd == "g":
+                cmd = "g1"
             assert cmd[1:].isnumeric(), "#n steps should be in the form of 'g 5' or 'g5'"
             logger.debug(minimizer.step_size)
 
-            logger.info(f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}")
+            logger.info(
+                f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}"
+            )
             n_steps = int(cmd[1:])
 
             logger.debug(f"Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}")
@@ -136,12 +147,6 @@ def main():
             mesh = refine_triangle_mesh(mesh)
             minimizer.mesh = mesh
             logger.info("Mesh refinement complete.")
-        elif cmd == 'cg':
-            logger.info("Switching to Conjugate Gradient stepper.")
-            stepper = ConjugateGradient()
-        elif cmd == 'gd':
-            logger.info("Switching to Gradient Descent stepper.")
-            stepper = GradientDescent()
         elif cmd == "visualize":
             plot_geometry(mesh, show_indices=False)
         elif cmd == "save":
