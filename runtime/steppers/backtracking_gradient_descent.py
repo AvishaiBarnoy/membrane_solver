@@ -5,6 +5,7 @@ import numpy as np
 
 from modules.steppers.base import BaseStepper
 from geometry.entities import Mesh
+from .line_search import backtracking_line_search
 
 
 class BacktrackingGradientDescent(BaseStepper):
@@ -18,9 +19,14 @@ class BacktrackingGradientDescent(BaseStepper):
         self.gamma = gamma
         self.alpha_max_factor = alpha_max_factor
 
-    def step(self, mesh: Mesh, grad: Dict[int, np.ndarray], step_size: float,
-             energy_fn: Callable[[], float]):
-        """Apply one descent step with backtracking.
+    def step(
+        self,
+        mesh: Mesh,
+        grad: Dict[int, np.ndarray],
+        step_size: float,
+        energy_fn: Callable[[], float],
+    ):
+        """Apply one gradient descent step using Armijo backtracking.
 
         Parameters
         ----------
@@ -38,47 +44,17 @@ class BacktrackingGradientDescent(BaseStepper):
         tuple[bool, float]
             Whether the step succeeded and the updated step size.
         """
-        original_positions = {
-            vidx: v.position.copy()
-            for vidx, v in mesh.vertices.items()
-            if not getattr(v, "fixed", False)
-        }
+        direction = {vidx: -g for vidx, g in grad.items()}
 
-        E0 = energy_fn()
-        grad_norm_sq = sum(np.dot(g, g) for g in grad.values())
-        if grad_norm_sq < 1e-20:
-            print("[DEBUG] Gradient norm too small; skipping step.")
-            return False, step_size
-
-        alpha = step_size
-        alpha_max = self.alpha_max_factor * step_size
-
-        for _ in range(self.max_iter):
-            for vidx, vertex in mesh.vertices.items():
-                if getattr(vertex, "fixed", False):
-                    continue
-                vertex.position[:] = original_positions[vidx] - alpha * grad[vidx]
-                if hasattr(vertex, "constraint"):
-                    vertex.position[:] = vertex.constraint.project_position(
-                        vertex.position
-                    )
-
-            E_trial = energy_fn()
-            if E_trial <= E0 - self.c * alpha * grad_norm_sq:
-                print(f"[DEBUG] Line search accepted step size {alpha:.3e}")
-                new_step = min(alpha * self.gamma, alpha_max)
-                return True, new_step
-
-            alpha *= self.beta
-
-        print(
-            f"[DEBUG] Line search failed to satisfy Armijo after {self.max_iter} iterations. Reverting."
+        return backtracking_line_search(
+            mesh,
+            direction,
+            grad,
+            step_size,
+            energy_fn,
+            max_iter=self.max_iter,
+            beta=self.beta,
+            c=self.c,
+            gamma=self.gamma,
+            alpha_max_factor=self.alpha_max_factor,
         )
-        for vidx, vertex in mesh.vertices.items():
-            if getattr(vertex, "fixed", False):
-                continue
-            vertex.position[:] = original_positions[vidx]
-
-        print("[DIAGNOSTIC] Zero-step detected: no trial step reduced energy.")
-        print(f"[DIAGNOSTIC] Current step_size = {step_size:.2e}")
-        return False, step_size
