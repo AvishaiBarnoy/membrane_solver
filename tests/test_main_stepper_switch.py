@@ -1,4 +1,6 @@
 import numpy as np
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from geometry.entities import Mesh, Vertex
 from parameters.global_parameters import GlobalParameters
 from runtime.energy_manager import EnergyModuleManager
