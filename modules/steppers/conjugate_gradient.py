@@ -15,7 +15,7 @@ class ConjugateGradient(BaseStepper):
         self.prev_dir.clear()
         self.iter_count = 0
 
-    def step(self, mesh, grad, step_size):
+    def step(self, mesh, grad, step_size, energy_fn=None):
         for vidx, vertex in mesh.vertices.items():
             if getattr(vertex, 'fixed', False):
                 continue
@@ -52,4 +52,5 @@ class ConjugateGradient(BaseStepper):
             self.prev_dir[vidx] = d.copy()
 
         self.iter_count += 1
+        return True, step_size
 
