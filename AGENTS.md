@@ -19,5 +19,6 @@ organized under `geometry/`, `modules/`, `runtime/` and other directories.
 
 ## Pull Requests
 - Summarize your changes clearly in commit messages and PR descriptions.
+- Provide detailed explanations in the PR body so reviewers understand the rationale behind the changes.
 - Mention the output of `pytest -q` in the PR body.
 
