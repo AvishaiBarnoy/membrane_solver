@@ -41,5 +41,6 @@
                         "gaussian_modulus": 0,
                         "volume_stiffness": 1e3
     },
-    "instructions": ["g20", "r", "g100", "r", "g50", "cg", "r", "g100"]
+    "instructions": ["g20", "r", "g100", "r", "g50", "r", "g100", "visualize", "V",
+    "visualize"]
 }

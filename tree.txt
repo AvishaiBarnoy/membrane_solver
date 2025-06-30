@@ -1,7 +1,7 @@
 .
+├── 1 domain.docx
 ├── AGENTS.md
 ├── README.md
-├── cube_output.json
 ├── deploy.sh
 ├── evolver_test
 │   ├── cube.fe
@@ -12,10 +12,10 @@
 │   ├── __init__.py
 │   ├── entities.py
 │   └── geom_io.py
-├── inheritance_flowchart
 ├── logging_config.py
 ├── main.py
 ├── manual.md
+├── membrane_solver
 ├── membrane_solver.log
 ├── meshes
 │   ├── cube.json
@@ -46,6 +46,8 @@
 │       ├── base.py
 │       ├── conjugate_gradient.py
 │       └── gradient_descent.py
+├── outputs
+│   └── cube_output.json
 ├── parameters
 │   ├── __init__.py
 │   ├── global_parameters.py
@@ -56,14 +58,20 @@
 │   ├── constraint_manager.py
 │   ├── energy_manager.py
 │   ├── minimizer.py
-│   └── refinement.py
+│   ├── refinement.py
+│   └── steppers
+│       ├── __init__.py
+│       ├── backtracking_gradient_descent.py
+│       └── line_search.py
 ├── tests
 │   ├── membrane_solver
+│   ├── test_conjugate_gradient.py
 │   ├── test_constraint_manager.py
 │   ├── test_energy_manager.py
 │   ├── test_facet_area_gradient.py
 │   ├── test_geom_io.py
 │   ├── test_global_parameters.py
+│   ├── test_main_stepper_switch.py
 │   ├── test_mesh.py
 │   ├── test_normals.py
 │   ├── test_refinement.py
@@ -71,4 +79,3 @@
 │   └── test_volume.py
 ├── tree.txt
 └── visualize_geometry.py
-

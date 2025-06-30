@@ -12,6 +12,7 @@ from modules.steppers.conjugate_gradient import ConjugateGradient
 from runtime.energy_manager import EnergyModuleManager
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_triangle_mesh
+from runtime.vertex_average import vertex_average
 from visualize_geometry import plot_geometry
 
 logger = None
@@ -44,6 +45,10 @@ def parse_instructions(instr):
             result.append('gd')
         elif cmd == "visualize":
             result.append('visualize')
+        elif cmd == "V" or cmd == "vertex_average":
+            # TODO 1: accept "V #n" for multiple averaging.
+            # TODO 2: expand to be target specific vertices "vertex_average [2,5]" 
+            result.append("V")
         elif cmd.startswith('t'):
             result.append(cmd)
         elif cmd == "save":
@@ -147,6 +152,9 @@ def main():
             mesh = refine_triangle_mesh(mesh)
             minimizer.mesh = mesh
             logger.info("Mesh refinement complete.")
+        elif cmd == "V" or cmd == "vertex_average":
+            vertex_average(mesh)
+            logger.info("Vertex averaging done.")
         elif cmd == "visualize":
             plot_geometry(mesh, show_indices=False)
         elif cmd == "save":
