@@ -1,4 +1,8 @@
 # modules/edge1.py
 
+import logging
+
+logger = logging.getLogger('membrane_solver')
+
 def compute_energy_and_gradient():
-    print("THIS IS A DUMMY MODULE FOR TESTING")
+    logger.info("THIS IS A DUMMY MODULE FOR TESTING")

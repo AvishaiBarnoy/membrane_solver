@@ -12,11 +12,13 @@ logger.error('Error while computing volume constraint.')
 logger.critical('Critical error! Cannot proceed further.')
 '''
 
-def setup_logging(log_file='membrane_solver.log'):
+def setup_logging(log_file='membrane_solver.log', quiet: bool = False):
     logger = logging.getLogger('membrane_solver')
 
     if logger.handlers:
-        # Logger is already configured, no need to add handlers again.
+        if quiet:
+            logger.handlers = [h for h in logger.handlers
+                               if not isinstance(h, logging.StreamHandler)]
         return logger
 
     logger.setLevel(logging.DEBUG)
@@ -31,13 +33,12 @@ def setup_logging(log_file='membrane_solver.log'):
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
 
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
-
-    # Adding handlers to the logger
     logger.addHandler(file_handler)
-    logger.addHandler(console_handler)
+
+    if not quiet:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
 
     return logger

@@ -14,7 +14,7 @@ from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_triangle_mesh
 from visualize_geometry import plot_geometry
 
-logger = setup_logging('membrane_solver.log')
+logger = None
 
 def load_mesh_from_json(path):
     with open(path, 'r') as f:
@@ -58,10 +58,13 @@ def main():
     parser.add_argument('-o', '--output', required=True, help='Output mesh JSON file')
     parser.add_argument('--instructions', help='Optional instruction file (one command per line)')
     parser.add_argument('--log', default=None, help='Optional log file')
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='Suppress console output')
     args = parser.parse_args()
 
-    if args.log:
-        logger.addHandler(setup_logging(args.log))
+    global logger
+    logger = setup_logging(args.log if args.log else 'membrane_solver.log',
+                           quiet=args.quiet)
 
     # Load mesh and parameters
     data = load_data(args.input)
@@ -69,16 +72,16 @@ def main():
     #print(f"[DEBUG] Loaded bodies:\n {mesh.bodies}")
 
     fixed_count = sum(1 for v in mesh.vertices.values() if getattr(v, 'fixed', False))
-    print(f"[DEBUG] Number of fixed vertices: {fixed_count} / {len(mesh.vertices)}")
-    print(f"[DEBUG] Target volume of body: {mesh.bodies[0].options['target_volume']}")
+    logger.debug(f"Number of fixed vertices: {fixed_count} / {len(mesh.vertices)}")
+    logger.debug(f"Target volume of body: {mesh.bodies[0].options['target_volume']}")
 
     global_params = mesh.global_parameters
     param_resolver = ParameterResolver(global_params)
     energy_manager = EnergyModuleManager(mesh.energy_modules)
 
-    print("###########")
-    print(mesh.energy_modules)
-    print("###########")
+    logger.debug("###########")
+    logger.debug(mesh.energy_modules)
+    logger.debug("###########")
 
     constraint_manager = ConstraintModuleManager(mesh.constraint_modules)
     stepper = GradientDescent()
@@ -90,11 +93,19 @@ def main():
     else:
         instr = mesh.instructions if hasattr(mesh, 'instructions') else []
     instructions = parse_instructions(instr)
-    print(f"[DEBUG] Instructions to execute: {instructions}")
+    logger.debug(f"Instructions to execute: {instructions}")
+
+    if not args.quiet:
+        print("=== Membrane Solver ===")
+        print(f"Input file: {args.input}")
+        print(f"Output file: {args.output}")
+        print(f"Energy modules: {mesh.energy_modules}")
+        print(f"Constraint modules: {mesh.constraint_modules}")
+        print(f"Instructions: {instructions}")
 
     minimizer = Minimizer(mesh, global_params, stepper, energy_manager,
-                          constraint_manager)
-    print(global_params)
+                          constraint_manager, quiet=args.quiet)
+    logger.debug(global_params)
 
     minimizer.step_size = global_params.get("step_size", 0.001)
 
@@ -104,12 +115,12 @@ def main():
             cmd = cmd.replace(" ", "")  # remove whitespaces
             if cmd == "g": cmd = "g1"
             assert cmd[1:].isnumeric(), "#n steps should be in the form of 'g 5' or 'g5'"
-            print(f"[DEBUG] {minimizer.step_size}")
+            logger.debug(minimizer.step_size)
 
             logger.info(f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}")
             n_steps = int(cmd[1:])
 
-            print(f"[DEBUG] Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}")
+            logger.debug(f"Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}")
             result = minimizer.minimize(n_steps=n_steps)
             mesh = result["mesh"]
             logger.info(f"Minimization complete. Final energy: {result['energy'] if result else 'N/A'}")

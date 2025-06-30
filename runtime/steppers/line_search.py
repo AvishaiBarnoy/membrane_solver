@@ -1,6 +1,9 @@
 from typing import Dict, Callable
 import numpy as np
+import logging
 from geometry.entities import Mesh
+
+logger = logging.getLogger('membrane_solver')
 
 
 def backtracking_line_search(
@@ -55,7 +58,7 @@ def backtracking_line_search(
     g_dot_d = sum(np.dot(gradient[vidx], direction[vidx]) for vidx in direction)
 
     if g_dot_d >= 0:
-        print("[DEBUG] Non-descent direction provided; skipping step.")
+        logger.debug("Non-descent direction provided; skipping step.")
         return False, step_size
 
     alpha = step_size
@@ -74,20 +77,20 @@ def backtracking_line_search(
 
         trial_energy = energy_fn()
         if trial_energy <= energy0 + c * alpha * g_dot_d:
-            print(f"[DEBUG] Line search accepted step size {alpha:.3e}")
+            logger.debug(f"Line search accepted step size {alpha:.3e}")
             new_step = min(alpha * gamma, alpha_max)
             return True, new_step
 
         alpha *= beta
 
-    print(
-        f"[DEBUG] Line search failed to satisfy Armijo after {max_iter} iterations. Reverting."
+    logger.debug(
+        f"Line search failed to satisfy Armijo after {max_iter} iterations. Reverting."
     )
     for vidx, vertex in mesh.vertices.items():
         if getattr(vertex, "fixed", False):
             continue
         vertex.position[:] = original_positions[vidx]
 
-    print("[DIAGNOSTIC] Zero-step detected: no trial step reduced energy.")
-    print(f"[DIAGNOSTIC] Current step_size = {step_size:.2e}")
+    logger.info("Zero-step detected: no trial step reduced energy.")
+    logger.info(f"Current step_size = {step_size:.2e}")
     return False, step_size
