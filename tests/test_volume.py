@@ -2,7 +2,7 @@ import numpy as np
 from geometry.entities import Mesh, Vertex, Edge, Facet, Body
 from parameters.global_parameters import GlobalParameters
 from modules.energy.volume import compute_energy_and_gradient, calculate_volume_energy
-from modules.minimizer import ParameterResolver
+from parameters.resolver import ParameterResolver
 
 def test_volume_energy_and_gradient():
     # Vertices of a unit tetrahedron

@@ -5,7 +5,8 @@ import os
 from logging_config import setup_logging
 from geometry.geom_io import load_data, save_geometry, parse_geometry
 from geometry.entities import Mesh
-from modules.minimizer import Minimizer, ParameterResolver
+from runtime.minimizer import Minimizer
+from parameters.resolver import ParameterResolver
 from modules.steppers.gradient_descent import GradientDescent
 from modules.steppers.conjugate_gradient import ConjugateGradient
 from runtime.energy_manager import EnergyModuleManager

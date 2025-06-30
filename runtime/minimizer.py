@@ -4,31 +4,29 @@ import sys
 import os
 import importlib
 import numpy as np
-from typing import Dict
+from typing import Dict, List, Optional
 from importlib import import_module
-from .steppers.base import BaseStepper
-#from runtime.energy_manager import EnergyModuleManager
-#from runtime.constraint_manager import ConstraintModuleManager
+from parameters.resolver import ParameterResolver
+from geometry.entities import Mesh
+from parameters.global_parameters import GlobalParameters
+from runtime.energy_manager import EnergyModuleManager
+from runtime.constraint_manager import ConstraintModuleManager
+from modules.steppers.base import BaseStepper
 
-class ParameterResolver:
-    def __init__(self, global_params):
-        self.global_params = global_params
-
-    def get(self, obj, name: str):
-        # look for facet-specific override, else global
-        return obj.options.get(name, self.global_params.get(name))
 
 class Minimizer:
+    """Coordinate the optimization loop for a mesh."""
+
     def __init__(self,
-                 mesh,
-                 global_params,
+                 mesh: Mesh,
+                 global_params: GlobalParameters,
                  stepper: BaseStepper,
-                 energy_manager,
-                 constraint_manager,
-                 energy_modules: list = [],
-                 constraint_modules: list = [],
+                 energy_manager: EnergyModuleManager,
+                 constraint_manager: ConstraintModuleManager,
+                 energy_modules: Optional[List[str]] = None,
+                 constraint_modules: Optional[List[str]] = None,
                  step_size: float = 1e-3,
-                 tol: float = 1e-6):
+                 tol: float = 1e-6) -> None:
         self.mesh = mesh
         self.global_params = global_params
         self.energy_manager = energy_manager
@@ -37,15 +35,18 @@ class Minimizer:
         self.step_size = step_size
         self.tol = tol
 
-        # Use module_names from the mesh to initialize the energy manager
+        # Use provided module lists or fall back to those defined on the mesh
+        module_list = energy_modules if energy_modules is not None else mesh.energy_modules
         self.energy_modules = [
-            self.energy_manager.get_module(mod) for mod in mesh.energy_modules
-            ]
+            self.energy_manager.get_module(mod) for mod in module_list
+        ]
 
+        constraint_list = (
+            constraint_modules if constraint_modules is not None else mesh.constraint_modules
+        )
         self.constraint_modules = [
-            self.constraint_manager.get_constraint(constraint) for constraint
-            in mesh.constraint_modules
-            ]
+            self.constraint_manager.get_constraint(constraint) for constraint in constraint_list
+        ]
 
         print(f"[DEBUG] Loaded energy modules: {self.energy_manager.modules.keys()}")
         print(f"[DEBUG] Mesh energy_modules: {self.mesh.energy_modules}")
@@ -62,6 +63,8 @@ STEP SIZE:\t {self.step_size}
         return msg
 
     def compute_energy_and_gradient(self):
+        """Return total energy and gradient for the current mesh."""
+
         total_energy = 0.0
         # initialize per-vertex gradient dict
         grad: Dict[int, np.ndarray] = {
@@ -82,6 +85,7 @@ STEP SIZE:\t {self.step_size}
         return total_energy, grad
 
     def compute_energy(self):
+        """Compute the total energy using the loaded modules."""
         total_energy = 0.0
         for module in self.energy_modules:
             E_mod, _ = module.compute_energy_and_gradient(
@@ -90,7 +94,8 @@ STEP SIZE:\t {self.step_size}
             total_energy += E_mod
         return total_energy
 
-    def project_constraints(self, grad: Dict[int, np.ndarray]):
+    def project_constraints(self, grad: Dict[int, np.ndarray]) -> None:
+        """Project gradients onto the feasible set defined by constraints."""
 
         # TODO: HOW IS instance.contraint.project_gradient(...) TAKING CARE OF
         # ALL RELEVANT CONSTRAINTS?
@@ -190,7 +195,8 @@ STEP SIZE:\t {self.step_size}
 
         return False  # Signal to minimize() that step was not accepted
 
-    def minimize(self, n_steps=1):
+    def minimize(self, n_steps: int = 1):
+        """Run the optimization loop for ``n_steps`` iterations."""
         zero_step_counter = 0
 
         max_zero_steps = 5  # You can tune this
