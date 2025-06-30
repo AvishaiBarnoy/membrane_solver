@@ -129,71 +129,6 @@ STEP SIZE:\t {self.step_size}
                 # project the gradient into tangent space of constraint
                 grad[bidx] = body.constraint.project_gradient(grad[bidx])
 
-    def take_step_with_backtracking(self, grad: Dict[int, np.ndarray],
-                                    max_iter=10, alpha_init=None, beta=0.5,
-                                    c=1e-4, gamma=1.2, alpha_max_factor=10):
-        """
-        Performs a single descent with Armijo backtracking line search.
-
-        Parameters:
-            - grad: dict of vertex_id -> gradient vector
-            - max_iter: max backtracking iterations
-            - alpha_init: starting step size (defaults to self.step_size)
-            - beta: step size reduction facotr (e.g., 0.5)
-            - c: Armijo condition parameter (e.g., 1e-4)
-            - gamma: step size growth factor (e.g., 1.2)
-        """
-        # Store original positions
-        original_positions = {vidx: v.position.copy() for vidx, v in
-                              self.mesh.vertices.items() if not getattr(v,
-                                                                       'fixed',
-                                                                       False)}
-
-        # Compute original energy without gradient for efficiency
-        E0 = self.compute_energy()
-
-        # Compute squared norm of full gradient
-        grad_norm_squared = sum(np.dot(g, g) for g in grad.values())
-        if grad_norm_squared < 1e-20:
-            print(f"[DEBUG] Gradient norm too small; skipping step.")
-            return
-
-        alpha = alpha_init if alpha_init is not None else self.step_size
-        alpha_max = alpha_max_factor * self.step_size
-
-        for i in range(max_iter):
-            # Trial step
-            for vidx, vertex in self.mesh.vertices.items():
-                if getattr(vertex, 'fixed', False):
-                    continue
-                vertex.position[:] = original_positions[vidx] - alpha * grad[vidx]
-                if hasattr(vertex, 'constraint'):
-                    vertex.position[:] = vertex.constraint.project_position(vertex.position)
-
-            # Compute energy after trial step without recomputing gradient
-            E_trial = self.compute_energy()
-
-            if E_trial <= E0 - c * alpha * grad_norm_squared:
-                print(f"[DEBUG] Line search accepted step size {alpha:.3e}")
-                self.step_size = min(alpha * gamma, alpha_max)
-                return True    # Accept step
-
-            alpha *= beta
-
-        print(f"[DEBUG] Line search failed to satisfy Armijo after {max_iter} iterations. Reverting.")
-        # Revert to original positions if no acceptable step found
-        for vidx, vertex in self.mesh.vertices.items():
-            if getattr(vertex, 'fixed', False):
-                continue
-            vertex.position[:] = original_positions[vidx]
-
-        # Report diagnostic
-        print("[DIAGNOSTIC] Zero-step detected: no trial step reduced energy.")
-        print(f"[DIAGNOSTIC] Current step_size = {self.step_size:.2e}")
-        if self.step_size < 1e-8:
-            print("[DIAGNOSTIC] Step size is very small - consider increasing tolerance or refining geometry.")
-
-        return False  # Signal to minimize() that step was not accepted
 
     def minimize(self, n_steps: int = 1):
         """Run the optimization loop for ``n_steps`` iterations."""
@@ -219,7 +154,9 @@ STEP SIZE:\t {self.step_size}
             # Print step details
             print(f"Step {i:4d}: Area = {total_area:.5f}, Energy = {E:.5f}, Step Size  = {self.step_size:.2e}")
 
-            step_success = self.take_step_with_backtracking(grad)
+            step_success, self.step_size = self.stepper.step(
+                self.mesh, grad, self.step_size, self.compute_energy
+            )
 
             if not step_success:
                 zero_step_counter += 1

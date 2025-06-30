@@ -3,7 +3,9 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from runtime.minimizer import Minimizer
-from modules.steppers.gradient_descent import GradientDescent
+from runtime.steppers.backtracking_gradient_descent import (
+    BacktrackingGradientDescent,
+)
 from geometry.entities import Mesh, Vertex, Edge, Facet, Body
 from parameters.global_parameters import GlobalParameters
 from runtime.refinement import refine_polygonal_facets
@@ -83,7 +85,7 @@ def test_minimizer_with_mock_energy_manager():
     )
 
     # Mock stepper
-    mock_stepper = GradientDescent()
+    mock_stepper = BacktrackingGradientDescent()
 
     # Initialize minimizer
     minimizer = Minimizer(mock_mesh, mock_global_params, mock_stepper,
