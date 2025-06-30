@@ -3,6 +3,7 @@
 import sys
 import os
 import importlib
+import logging
 import numpy as np
 from typing import Dict, List, Optional
 from importlib import import_module
@@ -13,6 +14,8 @@ from runtime.energy_manager import EnergyModuleManager
 from runtime.constraint_manager import ConstraintModuleManager
 from modules.steppers.base import BaseStepper
 
+
+logger = logging.getLogger('membrane_solver')
 
 class Minimizer:
     """Coordinate the optimization loop for a mesh."""
@@ -26,7 +29,8 @@ class Minimizer:
                  energy_modules: Optional[List[str]] = None,
                  constraint_modules: Optional[List[str]] = None,
                  step_size: float = 1e-3,
-                 tol: float = 1e-6) -> None:
+                 tol: float = 1e-6,
+                 quiet: bool = False) -> None:
         self.mesh = mesh
         self.global_params = global_params
         self.energy_manager = energy_manager
@@ -34,6 +38,7 @@ class Minimizer:
         self.stepper = stepper
         self.step_size = step_size
         self.tol = tol
+        self.quiet = quiet
 
         # Use provided module lists or fall back to those defined on the mesh
         module_list = energy_modules if energy_modules is not None else mesh.energy_modules
@@ -48,8 +53,8 @@ class Minimizer:
             self.constraint_manager.get_constraint(constraint) for constraint in constraint_list
         ]
 
-        print(f"[DEBUG] Loaded energy modules: {self.energy_manager.modules.keys()}")
-        print(f"[DEBUG] Mesh energy_modules: {self.mesh.energy_modules}")
+        logger.debug(f"Loaded energy modules: {self.energy_manager.modules.keys()}")
+        logger.debug(f"Mesh energy_modules: {self.mesh.energy_modules}")
 
         self.param_resolver = ParameterResolver(global_params)
 
@@ -143,8 +148,8 @@ STEP SIZE:\t {self.step_size}
             # check convergence by gradient norm
             grad_norm = np.sqrt(sum(np.dot(g, g) for g in grad.values()))
             if grad_norm < self.tol:
-                print("[DEBUG] Converged: gradient norm below tolerance.")
-                print(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
+                logger.debug("Converged: gradient norm below tolerance.")
+                logger.info(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
                 return {"energy": E, "gradient": grad, "mesh": self.mesh,
                         "step_success": True, "iterations": i + 1,
                         "terminated_early": True}
@@ -152,7 +157,8 @@ STEP SIZE:\t {self.step_size}
             # Compute total area
             total_area = sum(facet.compute_area(self.mesh) for facet in self.mesh.facets.values())
             # Print step details
-            print(f"Step {i:4d}: Area = {total_area:.5f}, Energy = {E:.5f}, Step Size  = {self.step_size:.2e}")
+            if not self.quiet:
+                print(f"Step {i:4d}: Area = {total_area:.5f}, Energy = {E:.5f}, Step Size  = {self.step_size:.2e}")
 
             step_success, self.step_size = self.stepper.step(
                 self.mesh, grad, self.step_size, self.compute_energy
@@ -161,7 +167,9 @@ STEP SIZE:\t {self.step_size}
             if not step_success:
                 zero_step_counter += 1
                 if zero_step_counter >= max_zero_steps:
-                    print(f"[INFO] Terminating early after {zero_step_counter} consecutive zero-steps.")
+                    logger.info(
+                        f"Terminating early after {zero_step_counter} consecutive zero-steps."
+                    )
                     return {"energy": E, "gradient": grad, "mesh": self.mesh,
                             "step_success": False, "iterations": i + 1,
                             "terminated_early": True}
