@@ -32,6 +32,13 @@ class OptimizedFacetMixin:
         
     def _get_vertex_loop_cached(self, mesh) -> List[int]:
         """Get vertex loop with caching."""
+        # Ensure cache is initialized
+        if not hasattr(self, '_cached_area'):
+            self._cached_area = None
+            self._cached_normal = None
+            self._cached_vertex_loop = None
+            self._dirty = True
+            
         if self._cached_vertex_loop is None or self._dirty:
             v_ids = []
             for signed_ei in self.edge_indices:
@@ -44,6 +51,13 @@ class OptimizedFacetMixin:
         
     def compute_area_optimized(self, mesh: "Mesh") -> float:
         """Optimized area computation with caching and vectorization."""
+        # Ensure cache is initialized
+        if not hasattr(self, '_cached_area'):
+            self._cached_area = None
+            self._cached_normal = None
+            self._cached_vertex_loop = None
+            self._dirty = True
+            
         if self._cached_area is not None and not self._dirty:
             return self._cached_area
             
@@ -70,6 +84,13 @@ class OptimizedFacetMixin:
         
     def compute_area_gradient_optimized(self, mesh: "Mesh") -> Dict[int, np.ndarray]:
         """Optimized area gradient computation with vectorization."""
+        # Ensure cache is initialized
+        if not hasattr(self, '_cached_area'):
+            self._cached_area = None
+            self._cached_normal = None
+            self._cached_vertex_loop = None
+            self._dirty = True
+            
         vertex_ids = self._get_vertex_loop_cached(mesh)
         if len(vertex_ids) < 3:
             return {i: np.zeros(3) for i in vertex_ids}
@@ -108,6 +129,13 @@ class OptimizedFacetMixin:
         
     def normal_optimized(self, mesh: "Mesh") -> np.ndarray:
         """Optimized normal computation with caching."""
+        # Ensure cache is initialized
+        if not hasattr(self, '_cached_area'):
+            self._cached_area = None
+            self._cached_normal = None
+            self._cached_vertex_loop = None
+            self._dirty = True
+            
         if self._cached_normal is not None and not self._dirty:
             return self._cached_normal
             
@@ -145,6 +173,12 @@ class OptimizedBodyMixin:
         
     def compute_volume_optimized(self, mesh: "Mesh") -> float:
         """Optimized volume computation with vectorization."""
+        # Ensure cache is initialized
+        if not hasattr(self, '_cached_volume'):
+            self._cached_volume = None
+            self._cached_surface_area = None
+            self._dirty = True
+            
         if self._cached_volume is not None and not self._dirty:
             return self._cached_volume
             
@@ -236,6 +270,12 @@ class OptimizedMesh(Mesh):
         
     def build_optimized_arrays(self):
         """Build optimized NumPy arrays for fast access."""
+        # Ensure cache is initialized
+        if not hasattr(self, '_vertex_position_array'):
+            self._vertex_position_array = None
+            self._facet_vertex_array = None
+            self._connectivity_dirty = True
+            
         if not self._connectivity_dirty:
             return
             
@@ -266,18 +306,36 @@ class OptimizedMesh(Mesh):
         
     def get_vertex_positions_array(self) -> np.ndarray:
         """Get vertex positions as a contiguous NumPy array."""
+        # Ensure cache is initialized
+        if not hasattr(self, '_vertex_position_array'):
+            self._vertex_position_array = None
+            self._facet_vertex_array = None
+            self._connectivity_dirty = True
+            
         if self._connectivity_dirty:
             self.build_optimized_arrays()
         return self._vertex_position_array
         
     def get_facet_vertices_array(self) -> np.ndarray:
         """Get facet vertex connectivity as array (for triangular meshes)."""
+        # Ensure cache is initialized
+        if not hasattr(self, '_vertex_position_array'):
+            self._vertex_position_array = None
+            self._facet_vertex_array = None
+            self._connectivity_dirty = True
+            
         if self._connectivity_dirty:
             self.build_optimized_arrays()
         return self._facet_vertex_array
         
     def compute_total_surface_area_optimized(self) -> float:
         """Optimized total surface area computation."""
+        # Ensure cache is initialized
+        if not hasattr(self, '_vertex_position_array'):
+            self._vertex_position_array = None
+            self._facet_vertex_array = None
+            self._connectivity_dirty = True
+            
         if self._facet_vertex_array is not None and not self._connectivity_dirty:
             # Vectorized computation for triangular meshes
             positions = self.get_vertex_positions_array()
@@ -373,6 +431,27 @@ def patch_optimizations():
         original_mesh_init(self, *args, **kwargs)
         init_mesh_cache(self)
     
+    # Patch existing instances as well
+    def ensure_facet_cache(self):
+        """Ensure facet has cache attributes initialized."""
+        if not hasattr(self, '_cached_area'):
+            init_facet_cache(self)
+    
+    def ensure_body_cache(self):
+        """Ensure body has cache attributes initialized."""
+        if not hasattr(self, '_cached_volume'):
+            init_body_cache(self)
+    
+    def ensure_mesh_cache(self):
+        """Ensure mesh has cache attributes initialized."""
+        if not hasattr(self, '_vertex_position_array'):
+            init_mesh_cache(self)
+    
     Facet.__init__ = patched_facet_init
     Body.__init__ = patched_body_init
     Mesh.__init__ = patched_mesh_init
+    
+    # Add cache ensuring methods
+    Facet.ensure_cache = ensure_facet_cache
+    Body.ensure_cache = ensure_body_cache  
+    Mesh.ensure_cache = ensure_mesh_cache
