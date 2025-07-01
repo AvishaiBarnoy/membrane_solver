@@ -7,8 +7,8 @@ from geometry.geom_io import load_data, save_geometry, parse_geometry
 from geometry.entities import Mesh
 from runtime.minimizer import Minimizer
 from parameters.resolver import ParameterResolver
-from modules.steppers.gradient_descent import GradientDescent
-from modules.steppers.conjugate_gradient import ConjugateGradient
+from runtime.steppers.gradient_descent import GradientDescent
+from runtime.steppers.conjugate_gradient import ConjugateGradient
 from runtime.energy_manager import EnergyModuleManager
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_triangle_mesh
