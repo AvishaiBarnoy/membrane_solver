@@ -44,8 +44,8 @@ def parse_instructions(instr):
             result.append('cg')
         elif cmd == 'gd':
             result.append('gd')
-        elif cmd == "visualize":
-            result.append('visualize')
+        elif cmd == "visualize" or cmd == "s":
+            result.append(cmd)
         elif cmd.startswith("V") or cmd == "vertex_average":
             # TODO: expand to be target specific vertices "vertex_average [2,5]" 
             result.append(cmd)
@@ -109,7 +109,7 @@ def execute_command(cmd, mesh, minimizer, stepper):
     elif cmd == 'vertex_average':
         vertex_average(mesh)
         logger.info("Vertex averaging done.")
-    elif cmd == 'visualize':
+    elif cmd == 'visualize' or cmd == "s":
         plot_geometry(mesh, show_indices=False)
     elif cmd == 'save':
         # fall back to a default name

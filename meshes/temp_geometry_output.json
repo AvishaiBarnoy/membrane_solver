@@ -406,13 +406,9 @@
             13,
             "r12",
             {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
                 "surface_tension": 1,
-                "parent_facet": 0
+                "parent_facet": 0,
+                "constraints": []
             }
         ],
         [
@@ -420,13 +416,9 @@
             14,
             "r13",
             {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
                 "surface_tension": 1,
-                "parent_facet": 0
+                "parent_facet": 0,
+                "constraints": []
             }
         ],
         [
@@ -434,13 +426,9 @@
             15,
             "r14",
             {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
                 "surface_tension": 1,
-                "parent_facet": 0
+                "parent_facet": 0,
+                "constraints": []
             }
         ],
         [
@@ -448,13 +436,9 @@
             12,
             "r15",
             {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
                 "surface_tension": 1,
-                "parent_facet": 0
+                "parent_facet": 0,
+                "constraints": []
             }
         ],
         [
@@ -462,11 +446,9 @@
             "r16",
             "r0",
             {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 1
+                "surface_tension": 1.0,
+                "parent_facet": 1,
+                "constraints": []
             }
         ],
         [
@@ -474,11 +456,9 @@
             18,
             "r17",
             {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 1
+                "surface_tension": 1.0,
+                "parent_facet": 1,
+                "constraints": []
             }
         ],
         [
@@ -486,11 +466,9 @@
             19,
             "r18",
             {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 1
+                "surface_tension": 1.0,
+                "parent_facet": 1,
+                "constraints": []
             }
         ],
         [
@@ -498,11 +476,9 @@
             "r19",
             "r9",
             {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 1
+                "surface_tension": 1.0,
+                "parent_facet": 1,
+                "constraints": []
             }
         ],
         [
@@ -511,14 +487,11 @@
             "r20",
             {
                 "surface_tension": 5,
+                "parent_facet": 2,
                 "constraints": [
                     "pin_to_plane",
                     "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 2
+                ]
             }
         ],
         [
@@ -527,14 +500,11 @@
             "r21",
             {
                 "surface_tension": 5,
+                "parent_facet": 2,
                 "constraints": [
                     "pin_to_plane",
                     "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 2
+                ]
             }
         ],
         [
@@ -543,14 +513,11 @@
             "r10",
             {
                 "surface_tension": 5,
+                "parent_facet": 2,
                 "constraints": [
                     "pin_to_plane",
                     "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 2
+                ]
             }
         ],
         [
@@ -559,14 +526,11 @@
             "r1",
             {
                 "surface_tension": 5,
+                "parent_facet": 2,
                 "constraints": [
                     "pin_to_plane",
                     "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 2
+                ]
             }
         ],
         [
@@ -574,10 +538,9 @@
             "r24",
             "r2",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 3
+                "surface_tension": 1.0,
+                "parent_facet": 3,
+                "constraints": []
             }
         ],
         [
@@ -585,10 +548,9 @@
             26,
             "r25",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 3
+                "surface_tension": 1.0,
+                "parent_facet": 3,
+                "constraints": []
             }
         ],
         [
@@ -596,10 +558,9 @@
             27,
             "r26",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 3
+                "surface_tension": 1.0,
+                "parent_facet": 3,
+                "constraints": []
             }
         ],
         [
@@ -607,10 +568,9 @@
             "r27",
             "r11",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 3
+                "surface_tension": 1.0,
+                "parent_facet": 3,
+                "constraints": []
             }
         ],
         [
@@ -618,10 +578,9 @@
             29,
             "r28",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 4
+                "surface_tension": 1.0,
+                "parent_facet": 4,
+                "constraints": []
             }
         ],
         [
@@ -629,10 +588,9 @@
             30,
             "r29",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 4
+                "surface_tension": 1.0,
+                "parent_facet": 4,
+                "constraints": []
             }
         ],
         [
@@ -640,10 +598,9 @@
             "r30",
             "r8",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 4
+                "surface_tension": 1.0,
+                "parent_facet": 4,
+                "constraints": []
             }
         ],
         [
@@ -651,10 +608,9 @@
             "r31",
             "r3",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 4
+                "surface_tension": 1.0,
+                "parent_facet": 4,
+                "constraints": []
             }
         ],
         [
@@ -662,10 +618,9 @@
             "r32",
             "r5",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 5
+                "surface_tension": 1.0,
+                "parent_facet": 5,
+                "constraints": []
             }
         ],
         [
@@ -673,10 +628,9 @@
             "r33",
             "r4",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 5
+                "surface_tension": 1.0,
+                "parent_facet": 5,
+                "constraints": []
             }
         ],
         [
@@ -684,10 +638,9 @@
             "r34",
             "r7",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 5
+                "surface_tension": 1.0,
+                "parent_facet": 5,
+                "constraints": []
             }
         ],
         [
@@ -695,10 +648,9 @@
             "r35",
             "r6",
             {
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 5
+                "surface_tension": 1.0,
+                "parent_facet": 5,
+                "constraints": []
             }
         ]
     ],
@@ -738,6 +690,9 @@
             [
                 "volume"
             ]
+        ],
+        "constraints": [
+            {}
         ]
     },
     "global_parameters": {
