@@ -1,4 +1,4 @@
-# modules/steppers/base.py
+# runtime/steppers/base.py
 """Abstract base class for optimization steppers."""
 
 from __future__ import annotations
@@ -42,4 +42,3 @@ class BaseStepper(ABC):
     def __repr__(self) -> str:  # pragma: no cover - simple utility
         params = ", ".join(f"{k}={v!r}" for k, v in vars(self).items())
         return f"{self.__class__.__name__}({params})"
-
