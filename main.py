@@ -47,9 +47,8 @@ def parse_instructions(instr):
         elif cmd == "visualize":
             result.append('visualize')
         elif cmd.startswith("V") or cmd == "vertex_average":
-            # TODO 1: accept "V #n" for multiple averaging.
-            # TODO 2: expand to be target specific vertices "vertex_average [2,5]" 
-            result.append("V")
+            # TODO: expand to be target specific vertices "vertex_average [2,5]" 
+            result.append(cmd)
         elif cmd.startswith('t'):
             result.append(cmd)
         elif cmd == "save":
@@ -101,10 +100,10 @@ def execute_command(cmd, mesh, minimizer, stepper):
     elif cmd.startswith('V'):
         if cmd != 'V':
             cmd = ''.join(cmd.split())
-            for _ in range(1, int(cmd[1:]) + 1):
+            for i in range(1, int(cmd[1:]) + 1):
                 vertex_average(mesh)
                 logger.info("Vertex averaging done.")
-        else:
+        elif cmd == "V":
             vertex_average(mesh)
             logger.info("Vertex averaging done.")
     elif cmd == 'vertex_average':

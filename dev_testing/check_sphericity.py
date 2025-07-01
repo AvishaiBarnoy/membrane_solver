@@ -109,4 +109,4 @@ if __name__ == '__main__':
         print(f"{k}: {v:.5f}" if isinstance(v, float) else f"{k}: {v}")
 
     # Visualize the mesh
-    plot_geometry(mesh, show_indices=False, scatter=True)
+    plot_geometry(mesh, show_indices=False, scatter=False)

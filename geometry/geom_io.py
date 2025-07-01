@@ -194,11 +194,11 @@ def parse_geometry(data: dict) -> Mesh:
                     energy_module_names.add("volume")
             # Body constraint modules
             if "constraints" in options:
-                if isinstance(options["energy"], list):
-                    constraint_module_names.update(options["energy"])
-                elif isinstance(options["energy"], str):
-                    constraint_module_names.add(options["energy"])
-                    mesh.bodies[i].options["energy"] = [mesh.bodies[i].options["energy"]]
+                if isinstance(options["constraints"], list):
+                    constraint_module_names.update(options["constraints"])
+                elif isinstance(options["constraints"], str):
+                    constraint_module_names.add(options["constraints"])
+                    mesh.bodies[i].options["constraints"] = [mesh.bodies[i].options["constraints"]]
                 else:
                     err_msg = "constraint modules should be in a list or a single string"
                     logger.error(err_msg)
@@ -239,7 +239,8 @@ def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
         "bodies": {
             "faces": [mesh.bodies[b].facet_indices for b in mesh.bodies.keys()],
             "target_volume": [mesh.bodies[b].target_volume for b in mesh.bodies.keys()],
-            "energy": [mesh.bodies[b].options.get("energy", {}) for b in mesh.bodies.keys()]
+            "energy": [mesh.bodies[b].options.get("energy", {}) for b in mesh.bodies.keys()],
+            "constraints": [mesh.bodies[b].options.get("constraints", {}) for b in mesh.bodies.keys()]
         },
         "global_parameters": mesh.global_parameters.to_dict(),
         "instructions": mesh.instructions
