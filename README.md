@@ -4,7 +4,16 @@ Membrane Solver is a simulation platform inspired by Surface Evolver, designed t
 
 ## Interactive mode
 
-Run `main.py` with the `-I/--interactive` flag to enter a simple command prompt after any initial instructions execute. Commands such as `g5` perform five minimization steps while `r` refines the mesh. Type `quit` or `exit` to stop the loop and save the final mesh.
+Run `main.py` with the `-I/--interactive` flag to enter a simple command prompt
+after any initial instructions execute. Commands such as `g5` perform five
+minimization steps while `r` refines the mesh. Type `quit` or `exit` to stop the
+loop and save the final mesh.
+
+## Geometry loading
+
+`parse_geometry` automatically triangulates any facet with more than three edges
+using `refine_polygonal_facets`. Triangular facets remain unchanged. The
+returned mesh is therefore ready for optimization without further refinement.
 
 
 ## TODO:

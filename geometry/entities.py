@@ -115,14 +115,23 @@ class Facet:
         verts = []
         for signed_index in self.edge_indices:
             edge = mesh.edges[abs(signed_index)]
-            tail, head = (edge.tail_index, edge.head_index) if signed_index > 0 else (edge.head_index, edge.tail_index)
+            tail, head = (
+                edge.tail_index,
+                edge.head_index,
+            ) if signed_index > 0 else (
+                edge.head_index,
+                edge.tail_index,
+            )
             if not verts:
                 verts.append(tail)
             verts.append(head)
 
-        verts = [mesh.vertices[i].position for i in verts[:-1]] # remove duplicate closing vertex
-        v0, v1, v2 = verts
-        area = 0.5 * np.linalg.norm(np.cross(v1 - v0, v2 - v0))
+        v_pos = np.array([mesh.vertices[i].position for i in verts[:-1]])
+        v0 = v_pos[0]
+        v1 = v_pos[1:-1] - v0
+        v2 = v_pos[2:] - v0
+        cross = np.cross(v1, v2)
+        area = 0.5 * np.linalg.norm(cross, axis=1).sum()
         return area
 
     def compute_area_gradient(self, mesh: "Mesh") -> Dict[int, np.ndarray]:

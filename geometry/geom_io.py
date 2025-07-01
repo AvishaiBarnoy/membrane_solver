@@ -214,9 +214,14 @@ def parse_geometry(data: dict) -> Mesh:
     # Constraint modules
     mesh.constraint_modules = list(set(constraint_module_names))
 
-    new_mesh = refine_polygonal_facets(mesh)
     mesh.build_connectivity_maps()
-    return new_mesh
+
+    # Automatically triangulate polygonal facets if needed
+    if any(len(f.edge_indices) > 3 for f in mesh.facets.values()):
+        refined = refine_polygonal_facets(mesh)
+        return refined
+
+    return mesh
 
 def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
     def export_edge_index(i):
