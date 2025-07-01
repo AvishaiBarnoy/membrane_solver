@@ -274,6 +274,10 @@ class Mesh:
     constraint_modules: List[str] = field(default_factory=list)
     instructions: List[str] = field(default_factory=list)
 
+    vertex_to_facets: Dict[int, set] = field(default_factory=dict)
+    vertex_to_edges: Dict[int, set] = field(default_factory=dict)
+    edge_to_facets: Dict[int, set] = field(default_factory=dict)
+
     def get_edge(self, index: int) -> "Edge":
         if index > 0:
             return self.edges[index]
@@ -304,6 +308,41 @@ class Mesh:
                     raise ValueError(f"Facet {facet_idx} uses invalid edge index {signed_index}.")
         return True
 
+    def build_connectivity_maps(self):
+        self.vertex_to_facets.clear()
+        self.vertex_to_edges.clear()
+        self.edge_to_facets.clear()
+
+        for edge in self.edges.values():
+            for v in (edge.tail_index, edge.head_index):
+                if v not in self.vertex_to_edges:
+                    self.vertex_to_edges[v] = set()
+                self.vertex_to_edges[v].add(edge.index)
+
+        for facet in self.facets.values():
+            v_ids = set()
+            for signed_ei in facet.edge_indices:
+                ei = abs(signed_ei)
+
+                if ei not in self.edge_to_facets:
+                    self.edge_to_facets[ei] = set()
+                self.edge_to_facets[ei].add(facet.index)
+
+                edge = self.get_edge(signed_ei)
+                v_ids.add(edge.tail_index)
+                v_ids.add(edge.head_index)
+
+            for v in v_ids:
+                if v not in self.vertex_to_facets:
+                    self.vertex_to_facets[v] = set()
+                self.vertex_to_facets[v].add(facet.index)
+    def get_facets_of_vertex(self, v_id: int) -> List["Facet"]:
+        return [self.facets[fid] for fid in self.vertex_to_facets.get(v_id, [])]
+    def get_edges_of_vertex(self, v_id: int) -> List["Edge"]:
+        return [self.edges[eid] for eid in self.vertex_to_edges.get(v_id, [])]
+    def get_facets_of_edge(self, e_id: int) -> List["Facet"]:
+        return [self.facets[fid] for fid in self.edge_to_facets.get(e_id, [])]
+
     def full_mesh_validate(self):
         """Perform full mesh validation."""
         # 1. Check all facets are triangles
@@ -315,7 +354,7 @@ class Mesh:
         # 3. (optional future checks: vertex connectivity, bodies, etc.)
         # Pass for now
         return True
-    
+
     def __post_init__(self):
         if self.global_parameters is None:
             self.global_parameters = GlobalParameters()
@@ -337,6 +376,7 @@ class Mesh:
             return self.bodies[index]
         else:
             raise KeyError(f"Index {index} not found in mesh.")
+
     def __setitem__(self, index, value):
         if isinstance(value, Vertex):
             self.vertices[index] = value
@@ -348,6 +388,7 @@ class Mesh:
             self.bodies[index] = value
         else:
             raise TypeError(f"Value {value} is not a valid mesh entity.")
+
     def __delitem__(self, index):
         if index in self.vertices:
             del self.vertices[index]

@@ -167,7 +167,6 @@ def parse_geometry(data: dict) -> Mesh:
         if options.get("fixed", False):
             constraint_module_names.append("fixed")
 
-    # Instructions
     # Bodies
     if "bodies" in data:
         face_groups = data["bodies"]["faces"]
@@ -215,7 +214,7 @@ def parse_geometry(data: dict) -> Mesh:
     mesh.constraint_modules = list(set(constraint_module_names))
 
     new_mesh = refine_polygonal_facets(mesh)
-
+    mesh.build_connectivity_maps()
     return new_mesh
 
 def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):

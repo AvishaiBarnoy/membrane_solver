@@ -1,5 +1,5 @@
 from geometry.entities import Mesh, Vertex, Facet
-from runtime.vertex_averaging import vertex_averaging
+from runtime.vertex_average import vertex_average
 import numpy as np
 
 def test_vertex_averaging_smooths_mesh():

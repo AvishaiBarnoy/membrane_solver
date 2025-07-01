@@ -179,6 +179,7 @@ def refine_polygonal_facets(mesh):
     new_mesh.energy_modules = mesh.energy_modules
     new_mesh.constraint_modules= mesh.constraint_modules
     new_mesh.instructions = mesh.instructions
+    mesh.build_connectivity_maps()
 
     return new_mesh
 
@@ -356,6 +357,8 @@ def refine_triangle_mesh(mesh):
     new_mesh.global_parameters = mesh.global_parameters
     new_mesh.energy_modules = mesh.energy_modules
     new_mesh.instructions = mesh.instructions
+
+    new_mesh.build_connectivity_maps()
 
     return new_mesh
 

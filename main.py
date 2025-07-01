@@ -39,13 +39,14 @@ def parse_instructions(instr):
             result.append(cmd)
         elif cmd == 'r':
             result.append('r')
+            # TODO 1: accept "r #n" for multiple refining.
         elif cmd == 'cg':
             result.append('cg')
         elif cmd == 'gd':
             result.append('gd')
         elif cmd == "visualize":
             result.append('visualize')
-        elif cmd == "V" or cmd == "vertex_average":
+        elif cmd.startswith("V") or cmd == "vertex_average":
             # TODO 1: accept "V #n" for multiple averaging.
             # TODO 2: expand to be target specific vertices "vertex_average [2,5]" 
             result.append("V")
@@ -152,7 +153,16 @@ def main():
             mesh = refine_triangle_mesh(mesh)
             minimizer.mesh = mesh
             logger.info("Mesh refinement complete.")
-        elif cmd == "V" or cmd == "vertex_average":
+        elif cmd.startswith("V"):
+            if cmd != "V":
+                cmd = "".join(cmd.split())
+                for i in range(1, int(cmd[1:]) + 1):
+                    vertex_average(mesh)
+                    logger.info("Vertex averaging done.")
+            elif cmd == "V":
+                vertex_average(mesh)
+                logger.info("Vertex averaging done.")
+        elif cmd == "vertex_average":
             vertex_average(mesh)
             logger.info("Vertex averaging done.")
         elif cmd == "visualize":

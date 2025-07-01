@@ -173,3 +173,39 @@ def test_midpoint_fixed_if_edge_fixed_even_if_vertices_not_fixed():
             break
     assert midpoint is not None, "Midpoint vertex not found"
     assert midpoint.fixed, "Midpoint should be fixed if edge is fixed, even if parent vertices are not"
+
+def test_connectivity_maps_after_polygonal_refinement():
+    mesh = create_quad()
+
+    # Run polygonal refinement (quad → 4 triangles)
+    mesh_tri = refine_polygonal_facets(mesh)
+
+    # Ensure connectivity maps were built
+    mesh_tri.build_connectivity_maps()
+
+    # 1. Each vertex maps to the correct number of facets
+    for v_id, facets in mesh_tri.vertex_to_facets.items():
+        for f_id in facets:
+            facet = mesh_tri.facets[f_id]
+            # Reconstruct all vertex IDs used by the facet
+            v_used = set()
+            for signed_ei in facet.edge_indices:
+                edge = mesh_tri.get_edge(signed_ei)
+                v_used.add(edge.tail_index)
+                v_used.add(edge.head_index)
+            assert v_id in v_used, f"Vertex {v_id} not actually in facet {f_id}"
+
+    # 2. Each edge maps to a facet that includes it
+    for e_id, facets in mesh_tri.edge_to_facets.items():
+        for f_id in facets:
+            assert e_id in [abs(i) for i in mesh_tri.facets[f_id].edge_indices], (
+                f"Edge {e_id} not found in facet {f_id}'s edge list"
+            )
+
+    # 3. Each vertex's edge map is consistent
+    for v_id, edges in mesh_tri.vertex_to_edges.items():
+        for e_id in edges:
+            edge = mesh_tri.edges[e_id]
+            assert v_id in (edge.tail_index, edge.head_index), (
+                f"Vertex {v_id} not in edge {e_id}"
+            )

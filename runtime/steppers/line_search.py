@@ -13,7 +13,7 @@ def backtracking_line_search(
     step_size: float,
     energy_fn: Callable[[], float],
     max_iter: int = 10,
-    beta: float = 0.5,
+    beta: float = 0.2,
     c: float = 1e-4,
     gamma: float = 1.2,
     alpha_max_factor: float = 10.0,
