@@ -1,8 +1,8 @@
 {
     "vertices": [
-        [0, 0, 0, {"fixed": false}],
-        [1, 0, 0, {"fixed": false}],
-        [1, 0, 1, {"fixed": false}],
+        [0, 0, 0], 
+        [1, 0, 0],
+        [1, 0, 1],
         [0, 0, 1],
         [0, 1, 1],
         [0, 1, 0],
@@ -41,5 +41,5 @@
                         "gaussian_modulus": 0,
                         "volume_stiffness": 1e3
     },
-    "instructions": ["r", "r", "g100", "r", "g10", "visualize", "V10", "visualize"]
+    "instructions": ["g10", "r", "g50", "r", "g100", "r", "g100", "V100"]
 }

@@ -1,4 +1,4 @@
-# modules/minimizer.py
+# runtime/minimizer.py
 
 import sys
 import os
@@ -12,7 +12,7 @@ from geometry.entities import Mesh
 from parameters.global_parameters import GlobalParameters
 from runtime.energy_manager import EnergyModuleManager
 from runtime.constraint_manager import ConstraintModuleManager
-from modules.steppers.base import BaseStepper
+from runtime.steppers.base import BaseStepper
 
 
 logger = logging.getLogger('membrane_solver')
