@@ -7,8 +7,8 @@ from geometry.geom_io import load_data, save_geometry, parse_geometry
 from geometry.entities import Mesh
 from runtime.minimizer import Minimizer
 from parameters.resolver import ParameterResolver
-from modules.steppers.gradient_descent import GradientDescent
-from modules.steppers.conjugate_gradient import ConjugateGradient
+from runtime.steppers.gradient_descent import GradientDescent
+from runtime.steppers.conjugate_gradient import ConjugateGradient
 from runtime.energy_manager import EnergyModuleManager
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_triangle_mesh
@@ -58,6 +58,87 @@ def parse_instructions(instr):
             logger.warning(f"Unknown instruction: {cmd}")
     return result
 
+def execute_command(cmd, mesh, minimizer, stepper):
+    """Handle a single simulation command."""
+
+    if cmd == 'cg':
+        logger.info("Switching to Conjugate Gradient stepper.")
+        stepper = ConjugateGradient()
+        minimizer.stepper = stepper
+    elif cmd == 'gd':
+        logger.info("Switching to Gradient Descent stepper.")
+        stepper = GradientDescent()
+        minimizer.stepper = stepper
+    elif cmd.startswith('g'):
+        cmd = cmd.replace(' ', '')
+        if cmd == 'g':
+            cmd = 'g1'
+        assert cmd[1:].isnumeric(), "#n steps should be in the form of 'g 5' or 'g5'"
+        logger.debug(
+            f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}"
+        )
+        n_steps = int(cmd[1:])
+        logger.debug(
+            f"Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}"
+        )
+        result = minimizer.minimize(n_steps=n_steps)
+        mesh = result["mesh"]
+        logger.info(
+            f"Minimization complete. Final energy: {result['energy'] if result else 'N/A'}"
+        )
+    elif cmd.startswith('t'):
+        new_ts = cmd.replace(' ', '')
+        try:
+            minimizer.step_size = float(new_ts[1:])
+        except ValueError as exc:
+            raise ValueError(f"Invalid step size format {new_ts[1:]}") from exc
+        logger.info(f"Updated step size to {minimizer.step_size}")
+    elif cmd == 'r':
+        logger.info("Refining mesh...")
+        mesh = refine_triangle_mesh(mesh)
+        minimizer.mesh = mesh
+        logger.info("Mesh refinement complete.")
+    elif cmd.startswith('V'):
+        if cmd != 'V':
+            cmd = ''.join(cmd.split())
+            for _ in range(1, int(cmd[1:]) + 1):
+                vertex_average(mesh)
+                logger.info("Vertex averaging done.")
+        else:
+            vertex_average(mesh)
+            logger.info("Vertex averaging done.")
+    elif cmd == 'vertex_average':
+        vertex_average(mesh)
+        logger.info("Vertex averaging done.")
+    elif cmd == 'visualize':
+        plot_geometry(mesh, show_indices=False)
+    elif cmd == 'save':
+        # fall back to a default name
+        save_geometry(mesh, 'interactive.temp')
+        logger.info("Saved geometry to interactive.temp")
+    else:
+        logger.warning(f"Unknown instruction: {cmd}")
+
+    return mesh, stepper
+
+def interactive_loop(mesh, minimizer, stepper):
+    """Run an interactive command loop."""
+
+    while True:
+        try:
+            line = input('> ').strip()
+        except EOFError:
+            break
+        if not line:
+            continue
+        if line.lower() in {'quit', 'exit', 'q'}:
+            break
+        commands = parse_instructions(''.join(line.split()))
+        for cmd in commands:
+            mesh, stepper = execute_command(cmd, mesh, minimizer, stepper)
+
+    return mesh
+
 def main():
     parser = argparse.ArgumentParser(description="Membrane Solver Simulation Driver")
     parser.add_argument('-i', '--input', required=True, help='Input mesh JSON file')
@@ -66,6 +147,8 @@ def main():
     parser.add_argument('--log', default=None, help='Optional log file')
     parser.add_argument('-q', '--quiet', action='store_true',
                         help='Suppress console output')
+    parser.add_argument('-I', '--interactive', action='store_true',
+                        help="Run in interactive mode after executing instructions")
     args = parser.parse_args()
 
     global logger
@@ -75,7 +158,6 @@ def main():
     # Load mesh and parameters
     data = load_data(args.input)
     mesh = parse_geometry(data)
-    #print(f"[DEBUG] Loaded bodies:\n {mesh.bodies}")
 
     fixed_count = sum(1 for v in mesh.vertices.values() if getattr(v, 'fixed', False))
     logger.debug(f"Number of fixed vertices: {fixed_count} / {len(mesh.vertices)}")
@@ -85,9 +167,7 @@ def main():
     param_resolver = ParameterResolver(global_params)
     energy_manager = EnergyModuleManager(mesh.energy_modules)
 
-    logger.debug("###########")
     logger.debug(mesh.energy_modules)
-    logger.debug("###########")
 
     constraint_manager = ConstraintModuleManager(mesh.constraint_modules)
     stepper = GradientDescent()
@@ -117,62 +197,10 @@ def main():
 
     # Simulation loop
     for cmd in instructions:
-        if cmd == 'cg':
-            logger.info("Switching to Conjugate Gradient stepper.")
-            stepper = ConjugateGradient()
-            minimizer.stepper = stepper
-        elif cmd == 'gd':
-            logger.info("Switching to Gradient Descent stepper.")
-            stepper = GradientDescent()
-            minimizer.stepper = stepper
-        elif cmd.startswith('g'):
-            cmd = cmd.replace(" ", "")  # remove whitespaces
-            if cmd == "g":
-                cmd = "g1"
-            assert cmd[1:].isnumeric(), "#n steps should be in the form of 'g 5' or 'g5'"
-            logger.debug(minimizer.step_size)
+        mesh, stepper = execute_command(cmd, mesh, minimizer, stepper)
 
-            logger.info(
-                f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}"
-            )
-            n_steps = int(cmd[1:])
-
-            logger.debug(f"Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}")
-            result = minimizer.minimize(n_steps=n_steps)
-            mesh = result["mesh"]
-            logger.info(f"Minimization complete. Final energy: {result['energy'] if result else 'N/A'}")
-        elif cmd.startswith('t'):
-            new_ts = cmd.replace(' ', '')
-            try:
-                minimizer.step_size = float(new_ts[1:])
-            except ValueError:
-                raise ValueError(f"Invalid step size format {new_ts[1:]}")
-            logger.info(f"Updated step size to {minimizer.step_size}")
-        elif cmd == 'r':
-            logger.info("Refining mesh...")
-            mesh = refine_triangle_mesh(mesh)
-            minimizer.mesh = mesh
-            logger.info("Mesh refinement complete.")
-        elif cmd.startswith("V"):
-            if cmd != "V":
-                cmd = "".join(cmd.split())
-                for i in range(1, int(cmd[1:]) + 1):
-                    vertex_average(mesh)
-                    logger.info("Vertex averaging done.")
-            elif cmd == "V":
-                vertex_average(mesh)
-                logger.info("Vertex averaging done.")
-        elif cmd == "vertex_average":
-            vertex_average(mesh)
-            logger.info("Vertex averaging done.")
-        elif cmd == "visualize":
-            plot_geometry(mesh, show_indices=False)
-        elif cmd == "save":
-            save_geometry(mesh, args.input + ".temp")
-            logger.info(f"Saved geometry to {args.input}.temp")
-        else:
-            logger.warning(f"Unknown instruction: {cmd}")
-
+    if args.interactive:
+        mesh = interactive_loop(mesh, minimizer, stepper)
     # Save final mesh
     #save_mesh_to_json(mesh, args.output)
     save_geometry(mesh, args.output)

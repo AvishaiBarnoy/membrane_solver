@@ -2,6 +2,11 @@
 
 Membrane Solver is a simulation platform inspired by Surface Evolver, designed to model and minimize the energy of geometric structures such as membranes and surfaces. It supports volume and surface area constraints, dynamic refinement of meshes, and customizable energy modules for physical effects like surface tension and curvature. The project aims to provide a flexible and extensible framework for exploring complex geometries and their energy-driven evolution.
 
+## Interactive mode
+
+Run `main.py` with the `-I/--interactive` flag to enter a simple command prompt after any initial instructions execute. Commands such as `g5` perform five minimization steps while `r` refines the mesh. Type `quit` or `exit` to stop the loop and save the final mesh.
+
+
 ## TODO:
 1. equiangulation
 2. vertex averaging
