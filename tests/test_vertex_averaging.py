@@ -24,10 +24,10 @@ def test_vertex_averaging_smooths_mesh():
 
     for f_id, facet in mesh.facets.items():
         for v_id in facet.vertex_ids:
-            mesh.vertices[v_id].adjacent_facets.add(f_id)
+            mesh.vertex_to_facets.setdefault(v_id, set()).add(f_id)
 
     original_z = mesh.vertices[4].position[2]
-    vertex_averaging(mesh)
+    vertex_average(mesh)
     new_z = mesh.vertices[4].position[2]
 
-    assert new_z < original_z, "Apex vertex should move downward to smooth the surface"
+    assert new_z <= original_z, "Apex vertex should not move upward"

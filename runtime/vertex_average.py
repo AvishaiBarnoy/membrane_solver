@@ -5,22 +5,40 @@ import logging
 
 logger = logging.getLogger("membrane_solver")
 
-def compute_facet_centroid(mesh,facet, vertices):
+def compute_facet_centroid(mesh, facet, vertices):
     v_ids = set()
-    for signed_ei in facet.edge_indices:
-        edge = mesh.get_edge(signed_ei)
-        v_ids.update([edge.tail_index, edge.head_index])
+    use_edges = bool(mesh.edges)
+    if use_edges:
+        for signed_ei in facet.edge_indices:
+            if abs(signed_ei) not in mesh.edges:
+                use_edges = False
+                break
+    if use_edges:
+        for signed_ei in facet.edge_indices:
+            edge = mesh.get_edge(signed_ei)
+            v_ids.update([edge.tail_index, edge.head_index])
+    else:
+        v_ids.update(facet.edge_indices)
     coords = np.array([vertices[i].position for i in v_ids])
     return np.mean(coords, axis=0)
 
 def compute_facet_normal(mesh, facet, vertices):
     # Use the first 3 vertices to compute a normal
     v_ids = []
-    for signed_ei in facet.edge_indices:
-        edge = mesh.get_edge(signed_ei)
-        v_ids.append(edge.tail_index)
-        if len(set(v_ids)) >= 3:
-            break
+    use_edges = bool(mesh.edges)
+    if use_edges:
+        for signed_ei in facet.edge_indices:
+            if abs(signed_ei) not in mesh.edges:
+                use_edges = False
+                break
+    if use_edges:
+        for signed_ei in facet.edge_indices:
+            edge = mesh.get_edge(signed_ei)
+            v_ids.append(edge.tail_index)
+            if len(set(v_ids)) >= 3:
+                break
+    else:
+        v_ids = facet.edge_indices[:3]
     a = vertices[v_ids[1]].position - vertices[v_ids[0]].position
     b = vertices[v_ids[2]].position - vertices[v_ids[0]].position
     return 0.5 * np.cross(a, b)  # area-weighted normal
@@ -68,3 +86,8 @@ def vertex_average(mesh):
         mesh.vertices[v_id].position = pos
 
     logger.info("Vertex averaging completed with volume conservation.")
+
+
+def vertex_averaging(mesh):
+    """Backward compatible alias."""
+    return vertex_average(mesh)

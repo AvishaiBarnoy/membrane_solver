@@ -19,6 +19,7 @@ class Vertex:
     position: np.ndarray
     fixed: bool = False
     options: Dict[str, Any] = field(default_factory=dict)
+    adjacent_facets: set = field(default_factory=set)
 
     def project_position(self, pos: np.ndarray) -> np.ndarray:
         """
@@ -76,6 +77,11 @@ class Facet:
     edge_indices: List[int]  # Signed indices: +n = forward, -n = reversed (including -1 for "r0")
     fixed: bool = False
     options: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def vertex_ids(self) -> List[int]:
+        """Compatibility property returning the stored list."""
+        return self.edge_indices
 
     def compute_normal(self, mesh) -> np.ndarray:
         """Compute (non-normalized) normal vector using right-hand rule from first three vertices."""
