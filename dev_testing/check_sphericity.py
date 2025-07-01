@@ -8,10 +8,6 @@ import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.geom_io import parse_geometry, load_data
 from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
-from logging_config import setup_logging
-
-logger = setup_logging('membrane_solver')
-logger = logger.getChild('visualizer')
 
 def plot_geometry(mesh, show_indices=False, scatter=False, ax=None,
                   transparent=False):
