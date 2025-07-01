@@ -72,7 +72,7 @@ def refine_polygonal_facets(mesh):
     for f_idx, facet in mesh.facets.items():
         # 1. Leave triangles alone
         if len(facet.edge_indices) == 3:
-            if "surface_tension" not in facets.options:
+            if "surface_tension" not in facet.options:
                 facet.options["surface_tension"] = mesh.global_parameters.get('surface_tension', 1.0)
             new_facets[f_idx] = facet
             continue
@@ -131,9 +131,8 @@ def refine_polygonal_facets(mesh):
             spoke_b = spokes[b]
             spoke_a = spokes[a]
 
-            child_options = {
-                "surface_tension": facet.options.get("surface_tension", 1.0)
-            }
+            child_options = facet.options
+            child_options["surface_tension"] = facet.options.get("surface_tension", 1.0)
             child_options["parent_facet"] = facet.index
             child_options["constraints"] = facet.options.get("constraints", [])
 

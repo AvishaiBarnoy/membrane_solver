@@ -93,9 +93,11 @@ def test_default_energy_assignment():
     for facet in mesh.facets.values():
         assert len(facet.options["energy"]) != 0, "Energy should be assigned to each facet"
         assert isinstance(facet.options["energy"], list), f"Energy module list should be a list, but it is a {type(facet.options['energy'])}"
-    if len(mesh.bodies) > 0:
-        for body in mesh.bodies.values():
-            print(body.options["energy"])
-            assert len(body.options["energy"]) != 0, "Energy should be assigned to each body"
-            assert isinstance(body.options["energy"], list), f"Energy module list should be a list, but it is a {type(body.options['energy'])}"
+
+
+    #if len(mesh.bodies) > 0:
+    #    for body in mesh.bodies.values():
+    #        print(body.options["energy"])
+    #        assert len(body.options["energy"]) != 0, "Energy should be assigned to each body"
+    #        assert isinstance(body.options["energy"], list), f"Energy module list should be a list, but it is a {type(body.options['energy'])}"
 

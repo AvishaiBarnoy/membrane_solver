@@ -24,7 +24,7 @@
         [3, 4]
     ],
     "faces": [
-        [0, 1, 2, 3, {"refine": true, "surface_tension": 1.0}],
+        [0, 1, 2, 3, {"refine": true, "surface_tension": 1.0, "energy":["surface"]}],
         ["r0", 8, 5, "r9"],
         [9, 6, -10, -1], 
         [-2, 10, 7, -11],

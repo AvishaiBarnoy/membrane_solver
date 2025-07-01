@@ -150,6 +150,7 @@ def parse_geometry(data: dict) -> Mesh:
         elif "energy" not in options:
             mesh.facets[i].options["energy"] = ["surface"]
             energy_module_names.add("surface")
+
         # Facets constraint modules
         if "constraints" in options:
             if isinstance(options["constraints"], list):

@@ -388,7 +388,11 @@
             14,
             26,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -419,7 +423,11 @@
             27,
             14,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -443,7 +451,11 @@
             26,
             27,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -467,7 +479,11 @@
             15,
             27,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -487,7 +503,11 @@
             28,
             15,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -500,7 +520,11 @@
             27,
             28,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -524,7 +548,11 @@
             16,
             28,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -544,7 +572,11 @@
             29,
             16,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -557,7 +589,11 @@
             28,
             29,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -581,7 +617,11 @@
             17,
             29,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -590,7 +630,11 @@
             26,
             17,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -603,7 +647,11 @@
             29,
             26,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -621,6 +669,9 @@
             31,
             14,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -639,6 +690,9 @@
             30,
             31,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -657,6 +711,9 @@
             14,
             30,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -679,6 +736,9 @@
             22,
             31,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -697,6 +757,9 @@
             32,
             22,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -710,6 +773,9 @@
             31,
             32,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -732,6 +798,9 @@
             19,
             32,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -750,6 +819,9 @@
             33,
             19,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -763,6 +835,9 @@
             32,
             33,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -781,6 +856,9 @@
             30,
             23,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -794,6 +872,9 @@
             33,
             30,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -807,6 +888,9 @@
             23,
             33,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -816,6 +900,9 @@
             23,
             34,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -843,6 +930,9 @@
             35,
             23,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -861,6 +951,9 @@
             34,
             35,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -883,6 +976,9 @@
             20,
             35,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -901,6 +997,9 @@
             36,
             20,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -914,6 +1013,9 @@
             35,
             36,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -941,6 +1043,9 @@
             37,
             24,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -954,6 +1059,9 @@
             36,
             37,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -976,6 +1084,9 @@
             24,
             36,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -985,6 +1096,9 @@
             34,
             15,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -994,6 +1108,9 @@
             37,
             34,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1003,6 +1120,9 @@
             15,
             37,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1021,6 +1141,9 @@
             39,
             16,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1039,6 +1162,9 @@
             38,
             39,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1057,6 +1183,9 @@
             16,
             38,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1075,6 +1204,9 @@
             24,
             39,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1093,6 +1225,9 @@
             40,
             24,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1102,6 +1237,9 @@
             39,
             40,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1124,6 +1262,9 @@
             21,
             40,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1142,6 +1283,9 @@
             41,
             21,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1155,6 +1299,9 @@
             40,
             41,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1173,6 +1320,9 @@
             38,
             25,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1186,6 +1336,9 @@
             41,
             38,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1199,6 +1352,9 @@
             25,
             41,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -1208,6 +1364,9 @@
             25,
             42,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1235,6 +1394,9 @@
             43,
             25,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1253,6 +1415,9 @@
             42,
             43,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1275,6 +1440,9 @@
             18,
             43,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1293,6 +1461,9 @@
             44,
             18,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1306,6 +1477,9 @@
             43,
             44,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1333,6 +1507,9 @@
             45,
             22,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1342,6 +1519,9 @@
             44,
             45,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1360,6 +1540,9 @@
             22,
             44,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1369,6 +1552,9 @@
             42,
             17,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1378,6 +1564,9 @@
             45,
             42,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1387,6 +1576,9 @@
             17,
             45,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -1405,6 +1597,9 @@
             47,
             19,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1423,6 +1618,9 @@
             46,
             47,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1441,6 +1639,9 @@
             19,
             46,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1468,6 +1669,9 @@
             48,
             18,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1477,6 +1681,9 @@
             47,
             48,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1495,6 +1702,9 @@
             18,
             47,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1513,6 +1723,9 @@
             49,
             21,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1522,6 +1735,9 @@
             48,
             49,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1540,6 +1756,9 @@
             21,
             48,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1549,6 +1768,9 @@
             46,
             20,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1558,6 +1780,9 @@
             49,
             46,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1567,6 +1792,9 @@
             20,
             49,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -1579,7 +1807,11 @@
             1,
             2,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1589,7 +1821,11 @@
             4,
             5,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1599,7 +1835,11 @@
             7,
             8,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1609,7 +1849,11 @@
             "r1",
             "r4",
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1619,7 +1863,11 @@
             10,
             "r3",
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1629,7 +1877,11 @@
             12,
             13,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1639,7 +1891,11 @@
             15,
             "r8",
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1649,7 +1905,11 @@
             "r10",
             "r12",
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1659,7 +1919,11 @@
             17,
             "r11",
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1669,7 +1933,11 @@
             19,
             20,
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1679,7 +1947,11 @@
             22,
             "r15",
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1689,7 +1961,11 @@
             "r17",
             "r19",
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1699,7 +1975,11 @@
             24,
             "r18",
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1709,7 +1989,11 @@
             26,
             "r2",
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1719,7 +2003,11 @@
             "r6",
             "r22",
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1729,7 +2017,11 @@
             "r24",
             "r25",
             {
+                "refine": true,
                 "surface_tension": 1.0,
+                "energy": [
+                    "surface"
+                ],
                 "parent_facet": 0,
                 "constraints": []
             }
@@ -1739,6 +2031,9 @@
             29,
             "r0",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1749,6 +2044,9 @@
             31,
             32,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1759,6 +2057,9 @@
             34,
             "r5",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1769,6 +2070,9 @@
             "r29",
             "r31",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1779,6 +2083,9 @@
             36,
             "r28",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1789,6 +2096,9 @@
             38,
             39,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1799,6 +2109,9 @@
             41,
             "r32",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1809,6 +2122,9 @@
             "r36",
             "r38",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1819,6 +2135,9 @@
             43,
             "r37",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1829,6 +2148,9 @@
             45,
             46,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1839,6 +2161,9 @@
             48,
             "r41",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1849,6 +2174,9 @@
             "r43",
             "r45",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1859,6 +2187,9 @@
             50,
             "r34",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1869,6 +2200,9 @@
             "r30",
             "r48",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1879,6 +2213,9 @@
             53,
             "r44",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1889,6 +2226,9 @@
             "r49",
             "r51",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 1,
                 "constraints": []
@@ -1899,6 +2239,9 @@
             55,
             "r50",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1909,6 +2252,9 @@
             57,
             "r52",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1919,6 +2265,9 @@
             59,
             60,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1929,6 +2278,9 @@
             "r54",
             "r57",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1939,6 +2291,9 @@
             62,
             "r56",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1949,6 +2304,9 @@
             64,
             65,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1959,6 +2317,9 @@
             67,
             "r60",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1969,6 +2330,9 @@
             "r62",
             "r64",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1979,6 +2343,9 @@
             69,
             70,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1989,6 +2356,9 @@
             72,
             "r67",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -1999,6 +2369,9 @@
             74,
             "r63",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -2009,6 +2382,9 @@
             "r69",
             "r71",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -2019,6 +2395,9 @@
             "r9",
             "r55",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -2029,6 +2408,9 @@
             "r58",
             "r72",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -2039,6 +2421,9 @@
             "r68",
             "r13",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -2049,6 +2434,9 @@
             "r75",
             "r76",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 2,
                 "constraints": []
@@ -2059,6 +2447,9 @@
             79,
             "r16",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2069,6 +2460,9 @@
             81,
             82,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2079,6 +2473,9 @@
             84,
             "r20",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2089,6 +2486,9 @@
             "r79",
             "r81",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2099,6 +2499,9 @@
             "r78",
             "r70",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2109,6 +2512,9 @@
             87,
             "r73",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2119,6 +2525,9 @@
             89,
             "r82",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2129,6 +2538,9 @@
             "r85",
             "r87",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2139,6 +2551,9 @@
             91,
             "r86",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2149,6 +2564,9 @@
             93,
             94,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2159,6 +2577,9 @@
             96,
             "r89",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2169,6 +2590,9 @@
             "r91",
             "r93",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2179,6 +2603,9 @@
             98,
             "r84",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2189,6 +2616,9 @@
             "r80",
             "r96",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2199,6 +2629,9 @@
             101,
             "r92",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2209,6 +2642,9 @@
             "r97",
             "r99",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 3,
                 "constraints": []
@@ -2219,6 +2655,9 @@
             103,
             "r98",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2229,6 +2668,9 @@
             105,
             "r100",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2239,6 +2681,9 @@
             107,
             108,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2249,6 +2694,9 @@
             "r102",
             "r105",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2259,6 +2707,9 @@
             110,
             "r104",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2269,6 +2720,9 @@
             112,
             113,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2279,6 +2733,9 @@
             115,
             "r108",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2289,6 +2746,9 @@
             "r110",
             "r112",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2299,6 +2759,9 @@
             117,
             "r35",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2309,6 +2772,9 @@
             119,
             "r115",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2319,6 +2785,9 @@
             "r111",
             "r39",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2329,6 +2798,9 @@
             "r117",
             "r118",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2339,6 +2811,9 @@
             "r23",
             "r103",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2349,6 +2824,9 @@
             "r106",
             "r119",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2359,6 +2837,9 @@
             "r116",
             "r26",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2369,6 +2850,9 @@
             "r121",
             "r122",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 4,
                 "constraints": []
@@ -2379,6 +2863,9 @@
             125,
             "r42",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2389,6 +2876,9 @@
             127,
             128,
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2399,6 +2889,9 @@
             130,
             "r46",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2409,6 +2902,9 @@
             "r125",
             "r127",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2419,6 +2915,9 @@
             132,
             "r109",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2429,6 +2928,9 @@
             134,
             "r128",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2439,6 +2941,9 @@
             "r124",
             "r113",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2449,6 +2954,9 @@
             "r132",
             "r133",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2459,6 +2967,9 @@
             137,
             "r90",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2469,6 +2980,9 @@
             139,
             "r134",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2479,6 +2993,9 @@
             "r131",
             "r94",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2489,6 +3006,9 @@
             "r137",
             "r138",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2499,6 +3019,9 @@
             "r61",
             "r130",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2509,6 +3032,9 @@
             "r126",
             "r139",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2519,6 +3045,9 @@
             "r136",
             "r65",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
@@ -2529,6 +3058,9 @@
             "r141",
             "r142",
             {
+                "energy": [
+                    "surface"
+                ],
                 "surface_tension": 1.0,
                 "parent_facet": 5,
                 "constraints": []
