@@ -9,7 +9,6 @@ Run `main.py` with the `-I/--interactive` flag to enter a simple command prompt 
 
 ## TODO:
 1. equiangulation
-2. vertex averaging
 3. add fixed option 
 4. add tests:
     3.1 test fixed
@@ -28,13 +27,13 @@ Run `main.py` with the `-I/--interactive` flag to enter a simple command prompt 
     put them in the log file
 12. add "quiet" mode for minimization
 13. initial energy calculation after loading -> test modules
-14. add interactive mode for refining, minimization, etc.
+14. interactive mode while showing updating visualization
 15. visualization script - exporting to obj, vtk, etc.
 16. remove "options" and have specific categories and attributes.
         i.e., a constraints category, energy category, etc.
 17. look at the Evolver manual pp.235 at the 16.8 Iteration chapter
-18. automatic time-step as 5% of the system size or maybe other small value
-19. add "gyration radius"
+18. automatic time-step as 10% of the system size or maybe other small value
+19. add "gyration radius" - in dev tools
 
 ## Design thoughts 
 1. Should I keep track of indices after refining facets and/or edges?
