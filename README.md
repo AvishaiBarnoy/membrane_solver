@@ -71,3 +71,14 @@ returned mesh is therefore ready for optimization without further refinement.
 12. final(?) - a single caveolin with outside membrane decays
 13. automatic minimization, user defines target refinement and the program
     tries to minimize
+
+## Performance benchmarks
+
+A simple benchmark script is available under `benchmarks/benchmark_surface_energy.py`.
+Run it with Python to compare the optimized surface energy calculation against the
+previous loop-based version::
+
+    python benchmarks/benchmark_surface_energy.py
+
+The script prints the total runtime for each implementation and the achieved
+speedup so you can verify the performance improvements.
