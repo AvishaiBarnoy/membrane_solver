@@ -21,12 +21,18 @@ returned mesh is therefore ready for optimization without further refinement.
 
 ## Interactive visualization
 
-Run ``interactive_minimize.py`` to see the mesh evolve in real time using
-PyVista::
+Two PyVista scripts are provided:
+
+* ``static_visualizer.py`` displays a mesh without modifying it.
+* ``interactive_minimize.py`` runs the minimizer while updating a window.
+
+Run ``interactive_minimize.py`` to watch the mesh evolve::
 
     python interactive_minimize.py meshes/cube.json -n 100
 
-This opens a window that updates each iteration of the minimizer.
+During ``main.py`` interactive sessions press ``s`` (or include
+``visualize`` in the instruction list) to launch the viewer and run 50
+minimization steps in real time.
 
 
 ## TODO:
