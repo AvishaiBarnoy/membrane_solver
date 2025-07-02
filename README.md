@@ -4,10 +4,14 @@ Membrane Solver is a simulation platform inspired by Surface Evolver, designed t
 
 ## Interactive mode
 
-Run `main.py` with the `-I/--interactive` flag to enter a simple command prompt
-after any initial instructions execute. Commands such as `g5` perform five
-minimization steps while `r` refines the mesh. Type `quit` or `exit` to stop the
-loop and save the final mesh.
+`main.py` starts in interactive mode by default, presenting a simple command
+prompt after any initial instructions execute. Use `--non-interactive` to skip
+the prompt. Commands such as `g5` perform five minimization steps while `r`
+refines the mesh. Type `quit` or `exit` to stop the loop and save the final
+mesh.
+
+If no input file is specified on the command line you will be prompted for the
+path. File names may be given with or without the `.json` suffix.
 
 ## Geometry loading
 
