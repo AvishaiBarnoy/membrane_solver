@@ -3,7 +3,9 @@ import logging
 from geometry.entities import Vertex, Edge, Facet, Body, Mesh
 from parameters.global_parameters import GlobalParameters
 import sys
+
 logger = logging.getLogger("membrane_solver")
+
 
 def orient_edges_cycle(edge_indices: list[int], mesh: Mesh) -> list[int]:
     """
@@ -26,28 +28,31 @@ def orient_edges_cycle(edge_indices: list[int], mesh: Mesh) -> list[int]:
     while remaining:
         for i, raw in enumerate(remaining):
             idx = abs(raw)
-            E   = mesh.get_edge(idx)
+            E = mesh.get_edge(idx)
             # Case A: we traverse E as tail->head
             if E.tail_index == prev_head:
-                cycle.append( idx )
+                cycle.append(idx)
                 prev_head = E.head_index
                 remaining.pop(i)
                 break
 
             # Case B: we traverse E as head->tail  (so sign it negative)
             if E.head_index == prev_head:
-                cycle.append( -idx )
+                cycle.append(-idx)
                 prev_head = E.tail_index
                 remaining.pop(i)
                 break
         else:
-            raise ValueError(f"Could not complete cycle: stuck at vertex {prev_head}, remaining edges {remaining}")
+            raise ValueError(
+                f"Could not complete cycle: stuck at vertex {prev_head}, remaining edges {remaining}"
+            )
 
     # Sanity
     if len(cycle) != len(edge_indices):
         raise AssertionError("orient_edges_cycle() returned wrong length")
 
     return cycle
+
 
 def refine_polygonal_facets(mesh):
     """
@@ -67,13 +72,17 @@ def refine_polygonal_facets(mesh):
     new_mesh.edges = new_edges.copy()
 
     # Prepare a map from old facet idx → list of new child facet idxs:
-    children_map = {mesh.facets[facet_idx].index: [] for facet_idx in mesh.facets.keys()}
+    children_map = {
+        mesh.facets[facet_idx].index: [] for facet_idx in mesh.facets.keys()
+    }
 
     for f_idx, facet in mesh.facets.items():
         # 1. Leave triangles alone
         if len(facet.edge_indices) == 3:
             if "surface_tension" not in facet.options:
-                facet.options["surface_tension"] = mesh.global_parameters.get('surface_tension', 1.0)
+                facet.options["surface_tension"] = mesh.global_parameters.get(
+                    "surface_tension", 1.0
+                )
             new_facets[f_idx] = facet
             continue
 
@@ -98,21 +107,26 @@ def refine_polygonal_facets(mesh):
         centroid_options = {}
         if "constraints" in facet.options:
             centroid_options["constraints"] = facet.options["constraints"]
-        centroid_vertex = Vertex(index=centroid_idx,
-                                 position=np.asarray(centroid_pos,
-                                                     dtype=float),
-                                 fixed=facet.fixed,
-                                 options=centroid_options)
+        centroid_vertex = Vertex(
+            index=centroid_idx,
+            position=np.asarray(centroid_pos, dtype=float),
+            fixed=facet.fixed,
+            options=centroid_options,
+        )
         new_vertices[centroid_idx] = centroid_vertex
 
         new_mesh.vertices = new_vertices.copy()
 
         # 4. build exactly one spoke edge per vertex in that loop
-        spokes = {} # maps vertex_idx -> the Edge( vertex -> centroid )
+        spokes = {}  # maps vertex_idx -> the Edge( vertex -> centroid )
         for vi in vertex_loop:
-            e = Edge(next_edge_idx, vi, centroid_vertex.index,
-                     fixed=facet.fixed,
-                     options=facet.options.copy())
+            e = Edge(
+                next_edge_idx,
+                vi,
+                centroid_vertex.index,
+                fixed=facet.fixed,
+                options=facet.options.copy(),
+            )
             new_edges[next_edge_idx] = e
             spokes[vi] = e
             next_edge_idx += 1
@@ -143,9 +157,9 @@ def refine_polygonal_facets(mesh):
 
             cycled_edges = orient_edges_cycle(child_edges, new_mesh)
 
-            child_facet = Facet(child_idx, cycled_edges,
-                                fixed=facet.fixed,
-                                options=child_options)
+            child_facet = Facet(
+                child_idx, cycled_edges, fixed=facet.fixed, options=child_options
+            )
 
             # After creating child_facet:
             # Get the parent normal
@@ -154,7 +168,9 @@ def refine_polygonal_facets(mesh):
             child_normal = child_facet.normal(new_mesh)
             # If the child normal is not aligned with the parent, flip the child facet
             if np.dot(child_normal, parent_normal) < 0:
-                child_facet.edge_indices = [-idx for idx in reversed(child_facet.edge_indices)]
+                child_facet.edge_indices = [
+                    -idx for idx in reversed(child_facet.edge_indices)
+                ]
             new_facets[child_idx] = child_facet
             # Record that this child belongs to the same bodies
             children_map[facet.index].append(child_idx)
@@ -163,7 +179,7 @@ def refine_polygonal_facets(mesh):
     # Step 3: Build updated bodies
     new_bodies = {}
     for body_idx, body in mesh.bodies.items():
-        #body = mesh.bodies[body_idx]
+        # body = mesh.bodies[body_idx]
         new_body_facets = []
         for old_facet_idx in body.facet_indices:
             # Instead of checking "if mesh.facets[old_facet_idx].index in facet_to_new_facets",
@@ -172,20 +188,24 @@ def refine_polygonal_facets(mesh):
                 new_body_facets.extend(children_map[old_facet_idx])
             else:
                 new_body_facets.append(old_facet_idx)
-        new_bodies[len(new_bodies)] = Body(len(new_bodies), new_body_facets,
-                                options=body.options.copy(),
-                                target_volume=body.target_volume)
+        new_bodies[len(new_bodies)] = Body(
+            len(new_bodies),
+            new_body_facets,
+            options=body.options.copy(),
+            target_volume=body.target_volume,
+        )
     new_mesh.bodies = new_bodies
 
     new_mesh.facets = new_facets
     new_mesh.bodies = new_bodies
     new_mesh.global_parameters = mesh.global_parameters
     new_mesh.energy_modules = mesh.energy_modules
-    new_mesh.constraint_modules= mesh.constraint_modules
+    new_mesh.constraint_modules = mesh.constraint_modules
     new_mesh.instructions = mesh.instructions
     mesh.build_connectivity_maps()
 
     return new_mesh
+
 
 def refine_triangle_mesh(mesh):
     # TODO: option for loop "r2" will refine twice
@@ -195,7 +215,7 @@ def refine_triangle_mesh(mesh):
     new_edges = {}
     new_facets = {}
     edge_midpoints = {}  # (min_idx, max_idx) → midpoint Vertex
-    edge_lookup = {}     # (min_idx, max_idx) → Edge
+    edge_lookup = {}  # (min_idx, max_idx) → Edge
     facet_to_new_facets = {}  # facet.index → [Facet, ...]
 
     def get_or_create_edge(v_from, v_to):
@@ -208,49 +228,73 @@ def refine_triangle_mesh(mesh):
         edge_lookup[key] = edge
         return edge
 
-    # Step 1: Compute midpoint vertices and split each edge
-    for edge_idx in mesh.edges.keys():
+    # Determine which facets should actually be refined
+    facets_to_refine = [
+        f for f in mesh.facets.values() if not f.options.get("no_refine", False)
+    ]
+
+    # Collect edges that belong to facets that will be refined
+    edges_to_refine = set()
+    for facet in facets_to_refine:
+        for ei in facet.edge_indices:
+            edges_to_refine.add(abs(ei))
+
+    # Step 1: Compute midpoint vertices only for edges that will be refined
+    for edge_idx in edges_to_refine:
         edge = mesh.get_edge(edge_idx)
         v1, v2 = edge.tail_index, edge.head_index
         key = (min(v1, v2), max(v1, v2))
         if key not in edge_midpoints:
-            midpoint_position = 0.5 * (mesh.vertices[v1].position + mesh.vertices[v2].position)
+            midpoint_position = 0.5 * (
+                mesh.vertices[v1].position + mesh.vertices[v2].position
+            )
             midpoint_idx = len(new_vertices)
-            # Check if edge is fixed
-            midpoint = Vertex(midpoint_idx,
-                              np.asarray(midpoint_position, dtype=float),
-                              fixed=edge.fixed,
-                              options=edge.options)
-            # Add the midpoint vertex to the new vertices
+            midpoint = Vertex(
+                midpoint_idx,
+                np.asarray(midpoint_position, dtype=float),
+                fixed=edge.fixed,
+                options=edge.options.copy(),
+            )
             new_vertices[midpoint_idx] = midpoint
             edge_midpoints[key] = midpoint
 
     new_mesh.vertices = new_vertices
 
-    # Step 2: Subdivide each triangle into four smaller triangles
+    # Step 2: Subdivide each triangle unless it is marked with "no_refine"
     for facet in mesh.facets.values():
-        e0parent, e1parent, e2parent = orient_edges_cycle(facet.edge_indices, mesh)
+        oriented = orient_edges_cycle(facet.edge_indices, mesh)
+        e0parent, e1parent, e2parent = oriented
         E0 = mesh.get_edge(e0parent)
         v0, v1 = E0.tail_index, E0.head_index
         E1 = mesh.get_edge(e1parent)
         _, v2 = E1.tail_index, E1.head_index
 
+        if facet.options.get("no_refine", False):
+            raw_edges = []
+            for ei in oriented:
+                edge = mesh.get_edge(ei)
+                if ei > 0:
+                    e = get_or_create_edge(edge.tail_index, edge.head_index)
+                    raw_edges.append(e.index)
+                else:
+                    e = get_or_create_edge(edge.head_index, edge.tail_index)
+                    raw_edges.append(-e.index)
+            new_mesh.edges.update(new_edges)
+            cyc = orient_edges_cycle(raw_edges, new_mesh)
+            nf = Facet(len(new_facets), cyc, facet.fixed, facet.options.copy())
+            new_facets[nf.index] = nf
+            facet_to_new_facets[facet.index] = [nf.index]
+            continue
+
         # simple sanity-check
         if v0 == v1 or v1 == v2 or v2 == v0:
             raise ValueError(f"Degenerate triangle: verts {v0},{v1},{v2}")
 
-        m01 = edge_midpoints[(min(mesh.vertices[v0].index, mesh.vertices[v1].index),
-                              max(mesh.vertices[v0].index,
-                                  mesh.vertices[v1].index))].index
-        m12 = edge_midpoints[(min(mesh.vertices[v1].index, mesh.vertices[v2].index),
-                              max(mesh.vertices[v1].index,
-                                  mesh.vertices[v2].index))].index
-        m20 = edge_midpoints[(min(mesh.vertices[v2].index, mesh.vertices[v0].index),
-                              max(mesh.vertices[v2].index,
-                                  mesh.vertices[v0].index))].index
+        m01 = edge_midpoints[(min(v0, v1), max(v0, v1))].index
+        m12 = edge_midpoints[(min(v1, v2), max(v1, v2))].index
+        m20 = edge_midpoints[(min(v2, v0), max(v2, v0))].index
         child_facets = []
 
-        # compute normal to make sure orientation of edges in child  facet is correct
         parent_normal = facet.normal(mesh)
 
         parent_edge_01 = mesh.edges[abs(e0parent)]
@@ -276,9 +320,9 @@ def refine_triangle_mesh(mesh):
         new_facets[len(new_facets)] = f1
 
         # Triangle 2: v1, m12, m01
-        e1 = get_or_create_edge(v1, m12)    # split of parent edge (v0-v1)
-        e2 = get_or_create_edge(m12, m01)   # middle edge (between midpoints)
-        e3 = get_or_create_edge(m01, v1)    # split of parent edge (v2-v0)
+        e1 = get_or_create_edge(v1, m12)  # split of parent edge (v0-v1)
+        e2 = get_or_create_edge(m12, m01)  # middle edge (between midpoints)
+        e3 = get_or_create_edge(m01, v1)  # split of parent edge (v2-v0)
         e1.options = parent_edge_12.options.copy()
         e1.fixed = parent_edge_12.fixed
         e3.options = parent_edge_01.options.copy()
@@ -353,8 +397,9 @@ def refine_triangle_mesh(mesh):
         for old_facet_idx in body.facet_indices:
             if mesh.facets[old_facet_idx].index in facet_to_new_facets:
                 new_body_facets.extend(facet_to_new_facets[old_facet_idx])
-        new_bodies[len(new_bodies)] = Body(len(new_bodies), new_body_facets,
-                                           target_volume=body.target_volume)
+        new_bodies[len(new_bodies)] = Body(
+            len(new_bodies), new_body_facets, target_volume=body.target_volume
+        )
     new_mesh.vertices = new_vertices
     new_mesh.facets = new_facets
     new_mesh.bodies = new_bodies
@@ -365,4 +410,3 @@ def refine_triangle_mesh(mesh):
     new_mesh.build_connectivity_maps()
 
     return new_mesh
-
