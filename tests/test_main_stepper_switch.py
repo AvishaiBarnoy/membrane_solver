@@ -6,8 +6,8 @@ from parameters.global_parameters import GlobalParameters
 from runtime.energy_manager import EnergyModuleManager
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.minimizer import Minimizer
-from modules.steppers.gradient_descent import GradientDescent
-from modules.steppers.conjugate_gradient import ConjugateGradient
+from runtime.steppers.gradient_descent import GradientDescent
+from runtime.steppers.conjugate_gradient import ConjugateGradient
 from main import parse_instructions
 
 

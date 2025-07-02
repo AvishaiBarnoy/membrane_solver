@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from runtime.minimizer import Minimizer
-from modules.steppers.gradient_descent import GradientDescent
+from runtime.steppers.gradient_descent import GradientDescent
 from geometry.entities import Mesh, Vertex, Edge, Facet, Body
 from parameters.global_parameters import GlobalParameters
 from runtime.refinement import refine_polygonal_facets

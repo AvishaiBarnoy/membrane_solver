@@ -115,41 +115,41 @@ def compute_energy_and_gradient_optimized(mesh, global_params, param_resolver, *
 def compute_energy_and_gradient_vectorized_triangular(mesh, global_params, param_resolver, *, compute_gradient: bool = True):
     """
     Fully vectorized surface energy computation for triangular meshes.
-    
+
     This function assumes all facets are triangles and uses mesh-level vectorization.
     """
     if not hasattr(mesh, 'get_facet_vertices_array') or mesh.get_facet_vertices_array() is None:
         # Fall back to standard optimized version
         return compute_energy_and_gradient_optimized(mesh, global_params, param_resolver, compute_gradient=compute_gradient)
-        
+
     # Get arrays for vectorized computation
     positions = mesh.get_vertex_positions_array()
     facet_vertices = mesh.get_facet_vertices_array()
-    
+
     if len(facet_vertices) == 0:
         return 0.0, {}
-        
+
     # Get surface tension for all facets (assuming uniform for now)
     # TODO: Handle per-facet surface tensions efficiently
     default_surface_tension = global_params.get("surface_tension", 1.0)
-    
+
     # Vectorized area computation for all triangles
     v0 = positions[facet_vertices[:, 0]]
     v1 = positions[facet_vertices[:, 1]]
     v2 = positions[facet_vertices[:, 2]]
-    
+
     # Triangle areas using cross product
     edge1 = v1 - v0
     edge2 = v2 - v0
     cross_products = np.cross(edge1, edge2)
     areas = 0.5 * np.linalg.norm(cross_products, axis=1)
-    
+
     # Total energy
     total_energy = default_surface_tension * np.sum(areas)
-    
+
     if not compute_gradient:
         return total_energy, {}
-        
+
     # Vectorized gradient computation
     # For triangle area gradients: ∇A = 0.5 * (n × edge_opposite) / |n|
     norms = np.linalg.norm(cross_products, axis=1)

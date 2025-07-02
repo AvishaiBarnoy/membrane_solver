@@ -3,7 +3,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Mesh, Vertex
-from modules.steppers.conjugate_gradient import ConjugateGradient
+from runtime.steppers.conjugate_gradient import ConjugateGradient
 
 
 def quadratic_energy(v: Vertex) -> float:
