@@ -1,51 +1,13 @@
 # visualize_geometry.py
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-import os, sys
+import os
+import sys
 import numpy as np
 
 # Import functions from your modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.geom_io import parse_geometry, load_data
 from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
-
-def plot_geometry(mesh, show_indices=False, scatter=False, ax=None,
-                  transparent=False):
-    if ax is None:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-
-    vertex_positions = [mesh.vertices[v].position for v in mesh.vertices.keys()]
-    X, Y, Z = zip(*vertex_positions)
-
-    # Plot triangle facets
-    triangles = []
-    for facet in mesh.facets.values():
-        if len(facet.edge_indices) < 3:
-            logger.warning(f"Skipping facet {facet.index}: too few edges")
-            continue
-        tri = [mesh.vertices[mesh.get_edge(e).tail_index].position for e in facet.edge_indices]
-        triangles.append(tri)
-
-    alpha = 0.4 if transparent else 1.0
-    tri_collection = Poly3DCollection(triangles, alpha=alpha, edgecolor='k')
-    tri_collection.set_facecolor((0.6, 0.8, 1.0))  # sky blue
-    ax.add_collection3d(tri_collection)
-
-    if scatter:
-        ax.scatter(X, Y, Z, color='r', s=20)
-
-    if show_indices:
-        for v in mesh.vertices.values():
-            ax.text(*v.position, f"{v.index}", color='k', fontsize=8)
-
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.set_title("Refined Geometry")
-    ax.auto_scale_xyz(X, Y, Z)
-    plt.tight_layout()
-    plt.show()
+from visualize_geometry import plot_geometry
 
 def compute_sphericity_from_mesh(mesh):
     vertex_positions = np.array([v.position for v in mesh.vertices.values()])

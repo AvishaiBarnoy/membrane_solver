@@ -6,14 +6,13 @@ from logging_config import setup_logging
 from geometry.geom_io import load_data, save_geometry, parse_geometry
 from geometry.entities import Mesh
 from runtime.minimizer import Minimizer
-from parameters.resolver import ParameterResolver
 from runtime.steppers.gradient_descent import GradientDescent
 from runtime.steppers.conjugate_gradient import ConjugateGradient
 from runtime.energy_manager import EnergyModuleManager
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_triangle_mesh
 from runtime.vertex_average import vertex_average
-from visualize_geometry import plot_geometry
+from runtime.interactive_visualizer import visualize_minimization
 
 logger = None
 
@@ -121,7 +120,7 @@ def execute_command(cmd, mesh, minimizer, stepper):
         vertex_average(mesh)
         logger.info("Vertex averaging done.")
     elif cmd == 'visualize' or cmd == "s":
-        plot_geometry(mesh, show_indices=False)
+        visualize_minimization(mesh, minimizer, n_steps=50)
     elif cmd == 'save':
         # fall back to a default name
         save_geometry(mesh, 'interactive.temp')
@@ -186,7 +185,6 @@ def main():
     logger.debug(f"Target volume of body: {mesh.bodies[0].options['target_volume']}")
 
     global_params = mesh.global_parameters
-    param_resolver = ParameterResolver(global_params)
     energy_manager = EnergyModuleManager(mesh.energy_modules)
 
     logger.debug(mesh.energy_modules)
