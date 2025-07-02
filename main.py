@@ -152,7 +152,7 @@ def interactive_loop(mesh, minimizer, stepper):
 def main():
     parser = argparse.ArgumentParser(description="Membrane Solver Simulation Driver")
     parser.add_argument('-i', '--input', help='Input mesh JSON file')
-    parser.add_argument('-o', '--output', required=True, help='Output mesh JSON file')
+    parser.add_argument('-o', '--output', default="output.json", help='Output mesh JSON file')
     parser.add_argument('--instructions', help='Optional instruction file (one command per line)')
     parser.add_argument('--log', default=None, help='Optional log file')
     parser.add_argument('-q', '--quiet', action='store_true',

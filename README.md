@@ -24,7 +24,7 @@ returned mesh is therefore ready for optimization without further refinement.
 1. equiangulation
 3. add fixed option 
 4. add tests:
-    3.1 test fixed
+    4.1 test fixed
 5. implement no_refine
 6. optimize optimization computations 
 7. how to calculate mean curvature from facets?
