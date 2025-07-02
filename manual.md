@@ -10,8 +10,9 @@ Here I will take notes for the manual...
                     different from those in global_parameters, e.g., some
                     facets have different surface_tension 
 3. if no energy is given to an element then default energy will be added:
-    facet - surface_tension
-    body - volume_stiffness which is only relevant if there is target_volume
+    facet - surface tension energy, for tension-less membranes one should set the  
+    surface_tension to 0.
+    body - volume_stiffness which is only relevant if there is target_volume.
 
 4. Inheritance rules:
     4.1 child facets inherit all energy and constraints of parent facet

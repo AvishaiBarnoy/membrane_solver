@@ -10,13 +10,15 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
+import sys, os
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-BASE_JSON = Path("meshes/cube.json")
-RUNS = 3
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+BASE_JSON = Path("../meshes/cube.json")
+RUNS = 5
 
 
 def _prepare_input(module: str, tmpdir: Path) -> Path:
@@ -45,8 +47,11 @@ def _prepare_input(module: str, tmpdir: Path) -> Path:
 def _run_simulation(input_path: Path, output_path: Path) -> float:
     """Execute ``main.py`` and return the elapsed time."""
     start = time.perf_counter()
+
+    main_py_path = Path(__file__).resolve().parent.parent / "main.py"
+
     subprocess.run(
-        [sys.executable, "main.py", "-i", str(input_path), "-o", str(output_path), "-q"],
+        [sys.executable, str(main_py_path), "-i", str(input_path), "-o", str(output_path), "-q"],
         check=True,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
