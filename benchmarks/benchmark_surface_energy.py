@@ -7,6 +7,8 @@ from typing import Dict, Tuple
 
 import numpy as np
 
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.geom_io import load_data, parse_geometry
 from modules.energy import surface
 from parameters.global_parameters import GlobalParameters
@@ -47,7 +49,7 @@ def benchmark(func, mesh, global_params, param_resolver, *, iterations: int = 10
 
 
 if __name__ == "__main__":
-    mesh = parse_geometry(load_data("meshes/cube.json"))
+    mesh = parse_geometry(load_data("../meshes/cube.json"))
     global_params = GlobalParameters()
     resolver = ParameterResolver(global_params)
 
