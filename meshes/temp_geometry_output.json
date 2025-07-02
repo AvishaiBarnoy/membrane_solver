@@ -65,13 +65,7 @@
         [
             1.0,
             0.5,
-            0.5,
-            {
-                "constraints": [
-                    "pin_to_plane",
-                    "fix_facet_area"
-                ]
-            }
+            0.5
         ],
         [
             0.5,
@@ -149,623 +143,297 @@
         ],
         [
             0,
-            8,
-            {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1
-            }
+            1
         ],
         [
             1,
+            8
+        ],
+        [
             8,
-            {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1
-            }
+            0
+        ],
+        [
+            1,
+            2
         ],
         [
             2,
+            8
+        ],
+        [
             8,
-            {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1
-            }
+            1
+        ],
+        [
+            2,
+            3
         ],
         [
             3,
-            8,
-            {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1
-            }
+            8
         ],
         [
-            1,
-            9,
-            {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ]
-            }
+            8,
+            2
+        ],
+        [
+            3,
+            0
         ],
         [
             0,
-            9,
-            {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ]
-            }
+            8
         ],
         [
-            5,
-            9,
-            {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            6,
-            9,
-            {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            1,
-            10,
-            {
-                "surface_tension": 5,
-                "constraints": [
-                    "pin_to_plane",
-                    "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            6,
-            10,
-            {
-                "surface_tension": 5,
-                "constraints": [
-                    "pin_to_plane",
-                    "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            7,
-            10,
-            {
-                "surface_tension": 5,
-                "constraints": [
-                    "pin_to_plane",
-                    "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            2,
-            10,
-            {
-                "surface_tension": 5,
-                "constraints": [
-                    "pin_to_plane",
-                    "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            3,
-            11,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            2,
-            11,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            7,
-            11,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            4,
-            11,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            3,
-            12,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            4,
-            12,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
-        ],
-        [
-            5,
-            12,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
+            8,
+            3
         ],
         [
             0,
-            12,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
+            1
+        ],
+        [
+            1,
+            9
+        ],
+        [
+            9,
+            0
+        ],
+        [
+            1,
+            6
         ],
         [
             6,
-            13,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
+            9
+        ],
+        [
+            9,
+            1
+        ],
+        [
+            6,
+            5
         ],
         [
             5,
-            13,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
+            9
         ],
         [
-            4,
-            13,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
+            9,
+            6
+        ],
+        [
+            5,
+            0
+        ],
+        [
+            0,
+            9
+        ],
+        [
+            9,
+            5
+        ],
+        [
+            1,
+            6
+        ],
+        [
+            6,
+            10
+        ],
+        [
+            10,
+            1
+        ],
+        [
+            6,
+            7
         ],
         [
             7,
+            10
+        ],
+        [
+            10,
+            6
+        ],
+        [
+            7,
+            2
+        ],
+        [
+            2,
+            10
+        ],
+        [
+            10,
+            7
+        ],
+        [
+            2,
+            1
+        ],
+        [
+            1,
+            10
+        ],
+        [
+            10,
+            2
+        ],
+        [
+            2,
+            3
+        ],
+        [
+            3,
+            11
+        ],
+        [
+            11,
+            2
+        ],
+        [
+            3,
+            4
+        ],
+        [
+            4,
+            11
+        ],
+        [
+            11,
+            3
+        ],
+        [
+            4,
+            7
+        ],
+        [
+            7,
+            11
+        ],
+        [
+            11,
+            4
+        ],
+        [
+            7,
+            2
+        ],
+        [
+            2,
+            11
+        ],
+        [
+            11,
+            7
+        ],
+        [
+            3,
+            4
+        ],
+        [
+            4,
+            12
+        ],
+        [
+            12,
+            3
+        ],
+        [
+            4,
+            5
+        ],
+        [
+            5,
+            12
+        ],
+        [
+            12,
+            4
+        ],
+        [
+            5,
+            0
+        ],
+        [
+            0,
+            12
+        ],
+        [
+            12,
+            5
+        ],
+        [
+            0,
+            3
+        ],
+        [
+            3,
+            12
+        ],
+        [
+            12,
+            0
+        ],
+        [
+            5,
+            6
+        ],
+        [
+            6,
+            13
+        ],
+        [
             13,
-            {
-                "energy": [
-                    "surface"
-                ]
-            }
+            5
+        ],
+        [
+            6,
+            7
+        ],
+        [
+            7,
+            13
+        ],
+        [
+            13,
+            6
+        ],
+        [
+            7,
+            4
+        ],
+        [
+            4,
+            13
+        ],
+        [
+            13,
+            7
+        ],
+        [
+            4,
+            5
+        ],
+        [
+            5,
+            13
+        ],
+        [
+            13,
+            4
         ]
     ],
-    "faces": [
-        [
-            0,
-            13,
-            "r12",
-            {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1,
-                "parent_facet": 0,
-                "constraints": []
-            }
-        ],
-        [
-            1,
-            14,
-            "r13",
-            {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1,
-                "parent_facet": 0,
-                "constraints": []
-            }
-        ],
-        [
-            2,
-            15,
-            "r14",
-            {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1,
-                "parent_facet": 0,
-                "constraints": []
-            }
-        ],
-        [
-            3,
-            12,
-            "r15",
-            {
-                "refine": false,
-                "fixed": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1,
-                "parent_facet": 0,
-                "constraints": []
-            }
-        ],
-        [
-            17,
-            "r16",
-            "r0",
-            {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 1,
-                "constraints": []
-            }
-        ],
-        [
-            8,
-            18,
-            "r17",
-            {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 1,
-                "constraints": []
-            }
-        ],
-        [
-            5,
-            19,
-            "r18",
-            {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 1,
-                "constraints": []
-            }
-        ],
-        [
-            16,
-            "r19",
-            "r9",
-            {
-                "refine": true,
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 1,
-                "constraints": []
-            }
-        ],
-        [
-            9,
-            21,
-            "r20",
-            {
-                "surface_tension": 5,
-                "constraints": [
-                    "pin_to_plane",
-                    "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 2
-            }
-        ],
-        [
-            6,
-            22,
-            "r21",
-            {
-                "surface_tension": 5,
-                "constraints": [
-                    "pin_to_plane",
-                    "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 2
-            }
-        ],
-        [
-            23,
-            "r22",
-            "r10",
-            {
-                "surface_tension": 5,
-                "constraints": [
-                    "pin_to_plane",
-                    "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 2
-            }
-        ],
-        [
-            20,
-            "r23",
-            "r1",
-            {
-                "surface_tension": 5,
-                "constraints": [
-                    "pin_to_plane",
-                    "fix_facet_area"
-                ],
-                "energy": [
-                    "surface"
-                ],
-                "parent_facet": 2
-            }
-        ],
-        [
-            25,
-            "r24",
-            "r2",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 3,
-                "constraints": []
-            }
-        ],
-        [
-            10,
-            26,
-            "r25",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 3,
-                "constraints": []
-            }
-        ],
-        [
-            7,
-            27,
-            "r26",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 3,
-                "constraints": []
-            }
-        ],
-        [
-            24,
-            "r27",
-            "r11",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 3,
-                "constraints": []
-            }
-        ],
-        [
-            11,
-            29,
-            "r28",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 4,
-                "constraints": []
-            }
-        ],
-        [
-            4,
-            30,
-            "r29",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 4,
-                "constraints": []
-            }
-        ],
-        [
-            31,
-            "r30",
-            "r8",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 4,
-                "constraints": []
-            }
-        ],
-        [
-            28,
-            "r31",
-            "r3",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 4,
-                "constraints": []
-            }
-        ],
-        [
-            33,
-            "r32",
-            "r5",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 5,
-                "constraints": []
-            }
-        ],
-        [
-            34,
-            "r33",
-            "r4",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 5,
-                "constraints": []
-            }
-        ],
-        [
-            35,
-            "r34",
-            "r7",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 5,
-                "constraints": []
-            }
-        ],
-        [
-            32,
-            "r35",
-            "r6",
-            {
-                "energy": [
-                    "surface"
-                ],
-                "surface_tension": 1.0,
-                "parent_facet": 5,
-                "constraints": []
-            }
-        ]
-    ],
+    "faces": [],
     "bodies": {
         "faces": [
-            [
-                0,
-                1,
-                2,
-                3,
-                4,
-                5,
-                6,
-                7,
-                8,
-                9,
-                10,
-                11,
-                12,
-                13,
-                14,
-                15,
-                16,
-                17,
-                18,
-                19,
-                20,
-                21,
-                22,
-                23
-            ]
+            []
         ],
         "target_volume": [
             1.0
