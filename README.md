@@ -19,6 +19,15 @@ path. File names may be given with or without the `.json` suffix.
 using `refine_polygonal_facets`. Triangular facets remain unchanged. The
 returned mesh is therefore ready for optimization without further refinement.
 
+## Interactive visualization
+
+Run ``interactive_minimize.py`` to see the mesh evolve in real time using
+PyVista::
+
+    python interactive_minimize.py meshes/cube.json -n 100
+
+This opens a window that updates each iteration of the minimizer.
+
 
 ## TODO:
 1. equiangulation

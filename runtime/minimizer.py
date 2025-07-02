@@ -135,8 +135,19 @@ STEP SIZE:\t {self.step_size}
                 grad[bidx] = body.constraint.project_gradient(grad[bidx])
 
 
-    def minimize(self, n_steps: int = 1):
-        """Run the optimization loop for ``n_steps`` iterations."""
+    def minimize(self, n_steps: int = 1, callback: Optional[callable] = None):
+        """Run the optimization loop for ``n_steps`` iterations.
+
+        Parameters
+        ----------
+        n_steps : int
+            Number of optimization iterations to perform.
+        callback : callable, optional
+            If given, called after each iteration with the updated ``Mesh``.
+        """
+        if callback:
+            callback(self.mesh)
+
         zero_step_counter = 0
 
         max_zero_steps = 5  # You can tune this
@@ -163,6 +174,9 @@ STEP SIZE:\t {self.step_size}
             step_success, self.step_size = self.stepper.step(
                 self.mesh, grad, self.step_size, self.compute_energy
             )
+
+            if callback:
+                callback(self.mesh)
 
             if not step_success:
                 zero_step_counter += 1
