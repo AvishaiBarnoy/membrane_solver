@@ -18,7 +18,7 @@ from tempfile import TemporaryDirectory
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 BASE_JSON = Path("../meshes/cube.json")
-RUNS = 5
+RUNS = 3
 
 
 def _prepare_input(module: str, tmpdir: Path) -> Path:
