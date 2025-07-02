@@ -12,7 +12,7 @@ from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
 
 import logging
 from logging_config import setup_logging
-logger = logging.getLogger('membrane_solver')
+logger = logging.getLogger('membrane_solver.log')
 
 # TODO: shading option when rotating
 # TODO: opaque scatter when transparent=False
