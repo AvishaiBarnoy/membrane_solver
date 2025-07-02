@@ -17,6 +17,17 @@ from visualize_geometry import plot_geometry
 
 logger = None
 
+
+def resolve_json_path(path: str) -> str:
+    """Return a valid JSON file path, allowing path without extension."""
+    if os.path.isfile(path):
+        return path
+    if not path.lower().endswith('.json'):
+        alt = path + '.json'
+        if os.path.isfile(alt):
+            return alt
+    raise FileNotFoundError(f"Cannot find file '{path}' or '{path}.json'")
+
 def load_mesh_from_json(path):
     with open(path, 'r') as f:
         data = json.load(f)
@@ -140,15 +151,27 @@ def interactive_loop(mesh, minimizer, stepper):
 
 def main():
     parser = argparse.ArgumentParser(description="Membrane Solver Simulation Driver")
-    parser.add_argument('-i', '--input', required=True, help='Input mesh JSON file')
+    parser.add_argument('-i', '--input', help='Input mesh JSON file')
     parser.add_argument('-o', '--output', required=True, help='Output mesh JSON file')
     parser.add_argument('--instructions', help='Optional instruction file (one command per line)')
     parser.add_argument('--log', default=None, help='Optional log file')
     parser.add_argument('-q', '--quiet', action='store_true',
                         help='Suppress console output')
-    parser.add_argument('-I', '--interactive', action='store_true',
-                        help="Run in interactive mode after executing instructions")
+    parser.add_argument('--non-interactive', action='store_true',
+                        help="Skip interactive mode after executing instructions")
     args = parser.parse_args()
+
+    if not args.input:
+        try:
+            args.input = input('Input mesh JSON file: ').strip()
+        except EOFError:
+            print('No input file provided.', file=sys.stderr)
+            sys.exit(1)
+    try:
+        args.input = resolve_json_path(args.input)
+    except FileNotFoundError as exc:
+        print(exc, file=sys.stderr)
+        sys.exit(1)
 
     global logger
     logger = setup_logging(args.log if args.log else 'membrane_solver.log',
@@ -198,7 +221,7 @@ def main():
     for cmd in instructions:
         mesh, stepper = execute_command(cmd, mesh, minimizer, stepper)
 
-    if args.interactive:
+    if not args.non_interactive:
         mesh = interactive_loop(mesh, minimizer, stepper)
     # Save final mesh
     #save_mesh_to_json(mesh, args.output)
