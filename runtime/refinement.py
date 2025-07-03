@@ -208,8 +208,6 @@ def refine_polygonal_facets(mesh):
 
 
 def refine_triangle_mesh(mesh):
-    # TODO: option for loop "r2" will refine twice
-
     new_mesh = Mesh()
     new_vertices = mesh.vertices.copy()
     new_edges = {}
