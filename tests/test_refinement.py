@@ -5,7 +5,12 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Vertex, Edge, Facet, Body, Mesh
-from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
+from runtime.refinement import (
+    refine_polygonal_facets,
+    refine_triangle_mesh,
+    refine_edges,
+    orient_edges_cycle,
+)
 
 
 def create_quad():
@@ -322,3 +327,62 @@ def test_no_refine_skips_triangle_refinement():
     # Vertex and edge counts correspond to refining only one triangle
     assert len(mesh_ref.vertices) == 9
     assert len(mesh_ref.edges) == 12
+
+
+def create_two_triangles_edge_flags():
+    mesh = Mesh()
+
+    # First triangle - no refined edges
+    v0 = Vertex(0, np.array([0.0, 0.0, 0.0]))
+    v1 = Vertex(1, np.array([1.0, 0.0, 0.0]))
+    v2 = Vertex(2, np.array([0.0, 1.0, 0.0]))
+
+    e0 = Edge(1, 0, 1, refine=False)
+    e1 = Edge(2, 1, 2, refine=False)
+    e2 = Edge(3, 2, 0, refine=False)
+
+    f0 = Facet(0, [1, 2, 3])
+
+    # Second triangle - all edges flagged for refinement
+    v3 = Vertex(3, np.array([2.0, 0.0, 0.0]))
+    v4 = Vertex(4, np.array([3.0, 0.0, 0.0]))
+    v5 = Vertex(5, np.array([2.0, 1.0, 0.0]))
+
+    e3 = Edge(4, 3, 4, refine=True)
+    e4 = Edge(5, 4, 5, refine=True)
+    e5 = Edge(6, 5, 3, refine=True)
+
+    f1 = Facet(1, [4, 5, 6])
+
+    for v in [v0, v1, v2, v3, v4, v5]:
+        mesh.vertices[v.index] = v
+    for e in [e0, e1, e2, e3, e4, e5]:
+        mesh.edges[e.index] = e
+    for f in [f0, f1]:
+        mesh.facets[f.index] = f
+    mesh.bodies[0] = Body(0, [0, 1], options={"target_volume": 0})
+
+    return mesh
+
+
+def test_refine_edges_only_adjacent_facets_split():
+    mesh = create_two_triangles_edge_flags()
+    mesh_ref = refine_edges(mesh)
+
+    # Expect the first facet unchanged and the second split into four
+    assert len(mesh_ref.facets) == 5
+    assert len(mesh_ref.vertices) == 9
+    assert len(mesh_ref.edges) == 12
+
+    original_vertices = set(mesh.vertices.keys())
+    new_vertices = set(mesh_ref.vertices.keys()) - original_vertices
+
+    facets_without_new_vertices = [
+        f for f in mesh_ref.facets.values()
+        if new_vertices.isdisjoint({
+            mesh_ref.get_edge(ei).tail_index if ei > 0 else mesh_ref.get_edge(ei).head_index
+            for ei in orient_edges_cycle(f.edge_indices, mesh_ref)
+        })
+    ]
+    # Only the facet not incident to refined edges should remain
+    assert len(facets_without_new_vertices) == 1

@@ -11,7 +11,11 @@ from runtime.steppers.gradient_descent import GradientDescent
 from runtime.steppers.conjugate_gradient import ConjugateGradient
 from runtime.energy_manager import EnergyModuleManager
 from runtime.constraint_manager import ConstraintModuleManager
-from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
+from runtime.refinement import (
+    refine_triangle_mesh,
+    refine_polygonal_facets,
+    refine_edges,
+)
 from runtime.vertex_average import vertex_average
 from visualize_geometry import plot_geometry
 
@@ -105,7 +109,7 @@ def execute_command(cmd, mesh, minimizer, stepper):
         logger.info(f"Updated step size to {minimizer.step_size}")
     elif cmd == 'r':
         logger.info("Refining mesh...")
-        mesh = refine_triangle_mesh(mesh)
+        mesh = refine_edges(mesh)
         mesh = refine_polygonal_facets(mesh)
         minimizer.mesh = mesh
         logger.info("Mesh refinement complete.")

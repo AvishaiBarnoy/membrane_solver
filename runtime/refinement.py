@@ -410,3 +410,152 @@ def refine_triangle_mesh(mesh):
     new_mesh.build_connectivity_maps()
 
     return new_mesh
+
+
+def refine_edges(mesh: Mesh) -> Mesh:
+    """Refine all facets adjacent to edges marked with ``edge.refine``.
+
+    Each flagged edge is bisected and any incident triangular facets are
+    subdivided accordingly. Facets with no refined edges are copied
+    unchanged. The body assignments are updated to reference the new child
+    facets.
+    """
+
+    new_mesh = Mesh()
+    new_vertices = mesh.vertices.copy()
+    new_edges: dict[int, Edge] = {}
+    new_facets: dict[int, Facet] = {}
+    edge_lookup: dict[tuple[int, int], Edge] = {}
+    facet_to_new_facets: dict[int, list[int]] = {}
+
+    next_vertex_idx = max(new_vertices.keys(), default=-1) + 1
+
+    # Precompute midpoint vertices for edges that will be refined
+    edge_midpoints: dict[tuple[int, int], int] = {}
+    half_edge_template: dict[tuple[int, int], Edge] = {}
+    edge_template: dict[tuple[int, int], Edge] = {}
+
+    for eid, edge in mesh.edges.items():
+        a, b = edge.tail_index, edge.head_index
+        pair = (min(a, b), max(a, b))
+        edge_template[pair] = edge
+        if edge.refine:
+            midpoint_pos = 0.5 * (mesh.vertices[a].position + mesh.vertices[b].position)
+            mid_idx = next_vertex_idx
+            next_vertex_idx += 1
+            new_vertices[mid_idx] = Vertex(
+                index=mid_idx,
+                position=np.asarray(midpoint_pos, dtype=float),
+                fixed=edge.fixed,
+                options=edge.options.copy(),
+            )
+            edge_midpoints[pair] = mid_idx
+            half_edge_template[(min(a, mid_idx), max(a, mid_idx))] = edge
+            half_edge_template[(min(mid_idx, b), max(mid_idx, b))] = edge
+
+    new_mesh.vertices = new_vertices
+
+    def get_or_create_edge(v_from: int, v_to: int, template: Edge | None = None, facet: Facet | None = None) -> Edge:
+        key = (min(v_from, v_to), max(v_from, v_to))
+        if key in edge_lookup:
+            return edge_lookup[key]
+
+        idx = len(new_edges) + 1
+        if template is not None:
+            fixed = template.fixed
+            options = template.options.copy()
+        elif facet is not None:
+            fixed = facet.fixed
+            options = facet.options.copy()
+        else:
+            fixed = False
+            options = {}
+        e = Edge(idx, v_from, v_to, fixed=fixed, options=options)
+        new_edges[idx] = e
+        edge_lookup[key] = e
+        return e
+
+    for facet in mesh.facets.values():
+        oriented = orient_edges_cycle(facet.edge_indices, mesh)
+        edges = [mesh.get_edge(ei) for ei in oriented]
+
+        v0 = edges[0].tail_index
+        v1 = edges[0].head_index
+        v2 = edges[1].head_index
+
+        edge_info = [
+            (edges[0], v0, v1),
+            (edges[1], v1, v2),
+            (edges[2], v2, v0),
+        ]
+
+        triangles = [(v0, v1, v2)]
+
+        for e, va, vb in edge_info:
+            pair = (min(va, vb), max(va, vb))
+            if pair not in edge_midpoints:
+                continue
+            m_idx = edge_midpoints[pair]
+            new_tris: list[tuple[int, int, int]] = []
+            for a, b, c in triangles:
+                if {va, vb} <= {a, b, c}:
+                    vc = next(x for x in (a, b, c) if x not in {va, vb})
+                    new_tris.append((va, m_idx, vc))
+                    new_tris.append((m_idx, vb, vc))
+                else:
+                    new_tris.append((a, b, c))
+            triangles = new_tris
+
+        parent_normal = facet.normal(mesh)
+        child_ids: list[int] = []
+
+        for a, b, c in triangles:
+            pairs = [
+                (a, b),
+                (b, c),
+                (c, a),
+            ]
+            raw_edges: list[int] = []
+            for va, vb in pairs:
+                p = (min(va, vb), max(va, vb))
+                template = None
+                if p in half_edge_template:
+                    template = half_edge_template[p]
+                elif p in edge_template:
+                    template = edge_template[p]
+                edge_obj = get_or_create_edge(va, vb, template=template, facet=facet)
+                raw_edges.append(edge_obj.index)
+
+            new_mesh.edges = new_edges
+            cyc = orient_edges_cycle(raw_edges, new_mesh)
+            child = Facet(len(new_facets), cyc, facet.fixed, facet.options.copy())
+            if np.dot(child.normal(new_mesh), parent_normal) < 0:
+                child.edge_indices = [-idx for idx in reversed(child.edge_indices)]
+            new_facets[child.index] = child
+            child_ids.append(child.index)
+
+        facet_to_new_facets[facet.index] = child_ids
+
+    new_bodies: dict[int, Body] = {}
+    for b_idx, body in mesh.bodies.items():
+        new_f_ids = []
+        for fid in body.facet_indices:
+            new_f_ids.extend(facet_to_new_facets.get(fid, [fid]))
+        new_bodies[b_idx] = Body(
+            index=b_idx,
+            facet_indices=new_f_ids,
+            options=body.options.copy(),
+            target_volume=body.target_volume,
+        )
+
+    new_mesh.vertices = new_vertices
+    new_mesh.edges = new_edges
+    new_mesh.facets = new_facets
+    new_mesh.bodies = new_bodies
+    new_mesh.global_parameters = mesh.global_parameters
+    new_mesh.energy_modules = mesh.energy_modules
+    new_mesh.instructions = mesh.instructions
+
+    new_mesh.build_connectivity_maps()
+
+    return new_mesh
