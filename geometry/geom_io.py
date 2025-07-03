@@ -81,6 +81,10 @@ def parse_geometry(data: dict) -> Mesh:
                 logger.error(err_msg)
                 raise err_msg
             if "fixed" in options["constraints"]:
+                # TODO: move fixed out of out constraints and make
+                #       a fixed_edges_map in meshes, when we do energy/grad
+                #       calculations the map zeros or just skips these edges
+                #       make sure the fixed flag is turned on
                 constraint_module_names.append("fixed")
                 mesh.vertices[i].fixed = True
         if options.get("fixed", False):
