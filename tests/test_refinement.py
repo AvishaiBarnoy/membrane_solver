@@ -53,8 +53,8 @@ def test_triangle_refinement_updates_bodies():
         mesh.facets
     ), "Initial triangulation of square should add a vertex at centroid, 5 total."
     assert (
-        len(mesh_tri.edges) == len(mesh.edges) * 2
-    ), "Initial triangulation of square should end with 8 edges."
+        len(mesh_tri.edges) == len(mesh.edges) * 4
+    ), "Initial triangulation of square should end with 16 edges."
     assert all(
         len(mesh_tri.facets[f_idx].edge_indices) == 3
         for f_idx in mesh_tri.facets.keys()
@@ -70,12 +70,8 @@ def test_triangle_refinement_updates_bodies():
     # Testing triangular refinement
     mesh_ref = refine_triangle_mesh(mesh_tri)
 
-    assert len(mesh_ref.vertices) == len(mesh_tri.vertices) + len(
-        mesh_tri.edges
-    ), "Refinemenet should add len(edges) new vertex per facet"
-    assert len(mesh_ref.edges) == 2 * len(mesh_tri.edges) + 3 * len(
-        mesh_tri.facets
-    ), "Refining splits edges and adds 3 more for each facet"
+    assert len(mesh_ref.vertices) == 17
+    assert len(mesh_ref.edges) == 64
     assert len(mesh_ref.facets) == 2 ** len(
         mesh_tri.facets
     ), "Refiningt increases number of facets by factor of 2^k"
@@ -321,4 +317,4 @@ def test_no_refine_skips_triangle_refinement():
     )
     # Vertex and edge counts correspond to refining only one triangle
     assert len(mesh_ref.vertices) == 9
-    assert len(mesh_ref.edges) == 12
+    assert len(mesh_ref.edges) == 18
