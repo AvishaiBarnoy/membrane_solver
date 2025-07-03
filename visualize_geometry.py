@@ -1,9 +1,6 @@
 # visualize_geometry.py
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
-# visualize_geometry.py
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import os, sys
 
 # Import functions from your modules.
