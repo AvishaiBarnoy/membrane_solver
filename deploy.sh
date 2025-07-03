@@ -25,4 +25,5 @@ if [ -n "$*" ]; then
 	git commit -m "$msg"
 
 	# Push source and build repos.
-	git push origin main 
+	current_branch=$(git rev-parse --abbrev-ref HEAD)
+	git push origin "$current_branch"
