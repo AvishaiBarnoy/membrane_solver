@@ -1,8 +1,6 @@
 import numpy as np
 import logging
 from geometry.entities import Vertex, Edge, Facet, Body, Mesh
-from parameters.global_parameters import GlobalParameters
-import sys
 
 logger = logging.getLogger("membrane_solver")
 
