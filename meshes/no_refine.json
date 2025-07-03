@@ -1,6 +1,6 @@
 {
     "vertices": [
-        [0, 0, 0], 
+        [0, 0, 0],
         [1, 0, 0],
         [1, 0, 1],
         [0, 0, 1],
@@ -24,7 +24,7 @@
         [3, 4]
     ],
     "faces": [
-        [0, 1, 2, 3, {"no_refine": true}],
+        [0, 1, 2, 3, {"no_refine": true}], 
         ["r0", 8, 5, "r9"],
         [9, 6, -10, -1], 
         [-2, 10, 7, -11],
@@ -41,5 +41,5 @@
                         "gaussian_modulus": 0,
                         "volume_stiffness": 1e3
     },
-    "instructions" : ["g20", "r", "g100"]
+    "instructions": ["r", "s"]
 }
