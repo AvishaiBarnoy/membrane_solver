@@ -438,23 +438,96 @@ def refine_triangle_mesh(mesh):
                 
             elif sum(refinable_edges) == 2:
                 # Two edges are refinable - split into 3 triangles
-                # Implementation would go here for the 2-edge case
-                # For now, fall back to copying the original facet
-                raw_edges = []
-                for ei in oriented:
-                    edge = mesh.get_edge(ei)
-                    if ei > 0:
-                        e = get_or_create_edge(edge.tail_index, edge.head_index, parent_edge=edge)
-                        raw_edges.append(e.index)
-                    else:
-                        e = get_or_create_edge(edge.head_index, edge.tail_index, parent_edge=edge)
-                        raw_edges.append(-e.index)
+                # Identify which edge is NOT refinable and implement 1-to-3 subdivision
+                
+                if not refinable_edges[0]:  # v0-v1 edge is NOT refinable (Case 2b)
+                    # TODO: Case 2b (edges v1-v2 and v2-v0 refinable) is complex and needs further development
+                    # For now, fall back to copying the original facet to maintain stability
+                    raw_edges = []
+                    for ei in oriented:
+                        edge = mesh.get_edge(ei)
+                        if ei > 0:
+                            e = get_or_create_edge(edge.tail_index, edge.head_index, parent_edge=edge)
+                            raw_edges.append(e.index)
+                        else:
+                            e = get_or_create_edge(edge.head_index, edge.tail_index, parent_edge=edge)
+                            raw_edges.append(-e.index)
+                    new_mesh.edges.update(new_edges)
+                    cyc = orient_edges_cycle(raw_edges, new_mesh)
+                    nf = Facet(next_facet_idx, cyc, fixed=facet.fixed, options=facet.options.copy())
+                    new_facets[next_facet_idx] = nf
+                    next_facet_idx += 1
+                    child_facets = [nf]
+                    
+                    # Skip the normal edge creation and orientation code below
+                    for child_facet in child_facets:
+                        child_normal = child_facet.normal(new_mesh)
+                        if np.dot(child_normal, parent_normal) < 0:
+                            child_facet.edge_indices = [-idx for idx in reversed(child_facet.edge_indices)]
+                        new_facets[child_facet.index] = child_facet
+                    facet_to_new_facets[facet.index] = [f.index for f in child_facets]
+                    continue
+                
+                elif not refinable_edges[1]:  # v1-v2 edge is NOT refinable (Case 2c)
+                    # Edges v2-v0 and v0-v1 are refinable
+                    # Pattern: Create triangles using m20 and m01, keep v1-v2 unchanged
+                    
+                    # Triangle 1: (v2, m20, v1) - corner triangle at v2
+                    e1 = get_or_create_edge(v2, m20, parent_edge=parent_edges[2])
+                    e2 = get_or_create_edge(m20, v1, parent_facet=facet)  # diagonal
+                    e3 = get_or_create_edge(v1, v2, parent_edge=parent_edges[1])  # original edge
+                    
+                    # Triangle 2: (m20, v0, m01) - triangle using both midpoints
+                    e4 = get_or_create_edge(m20, v0, parent_edge=parent_edges[2])
+                    e5 = get_or_create_edge(v0, m01, parent_edge=parent_edges[0])
+                    e6 = get_or_create_edge(m01, m20, parent_facet=facet)  # connecting edge
+                    
+                    # Triangle 3: (m01, v1, v2) - triangle connecting back to non-refinable edge
+                    e7 = get_or_create_edge(m01, v1, parent_edge=parent_edges[0])
+                    e8 = get_or_create_edge(v1, v2, parent_edge=parent_edges[1])  # original edge (reused)
+                    e9 = get_or_create_edge(v2, m01, parent_facet=facet)  # diagonal
+                    
+                    raw1 = [e1.index, e2.index, e3.index]
+                    raw2 = [e4.index, e5.index, e6.index]
+                    raw3 = [e7.index, e8.index, e9.index]  # use separate edges
+                    
+                else:  # not refinable_edges[2], so v2-v0 edge is NOT refinable (Case 2a)
+                    # Edges v0-v1 and v1-v2 are refinable
+                    # Pattern: Create triangles using m01 and m12, keep v2-v0 unchanged
+                    
+                    # Triangle 1: (v0, m01, v2) - corner triangle at v0
+                    e1 = get_or_create_edge(v0, m01, parent_edge=parent_edges[0])
+                    e2 = get_or_create_edge(m01, v2, parent_facet=facet)  # diagonal
+                    e3 = get_or_create_edge(v2, v0, parent_edge=parent_edges[2])  # original edge
+                    
+                    # Triangle 2: (m01, v1, m12) - triangle using both midpoints
+                    e4 = get_or_create_edge(m01, v1, parent_edge=parent_edges[0])
+                    e5 = get_or_create_edge(v1, m12, parent_edge=parent_edges[1])
+                    e6 = get_or_create_edge(m12, m01, parent_facet=facet)  # connecting edge
+                    
+                    # Triangle 3: (m12, v2, v0) - triangle connecting back to non-refinable edge
+                    e7 = get_or_create_edge(m12, v2, parent_edge=parent_edges[1])
+                    e8 = get_or_create_edge(v2, v0, parent_edge=parent_edges[2])  # original edge (reused)
+                    e9 = get_or_create_edge(v0, m12, parent_facet=facet)  # diagonal
+                    
+                    raw1 = [e1.index, e2.index, e3.index]
+                    raw2 = [e4.index, e5.index, e6.index]
+                    raw3 = [e7.index, e8.index, e9.index]  # use separate edges
+                
                 new_mesh.edges.update(new_edges)
-                cyc = orient_edges_cycle(raw_edges, new_mesh)
-                nf = Facet(next_facet_idx, cyc, fixed=facet.fixed, options=facet.options.copy())
-                new_facets[next_facet_idx] = nf
-                next_facet_idx += 1
-                child_facets = [nf]
+                cyc1 = orient_edges_cycle(raw1, new_mesh)
+                cyc2 = orient_edges_cycle(raw2, new_mesh)
+                cyc3 = orient_edges_cycle(raw3, new_mesh)
+                
+                f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=facet.options.copy())
+                f2 = Facet(next_facet_idx + 1, cyc2, fixed=facet.fixed, options=facet.options.copy())
+                f3 = Facet(next_facet_idx + 2, cyc3, fixed=facet.fixed, options=facet.options.copy())
+                
+                new_facets[next_facet_idx] = f1
+                new_facets[next_facet_idx + 1] = f2
+                new_facets[next_facet_idx + 2] = f3
+                next_facet_idx += 3
+                child_facets = [f1, f2, f3]
 
         # Check if the child facets are oriented correctly and preserve parent normal
         for child_facet in child_facets:
