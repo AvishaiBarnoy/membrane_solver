@@ -127,7 +127,8 @@ def refine_polygonal_facets(mesh):
                 fixed=facet.fixed,
                 options=facet.options.copy(),
             )
-            # If parent facet has no_refine, mark the new edge as non-refinable
+            # Spoke edges created within no_refine facets should be marked non-refinable
+            # This is correct behavior - new edges within no_refine facets inherit no_refine
             if facet.options.get("no_refine", False):
                 e.options["no_refine"] = True
             new_edges[next_edge_idx] = e
@@ -244,29 +245,30 @@ def refine_triangle_mesh(mesh):
         return edge
 
     # Collect all edges that should be refined
-    # An edge should be refined if it belongs to at least one facet that will be refined
-    # AND the edge itself is not marked with no_refine
-    # AND none of the facets it belongs to have no_refine=True
+    # An edge should be refined if:
+    # 1. The edge itself is not marked with no_refine
+    # 2. The edge belongs to at least one refinable facet (not marked no_refine)
+    # This follows Evolver behavior: original boundary edges are refinable unless explicitly marked no_refine
     edges_to_refine = set()
-    edges_in_no_refine_facets = set()
     
-    # First, collect all edges that are in facets marked with no_refine
+    # Collect edges that should be refined
     for facet in mesh.facets.values():
-        if facet.options.get("no_refine", False):
-            for ei in facet.edge_indices:
-                edges_in_no_refine_facets.add(abs(ei))
-    
-    # Then, collect edges that should be refined
-    for facet in mesh.facets.values():
-        if not facet.options.get("no_refine", False):  # Only consider refinable facets
-            for ei in facet.edge_indices:
-                edge_idx = abs(ei)
-                edge = mesh.get_edge(edge_idx)
-                # Edge should be refined if:
-                # 1. It's not marked no_refine itself
-                # 2. It's not in a facet marked no_refine
-                if (not edge.options.get("no_refine", False) and 
-                    edge_idx not in edges_in_no_refine_facets):
+        for ei in facet.edge_indices:
+            edge_idx = abs(ei)
+            edge = mesh.get_edge(edge_idx)
+            # Edge should be refined if:
+            # 1. It's not marked no_refine itself
+            # 2. At least one facet containing this edge is refinable
+            if not edge.options.get("no_refine", False):
+                # Check if this edge belongs to at least one refinable facet
+                belongs_to_refinable_facet = False
+                for other_facet in mesh.facets.values():
+                    if edge_idx in [abs(e) for e in other_facet.edge_indices]:
+                        if not other_facet.options.get("no_refine", False):
+                            belongs_to_refinable_facet = True
+                            break
+                
+                if belongs_to_refinable_facet:
                     edges_to_refine.add(edge_idx)
 
     # Step 1: Compute midpoint vertices only for edges that will be refined
