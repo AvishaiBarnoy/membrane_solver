@@ -441,32 +441,28 @@ def refine_triangle_mesh(mesh):
                 # Identify which edge is NOT refinable and implement 1-to-3 subdivision
                 
                 if not refinable_edges[0]:  # v0-v1 edge is NOT refinable (Case 2b)
-                    # TODO: Case 2b (edges v1-v2 and v2-v0 refinable) is complex and needs further development
-                    # For now, fall back to copying the original facet to maintain stability
-                    raw_edges = []
-                    for ei in oriented:
-                        edge = mesh.get_edge(ei)
-                        if ei > 0:
-                            e = get_or_create_edge(edge.tail_index, edge.head_index, parent_edge=edge)
-                            raw_edges.append(e.index)
-                        else:
-                            e = get_or_create_edge(edge.head_index, edge.tail_index, parent_edge=edge)
-                            raw_edges.append(-e.index)
-                    new_mesh.edges.update(new_edges)
-                    cyc = orient_edges_cycle(raw_edges, new_mesh)
-                    nf = Facet(next_facet_idx, cyc, fixed=facet.fixed, options=facet.options.copy())
-                    new_facets[next_facet_idx] = nf
-                    next_facet_idx += 1
-                    child_facets = [nf]
+                    # Edges v1-v2 and v2-v0 are refinable
+                    # The original triangle becomes a 4-sided polygon: v0 → v1 → m12 → v2 → m20 → v0
+                    # We need to triangulate this polygon into 3 triangles using diagonal triangulation
                     
-                    # Skip the normal edge creation and orientation code below
-                    for child_facet in child_facets:
-                        child_normal = child_facet.normal(new_mesh)
-                        if np.dot(child_normal, parent_normal) < 0:
-                            child_facet.edge_indices = [-idx for idx in reversed(child_facet.edge_indices)]
-                        new_facets[child_facet.index] = child_facet
-                    facet_to_new_facets[facet.index] = [f.index for f in child_facets]
-                    continue
+                    # Triangle 1: (v0, v1, m12) - uses original edge v0-v1 and half of refined edge v1-v2
+                    e1 = get_or_create_edge(v0, v1, parent_edge=parent_edges[0])  # original edge
+                    e2 = get_or_create_edge(v1, m12, parent_edge=parent_edges[1])  # split from v1-v2
+                    e3 = get_or_create_edge(m12, v0, parent_facet=facet)  # diagonal
+                    
+                    # Triangle 2: (v0, m12, m20) - diagonal triangle connecting the two midpoints
+                    e4 = get_or_create_edge(v0, m12, parent_facet=facet)  # diagonal (reused)
+                    e5 = get_or_create_edge(m12, m20, parent_facet=facet)  # connecting edge
+                    e6 = get_or_create_edge(m20, v0, parent_edge=parent_edges[2])  # split from v2-v0
+                    
+                    # Triangle 3: (m12, v2, m20) - uses the other halves of the refined edges
+                    e7 = get_or_create_edge(m12, v2, parent_edge=parent_edges[1])  # split from v1-v2
+                    e8 = get_or_create_edge(v2, m20, parent_edge=parent_edges[2])  # split from v2-v0
+                    e9 = get_or_create_edge(m20, m12, parent_facet=facet)  # connecting edge
+                    
+                    raw1 = [e1.index, e2.index, e3.index]
+                    raw2 = [e4.index, e5.index, e6.index]
+                    raw3 = [e7.index, e8.index, e9.index]
                 
                 elif not refinable_edges[1]:  # v1-v2 edge is NOT refinable (Case 2c)
                     # Edges v2-v0 and v0-v1 are refinable
