@@ -20,6 +20,10 @@ class Vertex:
     fixed: bool = False
     options: Dict[str, Any] = field(default_factory=dict)
 
+    def copy(self):
+        return Vertex(self.index, self.position.copy(), self.fixed,
+                      self.options.copy())
+
     def project_position(self, pos: np.ndarray) -> np.ndarray:
         """
         Project the given position onto the constraint, if any.
@@ -55,6 +59,10 @@ class Edge:
     fixed: bool = False
     options: Dict[str, Any] = field(default_factory=dict)
 
+    def copy(self):
+        return Edge(self.index, self.tail_index, self.head_index, self.refine,
+                    self.fixed, self.options.copy())
+
     def reversed(self) -> "Edge":
         return Edge(
             index=self.index,  # convention: reversed edge gets negative index
@@ -74,8 +82,14 @@ class Edge:
 class Facet:
     index: int
     edge_indices: List[int]  # Signed indices: +n = forward, -n = reversed (including -1 for "r0")
+    refine: bool = True
     fixed: bool = False
+    surface_tension: float = 1.0
     options: Dict[str, Any] = field(default_factory=dict)
+
+    def copy(self):
+        return Facet(self.index, self.edge_indices[:], self.refine, self.fixed,
+                     self.options.copy())
 
     def compute_normal(self, mesh) -> np.ndarray:
         """Compute (non-normalized) normal vector using right-hand rule from first three vertices."""
@@ -182,6 +196,10 @@ class Body:
     target_volume: Optional[float] = 0.0
     options: Dict[str, Any] = field(default_factory=dict)
 
+    def copy(self):
+        return Body(self.index, self.facet_indices[:],
+                    self.target_volume, self.options.copy())
+
     def compute_volume(self, mesh) -> float:
         volume = 0.0
         for facet_idx in self.facet_indices:
@@ -286,6 +304,18 @@ class Mesh:
     vertex_to_facets: Dict[int, set] = field(default_factory=dict)
     vertex_to_edges: Dict[int, set] = field(default_factory=dict)
     edge_to_facets: Dict[int, set] = field(default_factory=dict)
+
+    def copy(self):
+        import copy
+        new_mesh = Mesh()
+        new_mesh.vertices = {vid: v.copy() for vid, v in self.vertices.items()}
+        new_mesh.edges = {eid: e.copy() for eid, e in self.edges.items()}
+        new_mesh.facets = {fid: f.copy() for fid, f in self.facets.items()}
+        if hasattr(self, 'bodies'):
+            new_mesh.bodies = {bid: b.copy() for bid, b in self.bodies.items()}
+        if hasattr(self, 'global_parameters'):
+            new_mesh.global_parameters = copy.deepcopy(self.global_parameters)
+        return new_mesh
 
     def get_edge(self, index: int) -> "Edge":
         if index > 0:
