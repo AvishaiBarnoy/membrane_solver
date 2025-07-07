@@ -50,7 +50,7 @@ class Minimizer:
             constraint_modules if constraint_modules is not None else mesh.constraint_modules
         )
         self.constraint_modules = [
-            self.constraint_manager.get_constraint(constraint) for constraint in constraint_list
+            self.constraint_manager.get_module(constraint) for constraint in constraint_list
         ]
 
         logger.debug(f"Loaded energy modules: {self.energy_manager.modules.keys()}")
@@ -163,6 +163,11 @@ STEP SIZE:\t {self.step_size}
             step_success, self.step_size = self.stepper.step(
                 self.mesh, grad, self.step_size, self.compute_energy
             )
+
+            # Enforce hard constraints after each step using Lagrange multipliers
+            if step_success and self.constraint_manager.modules:
+                logger.debug("Enforcing hard constraints...")
+                self.constraint_manager.enforce_all(self.mesh)
 
             if not step_success:
                 zero_step_counter += 1

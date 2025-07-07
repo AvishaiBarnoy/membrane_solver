@@ -9,10 +9,12 @@ class GlobalParameters:
         self._params = {
             "surface_tension": 1.0,  # Default value
             "volume_stiffness": 1000.0,  # Default value
-            "step_size": 1.0,
+            "step_size": 0.001,
+            "tol": 1e-6,
             "intrinsic_curvature": 0.0,
             "bending_modulus": 0.0,
-            "gaussian_modulus": 0.0
+            "gaussian_modulus": 0.0,
+            "volume_multiplier": 0.0,  # Lagrange multiplier for hard volume constraints
         }
         # Load initial parameters if provided
         if initial_params:
