@@ -13,6 +13,7 @@ from runtime.energy_manager import EnergyModuleManager
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
 from runtime.vertex_average import vertex_average
+from runtime.equiangulation import equiangulate_mesh
 from visualize_geometry import plot_geometry
 
 logger = None
@@ -60,6 +61,8 @@ def parse_instructions(instr):
         elif cmd.startswith("V") or cmd == "vertex_average":
             # TODO: expand to be target specific vertices "vertex_average [2,5]" 
             result.append(cmd)
+        elif cmd == 'u':
+            result.append('u')
         elif cmd.startswith('t'):
             result.append(cmd)
         elif cmd == "save":
@@ -121,6 +124,11 @@ def execute_command(cmd, mesh, minimizer, stepper):
     elif cmd == 'vertex_average':
         vertex_average(mesh)
         logger.info("Vertex averaging done.")
+    elif cmd == 'u':
+        logger.info("Starting equiangulation...")
+        mesh = equiangulate_mesh(mesh)
+        minimizer.mesh = mesh
+        logger.info("Equiangulation complete.")
     elif cmd == 'visualize' or cmd == "s":
         plot_geometry(mesh, show_indices=False)
     elif cmd == 'save':

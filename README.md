@@ -21,7 +21,7 @@ returned mesh is therefore ready for optimization without further refinement.
 
 
 ## TODO:
-1. equiangulation
+1. ~~equiangulation~~ ✅ COMPLETED - Available via 'u' command
 3. add fixed option 
 4. add tests:
     4.1 test fixed
