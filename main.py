@@ -171,11 +171,38 @@ def main():
     args = parser.parse_args()
 
     if not args.input:
-        try:
-            args.input = input('Input mesh JSON file: ').strip()
-        except EOFError:
-            print('No input file provided.', file=sys.stderr)
-            sys.exit(1)
+        # Try to find a default input file in current directory first, then in meshes/
+        default_names = ['input.json', 'default.json', 'geometry.json', 'sample.json']
+        meshes_names = ['sample_geometry.json', 'cube.json', 'testing_geometry.json']
+        
+        found_input = None
+        
+        # First try current directory
+        for name in default_names:
+            if os.path.isfile(name):
+                found_input = name
+                if not args.quiet:
+                    print(f"Found default input file in current directory: {name}")
+                break
+        
+        # If not found, try meshes/ directory
+        if not found_input:
+            for name in meshes_names:
+                meshes_path = os.path.join('meshes', name)
+                if os.path.isfile(meshes_path):
+                    found_input = meshes_path
+                    if not args.quiet:
+                        print(f"Found default input file in meshes/ directory: {meshes_path}")
+                    break
+        
+        if found_input:
+            args.input = found_input
+        else:
+            # No default file found, try interactive input
+            try:
+                args.input = input('Input mesh JSON file: ').strip()
+            except EOFError:
+                raise EOFError('No input file provided and no default input file found in current directory or meshes/ directory')
     try:
         args.input = resolve_json_path(args.input)
     except FileNotFoundError as exc:
