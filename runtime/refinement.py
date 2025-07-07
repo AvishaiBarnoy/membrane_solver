@@ -110,7 +110,7 @@ def refine_polygonal_facets(mesh):
         centroid_vertex = Vertex(
             index=centroid_idx,
             position=np.asarray(centroid_pos, dtype=float),
-            fixed=facet.fixed,
+            fixed=False,
             options=centroid_options,
         )
         new_vertices[centroid_idx] = centroid_vertex
@@ -124,7 +124,7 @@ def refine_polygonal_facets(mesh):
                 next_edge_idx,
                 vi,
                 centroid_vertex.index,
-                fixed=facet.fixed,
+                fixed=False,  # Don't inherit fixed property - let spoke edges move
                 options=facet.options.copy(),
             )
             # Spoke edges created within no_refine facets should be marked non-refinable
@@ -165,7 +165,7 @@ def refine_polygonal_facets(mesh):
             cycled_edges = orient_edges_cycle(child_edges, new_mesh)
 
             child_facet = Facet(
-                child_idx, cycled_edges, fixed=facet.fixed, options=child_options
+                child_idx, cycled_edges, fixed=False, options=child_options  # Don't inherit fixed property
             )
 
             # After creating child_facet:
@@ -233,11 +233,11 @@ def refine_triangle_mesh(mesh):
         
         # Inherit properties from parent edge if available
         if parent_edge:
-            edge.fixed = parent_edge.fixed
+            edge.fixed = False  # Don't inherit fixed property - let new edges move
             edge.options = parent_edge.options.copy()
         elif parent_facet:
             # For new edges created within a facet, inherit facet properties
-            edge.fixed = parent_facet.fixed
+            edge.fixed = False  # Don't inherit fixed property - let new edges move  
             edge.options = parent_facet.options.copy()
             # If parent facet has no_refine, mark the new edge as non-refinable
             if parent_facet.options.get("no_refine", False):
@@ -287,7 +287,7 @@ def refine_triangle_mesh(mesh):
             midpoint = Vertex(
                 midpoint_idx,
                 np.asarray(midpoint_position, dtype=float),
-                fixed=edge.fixed,
+                fixed=False,  # Don't inherit fixed property - let midpoints move
                 options=edge.options.copy(),
             )
             new_vertices[midpoint_idx] = midpoint
@@ -321,7 +321,7 @@ def refine_triangle_mesh(mesh):
                     raw_edges.append(-e.index)
             new_mesh.edges.update(new_edges)
             cyc = orient_edges_cycle(raw_edges, new_mesh)
-            nf = Facet(facet.index, cyc, fixed=facet.fixed, options=facet.options.copy())
+            nf = Facet(facet.index, cyc, fixed=False, options=facet.options.copy())  # Don't inherit fixed
             new_facets[facet.index] = nf
             facet_to_new_facets[facet.index] = [facet.index]
             continue
@@ -349,7 +349,7 @@ def refine_triangle_mesh(mesh):
             new_mesh.edges.update(new_edges)
             raw1 = [e1.index, e2.index, e3.index]
             cyc1 = orient_edges_cycle(raw1, new_mesh)
-            f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=facet.options.copy())
+            f1 = Facet(next_facet_idx, cyc1, fixed=False, options=facet.options.copy())  # Don't inherit fixed
             new_facets[next_facet_idx] = f1
             next_facet_idx += 1
 
@@ -361,7 +361,7 @@ def refine_triangle_mesh(mesh):
             new_mesh.edges.update(new_edges)
             raw2 = [e1.index, e2.index, e3.index]
             cyc2 = orient_edges_cycle(raw2, new_mesh)
-            f2 = Facet(next_facet_idx, cyc2, fixed=facet.fixed, options=facet.options.copy())
+            f2 = Facet(next_facet_idx, cyc2, fixed=False, options=facet.options.copy())  # Don't inherit fixed
             new_facets[next_facet_idx] = f2
             next_facet_idx += 1
 
@@ -373,7 +373,7 @@ def refine_triangle_mesh(mesh):
             new_mesh.edges.update(new_edges)
             raw3 = [e1.index, e2.index, e3.index]
             cyc3 = orient_edges_cycle(raw3, new_mesh)
-            f3 = Facet(next_facet_idx, cyc3, fixed=facet.fixed, options=facet.options.copy())
+            f3 = Facet(next_facet_idx, cyc3, fixed=False, options=facet.options.copy())  # Don't inherit fixed
             new_facets[next_facet_idx] = f3
             next_facet_idx += 1
 
@@ -384,7 +384,7 @@ def refine_triangle_mesh(mesh):
             new_mesh.edges.update(new_edges)
             raw4 = [e1.index, e2.index, e3.index]
             cyc4 = orient_edges_cycle(raw4, new_mesh)
-            f4 = Facet(next_facet_idx, cyc4, fixed=facet.fixed, options=facet.options.copy())
+            f4 = Facet(next_facet_idx, cyc4, fixed=False, options=facet.options.copy())  # Don't inherit fixed
             new_facets[next_facet_idx] = f4
             next_facet_idx += 1
 
@@ -434,8 +434,8 @@ def refine_triangle_mesh(mesh):
                 raw2 = [e4.index, e5.index, e6.index]
                 cyc1 = orient_edges_cycle(raw1, new_mesh)
                 cyc2 = orient_edges_cycle(raw2, new_mesh)
-                f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=facet.options.copy())
-                f2 = Facet(next_facet_idx + 1, cyc2, fixed=facet.fixed, options=facet.options.copy())
+                f1 = Facet(next_facet_idx, cyc1, fixed=False, options=facet.options.copy())  # Don't inherit fixed
+                f2 = Facet(next_facet_idx + 1, cyc2, fixed=False, options=facet.options.copy())  # Don't inherit fixed
                 new_facets[next_facet_idx] = f1
                 new_facets[next_facet_idx + 1] = f2
                 next_facet_idx += 2
@@ -520,9 +520,9 @@ def refine_triangle_mesh(mesh):
                 cyc2 = orient_edges_cycle(raw2, new_mesh)
                 cyc3 = orient_edges_cycle(raw3, new_mesh)
                 
-                f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=facet.options.copy())
-                f2 = Facet(next_facet_idx + 1, cyc2, fixed=facet.fixed, options=facet.options.copy())
-                f3 = Facet(next_facet_idx + 2, cyc3, fixed=facet.fixed, options=facet.options.copy())
+                f1 = Facet(next_facet_idx, cyc1, fixed=False, options=facet.options.copy())  # Don't inherit fixed
+                f2 = Facet(next_facet_idx + 1, cyc2, fixed=False, options=facet.options.copy())  # Don't inherit fixed
+                f3 = Facet(next_facet_idx + 2, cyc3, fixed=False, options=facet.options.copy())  # Don't inherit fixed
                 
                 new_facets[next_facet_idx] = f1
                 new_facets[next_facet_idx + 1] = f2
