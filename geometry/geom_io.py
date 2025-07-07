@@ -154,6 +154,10 @@ def parse_geometry(data: dict) -> Mesh:
         elif "energy" not in options:
             mesh.facets[i].options["energy"] = ["surface"]
             energy_module_names.add("surface")
+        
+        # Ensure all facets have surface_tension set
+        if "surface_tension" not in options:
+            mesh.facets[i].options["surface_tension"] = mesh.global_parameters.get("surface_tension", 1.0)
 
         # Facets constraint modules
         if "constraints" in options:

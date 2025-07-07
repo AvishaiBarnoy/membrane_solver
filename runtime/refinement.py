@@ -149,10 +149,13 @@ def refine_polygonal_facets(mesh):
             spoke_b = spokes[b]
             spoke_a = spokes[a]
 
-            child_options = facet.options
-            child_options["surface_tension"] = facet.options.get("surface_tension", 1.0)
+            child_options = facet.options.copy()
+            child_options["surface_tension"] = facet.options.get("surface_tension", mesh.global_parameters.get("surface_tension", 1.0))
             child_options["parent_facet"] = facet.index
             child_options["constraints"] = facet.options.get("constraints", [])
+            # Ensure child facets have energy module set
+            if "energy" not in child_options:
+                child_options["energy"] = ["surface"]
 
             # build the new facet's edge‐list **in the correct orientation**:
             child_edges = [boundary_edge.index, spoke_b.index, -spoke_a.index]
