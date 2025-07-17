@@ -31,9 +31,7 @@ returned mesh is therefore ready for optimization without further refinement.
 8. surface area constraints:
     8.1. local - specific faces
     8.2. global - total area conservation -> maybe replace volume constraint?
-9. different library for visualization, for example:
-    12.1 https://docs.pyvista.org/
-    12.2 https://vedo.embl.es/
+9. different library for visualization, that allows minimization while updating the figure on display
 10. add option for "comment" attribute in the json file, maybe change to
     another format that supports comments.
 11. when running add -v/--verbose options to print out log messages or just
