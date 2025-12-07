@@ -52,6 +52,9 @@ class Minimizer:
         self.constraint_modules = [
             self.constraint_manager.get_constraint(constraint) for constraint in constraint_list
         ]
+        self._has_enforceable_constraints = any(
+            hasattr(mod, "enforce_constraint") for mod in self.constraint_modules
+        )
 
         logger.debug(f"Loaded energy modules: {self.energy_manager.modules.keys()}")
         logger.debug(f"Mesh energy_modules: {self.mesh.energy_modules}")
@@ -162,6 +165,12 @@ STEP SIZE:\t {self.step_size}
             step_success, self.step_size = self.stepper.step(
                 self.mesh, grad, self.step_size, self.compute_energy
             )
+
+            if self._has_enforceable_constraints:
+                self.constraint_manager.enforce_all(
+                    self.mesh,
+                    global_params=self.global_params,
+                )
 
             if not step_success:
                 zero_step_counter += 1
