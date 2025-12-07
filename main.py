@@ -56,6 +56,8 @@ def parse_instructions(instr):
             result.append('cg')
         elif cmd == 'gd':
             result.append('gd')
+        elif cmd in {'h', 'help', '?'}:
+            result.append('help')
         elif cmd == "visualize" or cmd == "s":
             result.append(cmd)
         elif cmd.startswith("V") or cmd == "vertex_average":
@@ -74,7 +76,29 @@ def parse_instructions(instr):
 def execute_command(cmd, mesh, minimizer, stepper):
     """Handle a single simulation command."""
 
-    if cmd == 'cg':
+    if cmd == 'help':
+        # Print interactive command help and CLI options
+        print("Interactive commands:")
+        print("  gN            Run N minimization steps (e.g. g5, g10)")
+        print("  gd / cg       Switch to Gradient Descent / Conjugate Gradient stepper")
+        print("  tX            Set step size to X (e.g. t1e-3)")
+        print("  r             Refine mesh (triangle refinement + polygonal)")
+        print("  V / Vn        Vertex averaging once or n times (e.g. V5)")
+        print("  vertex_average Same as V")
+        print("  u             Equiangulate mesh")
+        print("  visualize / s Plot current geometry")
+        print("  save          Save geometry to 'interactive.temp'")
+        print("  quit / exit / q  Leave interactive mode")
+        print()
+        print("Command-line options (when starting the solver):")
+        print("  -i, --input PATH          Input mesh JSON file")
+        print("  -o, --output PATH         Output mesh JSON file (default: output.json)")
+        print("  --instructions PATH       Instruction file (one command per line)")
+        print("  --log PATH                Log file path (default: membrane_solver.log)")
+        print("  -q, --quiet               Suppress console output")
+        print("  --debug                   Enable verbose debug logging")
+        print("  --non-interactive         Do not enter interactive prompt after instructions")
+    elif cmd == 'cg':
         logger.info("Switching to Conjugate Gradient stepper.")
         stepper = ConjugateGradient()
         minimizer.stepper = stepper
@@ -166,6 +190,8 @@ def main():
     parser.add_argument('--log', default=None, help='Optional log file')
     parser.add_argument('-q', '--quiet', action='store_true',
                         help='Suppress console output')
+    parser.add_argument('--debug', action='store_true',
+                        help='Enable verbose debug logging')
     parser.add_argument('--non-interactive', action='store_true',
                         help="Skip interactive mode after executing instructions")
     args = parser.parse_args()
@@ -183,8 +209,11 @@ def main():
         sys.exit(1)
 
     global logger
-    logger = setup_logging(args.log if args.log else 'membrane_solver.log',
-                           quiet=args.quiet)
+    logger = setup_logging(
+        args.log if args.log else 'membrane_solver.log',
+        quiet=args.quiet,
+        debug=args.debug,
+    )
 
     # Load mesh and parameters
     data = load_data(args.input)

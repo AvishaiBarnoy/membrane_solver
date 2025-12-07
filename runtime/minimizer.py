@@ -76,7 +76,6 @@ STEP SIZE:\t {self.step_size}
             idx: np.zeros(3) for idx in self.mesh.vertices
         }
 
-        #self.energy_modules = set(self.energy_modules)
         for module in self.energy_modules:
             # Each energy module must implement compute_energy_and_gradient
             E_mod, g_mod = module.compute_energy_and_gradient(
@@ -86,7 +85,6 @@ STEP SIZE:\t {self.step_size}
             for vidx, gvec in g_mod.items():
                 grad[vidx] += gvec
 
-        V  = self.mesh.compute_total_volume()
         return total_energy, grad
 
     def compute_energy(self):
@@ -154,10 +152,11 @@ STEP SIZE:\t {self.step_size}
                         "step_success": True, "iterations": i + 1,
                         "terminated_early": True}
 
-            # Compute total area
-            total_area = sum(facet.compute_area(self.mesh) for facet in self.mesh.facets.values())
-            # Print step details
             if not self.quiet:
+                # Compute total area only when needed for diagnostics
+                total_area = sum(
+                    facet.compute_area(self.mesh) for facet in self.mesh.facets.values()
+                )
                 print(f"Step {i:4d}: Area = {total_area:.5f}, Energy = {E:.5f}, Step Size  = {self.step_size:.2e}")
 
             step_success, self.step_size = self.stepper.step(
@@ -179,4 +178,3 @@ STEP SIZE:\t {self.step_size}
         return {"energy": E, "gradient": grad, "mesh": self.mesh,
                 "step_success": step_success, "iterations": n_steps,
                 "terminated_early": False}
-

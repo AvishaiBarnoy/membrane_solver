@@ -22,6 +22,8 @@ returned mesh is therefore ready for optimization without further refinement.
 
 ## TODO:
 1. ~~equiangulation~~ ✅ COMPLETED - Available via 'u' command
+2. use https://fdmatoz.github.io/PyMembrane/pythonapi/bending.html for
+   reference
 3. add fixed option 
 4. add tests:
     4.1 test fixed
@@ -39,6 +41,7 @@ returned mesh is therefore ready for optimization without further refinement.
 12. add "quiet" mode for minimization
 13. initial energy calculation after loading -> test modules
 14. interactive mode while showing updating visualization
+        idea: https://matplotlib.org/stable/gallery/animation/double_pendulum.html#sphx-glr-gallery-animation-double-pendulum-py
 15. visualization script - exporting to obj, vtk, etc.
 16. remove "options" and have specific categories and attributes.
         i.e., a constraints category, energy category, etc.
