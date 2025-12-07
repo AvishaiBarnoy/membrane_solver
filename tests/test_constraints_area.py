@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from modules.constraints import body_area as body_area_constraint
 from modules.constraints import fix_facet_area as facet_area_constraint
+from modules.constraints import global_area as global_area_constraint
 
 
 def build_tetra_mesh() -> Mesh:
@@ -56,6 +57,18 @@ def build_single_facet_mesh() -> Mesh:
     mesh = Mesh(vertices=vertices, edges=edges, facets={0: facet}, bodies={})
     mesh.build_connectivity_maps()
     return mesh
+
+
+def test_global_area_constraint_enforces_target():
+    mesh = build_tetra_mesh()
+    initial_area = mesh.compute_total_surface_area()
+    target_area = initial_area * 1.1
+    mesh.global_parameters.set("target_surface_area", target_area)
+
+    global_area_constraint.enforce_constraint(mesh, tol=1e-10, max_iter=20)
+
+    final_area = mesh.compute_total_surface_area()
+    assert abs(final_area - target_area) < 1e-5
 
 
 def test_body_area_constraint_enforces_target():
