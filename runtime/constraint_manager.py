@@ -11,7 +11,7 @@ class ConstraintModuleManager:
         for name in module_names:
             try:
                 self.modules[name] = importlib.import_module(f"modules.constraints.{name}")
-                logger.info(f"Loaded energy module: {name}")
+                logger.info(f"Loaded constraint module: {name}")
             except ImportError as e:
                 logger.error(f"Could not load constraint module '{name}': {e}")
                 raise
@@ -24,6 +24,10 @@ class ConstraintModuleManager:
         if mod in self.modules.keys():
             return self.modules[mod]
         raise KeyError(f"Constraint module '{mod}' not found.")
+
+    def get_constraint(self, mod):
+        """Backward-compatible alias for ``get_module``."""
+        return self.get_module(mod)
 
     def _load_modules(self, names):
         loaded = {}
@@ -40,6 +44,9 @@ class ConstraintModuleManager:
 
     def enforce_all(self, mesh, **kwargs):
         for name, module in self.modules.items():
+            if not hasattr(module, "enforce_constraint"):
+                logger.debug(f"Constraint module '{name}' has no enforce_constraint; skipping.")
+                continue
             logger.debug(f"Enforcing constraint: {name}")
             module.enforce_constraint(mesh, **kwargs)
 
@@ -48,4 +55,3 @@ class ConstraintModuleManager:
 
     def __getitem__(self, name):
         return self.modules[name]
-

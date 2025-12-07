@@ -1,7 +1,10 @@
 import os
+import sys
 
 import numpy as np
 import pytest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry
 from runtime.energy_manager import EnergyModuleManager
@@ -13,7 +16,7 @@ from runtime.steppers.gradient_descent import GradientDescent
 def test_cube_energy_and_volume_improve():
     """End-to-end sanity check: cube evolves toward target volume and lower energy."""
 
-    cube_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "meshes", "cube.json")
+    cube_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "meshes", "cube2.json")
     data = load_data(cube_path)
     mesh = parse_geometry(data)
 

@@ -36,3 +36,5 @@ membrane_solver
 .DS_Store
 .venv/
 docs/
+data/
+results/
