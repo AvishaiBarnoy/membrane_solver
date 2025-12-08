@@ -136,13 +136,32 @@ STEP SIZE:\t {self.step_size}
                 grad[bidx] = body.constraint.project_gradient(grad[bidx])
 
 
+    def _enforce_constraints(self):
+        if self._has_enforceable_constraints:
+            self.constraint_manager.enforce_all(
+                self.mesh,
+                global_params=self.global_params,
+            )
+
     def minimize(self, n_steps: int = 1):
         """Run the optimization loop for ``n_steps`` iterations."""
         zero_step_counter = 0
-
+        step_success = True
         max_zero_steps = 5  # You can tune this
 
-        for i in range(0, n_steps + 1):
+        if n_steps <= 0:
+            E, grad = self.compute_energy_and_gradient()
+            self._enforce_constraints()
+            return {
+                "energy": E,
+                "gradient": grad,
+                "mesh": self.mesh,
+                "step_success": True,
+                "iterations": 0,
+                "terminated_early": True,
+            }
+
+        for i in range(n_steps):
             E, grad = self.compute_energy_and_gradient()
             self.project_constraints(grad)
 
@@ -163,14 +182,12 @@ STEP SIZE:\t {self.step_size}
                 print(f"Step {i:4d}: Area = {total_area:.5f}, Energy = {E:.5f}, Step Size  = {self.step_size:.2e}")
 
             step_success, self.step_size = self.stepper.step(
-                self.mesh, grad, self.step_size, self.compute_energy
+                self.mesh,
+                grad,
+                self.step_size,
+                self.compute_energy,
+                constraint_enforcer=self._enforce_constraints if self._has_enforceable_constraints else None,
             )
-
-            if self._has_enforceable_constraints:
-                self.constraint_manager.enforce_all(
-                    self.mesh,
-                    global_params=self.global_params,
-                )
 
             if not step_success:
                 zero_step_counter += 1

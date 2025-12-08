@@ -189,6 +189,52 @@ class Facet:
 
         return grad
 
+    def compute_area_and_gradient(self, mesh: "Mesh") -> tuple[float, Dict[int, np.ndarray]]:
+        """
+        Compute both the facet area and its gradient with respect to vertex positions.
+
+        This combines the work of ``compute_area`` and ``compute_area_gradient`` so
+        callers that need both can avoid redundant geometric computation.
+        """
+        # ordered vertex loop
+        v_ids: list[int] = []
+        for signed_ei in self.edge_indices:
+            edge = mesh.get_edge(signed_ei)
+            tail = edge.tail_index
+            if not v_ids or v_ids[-1] != tail:
+                v_ids.append(tail)
+
+        grad: Dict[int, np.ndarray] = {i: np.zeros(3) for i in v_ids}
+        if len(v_ids) < 3:
+            return 0.0, grad
+
+        v0 = mesh.vertices[v_ids[0]].position
+        v_pos = np.array([mesh.vertices[i].position for i in v_ids])
+        va = v_pos[1:-1] - v0
+        vb = v_pos[2:] - v0
+
+        n = np.cross(va, vb)
+        A = np.linalg.norm(n, axis=1)
+        mask = A >= 1e-12
+        if not np.any(mask):
+            return 0.0, grad
+
+        n_hat = n[mask] / A[mask][:, None]
+        # total area is sum of triangle areas 0.5 * |n|
+        area = float(0.5 * A[mask].sum())
+
+        grad[v_ids[0]] += 0.5 * np.cross(va[mask], n_hat).sum(axis=0)
+
+        cross_vb_va = np.cross(vb[mask] - va[mask], n_hat)
+        cross_v0_vb = np.cross(-vb[mask], n_hat)
+        inner_ids = np.array(v_ids[1:-1])
+        next_ids = np.array(v_ids[2:])
+        for idx, (a, b) in enumerate(zip(inner_ids[mask], next_ids[mask])):
+            grad[a] += 0.5 * cross_vb_va[idx]
+            grad[b] += 0.5 * cross_v0_vb[idx]
+
+        return area, grad
+
 @dataclass
 class Body:
     index: int
@@ -289,6 +335,58 @@ class Body:
             cross = np.cross(v1, v2)
             area += 0.5 * np.linalg.norm(cross, axis=1).sum()
         return area
+
+    def compute_volume_and_gradient(self, mesh: "Mesh") -> tuple[float, Dict[int, np.ndarray]]:
+        """
+        Compute both the body volume and its gradient with respect to vertex positions.
+
+        This combines the work of ``compute_volume`` and ``compute_volume_gradient``
+        so callers that need both can avoid redundant geometric computation.
+        """
+        volume = 0.0
+        grad: Dict[int, np.ndarray] = {}
+
+        for facet_idx in self.facet_indices:
+            facet = mesh.facets[facet_idx]
+
+            # Re-create the ordered vertex loop exactly as in compute_volume
+            v_ids: list[int] = []
+            for signed_ei in facet.edge_indices:
+                edge = mesh.edges[abs(signed_ei)]
+                tail = edge.tail_index if signed_ei > 0 else edge.head_index
+                if not v_ids or v_ids[-1] != tail:
+                    v_ids.append(tail)
+
+            if len(v_ids) < 3:
+                continue
+
+            v_pos = np.array([mesh.vertices[i].position for i in v_ids])
+            v0 = v_pos[0]
+            va = v_pos[1:-1]
+            vb = v_pos[2:]
+
+            # Volume contribution using vectorized tetrahedron fan at v0
+            cross_prod = np.cross(va, vb)
+            volume += float(np.dot(cross_prod, v0).sum() / 6.0)
+
+            # Gradient contributions (same formula as compute_volume_gradient)
+            cross_va_vb = cross_prod
+            if v_ids[0] not in grad:
+                grad[v_ids[0]] = np.zeros(3)
+            grad[v_ids[0]] += cross_va_vb.sum(axis=0) / 6.0
+
+            cross_vb_v0 = np.cross(vb, v0)
+            cross_v0_va = np.cross(v0, va)
+
+            for idx, (a, b) in enumerate(zip(v_ids[1:-1], v_ids[2:])):
+                if a not in grad:
+                    grad[a] = np.zeros(3)
+                if b not in grad:
+                    grad[b] = np.zeros(3)
+                grad[a] += cross_vb_v0[idx] / 6.0
+                grad[b] += cross_v0_va[idx] / 6.0
+
+        return volume, grad
 
 @dataclass
 class Mesh:

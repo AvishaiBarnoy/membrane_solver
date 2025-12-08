@@ -48,13 +48,15 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_
         V0 = (body.target_volume
               if body.target_volume is not None
               else body.options.get('target_volume', 0))
-        V = body.compute_volume(mesh)
+        if compute_gradient:
+            V, volume_gradient = body.compute_volume_and_gradient(mesh)
+        else:
+            V = body.compute_volume(mesh)
         delta = V - V0
 
         E += 0.5 * k * delta ** 2
 
         if compute_gradient:
-            volume_gradient = body.compute_volume_gradient(mesh)
             factor = k * delta
             for vertex_index, gradient_vector in volume_gradient.items():
                 grad[vertex_index] += factor * gradient_vector

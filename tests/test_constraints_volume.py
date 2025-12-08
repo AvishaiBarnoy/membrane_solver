@@ -61,7 +61,9 @@ def test_volume_constraint_enforces_target():
 
 
 class DummyStepper(BaseStepper):
-    def step(self, mesh, grad, step_size, energy_fn):
+    def step(self, mesh, grad, step_size, energy_fn, constraint_enforcer=None):
+        if constraint_enforcer:
+            constraint_enforcer(mesh)
         return True, step_size
 
 

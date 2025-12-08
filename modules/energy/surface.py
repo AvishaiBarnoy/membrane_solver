@@ -61,11 +61,13 @@ def compute_energy_and_gradient(
         if surface_tension is None:
             surface_tension = global_params.get("surface_tension")
 
-        area = facet.compute_area(mesh)
+        if compute_gradient:
+            area, area_gradient = facet.compute_area_and_gradient(mesh)
+        else:
+            area = facet.compute_area(mesh)
         E += surface_tension * area
 
         if compute_gradient:
-            area_gradient = facet.compute_area_gradient(mesh)
             for vertex_index, gradient_vector in area_gradient.items():
                 grad_arr[idx_map[vertex_index]] += surface_tension * gradient_vector
 

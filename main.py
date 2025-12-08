@@ -185,7 +185,7 @@ def interactive_loop(mesh, minimizer, stepper):
 def main():
     parser = argparse.ArgumentParser(description="Membrane Solver Simulation Driver")
     parser.add_argument('-i', '--input', help='Input mesh JSON file')
-    parser.add_argument('-o', '--output', default="output.json", help='Output mesh JSON file')
+    parser.add_argument('-o', '--output', default=None, help='Output mesh JSON file')
     parser.add_argument('--instructions', help='Optional instruction file (one command per line)')
     parser.add_argument('--log', default=None, help='Optional log file')
     parser.add_argument('-q', '--quiet', action='store_true',
@@ -244,7 +244,7 @@ def main():
     if not args.quiet:
         print("=== Membrane Solver ===")
         print(f"Input file: {args.input}")
-        print(f"Output file: {args.output}")
+        print(f"Output file: {args.output or '(not saving)'}")
         print(f"Energy modules: {mesh.energy_modules}")
         print(f"Constraint modules: {mesh.constraint_modules}")
         print(f"Instructions: {instructions}")
@@ -263,8 +263,12 @@ def main():
         mesh = interactive_loop(mesh, minimizer, stepper)
     # Save final mesh
     #save_mesh_to_json(mesh, args.output)
-    save_geometry(mesh, args.output)
-    logger.info(f"Simulation complete. Output saved to {args.output}")
+    if args.output:
+        save_geometry(mesh, args.output)
+        logger.info(f"Simulation complete. Output saved to {args.output}")
+    else:
+        logger.info("Simulation complete. No output file written.")
+
 
 if __name__ == "__main__":
     main()

@@ -17,6 +17,7 @@ def backtracking_line_search(
     c: float = 1e-4,
     gamma: float = 1.2,
     alpha_max_factor: float = 10.0,
+    constraint_enforcer: Callable[[Mesh], None] | None = None,
 ) -> tuple[bool, float]:
     """Perform Armijo backtracking line search along ``direction``.
 
@@ -74,6 +75,9 @@ def backtracking_line_search(
                 vertex.position[:] = vertex.constraint.project_position(
                     vertex.position
                 )
+
+        if constraint_enforcer is not None:
+            constraint_enforcer(mesh)
 
         trial_energy = energy_fn()
         if trial_energy <= energy0 + c * alpha * g_dot_d:
