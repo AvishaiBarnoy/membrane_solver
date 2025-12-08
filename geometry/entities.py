@@ -189,7 +189,12 @@ class Facet:
 
         return grad
 
-    def compute_area_and_gradient(self, mesh: "Mesh") -> tuple[float, Dict[int, np.ndarray]]:
+    def compute_area_and_gradient(
+        self,
+        mesh: "Mesh",
+        positions: "np.ndarray | None" = None,
+        index_map: Dict[int, int] | None = None,
+    ) -> tuple[float, Dict[int, np.ndarray]]:
         """
         Compute both the facet area and its gradient with respect to vertex positions.
 
@@ -197,19 +202,27 @@ class Facet:
         callers that need both can avoid redundant geometric computation.
         """
         # ordered vertex loop
-        v_ids: list[int] = []
-        for signed_ei in self.edge_indices:
-            edge = mesh.get_edge(signed_ei)
-            tail = edge.tail_index
-            if not v_ids or v_ids[-1] != tail:
-                v_ids.append(tail)
+        if getattr(mesh, "facet_vertex_loops", None) and self.index in mesh.facet_vertex_loops:
+            v_ids_array = mesh.facet_vertex_loops[self.index]
+            v_ids = v_ids_array.tolist()
+        else:
+            v_ids = []
+            for signed_ei in self.edge_indices:
+                edge = mesh.get_edge(signed_ei)
+                tail = edge.tail_index
+                if not v_ids or v_ids[-1] != tail:
+                    v_ids.append(tail)
 
         grad: Dict[int, np.ndarray] = {i: np.zeros(3) for i in v_ids}
         if len(v_ids) < 3:
             return 0.0, grad
 
-        v0 = mesh.vertices[v_ids[0]].position
-        v_pos = np.array([mesh.vertices[i].position for i in v_ids])
+        if positions is not None and index_map is not None:
+            rows = [index_map[i] for i in v_ids]
+            v_pos = positions[rows]
+        else:
+            v_pos = np.array([mesh.vertices[i].position for i in v_ids])
+        v0 = v_pos[0]
         va = v_pos[1:-1] - v0
         vb = v_pos[2:] - v0
 
@@ -349,13 +362,17 @@ class Body:
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
 
-            # Re-create the ordered vertex loop exactly as in compute_volume
-            v_ids: list[int] = []
-            for signed_ei in facet.edge_indices:
-                edge = mesh.edges[abs(signed_ei)]
-                tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                if not v_ids or v_ids[-1] != tail:
-                    v_ids.append(tail)
+            # Reuse cached vertex loop if available, otherwise reconstruct.
+            if getattr(mesh, "facet_vertex_loops", None) and facet_idx in mesh.facet_vertex_loops:
+                v_ids_array = mesh.facet_vertex_loops[facet_idx]
+                v_ids = v_ids_array.tolist()
+            else:
+                v_ids = []
+                for signed_ei in facet.edge_indices:
+                    edge = mesh.edges[abs(signed_ei)]
+                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
+                    if not v_ids or v_ids[-1] != tail:
+                        v_ids.append(tail)
 
             if len(v_ids) < 3:
                 continue
@@ -402,6 +419,11 @@ class Mesh:
     vertex_to_facets: Dict[int, set] = field(default_factory=dict)
     vertex_to_edges: Dict[int, set] = field(default_factory=dict)
     edge_to_facets: Dict[int, set] = field(default_factory=dict)
+
+    # Cached array views and facet vertex loops for performance.
+    vertex_ids: "np.ndarray | None" = None
+    vertex_index_to_row: Dict[int, int] = field(default_factory=dict)
+    facet_vertex_loops: Dict[int, "np.ndarray"] = field(default_factory=dict)
 
     def copy(self):
         import copy
@@ -473,6 +495,49 @@ class Mesh:
                 if v not in self.vertex_to_facets:
                     self.vertex_to_facets[v] = set()
                 self.vertex_to_facets[v].add(facet.index)
+
+    def build_position_cache(self):
+        """Build or refresh the cached vertex ID order and index map.
+
+        This lets downstream geometry routines construct position arrays
+        efficiently without repeatedly iterating over dictionaries.
+        """
+        import numpy as np
+
+        if self.vertex_ids is None or len(self.vertex_ids) != len(self.vertices):
+            ids = np.array(sorted(self.vertices.keys()), dtype=int)
+            self.vertex_ids = ids
+            self.vertex_index_to_row = {vid: i for i, vid in enumerate(ids)}
+
+    def positions_view(self) -> "np.ndarray":
+        """Return a dense ``(N_vertices, 3)`` array of vertex positions.
+
+        The ordering of rows is given by ``vertex_ids``; this is intended to
+        be built once per geometry evaluation and reused across facets/bodies.
+        """
+        import numpy as np
+
+        self.build_position_cache()
+        return np.array([self.vertices[vid].position for vid in self.vertex_ids])
+
+    def build_facet_vertex_loops(self):
+        """Precompute ordered vertex loops for all facets.
+
+        This avoids reconstructing the same vertex ordering from edges in
+        every area/volume/gradient evaluation during minimization.
+        """
+        import numpy as np
+
+        self.facet_vertex_loops.clear()
+        for fid, facet in self.facets.items():
+            v_ids: list[int] = []
+            for signed_ei in facet.edge_indices:
+                edge = self.edges[abs(signed_ei)]
+                tail = edge.tail_index if signed_ei > 0 else edge.head_index
+                if not v_ids or v_ids[-1] != tail:
+                    v_ids.append(tail)
+            if v_ids:
+                self.facet_vertex_loops[fid] = np.array(v_ids, dtype=int)
     def get_facets_of_vertex(self, v_id: int) -> List["Facet"]:
         return [self.facets[fid] for fid in self.vertex_to_facets.get(v_id, [])]
     def get_edges_of_vertex(self, v_id: int) -> List["Edge"]:

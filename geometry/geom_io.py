@@ -223,6 +223,7 @@ def parse_geometry(data: dict) -> Mesh:
     mesh.constraint_modules = list(set(constraint_module_names))
 
     mesh.build_connectivity_maps()
+    mesh.build_facet_vertex_loops()
 
     # Automatically triangulate polygonal facets if needed
     if any(len(f.edge_indices) > 3 for f in mesh.facets.values()):
@@ -262,4 +263,3 @@ def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
     dfaces = data["faces"]
     with open(path, "w") as f:
         json.dump(data, f, indent=4)
-

@@ -35,11 +35,55 @@ def calculate_volume_energy(mesh, global_params):
 
     return volume_energy
 
+
+def _body_volume_batched(mesh, body: Body, positions: np.ndarray, index_map: Dict[int, int]) -> float:
+    """Compute body volume by batching over its triangular facets.
+
+    Assumes each facet in ``body.facet_indices`` has a cached vertex loop of
+    length 3 in ``mesh.facet_vertex_loops``.
+    """
+    tri_v0 = []
+    tri_v1 = []
+    tri_v2 = []
+
+    for facet_idx in body.facet_indices:
+        loop = mesh.facet_vertex_loops.get(facet_idx)
+        if loop is None or len(loop) != 3:
+            # Fallback will be used by caller if any facet is not a triangle.
+            return body.compute_volume(mesh)
+
+        i0 = index_map[int(loop[0])]
+        i1 = index_map[int(loop[1])]
+        i2 = index_map[int(loop[2])]
+        tri_v0.append(i0)
+        tri_v1.append(i1)
+        tri_v2.append(i2)
+
+    if not tri_v0:
+        return 0.0
+
+    v0 = positions[np.array(tri_v0, dtype=int)]
+    v1 = positions[np.array(tri_v1, dtype=int)]
+    v2 = positions[np.array(tri_v2, dtype=int)]
+
+    # For each triangle, volume contribution is dot(cross(v1, v2), v0) / 6
+    cross = np.cross(v1, v2)
+    vol_contrib = np.einsum("ij,ij->i", cross, v0)
+    return float(vol_contrib.sum() / 6.0)
+
 def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_gradient: bool = True):
     E = 0.0
     grad: Dict[int, np.ndarray] | None = (
         defaultdict(lambda: np.zeros(3)) if compute_gradient else None
     )
+
+    # For energy-only path we can batch volume over triangles using cached loops.
+    positions = None
+    index_map: Dict[int, int] | None = None
+    if not compute_gradient and getattr(mesh, "facet_vertex_loops", None):
+        positions = mesh.positions_view()
+        index_map = mesh.vertex_index_to_row
+
     for body in mesh.bodies.values():
         k = param_resolver.get(body, 'volume_stiffness')
         if k is None:
@@ -48,23 +92,24 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_
         V0 = (body.target_volume
               if body.target_volume is not None
               else body.options.get('target_volume', 0))
+
         if compute_gradient:
             V, volume_gradient = body.compute_volume_and_gradient(mesh)
         else:
-            V = body.compute_volume(mesh)
-        delta = V - V0
+            # Try batched triangle volume if we have positions and loops.
+            if positions is not None and index_map is not None:
+                V = _body_volume_batched(mesh, body, positions, index_map)
+            else:
+                V = body.compute_volume(mesh)
 
+        delta = V - V0
         E += 0.5 * k * delta ** 2
 
         if compute_gradient:
             factor = k * delta
             for vertex_index, gradient_vector in volume_gradient.items():
                 grad[vertex_index] += factor * gradient_vector
-        # Log the computed energy and gradient
-        #logger.info(f"Computed volume energy: {E}")
-        #logger.info(f"Computed volume energy gradient: {grad}")
 
-    # Return the total energy and gradient
     if compute_gradient:
         return E, dict(grad)
     else:
