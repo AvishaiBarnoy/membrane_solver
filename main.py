@@ -108,13 +108,22 @@ def execute_command(cmd, mesh, minimizer, stepper):
         minimizer.stepper = stepper
     elif cmd.startswith('g'):
         cmd = cmd.replace(' ', '')
+        # Accept bare 'g' as one step; otherwise require integer suffix.
         if cmd == 'g':
-            cmd = 'g1'
-        assert cmd[1:].isnumeric(), "#n steps should be in the form of 'g 5' or 'g5'"
+            n_steps = 1
+        else:
+            steps_str = cmd[1:]
+            if not steps_str.isnumeric():
+                logger.warning(
+                    "Invalid minimization command '%s'; expected 'g' or 'gN' with integer N.",
+                    cmd,
+                )
+                return mesh, stepper
+            n_steps = int(steps_str)
+
         logger.debug(
-            f"Minimizing for {cmd[1:]} steps using {stepper.__class__.__name__}"
+            f"Minimizing for {n_steps} steps using {stepper.__class__.__name__}"
         )
-        n_steps = int(cmd[1:])
         logger.debug(
             f"Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}"
         )
@@ -230,7 +239,8 @@ def main():
     logger.debug(mesh.energy_modules)
 
     constraint_manager = ConstraintModuleManager(mesh.constraint_modules)
-    stepper = GradientDescent()
+    # Use Conjugate Gradient as the default stepper for faster convergence.
+    stepper = ConjugateGradient()
 
     # Load instructions
     if args.instructions:

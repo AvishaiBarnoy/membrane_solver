@@ -107,96 +107,25 @@ def compute_energy_and_gradient(
 
     positions = mesh.positions_view()
 
-    # Fast path: all facets are cached triangles -> batch energy + gradient.
-    if compute_gradient and getattr(mesh, "facet_vertex_loops", None) and all(
-        len(mesh.facet_vertex_loops.get(f.index, [])) == 3 for f in mesh.facets.values()
-    ):
-        index_map_rows = mesh.vertex_index_to_row
+    # Per-facet computation; we still reuse the shared positions array to
+    # avoid rebuilding small arrays, but we rely on the established
+    # compute_area_and_gradient implementation for correctness.
+    for facet in mesh.facets.values():
+        surface_tension = param_resolver.get(facet, "surface_tension")
+        if surface_tension is None:
+            surface_tension = global_params.get("surface_tension")
 
-        # Collect per-facet vertex rows and surface tensions.
-        i0_list = []
-        i1_list = []
-        i2_list = []
-        gammas = []
+        if compute_gradient:
+            area, area_gradient = facet.compute_area_and_gradient(
+                mesh, positions=positions, index_map=mesh.vertex_index_to_row
+            )
+        else:
+            area = facet.compute_area(mesh)
+        E += surface_tension * area
 
-        for facet in mesh.facets.values():
-            loop = mesh.facet_vertex_loops[facet.index]
-            i0_list.append(index_map_rows[int(loop[0])])
-            i1_list.append(index_map_rows[int(loop[1])])
-            i2_list.append(index_map_rows[int(loop[2])])
-
-            gamma = param_resolver.get(facet, "surface_tension")
-            if gamma is None:
-                gamma = global_params.get("surface_tension")
-            gammas.append(gamma)
-
-        i0 = np.array(i0_list, dtype=int)
-        i1 = np.array(i1_list, dtype=int)
-        i2 = np.array(i2_list, dtype=int)
-        gammas = np.asarray(gammas, dtype=float)
-
-        v0 = positions[i0]
-        v1 = positions[i1]
-        v2 = positions[i2]
-
-        # Triangle area: 0.5 * ||(v1 - v0) x (v2 - v0)||
-        ba = v1 - v0
-        ca = v2 - v0
-        n = np.cross(ba, ca)
-        A = np.linalg.norm(n, axis=1)
-
-        # Avoid division by zero for degenerate triangles.
-        mask = A >= 1e-12
-        if not np.any(mask):
-            return 0.0, {v: np.zeros(3) for v in vidxs}
-
-        n_hat = np.zeros_like(n)
-        n_hat[mask] = n[mask] / A[mask][:, None]
-
-        # Energy
-        E = float(np.dot(gammas[mask], 0.5 * A[mask]))
-
-        # Gradient per vertex using analytic formulas:
-        # g0 = -0.5 * (n_hat x (v2 - v1))
-        # g1 =  0.5 * (n_hat x (v2 - v0))
-        # g2 = -0.5 * (n_hat x (v1 - v0))
-        g0 = -0.5 * np.cross(n_hat[mask], v2[mask] - v1[mask])
-        g1 =  0.5 * np.cross(n_hat[mask], v2[mask] - v0[mask])
-        g2 = -0.5 * np.cross(n_hat[mask], v1[mask] - v0[mask])
-
-        # Scale by surface tension per facet.
-        gamma_col = gammas[mask][:, None]
-        g0 *= gamma_col
-        g1 *= gamma_col
-        g2 *= gamma_col
-
-        # Accumulate into per-vertex gradient array.
-        active_i0 = i0[mask]
-        active_i1 = i1[mask]
-        active_i2 = i2[mask]
-
-        np.add.at(grad_arr, active_i0, g0)
-        np.add.at(grad_arr, active_i1, g1)
-        np.add.at(grad_arr, active_i2, g2)
-
-    else:
-        # General path (non-batched or no caches): per-facet computation.
-        for facet in mesh.facets.values():
-            surface_tension = param_resolver.get(facet, "surface_tension")
-            if surface_tension is None:
-                surface_tension = global_params.get("surface_tension")
-
-            if compute_gradient:
-                area, area_gradient = facet.compute_area_and_gradient(
-                    mesh, positions=positions, index_map=mesh.vertex_index_to_row
-                )
-            else:
-                area = facet.compute_area(mesh)
-            E += surface_tension * area
-
-            if compute_gradient:
-                for vertex_index, gradient_vector in area_gradient.items():
-                    grad_arr[idx_map[vertex_index]] += surface_tension * gradient_vector
+        if compute_gradient:
+            for vertex_index, gradient_vector in area_gradient.items():
+                grad_arr[idx_map[vertex_index]] += surface_tension * gradient_vector
 
     if compute_gradient:
         grad = {v: grad_arr[i] for v, i in idx_map.items()}

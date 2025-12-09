@@ -87,6 +87,11 @@ def backtracking_line_search(
 
         alpha *= beta
 
+        # If the trial step size becomes too small, further reductions are
+        # unlikely to produce meaningful changes in geometry, so bail out.
+        if alpha < 1e-8:
+            break
+
     logger.debug(
         f"Line search failed to satisfy Armijo after {max_iter} iterations. Reverting."
     )
