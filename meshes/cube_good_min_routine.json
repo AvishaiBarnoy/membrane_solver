@@ -40,8 +40,8 @@
                         "bending_modulus": 0,
                         "gaussian_modulus": 0,
                         "volume_stiffness": 1e3,
-                        "volume_constraint_mode": "lagrange",
-                        "volume_projection_during_minimization": false
+                        "volume_constraint_mode": "penalty",
+                        "volume_projection_during_minimization": true 
     },
     "instructions": ["g100", "r", "u", "g100", "V", "g20", "r", "g50", "r", "g50"]
 }

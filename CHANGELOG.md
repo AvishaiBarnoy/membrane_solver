@@ -19,13 +19,15 @@ but dates and versions are intentionally kept light for a research‑oriented co
 
 - Volume handling:
   - Introduced `volume_constraint_mode` global parameter with default `"lagrange"`.
-  - In `"lagrange"` mode, volume is treated as a hard constraint:
+  - `"lagrange"` (now the default) treats volume as a hard constraint:
     the minimizer projects the gradient onto the fixed‑volume manifold
-    using body volume gradients (Lagrange‑style), and the legacy quadratic
-    volume penalty is disabled by default.
-  - Bodies with a `target_volume` now automatically register the `volume`
-    constraint module instead of adding a `volume` energy term, making
-    JSON geometries behave more like Evolver's `FIXEDVOL` bodies.
+    using body volume gradients (Lagrange‑style) and does **not** add a
+    quadratic volume penalty term unless explicitly requested.
+  - `"penalty"` mode retains the legacy soft quadratic volume energy and
+    is now opt‑in via `global_parameters` or the `--volume-mode` CLI flag.
+  - Bodies with a `target_volume` automatically register the `volume`
+    constraint module instead of adding a `volume` energy term, making JSON
+    geometries behave more like Evolver's `FIXEDVOL` bodies.
 
 ### Existing (backfilled summary)
 

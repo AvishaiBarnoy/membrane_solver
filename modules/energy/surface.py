@@ -2,12 +2,24 @@
 # Here goes energy functions relevant for area of facets
 
 from geometry.entities import Mesh, Facet
-from typing import Dict
+from typing import Dict, Tuple
 from collections import defaultdict
 from logging_config import setup_logging
 import numpy as np
 
 logger = setup_logging('membrane_solver')
+
+
+def _all_facets_are_triangles(mesh: Mesh) -> bool:
+    """Return ``True`` if facet loops exist and all are triangles."""
+    if not getattr(mesh, "facet_vertex_loops", None):
+        return False
+    for facet in mesh.facets.values():
+        loop = mesh.facet_vertex_loops.get(facet.index)
+        if loop is None or len(loop) != 3:
+            return False
+    return True
+
 
 def calculate_surface_energy(mesh: Mesh, global_params) -> float:
     """Compute the total surface energy for all facets.
@@ -18,27 +30,19 @@ def calculate_surface_energy(mesh: Mesh, global_params) -> float:
     if not mesh.facets:
         return 0.0
 
-    # Fast path: all facets have cached vertex loops and are triangles.
-    # We can compute all triangle areas in one vectorized pass.
-    if getattr(mesh, "facet_vertex_loops", None) and all(
-        len(mesh.facet_vertex_loops.get(f.index, [])) == 3
-        for f in mesh.facets.values()
-    ):
+    # Fast path: all facets are triangles with cached vertex loops.
+    if _all_facets_are_triangles(mesh):
         positions = mesh.positions_view()
-        gammas = []
-        v0 = []
-        v1 = []
-        v2 = []
         index_map = mesh.vertex_index_to_row
 
+        tri_rows = []
+        gammas = []
         for facet in mesh.facets.values():
             loop = mesh.facet_vertex_loops[facet.index]
-            i0, i1, i2 = (index_map[int(loop[0])],
-                          index_map[int(loop[1])],
-                          index_map[int(loop[2])])
-            v0.append(i0)
-            v1.append(i1)
-            v2.append(i2)
+            i0 = index_map[int(loop[0])]
+            i1 = index_map[int(loop[1])]
+            i2 = index_map[int(loop[2])]
+            tri_rows.append((i0, i1, i2))
             gammas.append(
                 facet.options.get(
                     "surface_tension",
@@ -46,9 +50,11 @@ def calculate_surface_energy(mesh: Mesh, global_params) -> float:
                 )
             )
 
-        v0 = positions[np.array(v0, dtype=int)]
-        v1 = positions[np.array(v1, dtype=int)]
-        v2 = positions[np.array(v2, dtype=int)]
+        tri_rows_arr = np.asarray(tri_rows, dtype=int)
+        tri_pos = positions[tri_rows_arr]  # (n_facets, 3, 3)
+        v0 = tri_pos[:, 0, :]
+        v1 = tri_pos[:, 1, :]
+        v2 = tri_pos[:, 2, :]
         cross = np.cross(v1 - v0, v2 - v0)
         areas = 0.5 * np.linalg.norm(cross, axis=1)
         return float(np.dot(np.asarray(gammas, dtype=float), areas))
@@ -104,29 +110,121 @@ def compute_energy_and_gradient(
 
     E = 0.0
 
-    positions = mesh.positions_view()
-    vidxs = list(mesh.vertices.keys())
-    idx_map = {v: i for i, v in enumerate(vidxs)}
-    grad_arr = np.zeros((len(vidxs), 3))
+    # If we have a pure triangle mesh with cached vertex loops, use a fully
+    # batched path that mirrors :func:`calculate_surface_energy` but also
+    # accumulates gradients in a single vectorised pass.
+    if _all_facets_are_triangles(mesh):
+        E, grad = _batched_surface_energy_and_gradient_triangles(
+            mesh, global_params, param_resolver
+        )
+        return E, grad
 
-    # Per-facet computation; reuse shared positions array.
+    # Fallback: per-facet computation using shared position array.
+    positions = mesh.positions_view()
+    vertex_ids = mesh.vertex_ids
+    idx_map = mesh.vertex_index_to_row
+    grad_arr = np.zeros((len(vertex_ids), 3))
+
     for facet in mesh.facets.values():
         surface_tension = param_resolver.get(facet, "surface_tension")
         if surface_tension is None:
             surface_tension = global_params.get("surface_tension")
 
         area, area_gradient = facet.compute_area_and_gradient(
-            mesh, positions=positions, index_map=mesh.vertex_index_to_row
+            mesh, positions=positions, index_map=idx_map
         )
         E += surface_tension * area
 
         for vertex_index, gradient_vector in area_gradient.items():
-            grad_arr[idx_map[vertex_index]] += surface_tension * gradient_vector
+            row = idx_map[vertex_index]
+            grad_arr[row] += surface_tension * gradient_vector
 
-    grad = {v: grad_arr[i] for v, i in idx_map.items()}
+    grad = {vid: grad_arr[row] for vid, row in idx_map.items()}
     # Avoid constructing large string representations of gradients unless
     # debug logging is actually enabled.
-    if logger.isEnabledFor(np.logging.DEBUG if hasattr(np, "logging") else 10):
-        logger.debug("Computed surface energy: %s", E)
-        logger.debug("Computed surface energy gradient: %s", grad)
+    if logger.isEnabledFor(10):
+        logger.debug("Computed surface energy: %.6f", E)
+    return E, grad
+
+
+def _batched_surface_energy_and_gradient_triangles(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+) -> Tuple[float, Dict[int, np.ndarray]]:
+    """Vectorised surface energy and gradient for pure triangle meshes.
+
+    Assumes that ``mesh.facet_vertex_loops`` is populated and that every
+    facet loop has length three.
+    """
+    positions = mesh.positions_view()
+    idx_map = mesh.vertex_index_to_row
+
+    tri_rows = []
+    gammas = []
+    for facet in mesh.facets.values():
+        loop = mesh.facet_vertex_loops[facet.index]
+        i0 = idx_map[int(loop[0])]
+        i1 = idx_map[int(loop[1])]
+        i2 = idx_map[int(loop[2])]
+        tri_rows.append((i0, i1, i2))
+
+        surface_tension = param_resolver.get(facet, "surface_tension")
+        if surface_tension is None:
+            surface_tension = global_params.get("surface_tension")
+        gammas.append(surface_tension)
+
+    tri_rows_arr = np.asarray(tri_rows, dtype=int)  # (nF, 3)
+    tri_pos = positions[tri_rows_arr]              # (nF, 3, 3)
+    v0 = tri_pos[:, 0, :]
+    v1 = tri_pos[:, 1, :]
+    v2 = tri_pos[:, 2, :]
+
+    e1 = v1 - v0
+    e2 = v2 - v0
+    n = np.cross(e1, e2)
+    A = np.linalg.norm(n, axis=1)
+    mask = A >= 1e-12
+    if not np.any(mask):
+        # Degenerate mesh; return zero energy/gradient.
+        grad_zero = {vid: np.zeros(3) for vid in mesh.vertices.keys()}
+        return 0.0, grad_zero
+
+    n_hat = n[mask] / A[mask][:, None]
+    areas = 0.5 * A[mask]
+    gammas_arr = np.asarray(gammas, dtype=float)[mask]
+
+    # Energy: sum_i gamma_i * area_i
+    E = float(np.dot(gammas_arr, areas))
+
+    # Gradient per triangle, following the same formulas as
+    # Facet.compute_area_and_gradient specialised to the triangle case.
+    v0m = v0[mask]
+    v1m = v1[mask]
+    v2m = v2[mask]
+
+    g0 = 0.5 * np.cross(v1m - v0m, n_hat)          # dA/dv0
+    g1 = 0.5 * np.cross(v2m - v1m, n_hat)          # dA/dv1
+    g2 = 0.5 * np.cross(v0m - v2m, n_hat)          # dA/dv2
+
+    # Scale by per-facet surface tension.
+    scale = gammas_arr[:, None]
+    g0 *= scale
+    g1 *= scale
+    g2 *= scale
+
+    # Accumulate into per-vertex gradient array.
+    n_vertices = len(mesh.vertex_ids)
+    grad_arr = np.zeros((n_vertices, 3), dtype=float)
+    tri_rows_masked = tri_rows_arr[mask]
+
+    i0 = tri_rows_masked[:, 0]
+    i1 = tri_rows_masked[:, 1]
+    i2 = tri_rows_masked[:, 2]
+
+    np.add.at(grad_arr, i0, g0)
+    np.add.at(grad_arr, i1, g1)
+    np.add.at(grad_arr, i2, g2)
+
+    grad = {vid: grad_arr[idx_map[vid]] for vid in mesh.vertices.keys()}
     return E, grad

@@ -800,7 +800,7 @@
     "global_parameters": {
         "surface_tension": 1.0,
         "volume_stiffness": 1000,
-        "volume_constraint_mode": "penalty",
+        "volume_constraint_mode": "lagrange",
         "volume_projection_during_minimization": true,
         "volume_tolerance": 0.001,
         "max_zero_steps": 10,

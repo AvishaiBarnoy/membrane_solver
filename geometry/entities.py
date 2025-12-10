@@ -263,13 +263,19 @@ class Body:
         volume = 0.0
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
-            # collect the true cyclic list of vertex-indices around this facet
-            v_ids = []
-            for signed_ei in facet.edge_indices:
-                edge = mesh.edges[abs(signed_ei)]
-                tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                if not v_ids or v_ids[-1] != tail:
-                    v_ids.append(tail)
+            # Reuse precomputed vertex loops when available to avoid
+            # reconstructing the same connectivity on every call.
+            if getattr(mesh, "facet_vertex_loops", None) and facet_idx in mesh.facet_vertex_loops:
+                v_ids_array = mesh.facet_vertex_loops[facet_idx]
+                v_ids = v_ids_array.tolist()
+            else:
+                # Fallback: collect the cyclic list of vertex indices.
+                v_ids = []
+                for signed_ei in facet.edge_indices:
+                    edge = mesh.edges[abs(signed_ei)]
+                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
+                    if not v_ids or v_ids[-1] != tail:
+                        v_ids.append(tail)
 
             # ordered vertex positions
             v_pos = np.array([mesh.vertices[i].position for i in v_ids])
@@ -303,13 +309,18 @@ class Body:
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
 
-            # Re-create the ordered vertex loop exactly as you do in compute_volume
-            v_ids = []
-            for signed_ei in facet.edge_indices:
-                edge = mesh.edges[abs(signed_ei)]
-                tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                if not v_ids or v_ids[-1] != tail:
-                    v_ids.append(tail)
+            # Reuse the same ordered vertex loop as in compute_volume when
+            # cached, otherwise reconstruct it from edges.
+            if getattr(mesh, "facet_vertex_loops", None) and facet_idx in mesh.facet_vertex_loops:
+                v_ids_array = mesh.facet_vertex_loops[facet_idx]
+                v_ids = v_ids_array.tolist()
+            else:
+                v_ids = []
+                for signed_ei in facet.edge_indices:
+                    edge = mesh.edges[abs(signed_ei)]
+                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
+                    if not v_ids or v_ids[-1] != tail:
+                        v_ids.append(tail)
 
             if len(v_ids) < 3:
                 continue
@@ -334,12 +345,16 @@ class Body:
         area = 0.0
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
-            v_ids = []
-            for signed_ei in facet.edge_indices:
-                edge = mesh.edges[abs(signed_ei)]
-                tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                if not v_ids or v_ids[-1] != tail:
-                    v_ids.append(tail)
+            if getattr(mesh, "facet_vertex_loops", None) and facet_idx in mesh.facet_vertex_loops:
+                v_ids_array = mesh.facet_vertex_loops[facet_idx]
+                v_ids = v_ids_array.tolist()
+            else:
+                v_ids = []
+                for signed_ei in facet.edge_indices:
+                    edge = mesh.edges[abs(signed_ei)]
+                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
+                    if not v_ids or v_ids[-1] != tail:
+                        v_ids.append(tail)
 
             v_pos = np.array([mesh.vertices[i].position for i in v_ids])
             v0 = v_pos[0]

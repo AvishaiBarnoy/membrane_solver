@@ -13,9 +13,8 @@ class GlobalParameters:
             #   "penalty"  – use soft quadratic volume energy.
             #   "lagrange" – treat volume as a hard constraint integrated via
             #                Lagrange‑style gradient projection.
-            # Use the soft penalty mode by default for robustness; hard
-            # constraints can be enabled explicitly on a per‑run basis.
-            "volume_constraint_mode": "penalty",
+            # By default we follow the Evolver‑like hard‑constraint workflow.
+            "volume_constraint_mode": "lagrange",
             # Whether to apply geometric volume projection during each
             # minimization step. When set to False, the optimizer is expected
             # to handle fixed volume purely through its gradient/Lagrange

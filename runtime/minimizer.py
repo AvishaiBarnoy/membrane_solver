@@ -109,6 +109,30 @@ STEP SIZE:\t {self.step_size}
         # analogous to Evolver's ``calc_lagrange`` + ``lagrange_adjust``.
         self._apply_volume_constraints_lagrange(grad)
 
+        # Optional DEBUG‑level diagnostic: in Lagrange mode the projected
+        # gradient should be (numerically) tangent to each fixed‑volume
+        # manifold, i.e. ⟨∇E, ∇V_body⟩ ≈ 0.  This reuses the cached volume
+        # gradients from ``_update_volume_gradients`` and is only executed
+        # when verbose debugging is enabled.
+        if logger.isEnabledFor(logging.DEBUG):
+            mode = self.global_params.get("volume_constraint_mode", "lagrange")
+            if mode == "lagrange" and self.mesh.bodies:
+                max_abs_dot = 0.0
+                for body in self.mesh.bodies.values():
+                    vol_grad = getattr(body, "_last_volume_grad", None)
+                    if not vol_grad:
+                        continue
+                    dot = 0.0
+                    for vidx, gVi in vol_grad.items():
+                        gE = grad.get(vidx)
+                        if gE is not None:
+                            dot += float(np.dot(gE, gVi))
+                    max_abs_dot = max(max_abs_dot, abs(dot))
+                logger.debug(
+                    "Lagrange tangency check: max |<∇E, ∇V>| = %.3e",
+                    max_abs_dot,
+                )
+
         return total_energy, grad
 
     def _update_volume_gradients(self) -> None:
@@ -366,6 +390,43 @@ STEP SIZE:\t {self.step_size}
                     reset()
             else:
                 zero_step_counter = 0
+
+                # DEBUG-level diagnostics for accepted steps: report the new
+                # energy and volume error for constrained bodies. These checks
+                # are intentionally guarded so that normal runs pay no extra
+                # cost; they are meant for interactive debugging only.
+                if logger.isEnabledFor(logging.DEBUG):
+                    E_after = self.compute_energy()
+                    max_rel_violation_dbg = 0.0
+                    vol_msgs: list[str] = []
+                    if self.mesh.bodies:
+                        for body in self.mesh.bodies.values():
+                            target = body.target_volume
+                            if target is None:
+                                target = body.options.get("target_volume")
+                            if target is None:
+                                continue
+                            current = body.compute_volume(self.mesh)
+                            denom = max(abs(target), 1.0)
+                            rel = (current - target) / denom
+                            max_rel_violation_dbg = max(
+                                max_rel_violation_dbg, abs(rel)
+                            )
+                            vol_msgs.append(
+                                "body %d: V=%.6f, V0=%.6f, relΔV=%.3e"
+                                % (body.index, current, target, rel)
+                            )
+                    logger.debug(
+                        "Accepted step %d: E_before=%.6f, E_after=%.6f, "
+                        "step_size=%.3e, max_relΔV=%.3e",
+                        i,
+                        E,
+                        E_after,
+                        self.step_size,
+                        max_rel_violation_dbg,
+                    )
+                    if vol_msgs:
+                        logger.debug("Volume diagnostics: %s", "; ".join(vol_msgs))
 
                 # In Lagrange mode, when geometric volume projection is
                 # disabled during the line search, occasionally pull the
