@@ -54,30 +54,17 @@ returned mesh is therefore ready for optimization without further refinement.
     1.1 Yes: will allow better backtracking and debugging
     1.2 No: will allow better tracking of current state and number of object
 
-## roadmap
-1. cube that minimizes into a sphere
-    1.1 soft constraint – quadratic volume energy (`volume_constraint_mode="penalty"`)
-    1.2 hard constraint – Lagrange multiplier implemented via
-        volume‑gradient projection in the minimizer
-        (`volume_constraint_mode="lagrange"`, **default**)
-2. square that minimizes into circle
-    2.1 soft constraint - surface area energy
-    2.2 hard constraint - lagrange multiplier
-3. capillary bridge (catenoid) - two circles at fixed distance, tests surface - tension and volume constraint
-4. Pinned hemisphere under tension to yield spherical caps - boundary constraints 
-        and mean curvature-pressure balance
-5. Pure Gaussian curvature - check no change under constant topology, and no edge
-6. Tilt source decay - Should form a “dimple” or invagination
-7. Dimpled sphere with one embedded caveolin disk - 
-8. box that minimizes into a sphere with a dent - fixed/no_refine
-9. a plane with a disk and outer perimeter
-10. after implementing mean curvature energy -> membrane between two fixed parallel circels
-    results in a catenoid
-    10.1 check how cat.fe treats the fixed surface area of the soapfilm
-11. a flat sheet that folds to its spontaneous curvature
-12. final(?) - a single caveolin with outside membrane decays
-13. automatic minimization, user defines target refinement and the program
-    tries to minimize
+## Roadmap
+
+The detailed development roadmap has been moved to `docs/ROADMAP.md`. In brief,
+near‑term goals include:
+
+- Stabilizing and benchmarking baseline shape problems (cube→sphere,
+  square→circle, capillary bridge).
+- Adding curvature energies (mean and Gaussian) and validating against classic
+  examples such as catenoids and pinned caps.
+- Implementing tilt fields and caveolin‑like inclusions as a 3D extension of
+  the model in `docs/caveolin_generate_curvature.pdf`.
 
 ## Performance benchmarks
 

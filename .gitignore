@@ -35,6 +35,6 @@ membrane_solver
 *output*.json
 .DS_Store
 .venv/
-docs/
+#docs/
 data/
 results/
