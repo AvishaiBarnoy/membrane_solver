@@ -9,6 +9,25 @@ class GlobalParameters:
         self._params = {
             "surface_tension": 1.0,  # Default value
             "volume_stiffness": 1000.0,  # Default value
+            # How volume constraints are enforced:
+            #   "penalty"  – use soft quadratic volume energy.
+            #   "lagrange" – treat volume as a hard constraint integrated via
+            #                Lagrange‑style gradient projection.
+            # Use the soft penalty mode by default for robustness; hard
+            # constraints can be enabled explicitly on a per‑run basis.
+            "volume_constraint_mode": "penalty",
+            # Whether to apply geometric volume projection during each
+            # minimization step. When set to False, the optimizer is expected
+            # to handle fixed volume purely through its gradient/Lagrange
+            # machinery (more Evolver‑like); when True, the legacy behaviour
+            # of post‑step projection is enabled.
+            "volume_projection_during_minimization": True,
+            # Relative tolerance for volume drift during line search when
+            # relying on Lagrange‑style constraints without geometric
+            # projection. Steps that violate this tolerance are rejected.
+            "volume_tolerance": 1e-3,
+            "max_zero_steps": 10,
+            "step_size_floor": 1e-8,
             "step_size": 1e-3,
             "intrinsic_curvature": 0.0,
             "bending_modulus": 0.0,

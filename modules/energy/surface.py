@@ -95,43 +95,38 @@ def compute_energy_and_gradient(
         Total surface energy and gradient per vertex.
     """
 
+    # Fast energy‑only path: reuse the highly vectorised surface energy
+    # routine instead of looping per facet.
+    if not compute_gradient:
+        E = calculate_surface_energy(mesh, global_params)
+        logger.debug(f"Computed surface energy (energy‑only path): {E}")
+        return E, {}
+
     E = 0.0
 
-    if compute_gradient:
-        vidxs = list(mesh.vertices.keys())
-        idx_map = {v: i for i, v in enumerate(vidxs)}
-        grad_arr = np.zeros((len(vidxs), 3))
-    else:
-        idx_map = {}
-        grad_arr = None
-
     positions = mesh.positions_view()
+    vidxs = list(mesh.vertices.keys())
+    idx_map = {v: i for i, v in enumerate(vidxs)}
+    grad_arr = np.zeros((len(vidxs), 3))
 
-    # Per-facet computation; we still reuse the shared positions array to
-    # avoid rebuilding small arrays, but we rely on the established
-    # compute_area_and_gradient implementation for correctness.
+    # Per-facet computation; reuse shared positions array.
     for facet in mesh.facets.values():
         surface_tension = param_resolver.get(facet, "surface_tension")
         if surface_tension is None:
             surface_tension = global_params.get("surface_tension")
 
-        if compute_gradient:
-            area, area_gradient = facet.compute_area_and_gradient(
-                mesh, positions=positions, index_map=mesh.vertex_index_to_row
-            )
-        else:
-            area = facet.compute_area(mesh)
+        area, area_gradient = facet.compute_area_and_gradient(
+            mesh, positions=positions, index_map=mesh.vertex_index_to_row
+        )
         E += surface_tension * area
 
-        if compute_gradient:
-            for vertex_index, gradient_vector in area_gradient.items():
-                grad_arr[idx_map[vertex_index]] += surface_tension * gradient_vector
+        for vertex_index, gradient_vector in area_gradient.items():
+            grad_arr[idx_map[vertex_index]] += surface_tension * gradient_vector
 
-    if compute_gradient:
-        grad = {v: grad_arr[i] for v, i in idx_map.items()}
-        logger.debug(f"Computed surface energy: {E}")
-        logger.debug(f"Computed surface energy gradient: {grad}")
-        return E, grad
-    else:
-        logger.debug(f"Computed surface energy: {E}")
-        return E, {}
+    grad = {v: grad_arr[i] for v, i in idx_map.items()}
+    # Avoid constructing large string representations of gradients unless
+    # debug logging is actually enabled.
+    if logger.isEnabledFor(np.logging.DEBUG if hasattr(np, "logging") else 10):
+        logger.debug("Computed surface energy: %s", E)
+        logger.debug("Computed surface energy gradient: %s", grad)
+    return E, grad

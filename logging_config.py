@@ -47,10 +47,14 @@ def setup_logging(
     formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 
     # File handler: overwrite on each run instead of appending/rotating.
-    file_handler = logging.FileHandler(log_file, mode="w")
-    file_handler.setLevel(level)
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    file_handler = None
+    try:
+        file_handler = logging.FileHandler(log_file, mode="w")
+        file_handler.setLevel(level)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except OSError as exc:
+        print(f"[logging] Could not open log file '{log_file}': {exc}")
 
     # Optional console handler for interactive feedback.
     if not quiet:

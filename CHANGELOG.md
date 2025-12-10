@@ -15,6 +15,18 @@ but dates and versions are intentionally kept light for a research‑oriented co
   - New `--debug` CLI flag in `main.py` to enable verbose `DEBUG` logging.
   - Switched to `logging.FileHandler(mode="w")` so each run overwrites the previous log file instead of appending.
 
+### Changed
+
+- Volume handling:
+  - Introduced `volume_constraint_mode` global parameter with default `"lagrange"`.
+  - In `"lagrange"` mode, volume is treated as a hard constraint:
+    the minimizer projects the gradient onto the fixed‑volume manifold
+    using body volume gradients (Lagrange‑style), and the legacy quadratic
+    volume penalty is disabled by default.
+  - Bodies with a `target_volume` now automatically register the `volume`
+    constraint module instead of adding a `volume` energy term, making
+    JSON geometries behave more like Evolver's `FIXEDVOL` bodies.
+
 ### Existing (backfilled summary)
 
 - Core mesh and geometry representation (`Vertex`, `Edge`, `Facet`, `Body`, `Mesh`) with:
@@ -39,4 +51,3 @@ but dates and versions are intentionally kept light for a research‑oriented co
   - Instruction‑based and interactive control (`gN`, `gd`/`cg`, `r`, `V`, `u`, `visualize`, `save`, etc.).
   - Basic visualization script for inspecting meshes.
 - Test suite covering core geometry, I/O, energy modules, refinement, and steppers.
-

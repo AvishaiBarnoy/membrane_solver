@@ -49,6 +49,9 @@ def test_volume_energy_and_gradient():
 
     # Set up global parameters
     global_params = GlobalParameters()
+    # Use the legacy quadratic penalty mode so that the volume
+    # energy contributes to the total energy in this unit test.
+    global_params.set("volume_constraint_mode", "penalty")
     global_params.volume_stiffness = 2.0
 
     param_resolver = ParameterResolver(global_params)
@@ -107,6 +110,7 @@ def test_calculate_volume_energy():
     mesh = Mesh(vertices=vertices, edges=edges, facets=facets, bodies=bodies)
 
     global_params = GlobalParameters()
+    global_params.set("volume_constraint_mode", "penalty")
     global_params.volume_stiffness = 2.0
 
     energy = calculate_volume_energy(mesh, global_params)

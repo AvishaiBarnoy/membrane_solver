@@ -57,7 +57,8 @@ returned mesh is therefore ready for optimization without further refinement.
 ## roadmap
 1. cube that minimizes into a sphere
     1.1 soft constraint - volume energy - DONE
-    1.2 hard constraint - lagrange multiplier
+    1.2 hard constraint - lagrange multiplier – implemented via
+        volume‑gradient projection in the minimizer (default mode)
 2. square that minimizes into circle
     2.1 soft constraint - surface area energy
     2.2 hard constraint - lagrange multiplier

@@ -10,13 +10,20 @@ logger = setup_logging('membrane_solver')
 
 def calculate_volume_energy(mesh, global_params):
     """
-    Compute volume energy as:
+    Compute volume energy as a soft quadratic penalty:
         E = 1/2 * k * (V - V₀)²
     where:
     - V is current volume
     - V₀ is target volume
     - k is stiffness (local or from global parameters)
     """
+    # In "lagrange" mode volume is enforced as a hard constraint via the
+    # optimizer, so this energy term is disabled by default. The legacy
+    # penalty path is still available for tests or explicit configurations.
+    mode = global_params.get("volume_constraint_mode", "lagrange")
+    if mode != "penalty":
+        return 0.0
+
     volume_energy = 0.0
 
     for body in mesh.bodies.values():
@@ -72,6 +79,20 @@ def _body_volume_batched(mesh, body: Body, positions: np.ndarray, index_map: Dic
     return float(vol_contrib.sum() / 6.0)
 
 def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_gradient: bool = True):
+    """Volume energy and gradient.
+
+    In the default ``\"lagrange\"`` mode, volume is treated as a hard
+    constraint integrated into the optimizer, so this module returns zero
+    energy and gradient. When ``global_params.volume_constraint_mode`` is
+    set to ``\"penalty\"``, it reverts to the classic quadratic penalty
+    behaviour used in the original implementation and tests.
+    """
+
+    mode = global_params.get("volume_constraint_mode", "lagrange")
+    if mode != "penalty":
+        # Hard‑constraint mode: no explicit volume energy term.
+        return 0.0, {}
+
     E = 0.0
     grad: Dict[int, np.ndarray] | None = (
         defaultdict(lambda: np.zeros(3)) if compute_gradient else None

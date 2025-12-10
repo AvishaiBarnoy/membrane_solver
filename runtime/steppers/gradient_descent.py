@@ -18,9 +18,9 @@ class GradientDescent(BaseStepper):
     def __init__(
         self,
         max_iter: int = 10,
-        beta: float = 0.5,
+        beta: float = 0.7,
         c: float = 1e-4,
-        gamma: float = 1.2,
+        gamma: float = 1.5,
         alpha_max_factor: float = 10.0,
     ) -> None:
         self.max_iter = max_iter

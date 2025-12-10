@@ -16,9 +16,9 @@ class ConjugateGradient(BaseStepper):
         restart_interval: int = 10,
         precondition: bool = False,
         max_iter: int = 10,
-        beta: float = 0.5,
+        beta: float = 0.7,
         c: float = 1e-4,
-        gamma: float = 1.2,
+        gamma: float = 1.5,
         alpha_max_factor: float = 10.0,
     ) -> None:
         self.prev_grad: Dict[int, np.ndarray] = {}
@@ -97,4 +97,9 @@ class ConjugateGradient(BaseStepper):
                 self.prev_dir[vidx] = d.copy()
             self.iter_count += 1
 
-        return success, new_step
+        # On failure we deliberately return the original ``step_size`` so that
+        # callers controlling the outer loop can decide how (and whether) to
+        # adapt the step size. This also preserves the previous iteration
+        # history, which is important for tests that expect CG state to remain
+        # unchanged after an unsuccessful line search.
+        return success, new_step if success else step_size

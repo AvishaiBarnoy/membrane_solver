@@ -39,6 +39,8 @@ class Minimizer:
         self.step_size = step_size
         self.tol = tol
         self.quiet = quiet
+        self.max_zero_steps = int(global_params.get("max_zero_steps", 10))
+        self.step_size_floor = float(global_params.get("step_size_floor", 1e-8))
 
         # Use provided module lists or fall back to those defined on the mesh
         module_list = energy_modules if energy_modules is not None else mesh.energy_modules
@@ -73,6 +75,20 @@ STEP SIZE:\t {self.step_size}
     def compute_energy_and_gradient(self):
         """Return total energy and gradient for the current mesh."""
 
+        # Invalidate any cached body volume/gradient before computing new values
+        # since vertex positions may have changed after the last step.
+        for body in self.mesh.bodies.values():
+            if hasattr(body, "_last_volume"):
+                body._last_volume = None
+            if hasattr(body, "_last_volume_grad"):
+                body._last_volume_grad = None
+
+        # First, compute volume gradients for constrained bodies when using
+        # Lagrange‑style hard volume constraints. This mirrors Evolver's
+        # ``calc_volgrads`` phase and lets us reuse the same gradients both
+        # for constraint projection and diagnostics.
+        self._update_volume_gradients()
+
         total_energy = 0.0
         # initialize per-vertex gradient dict
         grad: Dict[int, np.ndarray] = {
@@ -88,7 +104,109 @@ STEP SIZE:\t {self.step_size}
             for vidx, gvec in g_mod.items():
                 grad[vidx] += gvec
 
+        # Integrate hard volume constraints via a Lagrange‑style projection
+        # of the gradient onto the tangent space of fixed‑volume manifolds,
+        # analogous to Evolver's ``calc_lagrange`` + ``lagrange_adjust``.
+        self._apply_volume_constraints_lagrange(grad)
+
         return total_energy, grad
+
+    def _update_volume_gradients(self) -> None:
+        """Compute and cache body volume gradients when needed.
+
+        In ``\"lagrange\"`` mode this plays the role of Evolver's
+        ``calc_volgrads``: for each body with a target volume we compute
+        ``(V, ∇V)`` once per iteration and stash them on the body for later
+        use by the projection routine.
+        """
+
+        mode = self.global_params.get("volume_constraint_mode", "lagrange")
+        if mode != "lagrange":
+            return
+
+        if not self.mesh.bodies:
+            return
+
+        for body in self.mesh.bodies.values():
+            V_target = body.target_volume
+            if V_target is None:
+                V_target = body.options.get("target_volume")
+            if V_target is None:
+                continue
+
+            vol, vol_grad = body.compute_volume_and_gradient(self.mesh)
+            body._last_volume = vol
+            body._last_volume_grad = vol_grad
+
+    def _apply_volume_constraints_lagrange(self, grad: Dict[int, np.ndarray]) -> None:
+        """Project the gradient to respect volume constraints.
+
+        When ``global_parameters.volume_constraint_mode == "lagrange"``,
+        project the gradient onto the subspace orthogonal to all active body
+        volume gradients. This solves a small linear system in the space of
+        volume constraints, analogous to a multi‑constraint Lagrange
+        multiplier update, and generalises cleanly to multiple bodies.
+        """
+
+        mode = self.global_params.get("volume_constraint_mode", "lagrange")
+        if mode != "lagrange":
+            return
+
+        # Gather all bodies that actually have a target volume and cached
+        # gradients from ``_update_volume_gradients``.
+        constrained_bodies: list[tuple["Body", Dict[int, np.ndarray]]] = []
+        for body in self.mesh.bodies.values():
+            V_target = body.target_volume
+            if V_target is None:
+                V_target = body.options.get("target_volume")
+            if V_target is None:
+                continue
+
+            vol_grad = getattr(body, "_last_volume_grad", None)
+            if not vol_grad:
+                continue
+            constrained_bodies.append((body, vol_grad))
+
+        if not constrained_bodies:
+            return
+
+        import numpy as np  # Local import to avoid polluting module namespace
+
+        k = len(constrained_bodies)
+        # A_ij = <∇V_i, ∇V_j>; b_i = <∇E, ∇V_i>
+        A = np.zeros((k, k), dtype=float)
+        b_vec = np.zeros(k, dtype=float)
+
+        # Build A and b by looping over vertices once per body pair.
+        for i, (_, gradVi) in enumerate(constrained_bodies):
+            for vidx, gVi in gradVi.items():
+                if vidx in grad:
+                    b_vec[i] += float(np.dot(grad[vidx], gVi))
+                for j in range(i, k):
+                    gVj = constrained_bodies[j][1].get(vidx)
+                    if gVj is None:
+                        continue
+                    val = float(np.dot(gVi, gVj))
+                    A[i, j] += val
+                    if j != i:
+                        A[j, i] += val
+
+        # Regularise and solve A λ = b. If the system is ill‑conditioned or
+        # singular, fall back to no projection rather than risking instability.
+        eps = 1e-18
+        A[np.diag_indices_from(A)] += eps
+        try:
+            lam = np.linalg.solve(A, b_vec)
+        except np.linalg.LinAlgError:
+            return
+
+        # Apply the combined projection to the gradient.
+        for (body, gradVi), lam_i in zip(constrained_bodies, lam):
+            if lam_i == 0.0:
+                continue
+            for vidx, gVi in gradVi.items():
+                if vidx in grad:
+                    grad[vidx] -= lam_i * gVi
 
     def compute_energy(self):
         """Compute the total energy using the loaded modules."""
@@ -136,18 +254,51 @@ STEP SIZE:\t {self.step_size}
                 grad[bidx] = body.constraint.project_gradient(grad[bidx])
 
 
-    def _enforce_constraints(self):
-        if self._has_enforceable_constraints:
-            self.constraint_manager.enforce_all(
-                self.mesh,
-                global_params=self.global_params,
-            )
+    def _enforce_constraints(self, mesh: Mesh | None = None):
+        """Invoke all constraint modules on the current mesh.
+
+        Accepts an optional ``mesh`` argument so it can be used directly as the
+        ``constraint_enforcer`` callback in line‑search routines that call it
+        as ``constraint_enforcer(mesh)``. When ``mesh`` is omitted, the
+        minimizer's own mesh is used.
+
+        This method is intended for use *during minimization*. Depending on
+        the global parameter ``volume_projection_during_minimization``, the
+        volume constraint may be enforced either purely through gradient
+        projection (Evolver‑like) or by an additional geometric projection
+        step inside the line search (legacy behaviour).
+        """
+        if not self._has_enforceable_constraints:
+            return
+
+        target_mesh = mesh if mesh is not None else self.mesh
+        self.constraint_manager.enforce_all(
+            target_mesh,
+            global_params=self.global_params,
+            context="minimize",
+        )
+
+    def enforce_constraints_after_mesh_ops(self, mesh: Mesh | None = None) -> None:
+        """Enforce constraints after discrete mesh operations.
+
+        This is used after refinement, equiangulation, vertex averaging, etc.,
+        where we do want to snap the geometry back to satisfy hard constraints
+        such as fixed volume.
+        """
+        if not self._has_enforceable_constraints:
+            return
+
+        target_mesh = mesh if mesh is not None else self.mesh
+        self.constraint_manager.enforce_all(
+            target_mesh,
+            global_params=self.global_params,
+            context="mesh_operation",
+        )
 
     def minimize(self, n_steps: int = 1):
         """Run the optimization loop for ``n_steps`` iterations."""
         zero_step_counter = 0
         step_success = True
-        max_zero_steps = 5  # You can tune this
 
         if n_steps <= 0:
             E, grad = self.compute_energy_and_gradient()
@@ -173,6 +324,7 @@ STEP SIZE:\t {self.step_size}
                 return {"energy": E, "gradient": grad, "mesh": self.mesh,
                         "step_success": True, "iterations": i + 1,
                         "terminated_early": True}
+            logger.debug("Iteration %d: |∇E|=%.3e", i, grad_norm)
 
             if not self.quiet:
                 # Compute total area only when needed for diagnostics
@@ -190,17 +342,78 @@ STEP SIZE:\t {self.step_size}
             )
 
             if not step_success:
-                zero_step_counter += 1
-                if zero_step_counter >= max_zero_steps:
-                    logger.info(
-                        f"Terminating early after {zero_step_counter} consecutive zero-steps."
-                    )
-                    return {"energy": E, "gradient": grad, "mesh": self.mesh,
-                            "step_success": False, "iterations": i + 1,
-                            "terminated_early": True}
+                if self.step_size <= self.step_size_floor:
+                    zero_step_counter += 1
+                    if zero_step_counter >= self.max_zero_steps:
+                        logger.info(
+                            "Terminating early after %d consecutive zero-steps "
+                            "with step size <= %.2e.",
+                            zero_step_counter,
+                            self.step_size_floor,
+                        )
+                        return {
+                            "energy": E,
+                            "gradient": grad,
+                            "mesh": self.mesh,
+                            "step_success": False,
+                            "iterations": i + 1,
+                            "terminated_early": True,
+                        }
+                else:
+                    zero_step_counter = 0
+                reset = getattr(self.stepper, "reset", None)
+                if callable(reset):
+                    reset()
             else:
                 zero_step_counter = 0
 
-        return {"energy": E, "gradient": grad, "mesh": self.mesh,
-                "step_success": step_success, "iterations": n_steps,
-                "terminated_early": False}
+                # In Lagrange mode, when geometric volume projection is
+                # disabled during the line search, occasionally pull the
+                # configuration back exactly onto the target volume manifolds
+                # if we have drifted too far. This keeps hard volume
+                # constraints honest without fighting the line search at every
+                # trial step.
+                mode = self.global_params.get("volume_constraint_mode", "lagrange")
+                proj_flag = self.global_params.get(
+                    "volume_projection_during_minimization", True
+                )
+                vol_tol = float(self.global_params.get("volume_tolerance", 1e-3))
+                if (
+                    mode == "lagrange"
+                    and not proj_flag
+                    and self.mesh.bodies
+                ):
+                    max_rel_violation = 0.0
+                    for body in self.mesh.bodies.values():
+                        target = body.target_volume
+                        if target is None:
+                            target = body.options.get("target_volume")
+                        if target is None:
+                            continue
+                        current = body.compute_volume(self.mesh)
+                        denom = max(abs(target), 1.0)
+                        rel = abs(current - target) / denom
+                        if rel > max_rel_violation:
+                            max_rel_violation = rel
+
+                    if max_rel_violation > vol_tol:
+                        logger.debug(
+                            "Volume drift %.3e exceeds tolerance %.3e; "
+                            "applying geometric volume projection.",
+                            max_rel_violation,
+                            vol_tol,
+                        )
+                        self.enforce_constraints_after_mesh_ops(self.mesh)
+                        # After a hard projection, any CG history is stale.
+                        reset = getattr(self.stepper, "reset", None)
+                        if callable(reset):
+                            reset()
+
+        return {
+            "energy": E,
+            "gradient": grad,
+            "mesh": self.mesh,
+            "step_success": step_success,
+            "iterations": n_steps,
+            "terminated_early": False,
+        }

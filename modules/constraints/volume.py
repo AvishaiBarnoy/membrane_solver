@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict
+from typing import Dict, Any
 import numpy as np
 
 from logging_config import setup_logging
@@ -10,20 +10,35 @@ from logging_config import setup_logging
 logger = setup_logging("membrane_solver")
 
 
-def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 3) -> None:
+def enforce_constraint(
+    mesh,
+    tol: float = 1e-12,
+    max_iter: int = 3,
+    global_params: Any | None = None,
+    force_projection: bool = False,
+    **kwargs,
+) -> None:
     """Enforce hard volume constraints on all bodies in ``mesh``.
 
-    Each body's vertices are displaced along the volume gradient so that the
-    body's volume matches its target volume exactly. The displacement is
-    computed using a Lagrange multiplier approach.
-
-    Parameters
-    ----------
-    mesh : Mesh
-        Mesh containing the bodies whose volume must be constrained.
-    tol : float, optional
-        Tolerance below which volume differences are ignored.
+    Modes:
+      - ``force_projection``: always apply the projection step, regardless of
+        global settings. Used by the constraint manager after mesh surgery.
+      - Otherwise, if ``global_params.volume_constraint_mode == "lagrange"``,
+        we still project here because downstream callers expect a hard volume
+        correction (e.g., after refinement/equiangulation/averaging).
+      - In legacy \"projection\" mode (or when ``force_projection`` is True),
+        bodies are displaced along the volume gradient so that their volume
+        matches the target exactly, using a Lagrange‑multiplier step.
     """
+
+    if global_params is not None:
+        mode = global_params.get("volume_constraint_mode", "lagrange")
+    else:
+        mode = "projection"
+
+    project = force_projection or (mode in {"lagrange", "projection"})
+    if not project:
+        return
 
     for body in mesh.bodies.values():
         V_target = body.target_volume
@@ -33,12 +48,16 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 3) -> None:
             continue
 
         for _ in range(max_iter):
-            V_actual = body.compute_volume(mesh)
+            # Always compute volume and its gradient fresh inside this local
+            # projection loop. This keeps the caching strategy simple: any
+            # persistent per‑body caches are owned by the minimizer's gradient
+            # pipeline rather than by the constraint module.
+            V_actual, grad = body.compute_volume_and_gradient(mesh)
+
             delta_v = V_actual - V_target
             if abs(delta_v) < tol:
                 break
 
-            grad = body.compute_volume_gradient(mesh)
             norm_sq = sum(np.dot(g, g) for g in grad.values()) + 1e-12
             lam = delta_v / norm_sq
 

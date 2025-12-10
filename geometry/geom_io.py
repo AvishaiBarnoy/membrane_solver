@@ -178,40 +178,71 @@ def parse_geometry(data: dict) -> Mesh:
 
     # Bodies
     if "bodies" in data:
-        face_groups = data["bodies"]["faces"]
-        volumes = data["bodies"].get("target_volume", [None] * len(face_groups))
-        options = data["bodies"].get("energy", [{}] * len(face_groups))
-        for i, (facet_indices, volume, options) in enumerate(zip(face_groups, volumes, options)):
-            body = Body(index=i, facet_indices=facet_indices,
-                                  target_volume=volume, options={"energy": options})
-            body.options["target_volume"] = float(volume)
+        bodies_section = data["bodies"]
+        face_groups = bodies_section["faces"]
+        volumes = bodies_section.get("target_volume", [None] * len(face_groups))
+
+        # ``energy`` may be:
+        #   - a list parallel to ``faces`` (per‑body specs), or
+        #   - a single string/dict applying to all bodies.
+        energy_entries = bodies_section.get("energy", [None] * len(face_groups))
+        if not isinstance(energy_entries, list) or len(energy_entries) != len(face_groups):
+            energy_entries = [energy_entries] * len(face_groups)
+
+        for i, (facet_indices, volume, energy_spec) in enumerate(
+            zip(face_groups, volumes, energy_entries)
+        ):
+            # Start with an options dict derived from the energy specification.
+            body_options = {}
+            if isinstance(energy_spec, dict):
+                body_options.update(energy_spec)
+            elif energy_spec is not None:
+                body_options["energy"] = energy_spec
+
+            body = Body(
+                index=i,
+                facet_indices=facet_indices,
+                target_volume=volume,
+                options=body_options,
+            )
+            if volume is not None:
+                body.options["target_volume"] = float(volume)
+
             mesh.bodies[i] = body
-            # Energy modules
-            if "energy" in options:
-                if isinstance(options["energy"], list):
-                    energy_module_names.update(options["energy"])
-                elif isinstance(options["energy"], str):
-                    energy_module_names.add(options["energy"])
-                    mesh.bodies[i].options["energy"] = [mesh.bodies[i].options["energy"]]
+
+            # Energy modules (opt‑in). If omitted, bodies have no explicit
+            # volume penalty term and are expected to be governed by hard
+            # constraints instead.
+            energy_spec = body.options.get("energy")
+            if energy_spec is not None:
+                if isinstance(energy_spec, list):
+                    energy_module_names.update(energy_spec)
+                elif isinstance(energy_spec, str):
+                    energy_module_names.add(energy_spec)
+                    body.options["energy"] = [energy_spec]
                 else:
                     err_msg = "energy modules should be in a list or a single string"
                     logger.error(err_msg)
                     raise err_msg
-            elif "energy" not in options:
-                if len(mesh.bodies) > 0:
-                    mesh.bodies[i].options["energy"] = ["volume"]
-                    energy_module_names.add("volume")
-            # Body constraint modules
-            if "constraints" in options:
-                if isinstance(options["constraints"], list):
-                    constraint_module_names.update(options["constraints"])
-                elif isinstance(options["constraints"], str):
-                    constraint_module_names.add(options["constraints"])
-                    mesh.bodies[i].options["constraints"] = [mesh.bodies[i].options["constraints"]]
-                else:
-                    err_msg = "constraint modules should be in a list or a single string"
-                    logger.error(err_msg)
-                    raise err_msg
+
+            # Body constraint modules. If a target volume is specified,
+            # automatically enable the volume constraint module so bodies
+            # behave like FIXEDVOL in Evolver, on top of any explicit
+            # constraints configured.
+            constraint_spec = body.options.get("constraints", [])
+            if isinstance(constraint_spec, str):
+                body_constraints = [constraint_spec]
+            elif isinstance(constraint_spec, list):
+                body_constraints = list(constraint_spec)
+            else:
+                body_constraints = []
+
+            if volume is not None and "volume" not in body_constraints:
+                body_constraints.append("volume")
+
+            if body_constraints:
+                body.options["constraints"] = body_constraints
+                constraint_module_names.extend(body_constraints)
 
     # Instructions
     mesh.instructions = data.get("instructions", [])

@@ -19,6 +19,36 @@ from visualize_geometry import plot_geometry
 logger = None
 
 
+def print_physical_properties(mesh: Mesh) -> None:
+    """Print basic physical properties of the mesh.
+
+    Includes global surface area and volume, as well as per‑body volumes
+    and surface areas when bodies are present.
+    """
+    total_area = mesh.compute_total_surface_area()
+    total_volume = mesh.compute_total_volume()
+
+    print("=== Physical Properties ===")
+    print(f"Vertices: {len(mesh.vertices)}")
+    print(f"Edges   : {len(mesh.edges)}")
+    print(f"Facets  : {len(mesh.facets)}")
+    print(f"Bodies  : {len(mesh.bodies)}")
+    print()
+    print(f"Total surface area: {total_area:.6f}")
+    print(f"Total volume      : {total_volume:.6f}")
+
+    if mesh.bodies:
+        print()
+        print("Per‑body properties:")
+        for body_idx, body in mesh.bodies.items():
+            body_vol = body.compute_volume(mesh)
+            body_area = body.compute_surface_area(mesh)
+            print(
+                f"  Body {body_idx}: volume = {body_vol:.6f}, "
+                f"surface area = {body_area:.6f}"
+            )
+
+
 def resolve_json_path(path: str) -> str:
     """Return a valid JSON file path, allowing path without extension."""
     if os.path.isfile(path):
@@ -58,6 +88,8 @@ def parse_instructions(instr):
             result.append('gd')
         elif cmd in {'h', 'help', '?'}:
             result.append('help')
+        elif cmd in {'properties', 'props', 'p'}:
+            result.append('properties')
         elif cmd == "visualize" or cmd == "s":
             result.append(cmd)
         elif cmd.startswith("V") or cmd == "vertex_average":
@@ -87,6 +119,7 @@ def execute_command(cmd, mesh, minimizer, stepper):
         print("  vertex_average Same as V")
         print("  u             Equiangulate mesh")
         print("  visualize / s Plot current geometry")
+        print("  properties    Print physical properties (area, volume, etc.)")
         print("  save          Save geometry to 'interactive.temp'")
         print("  quit / exit / q  Leave interactive mode")
         print()
@@ -144,16 +177,31 @@ def execute_command(cmd, mesh, minimizer, stepper):
         mesh = refine_triangle_mesh(mesh)
         mesh = refine_polygonal_facets(mesh)
         minimizer.mesh = mesh
+        minimizer.enforce_constraints_after_mesh_ops(mesh)
         logger.info("Mesh refinement complete.")
     elif cmd.startswith('V'):
-        if cmd != 'V':
-            cmd = ''.join(cmd.split())
-            for i in range(1, int(cmd[1:]) + 1):
-                vertex_average(mesh)
-                logger.info("Vertex averaging done.")
-        elif cmd == "V":
+        # Vertex averaging: V for a single pass, or VN for N passes.
+        cmd = cmd.replace(" ", "")
+        if cmd == "V":
+            n_passes = 1
+        else:
+            passes_str = cmd[1:]
+            if not passes_str.isnumeric():
+                logger.warning(
+                    "Invalid vertex averaging command '%s'; expected 'V' or 'VN' "
+                    "with integer N.",
+                    cmd,
+                )
+                return mesh, stepper
+            n_passes = int(passes_str)
+
+        for _ in range(n_passes):
             vertex_average(mesh)
-            logger.info("Vertex averaging done.")
+        logger.info("Vertex averaging done.")
+        # After vertex averaging, explicitly re‑enforce hard constraints such
+        # as fixed volume so subsequent minimization starts from a consistent
+        # state, even if averaging introduced small drifts.
+        minimizer.enforce_constraints_after_mesh_ops(mesh)
     elif cmd == 'vertex_average':
         vertex_average(mesh)
         logger.info("Vertex averaging done.")
@@ -161,7 +209,10 @@ def execute_command(cmd, mesh, minimizer, stepper):
         logger.info("Starting equiangulation...")
         mesh = equiangulate_mesh(mesh)
         minimizer.mesh = mesh
+        minimizer.enforce_constraints_after_mesh_ops(mesh)
         logger.info("Equiangulation complete.")
+    elif cmd == 'properties':
+        print_physical_properties(mesh)
     elif cmd == 'visualize' or cmd == "s":
         plot_geometry(mesh, show_indices=False)
     elif cmd == 'save':
@@ -203,6 +254,17 @@ def main():
                         help='Enable verbose debug logging')
     parser.add_argument('--non-interactive', action='store_true',
                         help="Skip interactive mode after executing instructions")
+    parser.add_argument(
+        '--properties',
+        action='store_true',
+        help='Print basic physical properties (volume, surface area, etc.) and exit',
+    )
+    parser.add_argument(
+        '--volume-mode',
+        choices=['lagrange', 'penalty'],
+        default=None,
+        help='Override volume constraint mode (lagrange = hard constraint; penalty = soft energy).',
+    )
     args = parser.parse_args()
 
     if not args.input:
@@ -233,6 +295,8 @@ def main():
     logger.debug(f"Target volume of body: {mesh.bodies[0].options['target_volume']}")
 
     global_params = mesh.global_parameters
+    if args.volume_mode:
+        global_params.set("volume_constraint_mode", args.volume_mode)
     param_resolver = ParameterResolver(global_params)
     energy_manager = EnergyModuleManager(mesh.energy_modules)
 
@@ -241,6 +305,11 @@ def main():
     constraint_manager = ConstraintModuleManager(mesh.constraint_modules)
     # Use Conjugate Gradient as the default stepper for faster convergence.
     stepper = ConjugateGradient()
+
+    # Optional: report physical properties and exit early if requested.
+    if args.properties:
+        print_physical_properties(mesh)
+        return
 
     # Load instructions
     if args.instructions:

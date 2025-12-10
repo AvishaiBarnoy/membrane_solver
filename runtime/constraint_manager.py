@@ -43,12 +43,52 @@ class ConstraintModuleManager:
         return loaded
 
     def enforce_all(self, mesh, **kwargs):
+        """Invoke ``enforce_constraint`` on all loaded constraint modules.
+
+        Modules are called with ``mesh`` and any keyword arguments supplied.
+        If a module does not accept the expanded signature, we gracefully
+        fall back to calling it with just ``mesh`` to preserve backward
+        compatibility.
+        """
+        context = kwargs.get("context", "minimize")
+        global_params = kwargs.get("global_params")
+        project_in_minimize = True
+        if global_params is not None:
+            project_in_minimize = global_params.get(
+                "volume_projection_during_minimization", True
+            )
+
         for name, module in self.modules.items():
             if not hasattr(module, "enforce_constraint"):
-                logger.debug(f"Constraint module '{name}' has no enforce_constraint; skipping.")
+                logger.debug(
+                    "Constraint module '%s' has no enforce_constraint; skipping.",
+                    name,
+                )
                 continue
-            logger.debug(f"Enforcing constraint: {name}")
-            module.enforce_constraint(mesh, **kwargs)
+
+            logger.debug("Enforcing constraint: %s", name)
+            try:
+                # For the volume constraint we distinguish between two use cases:
+                #   - During minimization steps (``context == 'minimize'``) we
+                #     may skip geometric volume projection if global parameters
+                #     request that the optimizer handle volume purely via
+                #     Lagrange‑style gradient projection.
+                #   - After discrete mesh operations such as refinement,
+                #     equiangulation or vertex averaging (other contexts), we
+                #     always apply a hard projection back to the target volume.
+                if name == "volume" and context == "minimize" and not project_in_minimize:
+                    logger.debug(
+                        "Skipping geometric volume projection during minimization; "
+                        "hard volume is handled via gradient projection."
+                    )
+                    continue
+                if name == "volume":
+                    module.enforce_constraint(mesh, force_projection=True, **kwargs)
+                else:
+                    module.enforce_constraint(mesh, **kwargs)
+            except TypeError:
+                # Older modules may not accept extra keyword arguments.
+                module.enforce_constraint(mesh)
 
     def __contains__(self, name):
         return name in self.modules

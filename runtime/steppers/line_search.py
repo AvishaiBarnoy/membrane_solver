@@ -13,13 +13,13 @@ def backtracking_line_search(
     step_size: float,
     energy_fn: Callable[[], float],
     max_iter: int = 10,
-    beta: float = 0.2,
+    beta: float = 0.7,
     c: float = 1e-4,
-    gamma: float = 1.2,
+    gamma: float = 1.5,
     alpha_max_factor: float = 10.0,
     constraint_enforcer: Callable[[Mesh], None] | None = None,
 ) -> tuple[bool, float]:
-    """Perform Armijo backtracking line search along ``direction``.
+    """Armijo backtracking line search with optional volume guard.
 
     Parameters
     ----------
@@ -65,7 +65,9 @@ def backtracking_line_search(
     alpha = step_size
     alpha_max = alpha_max_factor * step_size
 
+    backtracks = 0
     for _ in range(max_iter):
+        # Trial step from original positions.
         for vidx, vertex in mesh.vertices.items():
             if getattr(vertex, "fixed", False):
                 continue
@@ -76,16 +78,36 @@ def backtracking_line_search(
                     vertex.position
                 )
 
-        if constraint_enforcer is not None:
-            constraint_enforcer(mesh)
-
         trial_energy = energy_fn()
         if trial_energy <= energy0 + c * alpha * g_dot_d:
-            logger.debug(f"Line search accepted step size {alpha:.3e}")
-            new_step = min(alpha * gamma, alpha_max)
-            return True, new_step
+            # Apply constraints only after provisionally accepting the step.
+            if constraint_enforcer is not None:
+                constraint_enforcer(mesh)
+                trial_energy_after_constraint = energy_fn()
+            else:
+                trial_energy_after_constraint = trial_energy
+
+            if trial_energy_after_constraint <= energy0 + c * alpha * g_dot_d:
+                logger.debug(
+                    "Line search success: alpha=%.3e, backtracks=%d, "
+                    "E0=%.6f, Etrial=%.6f (post-constraint=%.6f)",
+                    alpha,
+                    backtracks,
+                    energy0,
+                    trial_energy,
+                    trial_energy_after_constraint,
+                )
+                new_step = min(alpha * gamma, alpha_max)
+                return True, new_step
+
+        # Reject this scale: restore and try a smaller one.
+        for vidx, vertex in mesh.vertices.items():
+            if getattr(vertex, "fixed", False):
+                continue
+            vertex.position[:] = original_positions[vidx]
 
         alpha *= beta
+        backtracks += 1
 
         # If the trial step size becomes too small, further reductions are
         # unlikely to produce meaningful changes in geometry, so bail out.
@@ -93,13 +115,17 @@ def backtracking_line_search(
             break
 
     logger.debug(
-        f"Line search failed to satisfy Armijo after {max_iter} iterations. Reverting."
+        "Line search failed after %d backtracks; reverting positions and shrinking step size.",
+        backtracks,
     )
     for vidx, vertex in mesh.vertices.items():
         if getattr(vertex, "fixed", False):
             continue
         vertex.position[:] = original_positions[vidx]
 
-    logger.info("Zero-step detected: no trial step reduced energy.")
-    logger.info(f"Current step_size = {step_size:.2e}")
-    return False, step_size
+    logger.debug(
+        "Zero-step detected: no trial step reduced energy (alpha reached %.2e).",
+        alpha,
+    )
+    reduced_step = max(alpha * beta, 0.0)
+    return False, max(reduced_step, step_size * beta)
