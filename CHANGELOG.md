@@ -6,6 +6,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 ### Added
 - Automatic target-area detection on bodies/facets and regression tests (square with area constraint, tetra with volume constraint).
 - Benchmarks now run in read-only sandboxes (no temp files); README/manual updated with benchmark usage.
+- Integration tests covering the cube penalty scenario (energy decrease, volume preservation, refine+equiangulate validity) and parsing tests for the interactive `rN` command.
 
 ### Changed
 - Volume handling:
@@ -13,6 +14,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - `penalty` mode auto-loads the `volume` energy module instead, restoring quadratic penalty behaviour.
 - `main.py` now imports `visualize_geometry` lazily so headless runs/benchmarks don’t crash when Matplotlib can’t create cache dirs.
 - `benchmark_cube_good.py` runs directly on `cube_good_min_routine.json` without writing outputs.
+- Interactive mode: `rN` now repeat-refines without scripting loops, `i` is a shorthand for the properties command, and README/manual document the updated syntax. The old README TODO list was moved to `docs/ROADMAP.md`.
 
 ### Fixed
 - `load_data` accepts `Path` objects (needed for tests writing tmp JSONs).

@@ -2,6 +2,7 @@ import argparse
 import json
 import sys
 import os
+import logging
 from logging_config import setup_logging
 from geometry.geom_io import load_data, save_geometry, parse_geometry
 from geometry.entities import Mesh
@@ -14,7 +15,8 @@ from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
 from runtime.vertex_average import vertex_average
 from runtime.equiangulation import equiangulate_mesh
-logger = None
+logger = logging.getLogger("membrane_solver")
+logger.addHandler(logging.NullHandler())
 
 
 def print_physical_properties(mesh: Mesh) -> None:
@@ -77,21 +79,19 @@ def parse_instructions(instr):
         cmd = inst
         if cmd.startswith('g'):
             result.append(cmd)
-        elif cmd == 'r':
-            result.append('r')
-            # TODO 1: accept "r #n" for multiple refining.
+        elif cmd.startswith('r'):
+            result.append(cmd)
         elif cmd == 'cg':
             result.append('cg')
         elif cmd == 'gd':
             result.append('gd')
         elif cmd in {'h', 'help', '?'}:
             result.append('help')
-        elif cmd in {'properties', 'props', 'p'}:
+        elif cmd in {'properties', 'props', 'p', 'i'}:
             result.append('properties')
         elif cmd == "visualize" or cmd == "s":
             result.append(cmd)
         elif cmd.startswith("V") or cmd == "vertex_average":
-            # TODO: expand to be target specific vertices "vertex_average [2,5]" 
             result.append(cmd)
         elif cmd == 'u':
             result.append('u')
@@ -170,13 +170,22 @@ def execute_command(cmd, mesh, minimizer, stepper):
         except ValueError as exc:
             raise ValueError(f"Invalid step size format {new_ts[1:]}") from exc
         logger.info(f"Updated step size to {minimizer.step_size}")
-    elif cmd == 'r':
-        logger.info("Refining mesh...")
-        mesh = refine_triangle_mesh(mesh)
-        mesh = refine_polygonal_facets(mesh)
-        minimizer.mesh = mesh
-        minimizer.enforce_constraints_after_mesh_ops(mesh)
-        logger.info("Mesh refinement complete.")
+    elif cmd.startswith('r'):
+        count = 1
+        arg = cmd[1:]
+        if arg:
+            if arg.isdigit():
+                count = int(arg)
+            else:
+                logger.warning("Invalid refine command '%s'; expected 'r' or 'rN'.", cmd)
+                return mesh, stepper
+        for i in range(count):
+            logger.info("Refining mesh... (%d/%d)", i + 1, count)
+            mesh = refine_triangle_mesh(mesh)
+            mesh = refine_polygonal_facets(mesh)
+            minimizer.mesh = mesh
+            minimizer.enforce_constraints_after_mesh_ops(mesh)
+        logger.info("Mesh refinement complete after %d pass(es).", count)
     elif cmd.startswith('V'):
         # Vertex averaging: V for a single pass, or VN for N passes.
         cmd = cmd.replace(" ", "")

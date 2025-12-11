@@ -45,14 +45,22 @@ Key command‑line options:
   interactive command (e.g. `g100`, `r`, `u`, …). These commands are executed
   before interactive mode starts.
 
-- `--properties`  
+- `--properties` / `-p` / `-i`  
   Compute and print basic physical properties (total area, volume, per‑body
   area/volume) and exit without minimization.
 
 - `--volume-mode {lagrange,penalty}`  
   Override the global `volume_constraint_mode`.
-  - `lagrange` – treat volume as a hard constraint (default).
-  - `penalty` – add a quadratic volume energy term.
+  - `lagrange` – treat volume as a hard constraint (default). Best paired with
+    `--volume-projection false` to avoid redundant geometric projections.
+  - `penalty` – add a quadratic volume energy term (soft constraint). Works
+    best with `--volume-projection true`.
+
+- `--volume-projection {true,false}`  
+  Control geometric projection during minimization.
+  - `false` is recommended when using the hard `lagrange` constraint (prevents
+    double enforcement in the line search).
+  - `true` is the historical behaviour and remains the default in penalty mode.
 
 - `--log PATH`  
   Log file path (default: `membrane_solver.log`, overwritten each run).
@@ -105,9 +113,10 @@ Interactive commands:
 - `tX`  
   Set step size to `X` (e.g. `t1e-3`).
 
-- `r`  
-  Refine the mesh (triangle refinement and polygonal refinement), then
-  re‑enforce hard constraints such as fixed volume.
+- `r` / `rN`  
+  Refine the mesh (triangle refinement + polygonal refinement). Provide a
+  number (`r3`) to repeat the refinement pass multiple times. After each pass
+  hard constraints are re‑enforced.
 
 - `V` / `VN` / `vertex_average`  
   Vertex averaging once (`V` / `vertex_average`) or `N` times (`V5`). After
@@ -117,7 +126,7 @@ Interactive commands:
   Equiangulate the mesh (edge flips to improve triangle quality), followed by
   constraint re‑enforcement.
 
-- `properties` / `props` / `p`  
+- `properties` / `props` / `p` / `i`  
   Print physical properties (global and per‑body area/volume).
 
 - `visualize` / `s`  
@@ -185,13 +194,20 @@ High‑level layout:
   - `"step_size"` (float initial step size).
   - `"max_zero_steps"`, `"step_size_floor"` (line‑search/stopping tweaks).
   - `"target_surface_area"`: for global area constraints.
-  - `"perimeter_constraints"`: see §6.4.
+- `"perimeter_constraints"`: see §6.4.
 
 The loader (`geometry.geom_io.parse_geometry`) also:
 
 - Automatically triangulates polygonal facets.
 - Builds connectivity maps (vertex↔edges↔facets).
 - Populates cached vertex loops for faster geometry calculations.
+
+> **Volume constraint defaults:** For stability the loader enforces paired
+> settings. If neither `volume_constraint_mode` nor
+> `volume_projection_during_minimization` is present, it defaults to
+> `("lagrange", False)`. Supplying only one field automatically picks the
+> complementary value (e.g. choosing `penalty` forces projection `True`).
+> You can still override both explicitly if needed.
 
 ---
 

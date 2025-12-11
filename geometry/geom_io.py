@@ -46,6 +46,35 @@ def parse_geometry(data: dict) -> Mesh:
     input_global_params = data.get("global_parameters", {})
     mesh.global_parameters.update(input_global_params)
 
+    # Stabilise volume constraint defaults: enforce complementary pairs.
+    has_mode = "volume_constraint_mode" in input_global_params
+    has_proj = "volume_projection_during_minimization" in input_global_params
+    if not has_mode and not has_proj:
+        mesh.global_parameters.set("volume_constraint_mode", "lagrange")
+        mesh.global_parameters.set("volume_projection_during_minimization", False)
+    elif has_mode and not has_proj:
+        mode = str(mesh.global_parameters.get("volume_constraint_mode", "lagrange")).lower()
+        proj = False if mode == "lagrange" else True
+        mesh.global_parameters.set("volume_projection_during_minimization", proj)
+    elif has_proj and not has_mode:
+        proj = bool(mesh.global_parameters.get("volume_projection_during_minimization", True))
+        mode = "penalty" if proj else "lagrange"
+        mesh.global_parameters.set("volume_constraint_mode", mode)
+
+    # Warn about unstable combinations.
+    mode = str(mesh.global_parameters.get("volume_constraint_mode", "lagrange")).lower()
+    proj_flag = bool(mesh.global_parameters.get("volume_projection_during_minimization", False))
+    if mode == "lagrange" and proj_flag:
+        logger.warning(
+            "volume_constraint_mode='lagrange' with volume_projection_during_minimization=True "
+            "is known to be unstable; consider disabling projection."
+        )
+    if mode == "penalty" and not proj_flag:
+        logger.warning(
+            "volume_constraint_mode='penalty' without geometric projection is not supported; "
+            "consider enabling volume_projection_during_minimization."
+        )
+
     # Initialize module_name list
     energy_module_names = set()
     # Allow explicit constraint modules at the top level (e.g. "global_area")

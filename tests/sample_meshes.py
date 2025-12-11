@@ -63,11 +63,15 @@ def cube_soft_volume_input(volume_mode: str = "penalty") -> dict:
 
     data = copy.deepcopy(SAMPLE_GEOMETRY)
     data.setdefault("global_parameters", {})
+    if volume_mode == "penalty":
+        projection = True
+    else:
+        projection = False
     data["global_parameters"].update(
         {
             "surface_tension": 1.0,
             "volume_constraint_mode": volume_mode,
-            "volume_projection_during_minimization": True,
+            "volume_projection_during_minimization": projection,
         }
     )
     return data
