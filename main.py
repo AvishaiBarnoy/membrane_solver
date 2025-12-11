@@ -14,8 +14,6 @@ from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
 from runtime.vertex_average import vertex_average
 from runtime.equiangulation import equiangulate_mesh
-from visualize_geometry import plot_geometry
-
 logger = None
 
 
@@ -214,6 +212,7 @@ def execute_command(cmd, mesh, minimizer, stepper):
     elif cmd == 'properties':
         print_physical_properties(mesh)
     elif cmd == 'visualize' or cmd == "s":
+        from visualize_geometry import plot_geometry
         plot_geometry(mesh, show_indices=False)
     elif cmd == 'save':
         # fall back to a default name

@@ -196,6 +196,10 @@ def parse_geometry(data: dict) -> Mesh:
         if options.get("fixed", False):
             constraint_module_names.append("fixed")
 
+    vol_mode = mesh.global_parameters.get("volume_constraint_mode", "lagrange")
+    if vol_mode == "penalty":
+        energy_module_names.add("volume")
+
     # Bodies
     if "bodies" in data:
         bodies_section = data["bodies"]
@@ -284,7 +288,11 @@ def parse_geometry(data: dict) -> Mesh:
             else:
                 body_constraints = []
 
-            if volume is not None and "volume" not in body_constraints:
+            if (
+                volume is not None
+                and vol_mode == "lagrange"
+                and "volume" not in body_constraints
+            ):
                 body_constraints.append("volume")
 
             if body.options.get("target_area") is not None and "body_area" not in body_constraints:

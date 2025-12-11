@@ -440,3 +440,12 @@ When adding new energies or constraints, implement the appropriate
 `compute_energy_and_gradient` / `enforce_constraint` functions and update this
 manual accordingly before merging into `main`.
 
+6. Volume enforcement modes (global_parameters):
+    - `"volume_constraint_mode": "lagrange"` (default) projects gradients
+      using body volume gradients; bodies auto-load the hard `volume`
+      constraint module.
+    - `"volume_constraint_mode": "penalty"` re-activates the quadratic volume
+      energy (`modules/energy/volume.py`) so you get Evolver-style ``VOLCONST``
+      behaviour without the hard constraint overhead.
+    - `volume_projection_during_minimization` controls whether the geometric
+      projection runs inside the line search (mostly for legacy penalty mode).

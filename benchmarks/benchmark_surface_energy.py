@@ -14,11 +14,24 @@ import sys, os
 import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
-
+from contextlib import contextmanager
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-BASE_JSON = Path("../meshes/cube.json")
+BASE_JSON = Path(__file__).resolve().parent.parent / "meshes" / "cube.json"
 RUNS = 3
+LOCAL_TMP_ROOT = Path(__file__).resolve().parent.parent / "outputs"
+
+
+@contextmanager
+def _temporary_directory():
+    """Yield a TemporaryDirectory with a local fallback when /tmp is unavailable."""
+    try:
+        with TemporaryDirectory() as tmp:
+            yield Path(tmp)
+            return
+    except (FileNotFoundError, OSError):
+        with TemporaryDirectory(dir=str(LOCAL_TMP_ROOT)) as tmp:
+            yield Path(tmp)
 
 
 def _prepare_input(module: str, tmpdir: Path) -> Path:
@@ -61,8 +74,7 @@ def _run_simulation(input_path: Path, output_path: Path) -> float:
 
 def benchmark(module: str, runs: int = RUNS) -> float:
     """Return the average run time for ``module`` over ``runs`` executions."""
-    with TemporaryDirectory() as tmp:
-        tmpdir = Path(tmp)
+    with _temporary_directory() as tmpdir:
         inp = _prepare_input(module, tmpdir)
         out = tmpdir / "out.json"
         times = [_run_simulation(inp, out) for _ in range(runs)]
