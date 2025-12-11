@@ -43,6 +43,7 @@ SAMPLE_GEOMETRY = {
         "bending_modulus": 0.0,
         "gaussian_modulus": 0.0,
         "volume_stiffness": 1e3,
+        "volume_constraint_mode": "lagrange",
     },
     "instructions": [],
 }
@@ -54,3 +55,19 @@ def write_sample_geometry(tmp_path, name="sample_geometry.json", data=None):
     with open(path, "w") as f:
         json.dump(data or SAMPLE_GEOMETRY, f)
     return str(path)
+
+
+def cube_soft_volume_input(volume_mode: str = "penalty") -> dict:
+    """Return a deep copy of the cube sample with requested volume mode."""
+    import copy
+
+    data = copy.deepcopy(SAMPLE_GEOMETRY)
+    data.setdefault("global_parameters", {})
+    data["global_parameters"].update(
+        {
+            "surface_tension": 1.0,
+            "volume_constraint_mode": volume_mode,
+            "volume_projection_during_minimization": True,
+        }
+    )
+    return data
