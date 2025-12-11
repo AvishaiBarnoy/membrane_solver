@@ -292,7 +292,12 @@ def main():
 
     fixed_count = sum(1 for v in mesh.vertices.values() if getattr(v, 'fixed', False))
     logger.debug(f"Number of fixed vertices: {fixed_count} / {len(mesh.vertices)}")
-    logger.debug(f"Target volume of body: {mesh.bodies[0].options['target_volume']}")
+    # Log target volume information only when a body and target are defined.
+    if mesh.bodies:
+        body0 = mesh.bodies.get(0)
+        if body0 is not None:
+            target_vol = body0.options.get("target_volume")
+            logger.debug(f"Body 0 target_volume: {target_vol}")
 
     global_params = mesh.global_parameters
     if args.volume_mode:

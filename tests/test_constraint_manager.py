@@ -68,7 +68,7 @@ def test_constraints_loaded_from_file(monkeypatch, tmp_path):
     monkeypatch.setattr(importlib, "import_module", mock_import_module)
 
     # Create a temporary geometry file
-    sample_geometry_path= os.path.join("meshes", "testing_geometry.json")
+    sample_geometry_path = tmp_path / "testing_geometry.json"
     sample_geometry_content = {
         "vertices": [
             [0, 0, 0, {"fixed": "true"}],
@@ -96,7 +96,7 @@ def test_constraints_loaded_from_file(monkeypatch, tmp_path):
         json.dump(sample_geometry_content, f)
 
     # Load and parse the geometry
-    data = load_data(sample_geometry_path)
+    data = load_data(str(sample_geometry_path))
     mesh = parse_geometry(data)
 
     # Initialize the ConstraintModuleManager
@@ -115,4 +115,3 @@ def test_constraints_loaded_from_file(monkeypatch, tmp_path):
 
     assert "constraints" in mesh.facets[0].options
     assert mesh.facets[0].options["constraints"] == ["fix_facet_area"]
-

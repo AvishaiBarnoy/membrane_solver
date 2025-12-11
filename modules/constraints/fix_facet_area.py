@@ -11,13 +11,31 @@ import numpy as np
 logger = logging.getLogger("membrane_solver")
 
 
-def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 3) -> None:
-    """Adjust facets with ``target_area`` to match their specified area."""
+def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 5) -> None:
+    """Adjust facets with ``target_area`` using a damped Lagrange step.
+
+    This is intentionally conservative: we project along the area gradient but
+    clamp the per-vertex displacement and backtrack until the area error
+    decreases, to avoid the blow-ups seen when facets are badly distorted.
+    """
 
     for facet in mesh.facets.values():
         target_area = facet.options.get("target_area")
         if target_area is None:
             continue
+
+        # Estimate a local length scale to clamp displacements
+        v_ids = []
+        for signed_ei in facet.edge_indices:
+            edge = mesh.get_edge(signed_ei)
+            tail = edge.tail_index if signed_ei > 0 else edge.head_index
+            if not v_ids or v_ids[-1] != tail:
+                v_ids.append(tail)
+        if len(v_ids) < 3:
+            continue
+        coords = np.array([mesh.vertices[vid].position for vid in v_ids])
+        diameter = np.max(np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=2))
+        max_move = 0.1 * diameter if diameter > 0 else 1e-3
 
         for _ in range(max_iter):
             current_area = facet.compute_area(mesh)
@@ -34,19 +52,59 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 3) -> None:
                 )
                 break
 
+            base_positions = {vidx: mesh.vertices[vidx].position.copy() for vidx in grad.keys()}
             lam = delta / (norm_sq + 1e-18)
-            logger.debug(
-                "Applying facet area constraint on facet %s: ΔA=%.3e, λ=%.3e",
-                facet.index,
-                delta,
-                lam,
-            )
 
-            for vidx, gvec in grad.items():
-                vertex = mesh.vertices[vidx]
-                if getattr(vertex, "fixed", False):
+            success = False
+            # Backtrack until the area error decreases and per-vertex move is bounded
+            for _trial in range(12):
+                too_far = False
+                for vidx, gvec in grad.items():
+                    if getattr(mesh.vertices[vidx], "fixed", False):
+                        continue
+                    disp = -lam * gvec
+                    step_norm = np.linalg.norm(disp)
+                    if step_norm > max_move:
+                        too_far = True
+                        break
+                if too_far:
+                    lam *= 0.5
                     continue
-                vertex.position -= lam * gvec
+
+                for vidx, gvec in grad.items():
+                    if getattr(mesh.vertices[vidx], "fixed", False):
+                        continue
+                    mesh.vertices[vidx].position = base_positions[vidx] - lam * gvec
+
+                new_area = facet.compute_area(mesh)
+                if abs(new_area - target_area) < abs(delta):
+                    success = True
+                    break
+
+                lam *= 0.5
+                for vidx in grad.keys():
+                    mesh.vertices[vidx].position = base_positions[vidx].copy()
+
+            if not success:
+                # Restore best-known positions if backtracking failed
+                for vidx, pos in base_positions.items():
+                    mesh.vertices[vidx].position = pos
+                break
+
+        logger.debug(
+            "Facet %s area constraint applied: target=%.6f, final=%.6f",
+            facet.index,
+            target_area,
+            facet.compute_area(mesh),
+        )
+
+
+        logger.debug(
+            "Facet %s area constraint applied: target=%.6f, final=%.6f",
+            facet.index,
+            target_area,
+            facet.compute_area(mesh),
+        )
 
 
 __all__ = ["enforce_constraint"]

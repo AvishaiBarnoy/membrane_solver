@@ -786,6 +786,9 @@
         "target_volume": [
             1.0
         ],
+        "target_area": [
+            null
+        ],
         "energy": [
             [
                 "volume"

@@ -77,6 +77,7 @@ def refine_polygonal_facets(mesh):
     }
 
     for f_idx, facet in mesh.facets.items():
+        parent_target_area = facet.options.get("target_area")
         # 1. Leave triangles alone
         if len(facet.edge_indices) == 3:
             if "surface_tension" not in facet.options:
@@ -150,6 +151,7 @@ def refine_polygonal_facets(mesh):
             spoke_a = spokes[a]
 
             child_options = facet.options.copy()
+            child_options.pop("target_area", None)
             child_options["surface_tension"] = facet.options.get("surface_tension", mesh.global_parameters.get("surface_tension", 1.0))
             child_options["parent_facet"] = facet.index
             child_options["constraints"] = facet.options.get("constraints", [])
@@ -181,6 +183,15 @@ def refine_polygonal_facets(mesh):
             new_facets[child_idx] = child_facet
             # Record that this child belongs to the same bodies
             children_map[facet.index].append(child_idx)
+
+        # Distribute facet target area across children if needed
+        child_ids = children_map.get(facet.index, [])
+        if parent_target_area is not None and child_ids:
+            child_areas = [(cid, new_facets[cid].compute_area(new_mesh)) for cid in child_ids]
+            total = sum(area for _, area in child_areas)
+            if total > 1e-12:
+                for cid, area in child_areas:
+                    new_facets[cid].options["target_area"] = parent_target_area * (area / total)
 
     # TODO: Associate facets with bodies! If no body exists skip
     # Step 3: Build updated bodies
@@ -307,6 +318,7 @@ def refine_triangle_mesh(mesh):
 
         # Check if any of the facet's edges can be refined
         parent_edges = [mesh.get_edge(abs(ei)) for ei in oriented]
+        parent_target_area = facet.options.get("target_area")
         refinable_edges = [abs(ei) in edges_to_refine for ei in oriented]
         
         # If no edges can be refined, just copy the facet
@@ -350,7 +362,9 @@ def refine_triangle_mesh(mesh):
             new_mesh.edges.update(new_edges)
             raw1 = [e1.index, e2.index, e3.index]
             cyc1 = orient_edges_cycle(raw1, new_mesh)
-            f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=facet.options.copy())
+            child_opts = facet.options.copy()
+            child_opts.pop("target_area", None)
+            f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=child_opts)
             new_facets[next_facet_idx] = f1
             next_facet_idx += 1
 
@@ -362,7 +376,9 @@ def refine_triangle_mesh(mesh):
             new_mesh.edges.update(new_edges)
             raw2 = [e1.index, e2.index, e3.index]
             cyc2 = orient_edges_cycle(raw2, new_mesh)
-            f2 = Facet(next_facet_idx, cyc2, fixed=facet.fixed, options=facet.options.copy())
+            child_opts = facet.options.copy()
+            child_opts.pop("target_area", None)
+            f2 = Facet(next_facet_idx, cyc2, fixed=facet.fixed, options=child_opts)
             new_facets[next_facet_idx] = f2
             next_facet_idx += 1
 
@@ -374,7 +390,9 @@ def refine_triangle_mesh(mesh):
             new_mesh.edges.update(new_edges)
             raw3 = [e1.index, e2.index, e3.index]
             cyc3 = orient_edges_cycle(raw3, new_mesh)
-            f3 = Facet(next_facet_idx, cyc3, fixed=facet.fixed, options=facet.options.copy())
+            child_opts = facet.options.copy()
+            child_opts.pop("target_area", None)
+            f3 = Facet(next_facet_idx, cyc3, fixed=facet.fixed, options=child_opts)
             new_facets[next_facet_idx] = f3
             next_facet_idx += 1
 
@@ -385,7 +403,9 @@ def refine_triangle_mesh(mesh):
             new_mesh.edges.update(new_edges)
             raw4 = [e1.index, e2.index, e3.index]
             cyc4 = orient_edges_cycle(raw4, new_mesh)
-            f4 = Facet(next_facet_idx, cyc4, fixed=facet.fixed, options=facet.options.copy())
+            child_opts = facet.options.copy()
+            child_opts.pop("target_area", None)
+            f4 = Facet(next_facet_idx, cyc4, fixed=facet.fixed, options=child_opts)
             new_facets[next_facet_idx] = f4
             next_facet_idx += 1
 
@@ -435,8 +455,12 @@ def refine_triangle_mesh(mesh):
                 raw2 = [e4.index, e5.index, e6.index]
                 cyc1 = orient_edges_cycle(raw1, new_mesh)
                 cyc2 = orient_edges_cycle(raw2, new_mesh)
-                f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=facet.options.copy())
-                f2 = Facet(next_facet_idx + 1, cyc2, fixed=facet.fixed, options=facet.options.copy())
+                child_opts = facet.options.copy()
+                child_opts.pop("target_area", None)
+                f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=child_opts)
+                child_opts = facet.options.copy()
+                child_opts.pop("target_area", None)
+                f2 = Facet(next_facet_idx + 1, cyc2, fixed=facet.fixed, options=child_opts)
                 new_facets[next_facet_idx] = f1
                 new_facets[next_facet_idx + 1] = f2
                 next_facet_idx += 2
@@ -521,9 +545,15 @@ def refine_triangle_mesh(mesh):
                 cyc2 = orient_edges_cycle(raw2, new_mesh)
                 cyc3 = orient_edges_cycle(raw3, new_mesh)
                 
-                f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=facet.options.copy())
-                f2 = Facet(next_facet_idx + 1, cyc2, fixed=facet.fixed, options=facet.options.copy())
-                f3 = Facet(next_facet_idx + 2, cyc3, fixed=facet.fixed, options=facet.options.copy())
+                child_opts = facet.options.copy()
+                child_opts.pop("target_area", None)
+                f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=child_opts)
+                child_opts = facet.options.copy()
+                child_opts.pop("target_area", None)
+                f2 = Facet(next_facet_idx + 1, cyc2, fixed=facet.fixed, options=child_opts)
+                child_opts = facet.options.copy()
+                child_opts.pop("target_area", None)
+                f3 = Facet(next_facet_idx + 2, cyc3, fixed=facet.fixed, options=child_opts)
                 
                 new_facets[next_facet_idx] = f1
                 new_facets[next_facet_idx + 1] = f2
@@ -540,6 +570,15 @@ def refine_triangle_mesh(mesh):
 
         facet_to_new_facets[facet.index] = [f.index for f in child_facets]
 
+        # distribute target area if needed
+        child_ids = facet_to_new_facets.get(facet.index, [])
+        if parent_target_area is not None and child_ids and not (len(child_ids) == 1 and child_ids[0] == facet.index):
+            child_areas = [(cid, new_facets[cid].compute_area(new_mesh)) for cid in child_ids]
+            total = sum(area for _, area in child_areas)
+            if total > 1e-12:
+                for cid, area in child_areas:
+                    new_facets[cid].options["target_area"] = parent_target_area * (area / total)
+
     # Step 3: Build updated bodies
     new_bodies = {}
     for body_idx, body in mesh.bodies.items():
@@ -548,7 +587,10 @@ def refine_triangle_mesh(mesh):
             if mesh.facets[old_facet_idx].index in facet_to_new_facets:
                 new_body_facets.extend(facet_to_new_facets[old_facet_idx])
         new_bodies[len(new_bodies)] = Body(
-            len(new_bodies), new_body_facets, target_volume=body.target_volume
+            index=len(new_bodies),
+            facet_indices=new_body_facets,
+            target_volume=body.target_volume,
+            options=body.options.copy(),
         )
     new_mesh.vertices = new_vertices
     new_mesh.facets = new_facets

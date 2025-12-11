@@ -56,6 +56,29 @@ def backtracking_line_search(
     }
 
     energy0 = energy_fn()
+
+    def constraint_violation(m: Mesh) -> float:
+        """Return a max relative violation over area/volume constraints."""
+        max_violation = 0.0
+        if m.bodies:
+            for body in m.bodies.values():
+                # Area constraint
+                if body.options.get("target_area") is not None:
+                    target = body.options["target_area"]
+                    area = body.compute_surface_area(m)
+                    denom = max(abs(target), 1.0)
+                    max_violation = max(max_violation, abs(area - target) / denom)
+                # Volume constraint
+                tgt_vol = body.target_volume
+                if tgt_vol is None:
+                    tgt_vol = body.options.get("target_volume")
+                if tgt_vol is not None:
+                    vol = body.compute_volume(m)
+                    denom = max(abs(tgt_vol), 1.0)
+                    max_violation = max(max_violation, abs(vol - tgt_vol) / denom)
+        return max_violation
+
+    base_violation = constraint_violation(mesh)
     g_dot_d = sum(np.dot(gradient[vidx], direction[vidx]) for vidx in direction)
 
     if g_dot_d >= 0:
@@ -80,25 +103,40 @@ def backtracking_line_search(
 
         trial_energy = energy_fn()
         if trial_energy <= energy0 + c * alpha * g_dot_d:
-            # Apply constraints only after provisionally accepting the step.
-            if constraint_enforcer is not None:
-                constraint_enforcer(mesh)
-                trial_energy_after_constraint = energy_fn()
-            else:
-                trial_energy_after_constraint = trial_energy
+            armijo_pass = True
+        else:
+            armijo_pass = False
 
-            if trial_energy_after_constraint <= energy0 + c * alpha * g_dot_d:
-                logger.debug(
-                    "Line search success: alpha=%.3e, backtracks=%d, "
-                    "E0=%.6f, Etrial=%.6f (post-constraint=%.6f)",
-                    alpha,
-                    backtracks,
-                    energy0,
-                    trial_energy,
-                    trial_energy_after_constraint,
-                )
-                new_step = min(alpha * gamma, alpha_max)
-                return True, new_step
+        if constraint_enforcer is not None:
+            constraint_enforcer(mesh)
+            trial_energy_after_constraint = energy_fn()
+            vio_after = constraint_violation(mesh)
+        else:
+            trial_energy_after_constraint = trial_energy
+            vio_after = base_violation
+
+        constraint_improved = vio_after < base_violation * (1.0 - 1e-6)
+
+        # Accept if Armijo passes, or if constraints improved while energy did not blow up.
+        energy_guard = trial_energy_after_constraint <= energy0 * 1.05 + 1e-8
+
+        if armijo_pass or (constraint_improved and energy_guard):
+            logger.debug(
+                "Line search success: alpha=%.3e, backtracks=%d, "
+                "E0=%.6f, Etrial=%.6f (post-constraint=%.6f), "
+                "violation %.3e -> %.3e (improved=%s, armijo=%s)",
+                alpha,
+                backtracks,
+                energy0,
+                trial_energy,
+                trial_energy_after_constraint,
+                base_violation,
+                vio_after,
+                constraint_improved,
+                armijo_pass,
+            )
+            new_step = min(alpha * gamma, alpha_max)
+            return True, new_step
 
         # Reject this scale: restore and try a smaller one.
         for vidx, vertex in mesh.vertices.items():

@@ -10,12 +10,16 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.geom_io import load_data, parse_geometry, save_geometry
 from geometry.entities import Mesh
 from runtime.refinement import refine_polygonal_facets
+from sample_meshes import SAMPLE_GEOMETRY, write_sample_geometry
 
-SAMPLE_FILE = os.path.join("meshes", "sample_geometry.json")
-TEMP_FILE = os.path.join("meshes", "temp_geometry_output.json")
 
-def test_geometry_loads_correctly():
-    data = load_data(SAMPLE_FILE)
+@pytest.fixture
+def sample_geometry_file(tmp_path):
+    return write_sample_geometry(tmp_path)
+
+
+def test_geometry_loads_correctly(sample_geometry_file):
+    data = load_data(sample_geometry_file)
     mesh = parse_geometry(data)
 
     assert isinstance(mesh, Mesh)
@@ -24,33 +28,34 @@ def test_geometry_loads_correctly():
     assert len(mesh.facets) > 0
     assert len(mesh.bodies) > 0
 
-def test_mesh_validation_passes():
-    data = load_data(SAMPLE_FILE)
+def test_mesh_validation_passes(sample_geometry_file):
+    data = load_data(sample_geometry_file)
     mesh = parse_geometry(data)
     assert mesh.validate_edge_indices()
 
-def test_edge_orientation_signs_preserved():
-    data = load_data(SAMPLE_FILE)
+def test_edge_orientation_signs_preserved(sample_geometry_file):
+    data = load_data(sample_geometry_file)
     mesh = parse_geometry(data)
 
     for facet_idx in mesh.facets.keys():
         for ei in mesh.facets[facet_idx].edge_indices:
             assert ei != 0, "Zero edge index should not exist (shifted system)"
 
-def test_round_trip_consistency():
-    data = load_data(SAMPLE_FILE)
+def test_round_trip_consistency(sample_geometry_file, tmp_path):
+    data = load_data(sample_geometry_file)
     mesh1 = parse_geometry(data)
 
-    save_geometry(mesh1, TEMP_FILE)
-    data2 = load_data(TEMP_FILE)
+    temp_file = tmp_path / "temp_geometry_output.json"
+    save_geometry(mesh1, temp_file)
+    data2 = load_data(temp_file)
     mesh2 = parse_geometry(data2)
 
     assert len(mesh1.vertices) == len(mesh2.vertices)
     assert len(mesh1.edges) == len(mesh2.edges)
     assert len(mesh1.facets) == len(mesh2.facets)
 
-def test_facet_vertex_sequence_is_consistent():
-    data = load_data(SAMPLE_FILE)
+def test_facet_vertex_sequence_is_consistent(sample_geometry_file):
+    data = load_data(sample_geometry_file)
     mesh = parse_geometry(data)
 
     for facet in mesh.facets:
@@ -65,8 +70,8 @@ def test_facet_vertex_sequence_is_consistent():
         assert verts[0] == verts[-1], f"Facet {facet.index} is not closed: {verts}"
 
 # TDD placeholder for future feature
-def test_body_volume_is_positive():
-    data = load_data(SAMPLE_FILE)
+def test_body_volume_is_positive(sample_geometry_file):
+    data = load_data(sample_geometry_file)
     mesh = parse_geometry(data)
 
     body = mesh.bodies[0]
@@ -76,8 +81,8 @@ def test_body_volume_is_positive():
     mesh_volume = mesh.compute_total_volume()
     assert round(mesh_volume, 3) == 1.0, f"Expected positive volume, got {mesh_volume}"
 
-def test_body_surface_area_positive():
-    data = load_data(SAMPLE_FILE)
+def test_body_surface_area_positive(sample_geometry_file):
+    data = load_data(sample_geometry_file)
     mesh = parse_geometry(data)
 
     area = mesh.bodies[0].compute_surface_area(mesh)
@@ -87,8 +92,8 @@ def test_body_surface_area_positive():
     mesh_area = mesh_tri.compute_total_surface_area()
     assert round(mesh_area, 3) == 6.0, f"Surface area should be positive, got {mesh_area}"
 
-def test_default_energy_assignment():
-    data = load_data(SAMPLE_FILE)
+def test_default_energy_assignment(sample_geometry_file):
+    data = load_data(sample_geometry_file)
     mesh = parse_geometry(data)
     for facet in mesh.facets.values():
         assert len(facet.options["energy"]) != 0, "Energy should be assigned to each facet"
@@ -100,4 +105,3 @@ def test_default_energy_assignment():
     #        print(body.options["energy"])
     #        assert len(body.options["energy"]) != 0, "Energy should be assigned to each body"
     #        assert isinstance(body.options["energy"], list), f"Energy module list should be a list, but it is a {type(body.options['energy'])}"
-
