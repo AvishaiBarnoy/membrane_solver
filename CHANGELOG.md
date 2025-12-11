@@ -1,55 +1,41 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
-The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-but dates and versions are intentionally kept light for a research‑oriented codebase.
-
-## Unreleased
-
+## [Unreleased]
 ### Added
-
-- `CHANGELOG.md` to track high‑level changes over time.
-- Logging configuration updates:
-  - Default log level set to `INFO` for file logging.
-  - New `--debug` CLI flag in `main.py` to enable verbose `DEBUG` logging.
-  - Switched to `logging.FileHandler(mode="w")` so each run overwrites the previous log file instead of appending.
+- Automatic target-area detection on bodies/facets and regression tests (square with area constraint, tetra with volume constraint).
+- Benchmarks now run in read-only sandboxes (no temp files); README/manual updated with benchmark usage.
 
 ### Changed
-
 - Volume handling:
-  - Introduced `volume_constraint_mode` global parameter with default `"lagrange"`.
-  - `"lagrange"` (now the default) treats volume as a hard constraint:
-    the minimizer projects the gradient onto the fixed‑volume manifold
-    using body volume gradients (Lagrange‑style) and does **not** add a
-    quadratic volume penalty term unless explicitly requested.
-  - `"penalty"` mode retains the legacy soft quadratic volume energy and
-    is now opt‑in via `global_parameters` or the `--volume-mode` CLI flag.
-  - Bodies with a `target_volume` automatically register the `volume`
-    constraint module instead of adding a `volume` energy term, making JSON
-    geometries behave more like Evolver's `FIXEDVOL` bodies.
+  - `lagrange` mode auto-loads the `volume` constraint and uses gradient projection.
+  - `penalty` mode auto-loads the `volume` energy module instead, restoring quadratic penalty behaviour.
+- `main.py` now imports `visualize_geometry` lazily so headless runs/benchmarks don’t crash when Matplotlib can’t create cache dirs.
+- `benchmark_cube_good.py` runs directly on `cube_good_min_routine.json` without writing outputs.
 
-### Existing (backfilled summary)
+### Fixed
+- `load_data` accepts `Path` objects (needed for tests writing tmp JSONs).
+- `cube_good_min_routine` converges again (energy ≈ 4.85) when run under penalty mode.
 
-- Core mesh and geometry representation (`Vertex`, `Edge`, `Facet`, `Body`, `Mesh`) with:
-  - Area and area‑gradient for facets.
-  - Volume and volume‑gradient for bodies.
-  - Connectivity maps (vertex↔edges↔facets) and basic validation.
-- JSON geometry I/O:
-  - Input format with per‑entity `options` for `energy`, `constraints`, and local parameters.
-  - `global_parameters` block with defaults for surface tension, volume stiffness, etc.
-  - Automatic triangulation of polygonal facets via centroid‑based refinement.
-- Energy modules:
-  - Surface tension energy and gradient (`modules/energy/surface.py`).
-  - Volume penalty energy and gradient (`modules/energy/volume.py`).
-- Constraint handling:
-  - `fixed` vertices and constraint projection for gradients/positions.
-  - Infrastructure for constraint modules (`modules/constraints`, `ConstraintModuleManager`).
-- Runtime / optimization:
-  - `Minimizer` coordinating energy, constraints, and steppers.
-  - Gradient Descent and Conjugate Gradient steppers with Armijo backtracking line search.
-  - Mesh refinement, equiangulation, and vertex averaging utilities.
-- CLI and interactive driver (`main.py`):
-  - Instruction‑based and interactive control (`gN`, `gd`/`cg`, `r`, `V`, `u`, `visualize`, `save`, etc.).
-  - Basic visualization script for inspecting meshes.
-- Test suite covering core geometry, I/O, energy modules, refinement, and steppers.
+## [0.3.0] - 2025-12-05
+### Added
+- Body/facet surface-area constraints with Lagrange-style enforcement.
+- Regression tests for area constraints.
+
+### Changed
+- Default volume mode switched to `lagrange` hard constraint; penalty mode opt-in via `global_parameters` or `--volume-mode`.
+- Constraint manager enforces fixed volume after each accepted step.
+
+## [0.2.0] - 2025-07-07
+### Added
+- Conjugate Gradient stepper with Armijo line search.
+- Equiangulation (`u` command) and refinement improvements.
+- Initial cube benchmark script.
+
+### Changed
+- CLI defaults to interactive mode; logging/quiet flags improved.
+- Refinement respects `no_refine` and preserves normals.
+
+## [0.1.0] - 2025-05-15
+Initial release with core mesh entities, JSON I/O, surface/volume energies, constraint manager, gradient-descent stepper, vertex averaging, refinement, and test suite.

@@ -31,3 +31,12 @@ Here I will take notes for the manual...
     Parameters can also be adjusted, e.g., {"surface_tension": 5} will override
         the default surface tension value of 1.0.
 
+6. Volume enforcement modes (global_parameters):
+    - `"volume_constraint_mode": "lagrange"` (default) projects gradients
+      using body volume gradients; bodies auto-load the hard `volume`
+      constraint module.
+    - `"volume_constraint_mode": "penalty"` re-activates the quadratic volume
+      energy (`modules/energy/volume.py`) so you get Evolver-style ``VOLCONST``
+      behaviour without the hard constraint overhead.
+    - `volume_projection_during_minimization` controls whether the geometric
+      projection runs inside the line search (mostly for legacy penalty mode).

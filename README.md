@@ -81,11 +81,14 @@ returned mesh is therefore ready for optimization without further refinement.
 
 ## Performance benchmarks
 
-A simple benchmark script is available under `benchmarks/benchmark_surface_energy.py`.
-Run it with Python to compare the optimized surface energy calculation against the
-previous loop-based version::
-
-    python benchmarks/benchmark_surface_energy.py
-
-The script prints the total runtime for each implementation and the achieved
-speedup so you can verify the performance improvements.
+- `python benchmarks/benchmark_cube_good.py` runs the full `cube_good_min_routine`
+  recipe (minimization, refinement, equiangulation, vertex averaging, etc.) and
+  reports the average wall-clock time over three runs. This is the main
+  regression benchmark we use when tuning steppers, constraints, or geometry
+  kernels. It runs entirely in-place and requires no writable temporary
+  directories.
+- `python benchmarks/benchmark_surface_energy.py` compares the old vs. new
+  surface energy implementations by generating temporary cube variants with
+  different facet `energy` modules. It prints average runtimes for both
+  implementations so you can evaluate surface-kernel optimizations in
+  isolation.
