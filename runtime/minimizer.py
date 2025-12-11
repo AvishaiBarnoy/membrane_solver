@@ -286,9 +286,6 @@ STEP SIZE:\t {self.step_size}
     def project_constraints(self, grad: Dict[int, np.ndarray]) -> None:
         """Project gradients onto the feasible set defined by constraints."""
 
-        # TODO: HOW IS instance.contraint.project_gradient(...) TAKING CARE OF
-        # ALL RELEVANT CONSTRAINTS?
-
         # zero out fixed vertices and project others
         for vidx, vertex in self.mesh.vertices.items():
             if getattr(vertex, 'fixed', False):

@@ -5,13 +5,13 @@ from typing import List, Dict, Any, Optional
 from parameters.global_parameters import GlobalParameters
 import numpy as np
 import sys
+import logging
 
-# TODO: think about defining a class GeometryCalculationsMixin to keep 
-#   Instead of putting .compute_area(), .compute_volume(), .compute_length() directly inside your core data classes (Vertex, Edge, Facet, Body...),
-#   you could keep the core classes "pure" (only holding structure and basic behaviors)
-#   and put all calculations into a separate Mixin class (or even in geometry_calculations.py).
+logger = logging.getLogger("membrane_solver")
 
-# TODO: build a proper MeshError custom exception for better error reporting
+
+class MeshError(Exception):
+    """Custom exception for invalid mesh topology or geometry."""
 
 @dataclass
 class Vertex:

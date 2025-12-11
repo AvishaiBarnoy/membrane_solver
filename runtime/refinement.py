@@ -193,7 +193,6 @@ def refine_polygonal_facets(mesh):
                 for cid, area in child_areas:
                     new_facets[cid].options["target_area"] = parent_target_area * (area / total)
 
-    # TODO: Associate facets with bodies! If no body exists skip
     # Step 3: Build updated bodies
     new_bodies = {}
     for body_idx, body in mesh.bodies.items():
