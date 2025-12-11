@@ -1,0 +1,28 @@
+  {
+    "vertices": [
+      [0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0]
+    ],
+    "edges": [
+      [0, 1],
+      [1, 2],
+      [2, 0]
+    ],
+    "faces": [
+      [0, 1, 2]
+    ],
+    "global_parameters": {
+      "surface_tension": 1.0
+    },
+    "bodies": {
+      "faces": [[0]],
+      "energy": [
+        {
+          "constraints": ["body_area"],
+          "target_area": 1.0
+        }
+      ]
+    }
+  }
+

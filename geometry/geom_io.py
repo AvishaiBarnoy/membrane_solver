@@ -22,16 +22,17 @@ def load_data(filename):
             ...
         ]
     }"""
-    with open(filename, 'r') as f:
-        if filename.endswith((".yaml", ".yml")):
+    filename_str = str(filename)
+    with open(filename_str, 'r') as f:
+        if filename_str.endswith((".yaml", ".yml")):
             data = yaml.safe_load(f)
             logger.error("Currently yaml format not supported.")
             raise ValueError("Currently yaml format not supported.")
-        elif filename.endswith(".json"):
+        elif filename_str.endswith(".json"):
             data = json.load(f)
         else:
-            logger.error(f"Unsupported file format for: {filename}")
-            raise ValueError(f"Unsupported file format for: {filename}")
+            logger.error(f"Unsupported file format for: {filename_str}")
+            raise ValueError(f"Unsupported file format for: {filename_str}")
 
     return data
 
@@ -47,7 +48,14 @@ def parse_geometry(data: dict) -> Mesh:
 
     # Initialize module_name list
     energy_module_names = set()
-    constraint_module_names = []
+    # Allow explicit constraint modules at the top level (e.g. "global_area")
+    # in addition to those inferred from per‑entity "constraints" options.
+    constraint_module_names = list(data.get("constraint_modules", []))
+    # If the input specifies a global target surface area, automatically load
+    # the corresponding constraint so users do not have to list the module
+    # manually.
+    if mesh.global_parameters.get("target_surface_area") is not None:
+        constraint_module_names.append("global_area")
 
     # TODO: add option to read both lowercase and uppercase title Vertices/vertices
     # Vertices
@@ -160,19 +168,31 @@ def parse_geometry(data: dict) -> Mesh:
             mesh.facets[i].options["surface_tension"] = mesh.global_parameters.get("surface_tension", 1.0)
 
         # Facets constraint modules
-        if "constraints" in options:
-            if isinstance(options["constraints"], list):
-                constraint_module_names.extend(options["constraints"])
-            elif isinstance(options["constraints"], str):
-                constraint_module_names.append(options["constraints"])
-                mesh.facets[i].options["constraints"] = [mesh.facets[i].options["constraints"]]
-            else:
-                err_msg = "constraint modules should be in a list or a single string"
-                logger.error(err_msg)
-                raise err_msg
-            if "fixed" in options["constraints"]:
+        facet_constraints = options.get("constraints")
+        if facet_constraints is not None and not isinstance(facet_constraints, (list, str)):
+            err_msg = "constraint modules should be in a list or a single string"
+            logger.error(err_msg)
+            raise err_msg
+
+        if isinstance(facet_constraints, str):
+            facet_constraints = [facet_constraints]
+            mesh.facets[i].options["constraints"] = facet_constraints
+        elif isinstance(facet_constraints, list):
+            facet_constraints = list(facet_constraints)
+
+        if options.get("target_area") is not None:
+            if facet_constraints is None:
+                facet_constraints = []
+            if "fix_facet_area" not in facet_constraints:
+                facet_constraints.append("fix_facet_area")
+                mesh.facets[i].options["constraints"] = facet_constraints
+
+        if facet_constraints:
+            constraint_module_names.extend(facet_constraints)
+            if "fixed" in facet_constraints:
                 constraint_module_names.append("fixed")
                 mesh.facets[i].fixed = True
+
         if options.get("fixed", False):
             constraint_module_names.append("fixed")
 
@@ -181,6 +201,7 @@ def parse_geometry(data: dict) -> Mesh:
         bodies_section = data["bodies"]
         face_groups = bodies_section["faces"]
         volumes = bodies_section.get("target_volume", [None] * len(face_groups))
+        areas = bodies_section.get("target_area", [None] * len(face_groups))
 
         # ``energy`` may be:
         #   - a list parallel to ``faces`` (per‑body specs), or
@@ -189,8 +210,12 @@ def parse_geometry(data: dict) -> Mesh:
         if not isinstance(energy_entries, list) or len(energy_entries) != len(face_groups):
             energy_entries = [energy_entries] * len(face_groups)
 
-        for i, (facet_indices, volume, energy_spec) in enumerate(
-            zip(face_groups, volumes, energy_entries)
+        constraint_entries = bodies_section.get("constraints", [None] * len(face_groups))
+        if not isinstance(constraint_entries, list) or len(constraint_entries) != len(face_groups):
+            constraint_entries = [constraint_entries] * len(face_groups)
+
+        for i, (facet_indices, volume, area, energy_spec, constraint_spec) in enumerate(
+            zip(face_groups, volumes, areas, energy_entries, constraint_entries)
         ):
             # Start with an options dict derived from the energy specification.
             body_options = {}
@@ -198,6 +223,28 @@ def parse_geometry(data: dict) -> Mesh:
                 body_options.update(energy_spec)
             elif energy_spec is not None:
                 body_options["energy"] = energy_spec
+
+            # Merge root-level constraints (if provided)
+            merged_constraints = []
+            if constraint_spec is not None:
+                if isinstance(constraint_spec, str):
+                    merged_constraints = [constraint_spec]
+                elif isinstance(constraint_spec, list):
+                    merged_constraints = list(constraint_spec)
+            if merged_constraints:
+                existing = body_options.get("constraints")
+                if existing is None:
+                    body_options["constraints"] = merged_constraints
+                else:
+                    if isinstance(existing, str):
+                        existing = [existing]
+                    body_options["constraints"] = list(
+                        dict.fromkeys(list(existing) + merged_constraints)
+                    )
+
+            # Merge root-level target_area if present
+            if area is not None and "target_area" not in body_options:
+                body_options["target_area"] = float(area)
 
             body = Body(
                 index=i,
@@ -239,6 +286,9 @@ def parse_geometry(data: dict) -> Mesh:
 
             if volume is not None and "volume" not in body_constraints:
                 body_constraints.append("volume")
+
+            if body.options.get("target_area") is not None and "body_area" not in body_constraints:
+                body_constraints.append("body_area")
 
             if body_constraints:
                 body.options["constraints"] = body_constraints
@@ -285,8 +335,9 @@ def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
         "bodies": {
             "faces": [mesh.bodies[b].facet_indices for b in mesh.bodies.keys()],
             "target_volume": [mesh.bodies[b].target_volume for b in mesh.bodies.keys()],
+            "target_area": [mesh.bodies[b].options.get("target_area") for b in mesh.bodies.keys()],
             "energy": [mesh.bodies[b].options.get("energy", {}) for b in mesh.bodies.keys()],
-            "constraints": [mesh.bodies[b].options.get("constraints", {}) for b in mesh.bodies.keys()]
+            "constraints": [mesh.bodies[b].options.get("constraints", []) for b in mesh.bodies.keys()]
         },
         "global_parameters": mesh.global_parameters.to_dict(),
         "instructions": mesh.instructions

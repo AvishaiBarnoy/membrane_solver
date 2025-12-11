@@ -109,6 +109,9 @@ STEP SIZE:\t {self.step_size}
         # analogous to Evolver's ``calc_lagrange`` + ``lagrange_adjust``.
         self._apply_volume_constraints_lagrange(grad)
 
+        # Apply area constraint forces to drive bodies toward their target areas.
+        self._apply_area_constraint_forces(grad)
+
         # Optional DEBUG‑level diagnostic: in Lagrange mode the projected
         # gradient should be (numerically) tangent to each fixed‑volume
         # manifold, i.e. ⟨∇E, ∇V_body⟩ ≈ 0.  This reuses the cached volume
@@ -231,6 +234,44 @@ STEP SIZE:\t {self.step_size}
             for vidx, gVi in gradVi.items():
                 if vidx in grad:
                     grad[vidx] -= lam_i * gVi
+
+    def _apply_area_constraint_forces(self, grad: Dict[int, np.ndarray]) -> None:
+        """Add a constraint force to drive each body toward its target area.
+
+        This mimics a Lagrange multiplier update by solving a 1‑body scalar
+        lambda = delta/||gradA||^2 and subtracting lambda * gradA from the
+        energy gradient, so the direction both reduces energy (when feasible)
+        and restores area when off‑target.
+        """
+        if not self.mesh.bodies:
+            return
+
+        for body in self.mesh.bodies.values():
+            A_target = body.options.get("target_area")
+            if A_target is None:
+                continue
+
+            area = 0.0
+            gA = {}
+            for facet_idx in body.facet_indices:
+                facet = self.mesh.facets[facet_idx]
+                a_f, g_f = facet.compute_area_and_gradient(self.mesh)
+                area += a_f
+                for vidx, vec in g_f.items():
+                    if vidx not in gA:
+                        gA[vidx] = vec.copy()
+                    else:
+                        gA[vidx] += vec
+
+            delta = area - A_target
+            norm_sq = sum(np.dot(v, v) for v in gA.values())
+            if abs(delta) < 1e-12 or norm_sq < 1e-18:
+                continue
+
+            lam = delta / (norm_sq + 1e-18)
+            for vidx, vec in gA.items():
+                if vidx in grad:
+                    grad[vidx] -= lam * vec
 
     def compute_energy(self):
         """Compute the total energy using the loaded modules."""

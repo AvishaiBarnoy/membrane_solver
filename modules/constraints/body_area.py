@@ -7,7 +7,7 @@ import numpy as np
 logger = logging.getLogger("membrane_solver")
 
 
-def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 3) -> None:
+def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 20) -> None:
     """Enforce hard surface-area constraints on bodies using Lagrange multipliers.
 
     Each body may define ``target_area`` in ``body.options``. After each call,
