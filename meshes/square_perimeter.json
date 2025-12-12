@@ -1,0 +1,38 @@
+  {
+    "vertices": [
+      [0.0, 0.0, 0.0],
+      [1.0, 0.0, 0.0],
+      [1.0, 1.0, 0.0],
+      [0.0, 1.0, 0.0]
+    ],
+  "edges": [
+    [0, 1],
+    [1, 2],
+    [2, 3],
+    [3, 0]
+  ],
+  "faces": [
+    [0, 1, 2, 3]
+  ],
+  "bodies": {
+    "faces": [[0]],
+    "energy": [
+      {
+        "constraints": ["body_area"],
+        "target_area": 1.0
+      }
+    ]
+  },
+  "constraint_modules": ["perimeter"],
+  "global_parameters": {
+    "surface_tension": 0.5,
+    "volume_constraint_mode": "penalty",
+    "volume_projection_during_minimization": true,
+    "perimeter_constraints": [
+      {
+        "edges": [1, 2, 3, 4],
+        "target_perimeter": 4
+      }
+    ]
+  }
+}

@@ -1,4 +1,5 @@
 import json
+import copy
 
 SAMPLE_GEOMETRY = {
     "vertices": [
@@ -59,8 +60,6 @@ def write_sample_geometry(tmp_path, name="sample_geometry.json", data=None):
 
 def cube_soft_volume_input(volume_mode: str = "penalty") -> dict:
     """Return a deep copy of the cube sample with requested volume mode."""
-    import copy
-
     data = copy.deepcopy(SAMPLE_GEOMETRY)
     data.setdefault("global_parameters", {})
     if volume_mode == "penalty":
@@ -73,5 +72,43 @@ def cube_soft_volume_input(volume_mode: str = "penalty") -> dict:
             "volume_constraint_mode": volume_mode,
             "volume_projection_during_minimization": projection,
         }
+    )
+    return data
+
+
+SQUARE_PERIMETER_GEOMETRY = {
+    "vertices": [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [1.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0],
+    ],
+    "edges": [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+    ],
+    "faces": [[0, 1, 2, 3]],
+    "bodies": {
+        "faces": [[0]],
+        "energy": [{"constraints": ["body_area"], "target_area": 1.0}],
+    },
+    "constraint_modules": ["perimeter"],
+    "global_parameters": {
+        "surface_tension": 0.5,
+        "volume_constraint_mode": "penalty",
+        "volume_projection_during_minimization": True,
+        "perimeter_constraints": [
+            {"edges": [1, 2, 3, 4], "target_perimeter": 4.0}
+        ],
+    },
+}
+
+
+def square_perimeter_input(target_perimeter: float = 4.0) -> dict:
+    data = copy.deepcopy(SQUARE_PERIMETER_GEOMETRY)
+    data["global_parameters"]["perimeter_constraints"][0]["target_perimeter"] = (
+        target_perimeter
     )
     return data

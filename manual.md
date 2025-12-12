@@ -320,6 +320,14 @@ Add `"perimeter"` to `constraint_modules` to activate. Each constraint defines:
 The module computes perimeter, its gradient, and applies a small Lagrange step
 to match the target.
 
+Example inputs live in `tests/sample_meshes.square_perimeter_input`, and the
+regression harness (`tests/test_perimeter_minimization.py`) demonstrates how to
+distort the loop, run a short minimization, and verify that the perimeter (and
+body-area constraint) are driven back toward their targets even after
+refinement and equiangulation. Small residual deviations are expected because
+refinement and equiangulation slightly change the discrete geometry; the tests
+assert improvement and proximity rather than exact equality.
+
 ### 6.4 Geometric constraints: `PinToPlane`
 
 `modules/constraints/pin_to_plane.py` defines a `PinToPlane` helper you can

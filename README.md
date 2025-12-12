@@ -21,6 +21,30 @@ path. File names may be given with or without the `.json` suffix.
 using `refine_polygonal_facets`. Triangular facets remain unchanged. The
 returned mesh is therefore ready for optimization without further refinement.
 
+## Constraint modules
+
+Membrane Solver mirrors Evolver’s mix of penalties and hard constraints. Surface
+area (body/facet/global) and volume constraints are configured via
+`constraint_modules` plus the relevant `target_*` values on entities or in
+`global_parameters`. Perimeter conservation uses a loop of signed edge indices:
+
+```json
+"constraint_modules": ["perimeter"],
+"global_parameters": {
+  "perimeter_constraints": [
+    {
+      "edges": [1, 2, 3, 4],
+      "target_perimeter": 4.0
+    }
+  ]
+}
+```
+
+The new regression tests in `tests/test_perimeter_minimization.py` load the same
+square loop (see `tests/sample_meshes.square_perimeter_input`) to verify that
+energy drops while the loop returns to the requested perimeter, even after mesh
+refinement and equiangulation.
+
 
 ## Development notes
 

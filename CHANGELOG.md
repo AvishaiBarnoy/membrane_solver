@@ -7,6 +7,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Automatic target-area detection on bodies/facets and regression tests (square with area constraint, tetra with volume constraint).
 - Benchmarks now run in read-only sandboxes (no temp files); README/manual updated with benchmark usage.
 - Integration tests covering the cube penalty scenario (energy decrease, volume preservation, refine+equiangulate validity) and parsing tests for the interactive `rN` command.
+- Perimeter constraint coverage: `tests/test_perimeter_minimization.py` now drives a constrained square loop through minimization, refinement, and equiangulation, checking that perimeter returns to its target while area stays near 1 even in the presence of small discretisation errors.
 
 ### Changed
 - Volume handling:
