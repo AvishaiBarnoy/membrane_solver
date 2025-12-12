@@ -38,3 +38,5 @@ membrane_solver
 #docs/
 data/
 results/
+
+codex_ids.txt
