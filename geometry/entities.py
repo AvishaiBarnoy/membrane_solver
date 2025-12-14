@@ -123,8 +123,9 @@ class Facet:
 
     def compute_area(self, mesh: "Mesh") -> float:
         """
-        Compute area by decomposing the polygon into triangles fan-based at vertex 0.
-        Supports arbitrary n-gon.
+        Compute area using the standard shoelace formula (sum of cross products).
+        This is robust for general polygons (convex or concave) in 3D,
+        projected onto the plane defined by the facet normal.
         """
         verts = []
         for signed_index in self.edge_indices:
@@ -140,18 +141,23 @@ class Facet:
                 verts.append(tail)
             verts.append(head)
 
-        v_pos = np.array([mesh.vertices[i].position for i in verts[:-1]])
-        v0 = v_pos[0]
-        v1 = v_pos[1:-1] - v0
-        v2 = v_pos[2:] - v0
-        cross = np.cross(v1, v2)
-        area = 0.5 * np.linalg.norm(cross, axis=1).sum()
-        return area
+        # Get unique ordered vertices for the loop
+        v_ids = verts[:-1]
+        v_pos = np.array([mesh.vertices[i].position for i in v_ids])
+
+        if len(v_ids) < 3:
+            return 0.0
+
+        # Shoelace formula vector form: Area = 0.5 * |sum(v_i x v_{i+1})|
+        # Note: cyclic cross products
+        v_curr = v_pos
+        v_next = np.roll(v_pos, -1, axis=0)
+        cross_sum = np.cross(v_curr, v_next).sum(axis=0)
+        return 0.5 * float(np.linalg.norm(cross_sum))
 
     def compute_area_gradient(self, mesh: "Mesh") -> Dict[int, np.ndarray]:
         """
-        Compute area gradient with respect to each vertex in the facet.
-        Returns a dictionary where keys are vertex indices and values are gradient vectors.
+        Compute area gradient with respect to each vertex using the shoelace formula.
         """
         # ordered vertex loop
         v_ids = []
@@ -161,31 +167,35 @@ class Facet:
             if not v_ids or v_ids[-1] != tail:
                 v_ids.append(tail)
 
-        # triangulate facet around v0
         grad = {i: np.zeros(3) for i in v_ids}
-        v0 = mesh.vertices[v_ids[0]].position
-
         if len(v_ids) < 3:
             return grad
 
         v_pos = np.array([mesh.vertices[i].position for i in v_ids])
-        va = v_pos[1:-1] - v0
-        vb = v_pos[2:] - v0
 
-        n = np.cross(va, vb)
-        A = np.linalg.norm(n, axis=1)
-        mask = A >= 1e-12
-        if not np.any(mask):
+        # Area vector A_vec = 0.5 * sum(v_i x v_{i+1})
+        # Area A = |A_vec|
+        # Gradient of A w.r.t v_k is 0.5 * (v_{k-1} - v_{k+1}) x n_hat
+        # where n_hat = A_vec / |A_vec|
+
+        v_prev = np.roll(v_pos, 1, axis=0)
+        v_next = np.roll(v_pos, -1, axis=0)
+        
+        # Calculate area vector first to get normal
+        cross_sum = np.cross(v_pos, v_next).sum(axis=0)
+        area_doubled = np.linalg.norm(cross_sum)
+        
+        if area_doubled < 1e-12:
             return grad
-        n_hat = n[mask] / A[mask][:, None]
 
-        grad[v_ids[0]] += 0.5 * np.cross(va[mask], n_hat).sum(axis=0)
+        n_hat = cross_sum / area_doubled
 
-        cross_vb_va = np.cross(vb[mask] - va[mask], n_hat)
-        cross_v0_vb = np.cross(-vb[mask], n_hat)  # v0 - vb since va,vb diff from v0
-        for idx, (a, b) in enumerate(zip(np.array(v_ids[1:-1])[mask], np.array(v_ids[2:])[mask])):
-            grad[a] += 0.5 * cross_vb_va[idx]
-            grad[b] += 0.5 * cross_v0_vb[idx]
+        # Term for each vertex v_i: 0.5 * n_hat x (v_{i-1} - v_{i+1})
+        diff = v_prev - v_next
+        grads = 0.5 * np.cross(n_hat, diff)
+
+        for i, vid in enumerate(v_ids):
+            grad[vid] += grads[i]
 
         return grad
 
@@ -200,6 +210,7 @@ class Facet:
 
         This combines the work of ``compute_area`` and ``compute_area_gradient`` so
         callers that need both can avoid redundant geometric computation.
+        Uses the Shoelace formula.
         """
         # ordered vertex loop
         if getattr(mesh, "facet_vertex_loops", None) and self.index in mesh.facet_vertex_loops:
@@ -222,29 +233,27 @@ class Facet:
             v_pos = positions[rows]
         else:
             v_pos = np.array([mesh.vertices[i].position for i in v_ids])
-        v0 = v_pos[0]
-        va = v_pos[1:-1] - v0
-        vb = v_pos[2:] - v0
 
-        n = np.cross(va, vb)
-        A = np.linalg.norm(n, axis=1)
-        mask = A >= 1e-12
-        if not np.any(mask):
+        # Shoelace area vector: 0.5 * sum(v_i x v_{i+1})
+        v_curr = v_pos
+        v_next = np.roll(v_pos, -1, axis=0)
+        
+        cross_sum = np.cross(v_curr, v_next).sum(axis=0)
+        area_doubled = float(np.linalg.norm(cross_sum))
+        area = 0.5 * area_doubled
+
+        if area_doubled < 1e-12:
             return 0.0, grad
 
-        n_hat = n[mask] / A[mask][:, None]
-        # total area is sum of triangle areas 0.5 * |n|
-        area = float(0.5 * A[mask].sum())
+        n_hat = cross_sum / area_doubled
 
-        grad[v_ids[0]] += 0.5 * np.cross(va[mask], n_hat).sum(axis=0)
+        # Gradient term for each vertex v_i: 0.5 * n_hat x (v_{i-1} - v_{i+1})
+        v_prev = np.roll(v_pos, 1, axis=0)
+        diff = v_prev - v_next
+        grads = 0.5 * np.cross(n_hat, diff)
 
-        cross_vb_va = np.cross(vb[mask] - va[mask], n_hat)
-        cross_v0_vb = np.cross(-vb[mask], n_hat)
-        inner_ids = np.array(v_ids[1:-1])
-        next_ids = np.array(v_ids[2:])
-        for idx, (a, b) in enumerate(zip(inner_ids[mask], next_ids[mask])):
-            grad[a] += 0.5 * cross_vb_va[idx]
-            grad[b] += 0.5 * cross_v0_vb[idx]
+        for i, vid in enumerate(v_ids):
+            grad[vid] += grads[i]
 
         return area, grad
 

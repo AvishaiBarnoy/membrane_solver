@@ -252,6 +252,25 @@ where:
 In the default `"lagrange"` mode this energy is **disabled**; volume is
 handled by the constraint system instead.
 
+### 5.3 Line Tension (`modules/energy/line_tension.py`)
+
+Minimizes the total length of edges flagged with this energy. It computes:
+
+\[
+E_{\text{line}} = \sum_{\text{edges } e} \lambda_e \, L_e,
+\]
+
+where `L_e` is the edge length and `\lambda_e` is the line tension coefficient.
+
+Configuration:
+- Add `"line_tension"` to `energy_modules`.
+- Set global tension: `global_parameters["line_tension"] = 1.0`.
+- Override per-edge: `edge.options["line_tension"] = 0.5`.
+- Flag edges: Ensure edges have `"energy": ["line_tension"]` in their options.
+
+This is commonly used for 2D problems (e.g. square relaxing to a circle) or
+for boundary tension in open membranes.
+
 ---
 
 ## 6. Constraints
