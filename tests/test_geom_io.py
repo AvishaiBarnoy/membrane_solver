@@ -105,3 +105,24 @@ def test_default_energy_assignment(sample_geometry_file):
     #        print(body.options["energy"])
     #        assert len(body.options["energy"]) != 0, "Energy should be assigned to each body"
     #        assert isinstance(body.options["energy"], list), f"Energy module list should be a list, but it is a {type(body.options['energy'])}"
+
+
+def test_parse_geometry_allows_missing_faces_for_line_only_mesh():
+    """parse_geometry should handle inputs that omit 'faces' for line-only meshes."""
+    data = {
+        "vertices": [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+        ],
+        "edges": [
+            [0, 1, {"energy": ["line_tension"], "line_tension": 2.0}],
+        ],
+        # No "faces" key: line-only geometry.
+        "global_parameters": {"line_tension": 2.0},
+    }
+    mesh = parse_geometry(data)
+
+    assert isinstance(mesh, Mesh)
+    assert len(mesh.vertices) == 2
+    assert len(mesh.edges) == 1
+    assert len(mesh.facets) == 0
