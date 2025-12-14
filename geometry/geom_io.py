@@ -128,6 +128,11 @@ def parse_geometry(data: dict) -> Mesh:
             constraint_module_names.append("fixed")
 
     # Edges
+    if "edges" not in data:
+        err_msg = "Input geometry is missing required 'edges' section."
+        logger.error(err_msg)
+        raise KeyError(err_msg)
+
     for i, entry in enumerate(data["edges"]):
         tail_index, head_index, *opts = entry
         options = opts[0] if opts else {}
@@ -165,8 +170,9 @@ def parse_geometry(data: dict) -> Mesh:
         if options.get("fixed", False):
             constraint_module_names.append("fixed")
 
-    # Facets
-    for i, entry in enumerate(data["faces"]):
+    # Facets (optional for line‑only geometries)
+    faces_section = data.get("faces", [])
+    for i, entry in enumerate(faces_section):
         *raw_edges, options = entry if isinstance(entry[-1], dict) else (*entry, {})
         def parse_edge(e):
             if isinstance(e, str) and e.startswith("r"):

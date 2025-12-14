@@ -222,6 +222,7 @@ def execute_command(cmd, mesh, minimizer, stepper):
         print_physical_properties(mesh)
     elif cmd == 'visualize' or cmd == "s":
         from visualize_geometry import plot_geometry
+        #from visualization.plotting import plot_geometry
         plot_geometry(mesh, show_indices=False)
     elif cmd == 'save':
         # fall back to a default name

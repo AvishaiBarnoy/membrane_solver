@@ -1,9 +1,15 @@
+import os
+import sys
+
 import matplotlib
 
 # Use a non-interactive backend suitable for testing.
 matplotlib.use("Agg")
 
 import numpy as np
+
+# Ensure project root is on sys.path for direct test execution.
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.entities import Edge, Mesh, Vertex
 from geometry.geom_io import parse_geometry
@@ -48,4 +54,3 @@ def test_plot_geometry_colors_from_options_and_kwargs():
         facet_color="blue",
         edge_color="black",
     )
-
