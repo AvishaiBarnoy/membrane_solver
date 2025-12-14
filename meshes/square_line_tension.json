@@ -1,0 +1,34 @@
+{
+  "vertices": [
+    [0.0, 0.0, 0.0, {"constraints": ["pin_to_plane"]}],
+    [1.0, 0.0, 0.0, {"constraints": ["pin_to_plane"]}],
+    [1.0, 1.0, 0.0, {"constraints": ["pin_to_plane"]}],
+    [0.0, 1.0, 0.0, {"constraints": ["pin_to_plane"]}]
+  ],
+  "edges": [
+    [0, 1, {"energy": ["line_tension"]}],
+    [1, 2, {"energy": ["line_tension"]}],
+    [2, 3, {"energy": ["line_tension"]}],
+    [3, 0, {"energy": ["line_tension"]}]
+  ],
+  "faces": [
+    [0, 1, 2, 3]
+  ],
+  "bodies": {
+    "faces": [[0]],
+    "energy": [
+      {
+        "constraints": ["body_area"],
+        "target_area": 1.0
+      }
+    ]
+  },
+  "global_parameters": {
+    "surface_tension": 0.0,
+    "line_tension": 0.5,
+    "volume_constraint_mode": "lagrange",
+    "volume_projection_during_minimization": false,
+    "step_size": 0.005
+  },
+  "instructions": ["g40", "r", "g80", "V", "g80"]
+}

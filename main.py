@@ -273,6 +273,20 @@ def main():
         default=None,
         help='Override volume constraint mode (lagrange = hard constraint; penalty = soft energy).',
     )
+    parser.add_argument(
+        '--line-tension',
+        type=float,
+        default=None,
+        help='Assign a line-tension modulus to edges. When combined with '
+        '`--line-tension-edges`, only the specified edge IDs are tagged. '
+        'Otherwise all edges receive line tension.',
+    )
+    parser.add_argument(
+        '--line-tension-edges',
+        type=str,
+        default=None,
+        help='Comma-separated edge IDs to receive CLI line tension.',
+    )
     args = parser.parse_args()
 
     if not args.input:
@@ -297,6 +311,45 @@ def main():
     # Load mesh and parameters
     data = load_data(args.input)
     mesh = parse_geometry(data)
+
+    def _apply_cli_line_tension(value: float, edge_ids: list[int] | None) -> None:
+        targets = edge_ids or list(mesh.edges.keys())
+        invalid = [idx for idx in targets if idx not in mesh.edges]
+        if invalid:
+            logger.warning("Ignoring unknown edge IDs for line tension: %s", invalid)
+        updated = False
+        for idx in targets:
+            edge = mesh.edges.get(idx)
+            if edge is None:
+                continue
+            opts = edge.options if hasattr(edge, "options") else {}
+            if isinstance(opts.get("energy"), str):
+                opts["energy"] = [opts["energy"]]
+            opts.setdefault("energy", [])
+            if "line_tension" not in opts["energy"]:
+                opts["energy"].append("line_tension")
+            opts["line_tension"] = value
+            edge.options = opts
+            updated = True
+        if updated and "line_tension" not in mesh.energy_modules:
+            mesh.energy_modules.append("line_tension")
+
+    if args.line_tension is not None:
+        ids = None
+        if args.line_tension_edges:
+            try:
+                ids = [
+                    int(token.strip())
+                    for token in args.line_tension_edges.split(",")
+                    if token.strip()
+                ]
+            except ValueError as exc:
+                print(
+                    f"Invalid --line-tension-edges value '{args.line_tension_edges}': {exc}",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+        _apply_cli_line_tension(args.line_tension, ids)
 
     fixed_count = sum(1 for v in mesh.vertices.values() if getattr(v, 'fixed', False))
     logger.debug(f"Number of fixed vertices: {fixed_count} / {len(mesh.vertices)}")

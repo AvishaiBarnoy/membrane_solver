@@ -13,6 +13,7 @@ logger = logging.getLogger('membrane_solver.log')
 
 # TODO: shading option when rotating
 # TODO: opaque scatter when transparent=False
+# TODO: allow drawing lines
 
 def plot_geometry(mesh, show_indices=False, scatter=False, ax=None,
                   transparent=False):
