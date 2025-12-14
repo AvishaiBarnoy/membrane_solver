@@ -88,8 +88,12 @@ class Facet:
     options: Dict[str, Any] = field(default_factory=dict)
 
     def copy(self):
-        return Facet(self.index, self.edge_indices[:], self.refine, self.fixed,
-                     self.options.copy())
+        return Facet(index=self.index,
+                     edge_indices=self.edge_indices[:],
+                     refine=self.refine,
+                     fixed=self.fixed,
+                     surface_tension=self.surface_tension,
+                     options=self.options.copy())
 
     def compute_normal(self, mesh) -> np.ndarray:
         """Compute (non-normalized) normal vector using right-hand rule from first three vertices."""
