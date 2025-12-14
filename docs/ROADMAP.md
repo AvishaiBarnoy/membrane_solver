@@ -12,8 +12,10 @@ intended for development and planning; users should consult `README.md` and
         (`volume_constraint_mode="lagrange"`, default)
 
 2. Square that minimizes into a circle
-   - 2.1 Soft constraint – surface‑area energy
-   - 2.2 Hard constraint – Lagrange multiplier for fixed area
+   - [x] DONE: Using `line_tension` energy (minimizes perimeter) + `body_area`
+         constraint (conserves area). Validated in `tests/test_line_tension.py`.
+   - [x] 2.1 Soft constraint – surface‑area energy (`modules/energy/body_area_penalty.py`)
+   - [x] 2.2 Hard constraint – Lagrange multiplier for fixed area (`modules/constraints/body_area.py`)
 
 3. Capillary bridge (catenoid)
    - Two circles at fixed distance; tests surface tension and volume

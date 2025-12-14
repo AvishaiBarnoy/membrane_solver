@@ -5,6 +5,5 @@
     ],
     "edges":[
         [0, 1, {"energy": ["line_tension"], "line_tension": 2.0}]
-    ],
-    "faces": [[0]]
+    ]
 }
