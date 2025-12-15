@@ -16,7 +16,7 @@ def plot_geometry(
     ax=None,
     transparent: bool = False,
     draw_facets: bool = True,
-    draw_edges: bool = False,
+    draw_edges: bool = True,
     facet_color: Any = None,
     edge_color: str = "k",
     facet_colors: Optional[Dict[int, Any]] = None,

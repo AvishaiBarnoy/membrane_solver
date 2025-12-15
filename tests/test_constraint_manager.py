@@ -20,8 +20,12 @@ def test_constraint_manager_init(monkeypatch):
     # Mock importlib to simulate loading modules
     import importlib
     mock_import_module = MagicMock()
-    sys.modules["modules.constraints.dummy_constraint"] = MagicMock()
-    sys.modules["modules.constraints.pin_to_plane"] = MagicMock()
+    monkeypatch.setitem(
+        sys.modules, "modules.constraints.dummy_constraint", MagicMock()
+    )
+    monkeypatch.setitem(
+        sys.modules, "modules.constraints.pin_to_plane", MagicMock()
+    )
 
     monkeypatch.setattr(importlib, "import_module", mock_import_module)
 
@@ -43,7 +47,7 @@ def test_get_module():
     mock_pin_to_plane_module = MagicMock()
 
     # Initialize the ConstraintModuleManager
-    constraint_manager = ConstraintModuleManager(constraint_names)
+    constraint_manager = ConstraintModuleManager([])
     constraint_manager.modules = {
         "dummy_constraint": mock_dummy_module,
         "pin_to_plane": mock_pin_to_plane_module
@@ -63,8 +67,12 @@ def test_constraints_loaded_from_file(monkeypatch, tmp_path):
     # Mock importlib to simulate loading modules
     import importlib
     mock_import_module = MagicMock()
-    sys.modules["modules.constraints.pin_to_plane"] = MagicMock()
-    sys.modules["modules.constraints.fix_facet_area"] = MagicMock()
+    monkeypatch.setitem(
+        sys.modules, "modules.constraints.pin_to_plane", MagicMock()
+    )
+    monkeypatch.setitem(
+        sys.modules, "modules.constraints.fix_facet_area", MagicMock()
+    )
 
     monkeypatch.setattr(importlib, "import_module", mock_import_module)
 

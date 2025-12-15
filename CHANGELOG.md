@@ -4,6 +4,9 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ## [Unreleased]
 ### Added
+- **Catenoid Benchmark**: Added `benchmarks/benchmark_catenoid.py` and `meshes/catenoid_good_min.json` to validate surface tension minimization between two fixed rings.
+- **YAML Support**: `load_data` now supports `.yaml` and `.yml` files for mesh definitions, enabling comments and anchors/aliases.
+- **JSON Presets**: Added support for a `definitions` block in input files. Entities can use `"preset": "definition_name"` to inherit properties, reducing duplication for constraints and options.
 - Stability improvements:
   - Implemented a "Safe Step Heuristic" in `backtracking_line_search` to prevent triangle flips (inverted normals) during minimization. Expensive geometric checks are only run for large steps (>30% of min edge length), preserving performance.
   - Added `runtime/topology.py` with `detect_vertex_edge_collisions` and `check_max_normal_change`.

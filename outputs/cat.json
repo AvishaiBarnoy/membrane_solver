@@ -1,0 +1,983 @@
+{
+    "vertices": [
+        [
+            1.5088795,
+            0.0,
+            1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            0.75443975,
+            1.30672798,
+            1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            -0.75443975,
+            1.30672798,
+            1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            -1.5088795,
+            0.0,
+            1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            -0.75443975,
+            -1.30672798,
+            1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            0.75443975,
+            -1.30672798,
+            1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            1.5088795,
+            0.0,
+            -1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            0.75443975,
+            1.30672798,
+            -1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            -0.75443975,
+            1.30672798,
+            -1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            -1.5088795,
+            0.0,
+            -1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            -0.75443975,
+            -1.30672798,
+            -1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            0.75443975,
+            -1.30672798,
+            -1.0,
+            {
+                "fixed": true
+            }
+        ],
+        [
+            1.131659625,
+            0.65336399,
+            0.0
+        ],
+        [
+            0.0,
+            1.30672798,
+            0.0
+        ],
+        [
+            -1.131659625,
+            0.65336399,
+            0.0
+        ],
+        [
+            -1.131659625,
+            -0.65336399,
+            0.0
+        ],
+        [
+            0.0,
+            -1.30672798,
+            0.0
+        ],
+        [
+            1.131659625,
+            -0.65336399,
+            0.0
+        ]
+    ],
+    "edges": [
+        [
+            0,
+            1,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            1,
+            2,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            2,
+            3,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            3,
+            4,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            4,
+            5,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            5,
+            0,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            6,
+            7,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    -1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            7,
+            8,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    -1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            8,
+            9,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    -1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            9,
+            10,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    -1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            10,
+            11,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    -1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            11,
+            6,
+            {
+                "fixed": true,
+                "constraints": [
+                    "pin_to_circle"
+                ],
+                "pin_to_circle_normal": [
+                    0,
+                    0,
+                    1
+                ],
+                "pin_to_circle_point": [
+                    0,
+                    0,
+                    -1
+                ],
+                "pin_to_circle_radius": 1.5088795
+            }
+        ],
+        [
+            0,
+            6
+        ],
+        [
+            1,
+            7
+        ],
+        [
+            2,
+            8
+        ],
+        [
+            3,
+            9
+        ],
+        [
+            4,
+            10
+        ],
+        [
+            5,
+            11
+        ],
+        [
+            0,
+            12,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            1,
+            12,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            7,
+            12,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            6,
+            12,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            1,
+            13,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            2,
+            13,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            8,
+            13,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            7,
+            13,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            2,
+            14,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            3,
+            14,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            9,
+            14,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            8,
+            14,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            3,
+            15,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            4,
+            15,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            10,
+            15,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            9,
+            15,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            4,
+            16,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            5,
+            16,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            11,
+            16,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            10,
+            16,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            5,
+            17,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            0,
+            17,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            6,
+            17,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ],
+        [
+            11,
+            17,
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0
+            }
+        ]
+    ],
+    "faces": [
+        [
+            0,
+            19,
+            "r18",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 0,
+                "constraints": []
+            }
+        ],
+        [
+            13,
+            20,
+            "r19",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 0,
+                "constraints": []
+            }
+        ],
+        [
+            21,
+            "r20",
+            "r6",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 0,
+                "constraints": []
+            }
+        ],
+        [
+            18,
+            "r21",
+            "r12",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 0,
+                "constraints": []
+            }
+        ],
+        [
+            1,
+            23,
+            "r22",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 1,
+                "constraints": []
+            }
+        ],
+        [
+            14,
+            24,
+            "r23",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 1,
+                "constraints": []
+            }
+        ],
+        [
+            25,
+            "r24",
+            "r7",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 1,
+                "constraints": []
+            }
+        ],
+        [
+            22,
+            "r25",
+            "r13",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 1,
+                "constraints": []
+            }
+        ],
+        [
+            2,
+            27,
+            "r26",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 2,
+                "constraints": []
+            }
+        ],
+        [
+            15,
+            28,
+            "r27",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 2,
+                "constraints": []
+            }
+        ],
+        [
+            29,
+            "r28",
+            "r8",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 2,
+                "constraints": []
+            }
+        ],
+        [
+            26,
+            "r29",
+            "r14",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 2,
+                "constraints": []
+            }
+        ],
+        [
+            3,
+            31,
+            "r30",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 3,
+                "constraints": []
+            }
+        ],
+        [
+            16,
+            32,
+            "r31",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 3,
+                "constraints": []
+            }
+        ],
+        [
+            33,
+            "r32",
+            "r9",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 3,
+                "constraints": []
+            }
+        ],
+        [
+            30,
+            "r33",
+            "r15",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 3,
+                "constraints": []
+            }
+        ],
+        [
+            4,
+            35,
+            "r34",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 4,
+                "constraints": []
+            }
+        ],
+        [
+            17,
+            36,
+            "r35",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 4,
+                "constraints": []
+            }
+        ],
+        [
+            37,
+            "r36",
+            "r10",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 4,
+                "constraints": []
+            }
+        ],
+        [
+            34,
+            "r37",
+            "r16",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 4,
+                "constraints": []
+            }
+        ],
+        [
+            5,
+            39,
+            "r38",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 5,
+                "constraints": []
+            }
+        ],
+        [
+            12,
+            40,
+            "r39",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 5,
+                "constraints": []
+            }
+        ],
+        [
+            41,
+            "r40",
+            "r11",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 5,
+                "constraints": []
+            }
+        ],
+        [
+            38,
+            "r41",
+            "r17",
+            {
+                "energy": [
+                    "surface"
+                ],
+                "surface_tension": 2.0,
+                "parent_facet": 5,
+                "constraints": []
+            }
+        ]
+    ],
+    "bodies": {
+        "faces": [],
+        "target_volume": [],
+        "target_area": [],
+        "energy": [],
+        "constraints": []
+    },
+    "global_parameters": {
+        "surface_tension": 2.0,
+        "volume_stiffness": 1000.0,
+        "volume_constraint_mode": "lagrange",
+        "volume_projection_during_minimization": false,
+        "volume_tolerance": 0.001,
+        "max_zero_steps": 10,
+        "step_size_floor": 1e-08,
+        "step_size": 0.001,
+        "intrinsic_curvature": 0.0,
+        "bending_modulus": 0.0,
+        "gaussian_modulus": 0.0
+    },
+    "instructions": []
+}

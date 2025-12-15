@@ -6,7 +6,9 @@ import matplotlib
 # Use a non-interactive backend suitable for testing.
 matplotlib.use("Agg")
 
+import matplotlib.pyplot as plt
 import numpy as np
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 # Ensure project root is on sys.path for direct test execution.
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -30,7 +32,20 @@ def test_plot_geometry_edges_only_does_not_crash():
     """plot_geometry should handle meshes with only edges."""
     mesh = _build_edge_only_mesh()
     # Should run without raising; drawing happens on an Agg canvas.
-    plot_geometry(mesh, draw_facets=False, draw_edges=True, scatter=False)
+    plot_geometry(
+        mesh, draw_facets=False, draw_edges=True, scatter=False, show=False
+    )
+
+
+def test_plot_geometry_draws_standalone_edges_by_default():
+    """plot_geometry should render edges even when facets are absent."""
+    mesh = _build_edge_only_mesh()
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+
+    plot_geometry(mesh, ax=ax, scatter=False, show=False)
+
+    assert any(isinstance(coll, Line3DCollection) for coll in ax.collections)
 
 
 def test_plot_geometry_colors_from_options_and_kwargs():
@@ -53,4 +68,5 @@ def test_plot_geometry_colors_from_options_and_kwargs():
         draw_edges=True,
         facet_color="blue",
         edge_color="black",
+        show=False,
     )
