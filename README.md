@@ -96,13 +96,6 @@ near‑term goals include:
 
 ## Performance benchmarks
 
-- `python benchmarks/benchmark_cube_good.py` runs the full `cube_good_min_routine`
-  recipe (minimization, refinement, equiangulation, vertex averaging, etc.) and
-  reports the average wall-clock time over three runs. This is the main
-  regression benchmark we use when tuning steppers, constraints, or geometry
-  kernels. It runs entirely in-place and requires no writable temporary
-  directories.
-- `python benchmarks/benchmark_surface_energy.py` compares the old vs. new
-  surface energy implementations by generating temporary cube variants with
-  different facet `energy` modules. Benchmark temp files now live under
-  `outputs/`, so the script works in read-only `/tmp` environments.
+- `python benchmarks/suite.py` is the main entry point for performance testing. It runs a set of standard scenarios (including `cube_good` and `square_to_circle`), tracks execution time history in `benchmarks/results.json`, and highlights regressions or improvements.
+- `python benchmarks/benchmark_cube_good.py` runs the full `cube_good_min_routine` recipe (minimization, refinement, equiangulation, vertex averaging, etc.) and reports the average wall-clock time.
+- `python benchmarks/benchmark_square_to_circle.py` runs the `square_to_circle` scenario (square sheet relaxing to a circle with line tension), serving as a stress test for mesh maintenance operations.

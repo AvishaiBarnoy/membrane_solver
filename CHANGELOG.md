@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ## [Unreleased]
 ### Added
+- Performance optimizations:
+  - Replaced `numpy.cross` with a specialized `_fast_cross` helper in `geometry/entities.py`, reducing overhead for small arrays.
+  - Vectorized volume gradient computations in `modules/energy/volume.py`.
+  - Optimized memory allocation in hot loops (using `np.empty` instead of list comprehensions).
+  - Total simulation runtime reduced by ~64% (from ~15.5s to ~5.6s on `cube_good_min_routine`).
+- New benchmark suite: `benchmarks/suite.py` runs and compares multiple scenarios (`cube_good`, `square_to_circle`) and tracks performance history.
 - Automatic target-area detection on bodies/facets and regression tests (square with area constraint, tetra with volume constraint).
 - Benchmarks now run in read-only sandboxes (no temp files); README/manual updated with benchmark usage.
 - Integration tests covering the cube penalty scenario (energy decrease, volume preservation, refine+equiangulate validity) and parsing tests for the interactive `rN` command.
@@ -21,6 +27,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Visualization: `visualize_geometry.py` is now a thin wrapper around the `visualization` CLI, and facet rendering skips <3-edge facets so line-only meshes can be displayed cleanly.
 
 ### Fixed
+- Fixed `square_to_circle.json`: Added missing instruction list and updated it to interleave minimization with mesh maintenance (`r`, `g10`, `u`, `V`) to prevent mesh tangling/overlap during large deformations.
 - `load_data` accepts `Path` objects (needed for tests writing tmp JSONs).
 - `cube_good_min_routine` converges again (energy ≈ 4.85) when run under penalty mode.
 

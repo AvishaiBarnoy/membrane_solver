@@ -30,6 +30,5 @@
     "volume_projection_during_minimization": false,
     "step_size": 0.005
   },
-  "instructions": ["g50", "r", "g50", "V", "g50", "r", "g100", "V", "g100", "gd", "g50",
-      "V 10", "g100", "r", "g100", "V 10", "g100", "u", "u", "u", "u", "u", "r", "g50"]
+  "instructions": ["r3", "V3", "g10", "V10", "gd", "g10", "V5", "r", "V5", "g20", "cg", "g10"]
 }

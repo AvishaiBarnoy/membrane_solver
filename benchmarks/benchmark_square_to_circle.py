@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Benchmark full minimization for the cube_good_min_routine setup.
+"""Benchmark full minimization for the square_to_circle_good_min routine.
 
-This script runs ``main.py`` on ``meshes/cube_good_min_routine.json`` a few
-times and reports the average wall-clock runtime. It is intended as a simple
-regression benchmark for performance tuning (e.g., geometry kernels,
-steppers, constraint handling).
+This script runs ``main.py`` on ``meshes/square_to_circle_good_min.json`` a few
+times and reports the average wall-clock runtime.
 """
 
 from __future__ import annotations
@@ -14,9 +12,11 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+# Ensure the project root is in sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-BASE_JSON = Path(__file__).resolve().parent.parent / "meshes" / "cube_good_min.json"
+BASE_JSON = Path(__file__).resolve().parent.parent / "meshes" / "square_to_circle_good_min.json"
 RUNS = 3
 
 
@@ -44,10 +44,17 @@ def _run_simulation(input_path: Path) -> float:
 
 def benchmark(runs: int = RUNS) -> float:
     """Return the average runtime over ``runs`` executions."""
-    times = [_run_simulation(BASE_JSON) for _ in range(runs)]
+    times = []
+    # Warmup run (optional, but good for stability)
+    # _run_simulation(BASE_JSON) 
+    
+    for i in range(runs):
+        elapsed = _run_simulation(BASE_JSON)
+        times.append(elapsed)
+    
     return sum(times) / runs
 
 
 if __name__ == "__main__":
     avg = benchmark()
-    print(f"cube_good_min_routine average runtime over {RUNS} runs: {avg:.4f}s")
+    print(f"square_to_circle_good_min average runtime over {RUNS} runs: {avg:.4f}s")

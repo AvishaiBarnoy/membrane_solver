@@ -181,8 +181,8 @@ def execute_command(cmd, mesh, minimizer, stepper):
                 return mesh, stepper
         for i in range(count):
             logger.info("Refining mesh... (%d/%d)", i + 1, count)
-            mesh = refine_triangle_mesh(mesh)
             mesh = refine_polygonal_facets(mesh)
+            mesh = refine_triangle_mesh(mesh)
             minimizer.mesh = mesh
             minimizer.enforce_constraints_after_mesh_ops(mesh)
         logger.info("Mesh refinement complete after %d pass(es).", count)

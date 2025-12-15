@@ -141,6 +141,14 @@ Interactive commands:
 - `quit`, `exit`, `q`  
   Leave interactive mode.
 
+> **Tip: Avoiding mesh tangling**
+> When running large deformations (e.g. relaxing a square to a circle), avoid
+> running many minimization steps (`g50`) in a single block immediately after
+> refinement. Instead, interleave minimization with mesh maintenance commands:
+> `r` -> `g10` -> `u` (equiangulate) -> `V` (vertex average) -> `g10` ...
+> This allows the mesh to "un-kink" and redistribute vertices as it deforms,
+> preventing overlapping triangles and degenerate edges.
+
 ---
 
 ## 4. Mesh JSON structure (overview)
@@ -523,3 +531,9 @@ manual accordingly before merging into `main`.
       behaviour without the hard constraint overhead.
     - `volume_projection_during_minimization` controls whether the geometric
       projection runs inside the line search (mostly for legacy penalty mode).
+
+7. Performance Optimization:
+   - Core geometry routines (cross products, volume gradients) are heavily optimized.
+   - Use `geometry.entities._fast_cross` for small-array cross products instead of `numpy.cross`.
+   - Prefer pre-allocating numpy arrays with `np.empty` over list comprehensions in hot loops.
+   - See `benchmarks/suite.py` for regression testing.
