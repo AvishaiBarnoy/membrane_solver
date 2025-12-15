@@ -234,6 +234,36 @@ The loader (`geometry.geom_io.parse_geometry`) also:
 > complementary value (e.g. choosing `penalty` forces projection `True`).
 > You can still override both explicitly if needed.
 
+### 4.1 Advanced Input Formats (YAML and Presets)
+
+**YAML Support:**
+You can now use `.yaml` or `.yml` files for your meshes. This allows for comments and standard YAML features like anchors (`&`) and aliases (`*`) to reduce repetition.
+
+**Presets (Definitions):**
+To avoid repeating complex constraint configurations, you can define a `definitions` block in your input file (JSON or YAML) and reference them using the `preset` key.
+
+Example (`catenoid_good_min.json` style):
+
+```json
+{
+  "definitions": {
+    "top_ring": {
+      "fixed": true,
+      "constraints": ["pin_to_circle"],
+      "pin_to_circle_normal": [0, 0, 1],
+      "pin_to_circle_point": [0, 0, 1],
+      "pin_to_circle_radius": 1.5
+    }
+  },
+  "edges": [
+    [0, 1, {"preset": "top_ring"}],
+    [1, 2, {"preset": "top_ring"}]
+  ]
+}
+```
+
+Any options provided in the entity's dictionary will merge with and override the preset values.
+
 ---
 
 ## 5. Energies

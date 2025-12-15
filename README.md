@@ -116,3 +116,4 @@ near‑term goals include:
 - `python benchmarks/suite.py` is the main entry point for performance testing. It runs a set of standard scenarios (including `cube_good` and `square_to_circle`), tracks execution time history in `benchmarks/results.json`, and highlights regressions or improvements.
 - `python benchmarks/benchmark_cube_good.py` runs the full `cube_good_min_routine` recipe (minimization, refinement, equiangulation, vertex averaging, etc.) and reports the average wall-clock time.
 - `python benchmarks/benchmark_square_to_circle.py` runs the `square_to_circle` scenario (square sheet relaxing to a circle with line tension), serving as a stress test for mesh maintenance operations.
+- `python benchmarks/benchmark_catenoid.py` runs the `catenoid` scenario (surface tension minimization between two fixed rings), validating `pin_to_circle` constraints and surface minimization.
