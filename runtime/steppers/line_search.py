@@ -2,6 +2,7 @@ from typing import Dict, Callable
 import numpy as np
 import logging
 from geometry.entities import Mesh
+from runtime.topology import check_max_normal_change, get_min_edge_length
 
 logger = logging.getLogger('membrane_solver')
 
@@ -57,6 +58,17 @@ def backtracking_line_search(
 
     energy0 = energy_fn()
 
+    # Pre-compute stability threshold
+    min_edge_len = get_min_edge_length(mesh)
+    safe_step_limit = 0.3 * min_edge_len if min_edge_len > 0 else float('inf')
+    
+    # Calculate max possible displacement vector magnitude (unscaled)
+    max_dir_norm = 0.0
+    if direction:
+        # Optimization: convert direction dict values to array once if needed, 
+        # but max loop is fast enough for now
+        max_dir_norm = max(np.linalg.norm(d) for d in direction.values())
+
     def constraint_violation(m: Mesh) -> float:
         """Return a max relative violation over area/volume constraints."""
         max_violation = 0.0
@@ -90,6 +102,10 @@ def backtracking_line_search(
 
     backtracks = 0
     for _ in range(max_iter):
+        # Heuristic: Check if step is small enough to be unconditionally safe
+        max_disp = alpha * max_dir_norm
+        is_safe_small_step = max_disp < safe_step_limit
+
         # Trial step from original positions.
         for vidx, vertex in mesh.vertices.items():
             if getattr(vertex, "fixed", False):
@@ -100,6 +116,21 @@ def backtracking_line_search(
                 vertex.position[:] = vertex.constraint.project_position(
                     vertex.position
                 )
+
+        # Stability Check: Only run expensive check if step is large
+        if not is_safe_small_step:
+            if not check_max_normal_change(mesh, original_positions):
+                # Treat as failure -> backtrack
+                for vidx, vertex in mesh.vertices.items():
+                    if getattr(vertex, "fixed", False):
+                        continue
+                    vertex.position[:] = original_positions[vidx]
+                
+                alpha *= beta
+                backtracks += 1
+                if alpha < 1e-8:
+                    break
+                continue
 
         trial_energy = energy_fn()
         if trial_energy <= energy0 + c * alpha * g_dot_d:

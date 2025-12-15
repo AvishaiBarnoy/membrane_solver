@@ -15,6 +15,7 @@ from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
 from runtime.vertex_average import vertex_average
 from runtime.equiangulation import equiangulate_mesh
+from runtime.topology import detect_vertex_edge_collisions
 logger = logging.getLogger("membrane_solver")
 logger.addHandler(logging.NullHandler())
 
@@ -163,6 +164,12 @@ def execute_command(cmd, mesh, minimizer, stepper):
         logger.info(
             f"Minimization complete. Final energy: {result['energy'] if result else 'N/A'}"
         )
+        # NEW: Check for collisions after minimization
+        collisions = detect_vertex_edge_collisions(mesh)
+        if collisions:
+            logger.warning(f"TOPOLOGY WARNING: {len(collisions)} vertex-edge collisions detected!")
+            # Optional: Visualize them or auto-correct (future work)
+
     elif cmd.startswith('t'):
         new_ts = cmd.replace(' ', '')
         try:

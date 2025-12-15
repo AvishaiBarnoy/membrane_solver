@@ -43,5 +43,5 @@
                         "volume_constraint_mode": "penalty",
                         "volume_projection_during_minimization": true 
     },
-    "instructions": ["g150", "r", "u", "g100", "V", "g50", "r", "g100", "r", "g50", "V", "s"]
+    "instructions": ["g150", "r", "u", "g100", "V", "g50", "r", "g100", "r", "g50", "s"]
 }

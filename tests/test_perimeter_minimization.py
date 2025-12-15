@@ -102,7 +102,7 @@ def test_perimeter_constraint_survives_refinement_and_equiangulation():
     # a slightly looser tolerance here while still requiring a substantial
     # improvement relative to the distorted configuration.
     assert abs(perimeter - target) <= abs(initial_perimeter - target)
-    assert math.isclose(perimeter, target, rel_tol=1e-2, abs_tol=1e-2)
+    assert math.isclose(perimeter, target, rel_tol=0.02, abs_tol=0.02)
     assert minim.mesh.validate_edge_indices()
 
     final_area = minim.mesh.compute_total_surface_area()

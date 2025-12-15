@@ -532,6 +532,24 @@ manual accordingly before merging into `main`.
     - `volume_projection_during_minimization` controls whether the geometric
       projection runs inside the line search (mostly for legacy penalty mode).
 
+10. Stability & Topology
+------------------------
+
+The solver includes safeguards inspired by Surface Evolver to prevent mesh
+degeneracy (tangling, overlapping triangles) during energy minimization.
+
+- **Safe Step Heuristic**: The line search automatically rejects steps that would
+  cause any triangle to rotate by more than ~30 degrees (flip). To maintain high
+  performance, this expensive geometric check is skipped for small steps (displacement
+  < 30% of the minimum edge length).
+- **Collision Detection**: After every `g` command, the solver checks for vertices
+  that have drifted dangerously close to edges they do not belong to. A warning is
+  logged (`TOPOLOGY WARNING`) if collisions are detected.
+- **Recommendations**: If you see topology warnings:
+  1. Reduce step size (`t`).
+  2. Interleave `equiangulation` (`u`) and `vertex_averaging` (`V`) more frequently.
+  3. Refine (`r`) the mesh to resolve sharp features.
+
 7. Performance Optimization:
    - Core geometry routines (cross products, volume gradients) are heavily optimized.
    - Use `geometry.entities._fast_cross` for small-array cross products instead of `numpy.cross`.

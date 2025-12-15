@@ -4,6 +4,10 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ## [Unreleased]
 ### Added
+- Stability improvements:
+  - Implemented a "Safe Step Heuristic" in `backtracking_line_search` to prevent triangle flips (inverted normals) during minimization. Expensive geometric checks are only run for large steps (>30% of min edge length), preserving performance.
+  - Added `runtime/topology.py` with `detect_vertex_edge_collisions` and `check_max_normal_change`.
+  - `main.py` now runs collision detection after every minimization sequence and logs warnings if the mesh self-intersects.
 - Performance optimizations:
   - Replaced `numpy.cross` with a specialized `_fast_cross` helper in `geometry/entities.py`, reducing overhead for small arrays.
   - Vectorized volume gradient computations in `modules/energy/volume.py`.
