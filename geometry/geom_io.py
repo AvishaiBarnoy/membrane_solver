@@ -122,10 +122,11 @@ def parse_geometry(data: dict) -> Mesh:
                 #       a fixed_edges_map in meshes, when we do energy/grad
                 #       calculations the map zeros or just skips these edges
                 #       make sure the fixed flag is turned on
-                constraint_module_names.append("fixed")
+                # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
                 mesh.vertices[i].fixed = True
         if options.get("fixed", False):
-            constraint_module_names.append("fixed")
+            # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
+            mesh.vertices[i].fixed = True # Ensure fixed flag is set if from top-level option
 
     # Edges
     if "edges" not in data:
@@ -165,10 +166,11 @@ def parse_geometry(data: dict) -> Mesh:
                 logger.error(err_msg)
                 raise err_msg
             if "fixed" in options["constraints"]:
-                constraint_module_names.append("fixed")
+                # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
                 mesh.edges[i+1].fixed = True
         if options.get("fixed", False):
-            constraint_module_names.append("fixed")
+            # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
+            mesh.edges[i+1].fixed = True # Ensure fixed flag is set if from top-level option
 
     # Facets (optional for line‑only geometries)
     faces_section = data.get("faces", [])
@@ -225,11 +227,12 @@ def parse_geometry(data: dict) -> Mesh:
         if facet_constraints:
             constraint_module_names.extend(facet_constraints)
             if "fixed" in facet_constraints:
-                constraint_module_names.append("fixed")
+                # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
                 mesh.facets[i].fixed = True
 
         if options.get("fixed", False):
-            constraint_module_names.append("fixed")
+            # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
+            mesh.facets[i].fixed = True # Ensure fixed flag is set if from top-level option
 
     vol_mode = mesh.global_parameters.get("volume_constraint_mode", "lagrange")
     if vol_mode == "penalty":
@@ -362,16 +365,22 @@ def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
             return f"r{abs(i) - 1}"     # -1 → "r0"
         return i - 1                    # 1 → 0
 
+    def prepare_options(entity):
+        opts = entity.options.copy() if entity.options else {}
+        if entity.fixed:
+            opts["fixed"] = True
+        return opts if opts else None
+
     data = {
         "vertices": [[*mesh.vertices[v].position.tolist(),
-                        mesh.vertices[v].options] if mesh.vertices[v].options else
+                        prepare_options(mesh.vertices[v])] if prepare_options(mesh.vertices[v]) else
                         mesh.vertices[v].position.tolist() for v in mesh.vertices.keys()],
         "edges": [[mesh.edges[e].tail_index, mesh.edges[e].head_index,
-                   mesh.edges[e].options] if mesh.edges[e].options else
+                   prepare_options(mesh.edges[e])] if prepare_options(mesh.edges[e]) else
                   [mesh.edges[e].tail_index, mesh.edges[e].head_index] for e in mesh.edges.keys()],
         "faces": [
             [*map(export_edge_index, mesh.facets[facet_idx].edge_indices),
-             mesh.facets[facet_idx].options] if mesh.facets[facet_idx].options else
+             prepare_options(mesh.facets[facet_idx])] if prepare_options(mesh.facets[facet_idx]) else
             list(map(export_edge_index, mesh.facets[facet_idx].edge_indices))
             for facet_idx in mesh.facets.keys()
         ],

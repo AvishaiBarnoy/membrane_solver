@@ -18,8 +18,7 @@ intended for development and planning; users should consult `README.md` and
    - [x] 2.2 Hard constraint – Lagrange multiplier for fixed area (`modules/constraints/body_area.py`)
 
 3. Capillary bridge (catenoid)
-   - Two circles at fixed distance; tests surface tension and volume
-     constraint.
+   - Two circles at fixed distance; tests surface tension and surface constraint.
 
 4. Pinned hemisphere under tension
    - Yield spherical caps using boundary constraints and
