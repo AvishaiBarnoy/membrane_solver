@@ -11,9 +11,21 @@ cd "$SCRIPT_DIR"
 PROFILE_OUT="${SCRIPT_DIR}/profile.out"
 
 python -m cProfile -o "$PROFILE_OUT" main.py \
-    -i meshes/cube_good_min_routine.json --non-interactive -q
+    -i meshes/cube_good_min.json --non-interactive -q
 
 python -m pstats "$PROFILE_OUT" << EOF
 sort cumulative
 stats 30
 EOF
+
+echo
+read -r -p "Delete profile output file '$PROFILE_OUT'? [y/N] " REPLY
+case "$REPLY" in
+    [yY][eE][sS]|[yY])
+        rm -f "$PROFILE_OUT"
+        echo "Deleted '$PROFILE_OUT'."
+        ;;
+    *)
+        echo "Kept '$PROFILE_OUT'."
+        ;;
+esac

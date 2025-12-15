@@ -18,7 +18,7 @@ import numpy as np
 from geometry.entities import Mesh
 from logging_config import setup_logging
 
-logger = setup_logging("membrane_solver")
+logger = setup_logging("membrane_solver.log")
 
 
 def _edges_with_line_tension(mesh: Mesh) -> Iterable[int]:
@@ -99,4 +99,3 @@ def compute_energy_and_gradient(
 
 
 __all__ = ["compute_energy_and_gradient"]
-

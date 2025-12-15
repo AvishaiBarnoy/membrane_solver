@@ -7,7 +7,7 @@ from collections import defaultdict
 from logging_config import setup_logging
 import numpy as np
 
-logger = setup_logging('membrane_solver')
+logger = setup_logging("membrane_solver.log")
 
 
 def _all_facets_are_triangles(mesh: Mesh) -> bool:

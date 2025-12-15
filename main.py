@@ -16,7 +16,7 @@ from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
 from runtime.vertex_average import vertex_average
 from runtime.equiangulation import equiangulate_mesh
 from runtime.topology import detect_vertex_edge_collisions
-logger = logging.getLogger("membrane_solver")
+logger = logging.getLogger("membrane_solver.log")
 logger.addHandler(logging.NullHandler())
 
 

@@ -23,7 +23,7 @@ import numpy as np
 
 from logging_config import setup_logging
 
-logger = setup_logging("membrane_solver")
+logger = setup_logging("membrane_solver.log")
 
 
 def compute_energy_and_gradient(
@@ -80,4 +80,3 @@ def compute_energy_and_gradient(
 
 
 __all__ = ["compute_energy_and_gradient"]
-

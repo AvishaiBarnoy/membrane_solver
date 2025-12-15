@@ -7,7 +7,7 @@ import numpy as np
 
 from logging_config import setup_logging
 
-logger = setup_logging("membrane_solver")
+logger = setup_logging("membrane_solver.log")
 
 
 def enforce_constraint(

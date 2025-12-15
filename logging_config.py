@@ -26,7 +26,7 @@ def setup_logging(
     - Uses a FileHandler opened with ``mode='w'`` so each run overwrites
       any existing log file.
     """
-    logger = logging.getLogger("membrane_solver")
+    logger = logging.getLogger("membrane_solver.log")
     level = logging.DEBUG if debug else logging.INFO
 
     # If logger already has handlers, just adjust levels / quietness.

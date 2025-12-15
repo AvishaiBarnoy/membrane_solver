@@ -6,7 +6,7 @@ from collections import defaultdict
 import numpy as np
 from logging_config import setup_logging
 
-logger = setup_logging('membrane_solver')
+logger = setup_logging("membrane_solver.log")
 
 def calculate_volume_energy(mesh, global_params):
     """

@@ -7,7 +7,7 @@ from collections import defaultdict
 from logging_config import setup_logging
 import numpy as np
 
-logger = setup_logging('membrane_solver')
+logger = setup_logging("membrane_solver.log")
 
 def calculate_surface_energy(mesh, global_params):
     """Compute the total surface energy for all facets."""
