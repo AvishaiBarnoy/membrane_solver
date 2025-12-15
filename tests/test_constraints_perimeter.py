@@ -2,11 +2,10 @@ import os
 import sys
 
 import numpy as np
-import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from geometry.entities import Mesh, Vertex, Edge, Facet
+from geometry.entities import Edge, Facet, Mesh, Vertex
 from modules.constraints import perimeter as perimeter_constraint
 
 

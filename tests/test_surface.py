@@ -1,11 +1,14 @@
-import pytest
-import sys, os
+import os
+import sys
+
 import numpy as np
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from geometry.entities import Mesh, Vertex, Edge, Facet
+from geometry.entities import Edge, Facet, Mesh, Vertex
+from modules.energy.surface import calculate_surface_energy, compute_energy_and_gradient
 from parameters.global_parameters import GlobalParameters
-from modules.energy.surface import compute_energy_and_gradient, calculate_surface_energy
 from parameters.resolver import ParameterResolver
+
 
 def test_compute_energy_and_gradient():
     # Create a simple triangular mesh

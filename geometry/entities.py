@@ -1,11 +1,12 @@
 # entities.py
 
-from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
-from parameters.global_parameters import GlobalParameters
-import numpy as np
-import sys
 import logging
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+import numpy as np
+
+from parameters.global_parameters import GlobalParameters
 
 logger = logging.getLogger("membrane_solver")
 
@@ -19,7 +20,7 @@ def _fast_cross(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     x = a[..., 1] * b[..., 2] - a[..., 2] * b[..., 1]
     y = a[..., 2] * b[..., 0] - a[..., 0] * b[..., 2]
     z = a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0]
-    
+
     out = np.empty(x.shape + (3,), dtype=x.dtype)
     out[..., 0] = x
     out[..., 1] = y
@@ -201,11 +202,11 @@ class Facet:
 
         v_prev = np.roll(v_pos, 1, axis=0)
         v_next = np.roll(v_pos, -1, axis=0)
-        
+
         # Calculate area vector first to get normal
         cross_sum = _fast_cross(v_pos, v_next).sum(axis=0)
         area_doubled = np.linalg.norm(cross_sum)
-        
+
         if area_doubled < 1e-12:
             return grad
 
@@ -258,7 +259,7 @@ class Facet:
         # Shoelace area vector: 0.5 * sum(v_i x v_{i+1})
         v_curr = v_pos
         v_next = np.roll(v_pos, -1, axis=0)
-        
+
         cross_sum = _fast_cross(v_curr, v_next).sum(axis=0)
         area_doubled = float(np.linalg.norm(cross_sum))
         area = 0.5 * area_doubled
@@ -566,10 +567,10 @@ class Mesh:
         # Optimization: pre-allocate to avoid creating a large intermediate list
         n_verts = len(self.vertex_ids)
         pos = np.empty((n_verts, 3), dtype=float)
-        
+
         for i, vid in enumerate(self.vertex_ids):
             pos[i] = self.vertices[vid].position
-            
+
         return pos
 
     def build_facet_vertex_loops(self):

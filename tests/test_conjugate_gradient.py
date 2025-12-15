@@ -1,6 +1,8 @@
-import numpy as np
-import sys
 import os
+import sys
+
+import numpy as np
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Mesh, Vertex
 from runtime.steppers.conjugate_gradient import ConjugateGradient
@@ -60,4 +62,3 @@ def test_line_search_failure_preserves_history():
     assert stepper.prev_grad == old_grad
     assert stepper.prev_dir == old_dir
     assert stepper.iter_count == old_iter
-

@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def compute_energy_and_gradient(mesh, gp, resolver):
     E = 0.0
     shape_grad = {i: np.zeros(3) for i in mesh.vertices}
@@ -42,4 +43,3 @@ def compute_energy_and_gradient(mesh, gp, resolver):
             tilt_grad[vidx] += dE_d_divt * ddivt_dti
 
     return E, shape_grad, tilt_grad
-

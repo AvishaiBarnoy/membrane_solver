@@ -1,6 +1,8 @@
-from typing import Dict, Callable
-import numpy as np
 import logging
+from typing import Callable, Dict
+
+import numpy as np
+
 from geometry.entities import Mesh
 from runtime.topology import check_max_normal_change, get_min_edge_length
 
@@ -61,11 +63,11 @@ def backtracking_line_search(
     # Pre-compute stability threshold
     min_edge_len = get_min_edge_length(mesh)
     safe_step_limit = 0.3 * min_edge_len if min_edge_len > 0 else float('inf')
-    
+
     # Calculate max possible displacement vector magnitude (unscaled)
     max_dir_norm = 0.0
     if direction:
-        # Optimization: convert direction dict values to array once if needed, 
+        # Optimization: convert direction dict values to array once if needed,
         # but max loop is fast enough for now
         max_dir_norm = max(np.linalg.norm(d) for d in direction.values())
 
@@ -125,7 +127,7 @@ def backtracking_line_search(
                     if getattr(vertex, "fixed", False):
                         continue
                     vertex.position[:] = original_positions[vidx]
-                
+
                 alpha *= beta
                 backtracks += 1
                 if alpha < 1e-8:

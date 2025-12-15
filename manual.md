@@ -22,6 +22,23 @@ should extend this manual before they are merged.
   pytest -q
   ```
 
+### 1.1 Development tooling (optional)
+
+- Lint:
+
+  ```bash
+  pip install ruff
+  ruff check .
+  ```
+
+- Pre-commit hooks (recommended):
+
+  ```bash
+  pip install pre-commit
+  pre-commit install
+  pre-commit run -a
+  ```
+
 ---
 
 ## 2. Basic usage
@@ -34,45 +51,45 @@ python main.py -i meshes/cube_good_min_routine.json -o output.json
 
 Key command‑line options:
 
-- `-i, --input PATH`  
+- `-i, --input PATH`
   Input mesh JSON file. If the `.json` suffix is omitted, it will be added.
 
-- `-o, --output PATH`  
+- `-o, --output PATH`
   Output mesh JSON file. If omitted, the final geometry is **not** saved.
 
-- `--instructions PATH`  
+- `--instructions PATH`
   Optional instruction file; each token or whitespace‑separated word is an
   interactive command (e.g. `g100`, `r`, `u`, …). These commands are executed
   before interactive mode starts.
 
-- `--properties` / `-p` / `-i`  
+- `--properties` / `-p` / `-i`
   Compute and print basic physical properties (total area, volume, per‑body
   area/volume) and exit without minimization.
 
-- `--volume-mode {lagrange,penalty}`  
+- `--volume-mode {lagrange,penalty}`
   Override the global `volume_constraint_mode`.
   - `lagrange` – treat volume as a hard constraint (default). Best paired with
     `--volume-projection false` to avoid redundant geometric projections.
   - `penalty` – add a quadratic volume energy term (soft constraint). Works
     best with `--volume-projection true`.
 
-- `--volume-projection {true,false}`  
+- `--volume-projection {true,false}`
   Control geometric projection during minimization.
   - `false` is recommended when using the hard `lagrange` constraint (prevents
     double enforcement in the line search).
   - `true` is the historical behaviour and remains the default in penalty mode.
 
-- `--log PATH`  
+- `--log PATH`
   Log file path (default: `membrane_solver.log`, overwritten each run).
 
-- `-q, --quiet`  
+- `-q, --quiet`
   Suppress per‑step console output.
 
-- `--debug`  
+- `--debug`
   Enable verbose DEBUG logging (line‑search diagnostics, constraint details,
   etc.). For normal runs leave this off.
 
-- `--non-interactive`  
+- `--non-interactive`
   Do not enter the interactive prompt after executing the instruction list.
 
 Example: run a scripted minimization, then exit without interactive mode:
@@ -104,41 +121,41 @@ Type commands at the prompt; multiple commands can be written without spaces
 
 Interactive commands:
 
-- `gN`  
+- `gN`
   Run `N` minimization steps (e.g. `g5`, `g100`). Bare `g` runs one step.
 
-- `gd` / `cg`  
+- `gd` / `cg`
   Switch to Gradient Descent or Conjugate Gradient steppers. CG is the default.
 
-- `tX`  
+- `tX`
   Set step size to `X` (e.g. `t1e-3`).
 
-- `r` / `rN`  
+- `r` / `rN`
   Refine the mesh (triangle refinement + polygonal refinement). Provide a
   number (`r3`) to repeat the refinement pass multiple times. After each pass
   hard constraints are re‑enforced.
 
-- `V` / `VN` / `vertex_average`  
+- `V` / `VN` / `vertex_average`
   Vertex averaging once (`V` / `vertex_average`) or `N` times (`V5`). After
   averaging, hard constraints are re‑enforced.
 
-- `u`  
+- `u`
   Equiangulate the mesh (edge flips to improve triangle quality), followed by
   constraint re‑enforcement.
 
-- `properties` / `props` / `p` / `i`  
+- `properties` / `props` / `p` / `i`
   Print physical properties (global and per‑body area/volume).
 
-- `visualize` / `s`  
+- `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.
 
-- `save`  
+- `save`
   Save the current geometry to `interactive.temp`.
 
-- `help`, `h`, `?`  
+- `help`, `h`, `?`
   Show a summary of interactive commands and CLI options.
 
-- `quit`, `exit`, `q`  
+- `quit`, `exit`, `q`
   Leave interactive mode.
 
 > **Tip: Avoiding mesh tangling**
@@ -281,10 +298,10 @@ for boundary tension in open membranes.
 
 You can also assign line tension from the CLI without editing JSON:
 
-- `--line-tension VALUE`  
+- `--line-tension VALUE`
   Apply a uniform line‑tension modulus to edges.
 
-- `--line-tension-edges ID1,ID2,...`  
+- `--line-tension-edges ID1,ID2,...`
   Restrict the CLI‑assigned line tension to the listed edge IDs. Without this
   option, all edges are tagged.
 
@@ -322,16 +339,16 @@ Behaviour:
 
 ### 6.2 Surface‑area constraints
 
-- **Body surface area** (`modules/constraints/body_area.py`)  
-  - Add `"body_area"` to `constraint_modules`.  
+- **Body surface area** (`modules/constraints/body_area.py`)
+  - Add `"body_area"` to `constraint_modules`.
   - Set `body.options["target_area"]` for each constrained body.
 
-- **Facet surface area** (`modules/constraints/fix_facet_area.py`)  
-  - Add `"fix_facet_area"` to `constraint_modules`.  
+- **Facet surface area** (`modules/constraints/fix_facet_area.py`)
+  - Add `"fix_facet_area"` to `constraint_modules`.
   - Set `facet.options["target_area"]` on each constrained facet.
 
-- **Global surface area** (`modules/constraints/global_area.py`)  
-  - Add `"global_area"` to `constraint_modules`.  
+- **Global surface area** (`modules/constraints/global_area.py`)
+  - Add `"global_area"` to `constraint_modules`.
   - Set `global_parameters["target_surface_area"]`.
 
 All of these use small Lagrange‑multiplier style corrections (displacing
@@ -399,28 +416,28 @@ This is the primary way to pin boundary curves or special anchor points.
 
 Some important tuning parameters in `global_parameters`:
 
-- `step_size`  
+- `step_size`
   Initial step size for the line search (overridden by `tX` in interactive
   mode).
 
-- `max_zero_steps`  
+- `max_zero_steps`
   Maximum consecutive failed steps (step size below floor with no energy
   decrease) before early termination.
 
-- `step_size_floor`  
+- `step_size_floor`
   Minimum allowed step size in the line search.
 
-- `volume_constraint_mode`  
+- `volume_constraint_mode`
   - `"lagrange"` (default): hard volume; `volume` energy disabled.
   - `"penalty"`: soft volume energy; use with the `volume` energy module.
 
-- `volume_projection_during_minimization`  
+- `volume_projection_during_minimization`
   - `False` (recommended with `"lagrange"`): rely on gradient projection and
     occasional hard projections after mesh operations.
   - `True`: force geometric volume projection during minimization as well
     (legacy behaviour; slower).
 
-- `volume_tolerance`  
+- `volume_tolerance`
   Allowed relative volume drift before a corrective projection is triggered.
 
 The default stepper is Conjugate Gradient with Armijo backtracking line search.

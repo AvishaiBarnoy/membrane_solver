@@ -6,7 +6,7 @@ from typing import Optional, Sequence
 import matplotlib.pyplot as plt
 
 from geometry.geom_io import load_data, parse_geometry
-from logging_config import setup_logging
+from runtime.logging_config import setup_logging
 from visualization.plotting import plot_geometry
 
 logger = logging.getLogger("membrane_solver.log")
@@ -115,4 +115,3 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         fig = plt.gcf()
         fig.savefig(args.save, bbox_inches="tight")
         logger.info("Saved visualization to %s", args.save)
-

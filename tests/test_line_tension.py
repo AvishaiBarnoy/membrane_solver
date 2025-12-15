@@ -56,7 +56,6 @@ def test_line_tension_energy_and_gradient_linear_with_length():
 def test_line_tension_shrinks_segment_during_minimization():
     mesh = _build_simple_mesh()
     gp = mesh.global_parameters
-    resolver = ParameterResolver(gp)
     em = EnergyModuleManager(mesh.energy_modules)
     cm = ConstraintModuleManager(mesh.constraint_modules)
     minimizer = Minimizer(

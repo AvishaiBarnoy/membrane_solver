@@ -1,14 +1,11 @@
 import os
 import sys
 
-import numpy as np
-import pytest
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from geometry.geom_io import load_data, parse_geometry
-from runtime.energy_manager import EnergyModuleManager
+from geometry.geom_io import parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
+from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
 
@@ -62,7 +59,6 @@ def test_cube_energy_and_volume_improve():
     mesh = parse_geometry(data)
 
     target_volume = mesh.bodies[0].target_volume
-    initial_volume = mesh.compute_total_volume()
 
     energy_manager = EnergyModuleManager(mesh.energy_modules)
     constraint_manager = ConstraintModuleManager(mesh.constraint_modules)

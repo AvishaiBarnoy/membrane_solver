@@ -1,11 +1,12 @@
 # modules/surface.py
 # Here goes energy functions relevant for area of facets
 
-from geometry.entities import Mesh, Facet, _fast_cross
 from typing import Dict, Tuple
-from collections import defaultdict
-from logging_config import setup_logging
+
 import numpy as np
+
+from geometry.entities import Mesh, _fast_cross
+from runtime.logging_config import setup_logging
 
 logger = setup_logging("membrane_solver.log")
 
@@ -160,10 +161,9 @@ def _batched_surface_energy_and_gradient_triangles(
 
     n_facets = len(mesh.facets)
     tri_rows_arr = np.empty((n_facets, 3), dtype=int)
-    gammas = []
-    
-    # We collect gammas in a list because usually they are scalars, 
-    # but creating a numpy array from them at the end is fine. 
+
+    # We collect gammas in a list because usually they are scalars,
+    # but creating a numpy array from them at the end is fine.
     # However, tri_rows is the big one.
     # Actually, let's preallocate gammas too for consistency.
     gammas_arr = np.empty(n_facets, dtype=float)

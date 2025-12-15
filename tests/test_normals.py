@@ -1,12 +1,15 @@
-import numpy as np
-import pytest
 import os
 import sys
+
+import numpy as np
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from geometry.entities import Vertex, Edge, Facet, Body, Mesh
+from sample_meshes import write_sample_geometry
+
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from geometry.geom_io import load_data, parse_geometry
 from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
-from sample_meshes import write_sample_geometry
+
 
 def get_triangle_normal(a, b, c):
     n = np.cross(b - a, c - a)

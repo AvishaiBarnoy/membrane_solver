@@ -1,11 +1,9 @@
 import math
 
-import numpy as np
-
 from geometry.geom_io import parse_geometry
-from runtime.minimizer import Minimizer
-from runtime.energy_manager import EnergyModuleManager
 from runtime.constraint_manager import ConstraintModuleManager
+from runtime.energy_manager import EnergyModuleManager
+from runtime.minimizer import Minimizer
 from runtime.steppers.conjugate_gradient import ConjugateGradient
 
 

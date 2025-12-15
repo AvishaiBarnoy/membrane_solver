@@ -1,6 +1,7 @@
 # tilt.py
 import numpy as np
 
+
 def compute_energy_and_gradient(mesh, gp, resolver):
     κt = resolver.get(None, 'tilt_rigidity')
     E = 0.0
@@ -19,4 +20,3 @@ def compute_energy_and_gradient(mesh, gp, resolver):
 
         # optionally ∂A/∂x contributes to shape_grad, but often small—omit or include if you wish
     return E, shape_grad, tilt_grad
-

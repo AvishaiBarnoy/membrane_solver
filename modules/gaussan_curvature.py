@@ -1,6 +1,7 @@
 # gaussian_curvature.py
 import numpy as np
 
+
 def compute_energy_and_gradient(mesh, gp, resolver):
     κbar = resolver.get(None, 'gaussian_modulus')
     E = 0.0
@@ -21,4 +22,3 @@ def compute_energy_and_gradient(mesh, gp, resolver):
         shape_grad[v.index] += κbar * (K * dA_dx + A * dK_dx)
 
     return E, shape_grad, tilt_grad
-

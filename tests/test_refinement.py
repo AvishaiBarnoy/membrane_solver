@@ -1,10 +1,10 @@
-import numpy as np
-import pytest
-import sys
 import os
+import sys
+
+import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from geometry.entities import Vertex, Edge, Facet, Body, Mesh
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
 
 

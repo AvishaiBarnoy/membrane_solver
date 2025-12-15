@@ -46,12 +46,12 @@ def benchmark(runs: int = RUNS) -> float:
     """Return the average runtime over ``runs`` executions."""
     times = []
     # Warmup run (optional, but good for stability)
-    # _run_simulation(BASE_JSON) 
-    
+    # _run_simulation(BASE_JSON)
+
     for i in range(runs):
         elapsed = _run_simulation(BASE_JSON)
         times.append(elapsed)
-    
+
     return sum(times) / runs
 
 

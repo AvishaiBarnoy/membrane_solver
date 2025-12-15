@@ -1,19 +1,16 @@
 # runtime/minimizer.py
 
-import sys
-import os
-import importlib
 import logging
-import numpy as np
 from typing import Dict, List, Optional
-from importlib import import_module
-from parameters.resolver import ParameterResolver
-from geometry.entities import Mesh
+
+import numpy as np
+
+from geometry.entities import Body, Mesh
 from parameters.global_parameters import GlobalParameters
-from runtime.energy_manager import EnergyModuleManager
+from parameters.resolver import ParameterResolver
 from runtime.constraint_manager import ConstraintModuleManager
+from runtime.energy_manager import EnergyModuleManager
 from runtime.steppers.base import BaseStepper
-from geometry.entities import Body
 
 logger = logging.getLogger('membrane_solver')
 
@@ -196,8 +193,6 @@ STEP SIZE:\t {self.step_size}
 
         if not constrained_bodies:
             return
-
-        import numpy as np  # Local import to avoid polluting module namespace
 
         k = len(constrained_bodies)
         # A_ij = <∇V_i, ∇V_j>; b_i = <∇E, ∇V_i>

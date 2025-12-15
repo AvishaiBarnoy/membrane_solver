@@ -1,16 +1,18 @@
-from unittest.mock import MagicMock
-import sys
 import os
+import sys
+from unittest.mock import MagicMock
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
-from geometry.entities import Mesh, Vertex, Edge, Facet, Body
-from parameters.global_parameters import GlobalParameters
-from runtime.refinement import refine_polygonal_facets
-from runtime.energy_manager import EnergyModuleManager
-from runtime.constraint_manager import ConstraintModuleManager
 import numpy as np
 import pytest
+
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
+from parameters.global_parameters import GlobalParameters
+from runtime.energy_manager import EnergyModuleManager
+from runtime.minimizer import Minimizer
+from runtime.refinement import refine_polygonal_facets
+from runtime.steppers.gradient_descent import GradientDescent
+
 
 def create_quad():
     mesh = Mesh()
@@ -53,10 +55,6 @@ def test_minimizer_with_mock_energy_manager():
 
     # Mock energy manager
     mock_energy_manager = MagicMock()
-
-    # Mock energy functions
-    mock_surface_energy_function = lambda obj, params: (1.0, {0: np.array([0.1, 0.1, 0.1])})
-    mock_volume_energy_function = lambda obj, params: (2.0, {1: np.array([0.2, 0.2, 0.2])})
 
     # Mock modules with different energy functions
     mock_surface_module = MagicMock()

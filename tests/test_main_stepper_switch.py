@@ -1,14 +1,17 @@
+import os
+import sys
+
 import numpy as np
-import sys, os
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from geometry.entities import Mesh, Vertex
-from parameters.global_parameters import GlobalParameters
-from runtime.energy_manager import EnergyModuleManager
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
-from runtime.steppers.conjugate_gradient import ConjugateGradient
 from main import parse_instructions
+from parameters.global_parameters import GlobalParameters
+from runtime.constraint_manager import ConstraintModuleManager
+from runtime.energy_manager import EnergyModuleManager
+from runtime.minimizer import Minimizer
+from runtime.steppers.conjugate_gradient import ConjugateGradient
+from runtime.steppers.gradient_descent import GradientDescent
 
 
 def create_mesh():

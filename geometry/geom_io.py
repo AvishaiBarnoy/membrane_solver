@@ -1,13 +1,13 @@
-# geometry_io.py 
-import json, yaml
-from geometry.entities import Vertex, Edge, Facet, Body, Mesh
-from parameters.global_parameters import GlobalParameters
-from runtime.refinement import refine_polygonal_facets
-import importlib
+# geometry_io.py
+import json
+
 import numpy as np
-import logging
-from logging_config import setup_logging
-import sys
+import yaml
+
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
+from parameters.global_parameters import GlobalParameters
+from runtime.logging_config import setup_logging
+from runtime.refinement import refine_polygonal_facets
 
 logger = setup_logging('membrane_solver.log')
 
@@ -102,7 +102,7 @@ def parse_geometry(data: dict) -> Mesh:
                 err_msg = "energy modules should be in a list or a single string"
                 logger.error(err_msg)
                 raise err_msg
-        # Uncomment to add a default energy moduel to Vertices 
+        # Uncomment to add a default energy moduel to Vertices
         #elif "energy" not in options:
             #mesh.vertices[i].options["energy"] = ["surface"]
 
@@ -197,7 +197,7 @@ def parse_geometry(data: dict) -> Mesh:
         elif "energy" not in options:
             mesh.facets[i].options["energy"] = ["surface"]
             energy_module_names.add("surface")
-        
+
         # Ensure all facets have surface_tension set
         if "surface_tension" not in options:
             mesh.facets[i].options["surface_tension"] = mesh.global_parameters.get("surface_tension", 1.0)
@@ -385,6 +385,5 @@ def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
         "global_parameters": mesh.global_parameters.to_dict(),
         "instructions": mesh.instructions
     }
-    dfaces = data["faces"]
     with open(path, "w") as f:
         json.dump(data, f, indent=4)

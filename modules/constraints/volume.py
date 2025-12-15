@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Any
+
 import numpy as np
 
-from logging_config import setup_logging
+from runtime.logging_config import setup_logging
 
 logger = setup_logging("membrane_solver.log")
 

@@ -23,4 +23,4 @@ organized under `geometry/`, `modules/`, `runtime/` and other directories.
 - Mention the output of `pytest -q` in the PR body.
 
 ## Files to update
-- Update relevant .md files: README.md, MANUAL.md, CHANGELOG.md, docs/ROADMAP.md 
+- Update relevant .md files: README.md, MANUAL.md, CHANGELOG.md, docs/ROADMAP.md

@@ -5,7 +5,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from geometry.entities import Mesh, Vertex, Edge, Facet, Body
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from modules.constraints.body_area import enforce_constraint as enforce_body_area
 
 

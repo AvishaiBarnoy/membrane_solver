@@ -154,4 +154,3 @@ def plot_geometry(
 
     if show:
         plt.show()
-

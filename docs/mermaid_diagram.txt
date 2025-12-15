@@ -2,34 +2,34 @@ graph TD
     subgraph User Input
         A[Input File .json] --> B{main.py};
     end
-     
+
     subgraph Core Engine
         B --> C[geometry/entities.py: Mesh];
         C --> D[runtime/minimizer.py: Minimizer];
     end
-    
+
     subgraph Extensible Modules
         E[modules/energy/*.py] --> F[runtime/energy_manager.py];
         G[modules/constraints/*.py] --> H[runtime/constraint_manager.py];
     end
-   
+
    subgraph Optimization Algorithms
         I[runtime/steppers/*.py] --> J[runtime/steppers/base.py: BaseStepper];
-    end 
-     
+    end
+
     subgraph Interactions
         B -- Instantiates --> D;
         D -- Holds --> C;
         D -- Uses --> F;
         D -- Uses --> H;
         D -- Uses --> J;
- 
+
         F -- Dynamically Loads --> E;
         H -- Dynamically Loads --> G;
- 
+
         J -- Updates Vertices in --> C;
     end
- 
+
    %% Styling
    classDef core fill:#D6EAF8,stroke:#3498DB,stroke-width:2px;
    classDef modules fill:#E8F8F5,stroke:#1ABC9C,stroke-width:2px;

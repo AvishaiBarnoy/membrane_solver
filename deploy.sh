@@ -2,8 +2,8 @@
 
 # Deploying blog for my small version of SurfaceEvolver for caveolin 3D
 # membrane shaping mechanism
-# 
-# Usage: add custom message after ./deploy 
+#
+# Usage: add custom message after ./deploy
 
 # If a command fails then the deploy stops
 set -e

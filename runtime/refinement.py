@@ -1,8 +1,8 @@
-import numpy as np
 import logging
-from geometry.entities import Vertex, Edge, Facet, Body, Mesh
-from parameters.global_parameters import GlobalParameters
-import sys
+
+import numpy as np
+
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 
 logger = logging.getLogger("membrane_solver")
 
@@ -241,7 +241,7 @@ def refine_triangle_mesh(mesh):
             return edge_lookup[key]
         new_edge_idx = len(new_edges) + 1
         edge = Edge(new_edge_idx, v_from, v_to)
-        
+
         # Inherit properties from parent edge if available
         if parent_edge:
             edge.fixed = parent_edge.fixed
@@ -253,7 +253,7 @@ def refine_triangle_mesh(mesh):
             # If parent facet has no_refine, mark the new edge as non-refinable
             if parent_facet.options.get("no_refine", False):
                 edge.options["no_refine"] = True
-        
+
         new_edges[new_edge_idx] = edge
         edge_lookup[key] = edge
         return edge
@@ -264,7 +264,7 @@ def refine_triangle_mesh(mesh):
     # 2. The edge belongs to at least one refinable facet (not marked no_refine)
     # This follows Evolver behavior: original boundary edges are refinable unless explicitly marked no_refine
     edges_to_refine = set()
-    
+
     # Collect edges that should be refined
     for facet in mesh.facets.values():
         for ei in facet.edge_indices:
@@ -281,7 +281,7 @@ def refine_triangle_mesh(mesh):
                         if not other_facet.options.get("no_refine", False):
                             belongs_to_refinable_facet = True
                             break
-                
+
                 if belongs_to_refinable_facet:
                     edges_to_refine.add(edge_idx)
 
@@ -319,7 +319,7 @@ def refine_triangle_mesh(mesh):
         parent_edges = [mesh.get_edge(abs(ei)) for ei in oriented]
         parent_target_area = facet.options.get("target_area")
         refinable_edges = [abs(ei) in edges_to_refine for ei in oriented]
-        
+
         # If no edges can be refined, just copy the facet
         if not any(refinable_edges):
             raw_edges = []
@@ -346,7 +346,7 @@ def refine_triangle_mesh(mesh):
         m01 = edge_midpoints[(min(v0, v1), max(v0, v1))].index if refinable_edges[0] else None
         m12 = edge_midpoints[(min(v1, v2), max(v1, v2))].index if refinable_edges[1] else None
         m20 = edge_midpoints[(min(v2, v0), max(v2, v0))].index if refinable_edges[2] else None
-        
+
         child_facets = []
         parent_normal = facet.normal(mesh)
 
@@ -413,7 +413,7 @@ def refine_triangle_mesh(mesh):
             # Partial refinement - handle cases where only some edges are refinable
             # This is more complex and requires careful handling of the subdivision
             # For now, implement the most common cases
-            
+
             if sum(refinable_edges) == 1:
                 # Only one edge is refinable - split into 2 triangles
                 if refinable_edges[0]:  # edge v0-v1 is refinable
@@ -421,34 +421,34 @@ def refine_triangle_mesh(mesh):
                     e1 = get_or_create_edge(v0, m01, parent_edge=parent_edges[0])
                     e2 = get_or_create_edge(m01, v2, parent_facet=facet)
                     e3 = get_or_create_edge(v2, v0, parent_edge=parent_edges[2])
-                    
+
                     # Triangle 2: m01, v1, v2
                     e4 = get_or_create_edge(m01, v1, parent_edge=parent_edges[0])
                     e5 = get_or_create_edge(v1, v2, parent_edge=parent_edges[1])
                     e6 = get_or_create_edge(v2, m01, parent_facet=facet)
-                    
+
                 elif refinable_edges[1]:  # edge v1-v2 is refinable
                     # Triangle 1: v1, m12, v0
                     e1 = get_or_create_edge(v1, m12, parent_edge=parent_edges[1])
                     e2 = get_or_create_edge(m12, v0, parent_facet=facet)
                     e3 = get_or_create_edge(v0, v1, parent_edge=parent_edges[0])
-                    
+
                     # Triangle 2: m12, v2, v0
                     e4 = get_or_create_edge(m12, v2, parent_edge=parent_edges[1])
                     e5 = get_or_create_edge(v2, v0, parent_edge=parent_edges[2])
                     e6 = get_or_create_edge(v0, m12, parent_facet=facet)
-                    
+
                 else:  # edge v2-v0 is refinable
                     # Triangle 1: v2, m20, v1
                     e1 = get_or_create_edge(v2, m20, parent_edge=parent_edges[2])
                     e2 = get_or_create_edge(m20, v1, parent_facet=facet)
                     e3 = get_or_create_edge(v1, v2, parent_edge=parent_edges[1])
-                    
+
                     # Triangle 2: m20, v0, v1
                     e4 = get_or_create_edge(m20, v0, parent_edge=parent_edges[2])
                     e5 = get_or_create_edge(v0, v1, parent_edge=parent_edges[0])
                     e6 = get_or_create_edge(v1, m20, parent_facet=facet)
-                
+
                 new_mesh.edges.update(new_edges)
                 raw1 = [e1.index, e2.index, e3.index]
                 raw2 = [e4.index, e5.index, e6.index]
@@ -464,86 +464,86 @@ def refine_triangle_mesh(mesh):
                 new_facets[next_facet_idx + 1] = f2
                 next_facet_idx += 2
                 child_facets = [f1, f2]
-                
+
             elif sum(refinable_edges) == 2:
                 # Two edges are refinable - split into 3 triangles
                 # Identify which edge is NOT refinable and implement 1-to-3 subdivision
-                
+
                 if not refinable_edges[0]:  # v0-v1 edge is NOT refinable (Case 2b)
                     # Edges v1-v2 and v2-v0 are refinable
                     # The original triangle becomes a 4-sided polygon: v0 → v1 → m12 → v2 → m20 → v0
                     # We need to triangulate this polygon into 3 triangles using diagonal triangulation
-                    
+
                     # Triangle 1: (v0, v1, m12) - uses original edge v0-v1 and half of refined edge v1-v2
                     e1 = get_or_create_edge(v0, v1, parent_edge=parent_edges[0])  # original edge
                     e2 = get_or_create_edge(v1, m12, parent_edge=parent_edges[1])  # split from v1-v2
                     e3 = get_or_create_edge(m12, v0, parent_facet=facet)  # diagonal
-                    
+
                     # Triangle 2: (v0, m12, m20) - diagonal triangle connecting the two midpoints
                     e4 = get_or_create_edge(v0, m12, parent_facet=facet)  # diagonal (reused)
                     e5 = get_or_create_edge(m12, m20, parent_facet=facet)  # connecting edge
                     e6 = get_or_create_edge(m20, v0, parent_edge=parent_edges[2])  # split from v2-v0
-                    
+
                     # Triangle 3: (m12, v2, m20) - uses the other halves of the refined edges
                     e7 = get_or_create_edge(m12, v2, parent_edge=parent_edges[1])  # split from v1-v2
                     e8 = get_or_create_edge(v2, m20, parent_edge=parent_edges[2])  # split from v2-v0
                     e9 = get_or_create_edge(m20, m12, parent_facet=facet)  # connecting edge
-                    
+
                     raw1 = [e1.index, e2.index, e3.index]
                     raw2 = [e4.index, e5.index, e6.index]
                     raw3 = [e7.index, e8.index, e9.index]
-                
+
                 elif not refinable_edges[1]:  # v1-v2 edge is NOT refinable (Case 2c)
                     # Edges v2-v0 and v0-v1 are refinable
                     # Pattern: Create triangles using m20 and m01, keep v1-v2 unchanged
-                    
+
                     # Triangle 1: (v2, m20, v1) - corner triangle at v2
                     e1 = get_or_create_edge(v2, m20, parent_edge=parent_edges[2])
                     e2 = get_or_create_edge(m20, v1, parent_facet=facet)  # diagonal
                     e3 = get_or_create_edge(v1, v2, parent_edge=parent_edges[1])  # original edge
-                    
+
                     # Triangle 2: (m20, v0, m01) - triangle using both midpoints
                     e4 = get_or_create_edge(m20, v0, parent_edge=parent_edges[2])
                     e5 = get_or_create_edge(v0, m01, parent_edge=parent_edges[0])
                     e6 = get_or_create_edge(m01, m20, parent_facet=facet)  # connecting edge
-                    
+
                     # Triangle 3: (m01, v1, v2) - triangle connecting back to non-refinable edge
                     e7 = get_or_create_edge(m01, v1, parent_edge=parent_edges[0])
                     e8 = get_or_create_edge(v1, v2, parent_edge=parent_edges[1])  # original edge (reused)
                     e9 = get_or_create_edge(v2, m01, parent_facet=facet)  # diagonal
-                    
+
                     raw1 = [e1.index, e2.index, e3.index]
                     raw2 = [e4.index, e5.index, e6.index]
                     raw3 = [e7.index, e8.index, e9.index]  # use separate edges
-                    
+
                 else:  # not refinable_edges[2], so v2-v0 edge is NOT refinable (Case 2a)
                     # Edges v0-v1 and v1-v2 are refinable
                     # Pattern: Create triangles using m01 and m12, keep v2-v0 unchanged
-                    
+
                     # Triangle 1: (v0, m01, v2) - corner triangle at v0
                     e1 = get_or_create_edge(v0, m01, parent_edge=parent_edges[0])
                     e2 = get_or_create_edge(m01, v2, parent_facet=facet)  # diagonal
                     e3 = get_or_create_edge(v2, v0, parent_edge=parent_edges[2])  # original edge
-                    
+
                     # Triangle 2: (m01, v1, m12) - triangle using both midpoints
                     e4 = get_or_create_edge(m01, v1, parent_edge=parent_edges[0])
                     e5 = get_or_create_edge(v1, m12, parent_edge=parent_edges[1])
                     e6 = get_or_create_edge(m12, m01, parent_facet=facet)  # connecting edge
-                    
+
                     # Triangle 3: (m12, v2, v0) - triangle connecting back to non-refinable edge
                     e7 = get_or_create_edge(m12, v2, parent_edge=parent_edges[1])
                     e8 = get_or_create_edge(v2, v0, parent_edge=parent_edges[2])  # original edge (reused)
                     e9 = get_or_create_edge(v0, m12, parent_facet=facet)  # diagonal
-                    
+
                     raw1 = [e1.index, e2.index, e3.index]
                     raw2 = [e4.index, e5.index, e6.index]
                     raw3 = [e7.index, e8.index, e9.index]  # use separate edges
-                
+
                 new_mesh.edges.update(new_edges)
                 cyc1 = orient_edges_cycle(raw1, new_mesh)
                 cyc2 = orient_edges_cycle(raw2, new_mesh)
                 cyc3 = orient_edges_cycle(raw3, new_mesh)
-                
+
                 child_opts = facet.options.copy()
                 child_opts.pop("target_area", None)
                 f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=child_opts)
@@ -553,7 +553,7 @@ def refine_triangle_mesh(mesh):
                 child_opts = facet.options.copy()
                 child_opts.pop("target_area", None)
                 f3 = Facet(next_facet_idx + 2, cyc3, fixed=facet.fixed, options=child_opts)
-                
+
                 new_facets[next_facet_idx] = f1
                 new_facets[next_facet_idx + 1] = f2
                 new_facets[next_facet_idx + 2] = f3

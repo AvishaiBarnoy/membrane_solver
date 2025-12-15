@@ -8,11 +8,9 @@ is compatible with both minimization steps and discrete mesh operations.
 
 from __future__ import annotations
 
-from typing import Iterable
+import logging
 
 import numpy as np
-
-import logging
 
 logger = logging.getLogger("membrane_solver")
 
@@ -56,4 +54,3 @@ def enforce_constraint(mesh, tol: float = 0.0, max_iter: int = 1) -> None:
 
 
 __all__ = ["enforce_constraint"]
-

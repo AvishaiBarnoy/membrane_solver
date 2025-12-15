@@ -1,16 +1,16 @@
 import os
-import numpy as np
-import json
-import pytest
 import sys
+
+import pytest
 
 # Adjust import paths for this testing environment
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from geometry.geom_io import load_data, parse_geometry, save_geometry
+from sample_meshes import write_sample_geometry
+
 from geometry.entities import Mesh
+from geometry.geom_io import load_data, parse_geometry, save_geometry
 from runtime.refinement import refine_polygonal_facets
-from sample_meshes import SAMPLE_GEOMETRY, write_sample_geometry
 
 
 @pytest.fixture

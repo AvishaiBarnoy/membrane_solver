@@ -1,12 +1,14 @@
-import numpy as np
-import sys
 import os
+import sys
+
+import numpy as np
 
 # Add root project directory to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from geometry.entities import Mesh, Vertex, Edge, Facet
+from geometry.entities import Edge, Facet, Mesh, Vertex
 from runtime.vertex_average import vertex_average
+
 
 def test_vertex_averaging_smooths_mesh():
     mesh = Mesh()

@@ -14,7 +14,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Edge, Mesh, Vertex
 from geometry.geom_io import parse_geometry
 from tests.sample_meshes import SAMPLE_GEOMETRY
-from visualize_geometry import plot_geometry
+from visualization.plotting import plot_geometry
 
 
 def _build_edge_only_mesh() -> Mesh:
