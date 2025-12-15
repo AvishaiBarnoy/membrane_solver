@@ -49,19 +49,37 @@
 
   This gives you a remote backup and lets you open a PR later. If you’re working locally only, you can skip this.
 
-  6. Merge back to main when ready
-  Once the branch is feature-complete and tested:
+  6. Create a Pull Request
+  Once your branch is pushed, you can create a PR via the browser or the command line.
 
-  git checkout main
-  git pull origin main          # get latest main
-  git merge feature/mean-curvature
-  pytest -q                     # optional final verification
-  git push origin main          # publish the updated main
+  **Option A: Browser**
+  Navigate to your repository on GitHub (or equivalent) and open a Pull Request (PR).
 
-  Then delete the branch if you like:
+  **Option B: GitHub CLI**
+  If you have `gh` installed:
+
+  gh pr create --title "My Feature" --body "Description of changes"
+
+  Regardless of the method:
+  - Provide a clear title and description for your changes.
+  - Link any relevant issues or documentation.
+  - Request reviews from appropriate team members.
+
+  7. Review and Merge Pull Request
+  Once your PR has been approved and all checks pass:
+
+  - Ensure your local main branch is up to date:
+    git checkout main
+    git pull origin main
+
+  - Merge the PR through the GitHub interface (preferred for better tracking and automation).
+  - After merging, you can pull the updated main branch locally:
+    git pull origin main
+
+  - Then delete the branch if you like:
 
   git branch -d feature/mean-curvature              # delete local branch
   git push origin --delete feature/mean-curvature   # delete remote branch
 
-  7. Daily cleanup
+  8. Daily cleanup
   Before starting new work, make sure git status is clean (no leftover changes). If you paused mid-feature, just continue on that branch.

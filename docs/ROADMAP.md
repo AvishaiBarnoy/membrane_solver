@@ -7,8 +7,8 @@ intended for development and planning; users should consult `README.md` and
 ## 1. Baseline shape problems
 
 1. Cube that minimizes into a sphere
-   - 1.1 Soft constraint – volume energy (`volume_constraint_mode="penalty"`)
-   - 1.2 Hard constraint – Lagrange multiplier via volume‑gradient projection
+   - [x] 1.1 Soft constraint – volume energy (`volume_constraint_mode="penalty"`)
+   - [x] 1.2 Hard constraint – Lagrange multiplier via volume‑gradient projection
         (`volume_constraint_mode="lagrange"`, default)
 
 2. Square that minimizes into a circle

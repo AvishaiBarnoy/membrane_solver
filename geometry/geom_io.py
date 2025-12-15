@@ -1,5 +1,5 @@
 # geometry_io.py 
-import json #, yaml
+import json, yaml
 from geometry.entities import Vertex, Edge, Facet, Body, Mesh
 from parameters.global_parameters import GlobalParameters
 from runtime.refinement import refine_polygonal_facets

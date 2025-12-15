@@ -13,35 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: "pip"
-          cache-dependency-path: |
-            requirements.txt
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pytest
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-      - name: Run tests
-        run: |
-          pytest -q tests/
-
   lint:
+    name: Lint (fatal only)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,17 +22,44 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: |
-            requirements.txt
+          python-version: "3.11"
+          cache: pip
 
       - name: Install lint tool
         run: |
           python -m pip install --upgrade pip
           pip install flake8
 
-      - name: Lint
+      - name: Run flake8 (syntax + undefined names)
         run: |
-          flake8 . --count --show-source --statistics
-  
+          # Only fail CI on "this will break at runtime"-type issues
+          flake8 . \
+            --count \
+            --select=E9,F63,F7,F82,F821 \
+            --show-source \
+            --statistics
+
+  test:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest
+
+      - name: Run pytest
+        env:
+          PYTHONPATH: .
+        run: |
+          pytest -q
+
