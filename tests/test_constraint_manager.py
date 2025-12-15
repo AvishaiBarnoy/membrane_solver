@@ -1,13 +1,17 @@
 # tests/test_constraint_manager.py
 
-import pytest
-import sys
 import os
+import sys
 from unittest.mock import MagicMock
+
+import pytest
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from runtime.constraint_manager import ConstraintModuleManager
-from geometry.geom_io import load_data, parse_geometry
 import json
+
+from geometry.geom_io import load_data, parse_geometry
+from runtime.constraint_manager import ConstraintModuleManager
+
 
 def test_constraint_manager_init(monkeypatch):
     # Mock constraint module names
@@ -56,9 +60,6 @@ def test_get_module():
         constraint_manager.get_module("non_existent")
 
 def test_constraints_loaded_from_file(monkeypatch, tmp_path):
-    # Mock constraint module names
-    constraint_names = ["pin_to_plane", "fix_facet_area"]
-
     # Mock importlib to simulate loading modules
     import importlib
     mock_import_module = MagicMock()

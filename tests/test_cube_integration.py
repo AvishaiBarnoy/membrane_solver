@@ -1,5 +1,7 @@
 import math
 
+from sample_meshes import cube_soft_volume_input
+
 from geometry.geom_io import parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
@@ -7,7 +9,6 @@ from runtime.equiangulation import equiangulate_mesh
 from runtime.minimizer import Minimizer
 from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
 from runtime.steppers.conjugate_gradient import ConjugateGradient
-from sample_meshes import cube_soft_volume_input
 
 
 def _build_minimizer(data: dict) -> Minimizer:

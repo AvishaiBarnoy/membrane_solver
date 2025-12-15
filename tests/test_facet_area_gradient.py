@@ -1,8 +1,11 @@
-import sys
 import os
+import sys
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from geometry.entities import Mesh, Vertex, Edge, Facet, Body
 import numpy as np
+
+from geometry.entities import Edge, Facet, Mesh, Vertex
+
 
 def test_compute_area_gradient():
     # Create a simple triangular facet

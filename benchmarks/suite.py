@@ -8,8 +8,8 @@ and compares them against a stored history of "best" results in ``results.json``
 import json
 import os
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 # Add local directory to path to import benchmark modules
 sys.path.append(os.path.dirname(__file__))
@@ -41,7 +41,7 @@ def main():
     print(f"Running benchmarking suite on {sys.platform}...")
     history = load_results()
     current_results = {}
-    
+
     # Get current timestamp
     timestamp = datetime.now().isoformat()
 
@@ -61,13 +61,13 @@ def main():
         # Compare with best
         best_record = history.get(name)
         best_time = best_record["time"] if best_record else float("inf")
-        
+
         change_str = "N/A"
         if best_record:
             delta = avg_time - best_time
             pct = (delta / best_time) * 100
             change_str = f"{pct:+.1f}%"
-            
+
             # Simple color coding for CLI
             if pct > 5.0: # Regression > 5%
                 change_str += " (SLOW)"
@@ -84,7 +84,7 @@ def main():
             history[name] = current_results[name]
 
     print("-" * 65)
-    
+
     if any_regression:
         print("WARNING: Performance regression detected!")
     else:

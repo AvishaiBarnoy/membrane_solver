@@ -43,3 +43,4 @@ results/
 
 codex_ids.txt
 profile.out
+.ruff_cache/

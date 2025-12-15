@@ -66,4 +66,3 @@ intended for development and planning; users should consult `README.md` and
     - User defines target refinement or mesh quality criteria; the program
       iterates between minimization, refinement, equiangulation and averaging
       to reach a prescribed resolution and energy tolerance.
-

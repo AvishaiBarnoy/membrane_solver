@@ -1,21 +1,22 @@
 import argparse
 import json
-import sys
-import os
 import logging
-from logging_config import setup_logging
-from geometry.geom_io import load_data, save_geometry, parse_geometry
+import os
+import sys
+
 from geometry.entities import Mesh
-from runtime.minimizer import Minimizer
-from parameters.resolver import ParameterResolver
-from runtime.steppers.gradient_descent import GradientDescent
-from runtime.steppers.conjugate_gradient import ConjugateGradient
-from runtime.energy_manager import EnergyModuleManager
+from geometry.geom_io import load_data, parse_geometry, save_geometry
 from runtime.constraint_manager import ConstraintModuleManager
-from runtime.refinement import refine_triangle_mesh, refine_polygonal_facets
-from runtime.vertex_average import vertex_average
+from runtime.energy_manager import EnergyModuleManager
 from runtime.equiangulation import equiangulate_mesh
+from runtime.logging_config import setup_logging
+from runtime.minimizer import Minimizer
+from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
+from runtime.steppers.conjugate_gradient import ConjugateGradient
+from runtime.steppers.gradient_descent import GradientDescent
 from runtime.topology import detect_vertex_edge_collisions
+from runtime.vertex_average import vertex_average
+
 logger = logging.getLogger("membrane_solver.log")
 logger.addHandler(logging.NullHandler())
 
@@ -371,7 +372,6 @@ def main():
     global_params = mesh.global_parameters
     if args.volume_mode:
         global_params.set("volume_constraint_mode", args.volume_mode)
-    param_resolver = ParameterResolver(global_params)
     energy_manager = EnergyModuleManager(mesh.energy_modules)
 
     logger.debug(mesh.energy_modules)

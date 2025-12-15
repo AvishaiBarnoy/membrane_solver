@@ -1,8 +1,10 @@
-import json
 import copy
+import json
 import math
+
 import numpy as np
-from geometry.entities import Mesh, Vertex, Edge, Facet, Body
+
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 
 SAMPLE_GEOMETRY = {
     "vertices": [
@@ -205,7 +207,7 @@ def generate_open_cylinder(radius=1.0, height=2.0, n_segments=16):
 
     # Body
     # Calculate initial volume to set as target
-    # Note: Body volume is computed using divergence theorem. For open cylinder, 
+    # Note: Body volume is computed using divergence theorem. For open cylinder,
     # it gives volume of cone from origin.
     # We set target_volume to this computed value to keep it "constant".
 

@@ -1,6 +1,8 @@
-import numpy as np
 import logging
-from geometry.entities import Mesh, Edge, Facet, Vertex, Body
+
+import numpy as np
+
+from geometry.entities import Edge, Facet, Mesh
 
 logger = logging.getLogger("membrane_solver")
 
@@ -8,15 +10,15 @@ logger = logging.getLogger("membrane_solver")
 def equiangulate_mesh(mesh: Mesh, max_iterations: int = 100) -> Mesh:
     """
     Performs equiangulation on a triangulated mesh using the Delaunay criterion.
-    
-    For any edge with two adjacent triangular facets, we switch the edge to the other 
-    diagonal of the quadrilateral if the sum of the angles at the off vertices is more 
+
+    For any edge with two adjacent triangular facets, we switch the edge to the other
+    diagonal of the quadrilateral if the sum of the angles at the off vertices is more
     than π. This is equivalent to cos θ₁ + cos θ₂ < 0.
-    
+
     Args:
         mesh: The input triangulated mesh
         max_iterations: Maximum number of iterations to prevent infinite loops
-        
+
     Returns:
         A new mesh with improved triangulation
     """
@@ -38,11 +40,11 @@ def equiangulate_mesh(mesh: Mesh, max_iterations: int = 100) -> Mesh:
 
     current_mesh = mesh
     iteration = 0
-    
+
     for iteration in range(max_iterations):
         # Try one iteration of edge flips
         new_mesh, changes_made = equiangulate_iteration(current_mesh)
-        
+
         if not changes_made:
             logger.info(f"Equiangulation converged in {iteration} iterations")
             # Validate final mesh; if broken, fall back to the original.
@@ -90,41 +92,41 @@ def equiangulate_iteration(mesh: Mesh) -> tuple[Mesh, bool]:
     new_mesh.energy_modules = mesh.energy_modules[:]
     new_mesh.constraint_modules = mesh.constraint_modules[:]
     new_mesh.instructions = mesh.instructions[:]
-    
+
     # Build connectivity and facet loops for the new mesh
     new_mesh.build_connectivity_maps()
     if hasattr(new_mesh, "build_facet_vertex_loops"):
         new_mesh.build_facet_vertex_loops()
-    
+
     changes_made = False
     next_edge_idx = max(new_mesh.edges.keys()) + 1 if new_mesh.edges else 1
-    
+
     # Check all edges for potential flips
     edges_to_check = list(new_mesh.edges.keys())
-    
+
     for edge_idx in edges_to_check:
         if edge_idx not in new_mesh.edges:
             continue  # Edge may have been removed
-            
+
         edge = new_mesh.edges[edge_idx]
 
         # Respect fixed edges, as in Evolver.
         if getattr(edge, "fixed", False):
             continue
-        
+
         # Get facets adjacent to this edge
         adjacent_facets = new_mesh.get_facets_of_edge(edge_idx)
-        
+
         # Only process edges with exactly 2 adjacent triangular facets
         if len(adjacent_facets) != 2:
             continue
-            
+
         facet1, facet2 = adjacent_facets
-        
+
         # Ensure both facets are triangles
         if len(facet1.edge_indices) != 3 or len(facet2.edge_indices) != 3:
             continue
-            
+
         # Check if edge should be flipped using Delaunay criterion
         if should_flip_edge(new_mesh, edge, facet1, facet2):
             # Perform the edge flip
@@ -136,55 +138,55 @@ def equiangulate_iteration(mesh: Mesh) -> tuple[Mesh, bool]:
                 new_mesh.build_connectivity_maps()
                 if hasattr(new_mesh, "build_facet_vertex_loops"):
                     new_mesh.build_facet_vertex_loops()
-    
+
     return new_mesh, changes_made
 
 
 def should_flip_edge(mesh: Mesh, edge: Edge, facet1: Facet, facet2: Facet) -> bool:
     """
     Determines if an edge should be flipped using the Delaunay criterion.
-    
+
     Returns True if cos θ₁ + cos θ₂ < 0, where θ₁ and θ₂ are the angles
     at the off vertices (vertices not on the shared edge).
     """
     # Get vertices of the quadrilateral
     v1, v2 = edge.tail_index, edge.head_index
-    
+
     # Find the off vertices (vertices not on the shared edge)
     off_vertex1 = get_off_vertex(mesh, facet1, edge)
     off_vertex2 = get_off_vertex(mesh, facet2, edge)
-    
+
     if off_vertex1 is None or off_vertex2 is None:
         return False
-    
+
     # Get vertex positions
     pos1 = mesh.vertices[v1].position
     pos2 = mesh.vertices[v2].position
     pos_off1 = mesh.vertices[off_vertex1].position
     pos_off2 = mesh.vertices[off_vertex2].position
-    
+
     # Calculate side lengths for both triangles
     # Triangle 1: (v1, v2, off_vertex1)
     a1 = np.linalg.norm(pos2 - pos_off1)  # edge opposite to v1
     b1 = np.linalg.norm(pos1 - pos_off1)  # edge from off_vertex1 to v1
     c1 = np.linalg.norm(pos2 - pos1)      # shared edge (common edge)
-    
+
     # Triangle 2: (v1, v2, off_vertex2)
     a2 = np.linalg.norm(pos2 - pos_off2)  # edge opposite to v1
     d2 = np.linalg.norm(pos1 - pos_off2)  # edge from off_vertex2 to v1
     e2 = np.linalg.norm(pos2 - pos1)      # shared edge (common edge)
-    
+
     # Calculate cos θ₁ and cos θ₂ using law of cosines
     # For triangle 1, angle at off_vertex1: cos θ₁ = (b1² + c1² - a1²) / (2*b1*c1)
     # For triangle 2, angle at off_vertex2: cos θ₂ = (d2² + e2² - a2²) / (2*d2*e2)
-    
+
     # Avoid division by zero / degenerate configurations
     if b1 * c1 <= 0.0 or d2 * e2 <= 0.0:
         return False
-    
+
     cos_theta1 = (b1**2 + c1**2 - a1**2) / (2 * b1 * c1)
     cos_theta2 = (d2**2 + e2**2 - a2**2) / (2 * d2 * e2)
-    
+
     # Apply Delaunay/equiangular criterion with a small negative margin,
     # similar in spirit to Evolver's -0.001 tolerance, to avoid cycling
     # on nearly-flat quadrilaterals.
@@ -363,7 +365,7 @@ def find_connecting_edge(mesh: Mesh, v1: int, v2: int, candidate_edges: list) ->
         if (edge.tail_index == v1 and edge.head_index == v2) or \
            (edge.tail_index == v2 and edge.head_index == v1):
             return abs(signed_edge_idx)
-    
+
     return None
 
 
@@ -373,7 +375,7 @@ def get_oriented_edge(mesh: Mesh, from_vertex: int, to_vertex: int, edge_idx: in
     Returns positive index if edge goes from->to, negative if edge goes to->from.
     """
     edge = mesh.edges[edge_idx]
-    
+
     if edge.tail_index == from_vertex and edge.head_index == to_vertex:
         return edge_idx
     elif edge.tail_index == to_vertex and edge.head_index == from_vertex:

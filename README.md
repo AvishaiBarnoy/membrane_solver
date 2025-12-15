@@ -36,16 +36,16 @@ python visualize_geometry.py meshes/cube.json
 The script now delegates to a small CLI under `visualization/cli.py` and
 accepts several flags:
 
-- `python visualize_geometry.py meshes/cube.json --transparent`  
+- `python visualize_geometry.py meshes/cube.json --transparent`
   Draw facets semi‑transparent.
 
-- `python visualize_geometry.py meshes/cube.json --no-edges`  
+- `python visualize_geometry.py meshes/cube.json --no-edges`
   Hide edges and show only filled facets (useful for solid views).
 
-- `python visualize_geometry.py meshes/simple_line.json --no-facets --scatter`  
+- `python visualize_geometry.py meshes/simple_line.json --no-facets --scatter`
   Visualize line‑only meshes: edges only, plus vertex scatter points.
 
-- `python visualize_geometry.py meshes/cube.json --no-axes --save outputs/cube.png`  
+- `python visualize_geometry.py meshes/cube.json --no-axes --save outputs/cube.png`
   Remove axes and save the figure to an image file instead of only showing it.
 
 All interactive visualizations are based on the shared `visualization.plotting.plot_geometry`
@@ -81,6 +81,23 @@ refinement and equiangulation.
 - The evolving backlog/TODO list now lives in `docs/ROADMAP.md` so changes are
   tracked alongside the code. Refer to that document for design sketches,
   medium-term research targets, and open questions.
+
+## Linting
+
+This repo uses Ruff for linting (and can adopt Ruff formatting later).
+
+```bash
+pip install ruff
+ruff check .
+```
+
+To enforce linting locally before commits, install and enable `pre-commit`:
+
+```bash
+pip install pre-commit
+pre-commit install
+pre-commit run -a
+```
 
 ## Roadmap
 

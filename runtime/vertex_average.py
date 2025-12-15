@@ -1,7 +1,8 @@
 # runtime/vertex_average.py
 
-import numpy as np
 import logging
+
+import numpy as np
 
 logger = logging.getLogger("membrane_solver")
 

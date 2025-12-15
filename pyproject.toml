@@ -1,0 +1,27 @@
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+extend-exclude = [
+  ".git",
+  ".venv",
+  "__pycache__",
+  "outputs",
+  "results",
+  "evolver_test",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "I",  # isort (import sorting)
+]
+ignore = [
+  "E501", # line length is enforced later via formatting
+  "E701", # Multiple statements on one line (colon)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**.py" = [
+  "E402", # allow imports after sys.path tweaks in tests
+]

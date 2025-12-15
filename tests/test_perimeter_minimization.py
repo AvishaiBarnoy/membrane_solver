@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+from sample_meshes import square_perimeter_input
 
 from geometry.geom_io import parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
@@ -9,7 +10,6 @@ from runtime.equiangulation import equiangulate_mesh
 from runtime.minimizer import Minimizer
 from runtime.refinement import refine_polygonal_facets
 from runtime.steppers.conjugate_gradient import ConjugateGradient
-from sample_meshes import square_perimeter_input
 
 
 def _build_minimizer(data: dict, step_size: float = 1e-2) -> Minimizer:

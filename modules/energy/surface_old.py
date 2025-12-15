@@ -1,11 +1,12 @@
 # modules/surface.py
 # Here goes energy functions relevant for area of facets
 
-from geometry.entities import Mesh, Facet
-from typing import Dict
 from collections import defaultdict
-from logging_config import setup_logging
+from typing import Dict
+
 import numpy as np
+
+from runtime.logging_config import setup_logging
 
 logger = setup_logging("membrane_solver.log")
 

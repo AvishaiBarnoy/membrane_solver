@@ -1,10 +1,13 @@
+import os
+import sys
+
 import numpy as np
-import sys, os
 
 # Adjust import paths for this testing environment
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from geometry.entities import Mesh, Vertex, Edge, Facet
+from geometry.entities import Edge, Facet, Mesh, Vertex
 from runtime.refinement import refine_triangle_mesh
+
 
 def test_build_connectivity_maps():
     mesh = Mesh()

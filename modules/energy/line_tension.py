@@ -16,7 +16,7 @@ from typing import Dict, Iterable
 import numpy as np
 
 from geometry.entities import Mesh
-from logging_config import setup_logging
+from runtime.logging_config import setup_logging
 
 logger = setup_logging("membrane_solver.log")
 

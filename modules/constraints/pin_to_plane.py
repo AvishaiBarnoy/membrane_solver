@@ -1,6 +1,7 @@
 # modules/constraints/pin_to_plane.py
 import numpy as np
 
+
 class PinToPlane:
     def __init__(self, plane_normal, plane_point):
         self.n = plane_normal

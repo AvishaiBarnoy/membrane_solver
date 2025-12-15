@@ -62,4 +62,3 @@ jobs:
           PYTHONPATH: .
         run: |
           pytest -q
-

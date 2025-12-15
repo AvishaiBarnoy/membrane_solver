@@ -1,8 +1,8 @@
-from geometry.geom_io import parse_geometry
-from parameters.global_parameters import GlobalParameters
-from geometry.entities import Vertex, Edge, Facet, Body, Mesh
 import numpy as np
-import sys
+
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
+from parameters.global_parameters import GlobalParameters
+
 
 def create_quad():
 

@@ -37,6 +37,8 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ### Maintenance
 - Fixed F821 lint errors for undefined names in steppers and tests.
+- Added Ruff + pre-commit configuration for local linting.
+- Moved logging setup helper to `runtime/logging_config.py` and updated imports.
 
 ## [0.3.0] - 2025-12-05
 ### Added

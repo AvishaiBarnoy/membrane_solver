@@ -1,10 +1,11 @@
-from main import parse_instructions, execute_command
-from runtime.minimizer import Minimizer
-from runtime.energy_manager import EnergyModuleManager
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.steppers.conjugate_gradient import ConjugateGradient
 from sample_meshes import cube_soft_volume_input
+
 from geometry.geom_io import parse_geometry
+from main import execute_command, parse_instructions
+from runtime.constraint_manager import ConstraintModuleManager
+from runtime.energy_manager import EnergyModuleManager
+from runtime.minimizer import Minimizer
+from runtime.steppers.conjugate_gradient import ConjugateGradient
 
 
 def _build_minimizer():

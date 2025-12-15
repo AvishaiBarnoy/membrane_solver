@@ -21,7 +21,7 @@ from typing import Dict
 
 import numpy as np
 
-from logging_config import setup_logging
+from runtime.logging_config import setup_logging
 
 logger = setup_logging("membrane_solver.log")
 

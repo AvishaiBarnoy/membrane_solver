@@ -6,7 +6,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from geometry.entities import Mesh, Vertex, Edge, Facet, Body
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from modules.constraints import volume as volume_constraint
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager

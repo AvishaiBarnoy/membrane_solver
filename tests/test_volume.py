@@ -5,10 +5,11 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from geometry.entities import Mesh, Vertex, Edge, Facet, Body
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
+from modules.energy.volume import calculate_volume_energy, compute_energy_and_gradient
 from parameters.global_parameters import GlobalParameters
-from modules.energy.volume import compute_energy_and_gradient, calculate_volume_energy
 from parameters.resolver import ParameterResolver
+
 
 def test_volume_energy_and_gradient():
     # Vertices of a unit tetrahedron

@@ -1,12 +1,15 @@
 # modules/steppers/conjugate_gradient.py
 from __future__ import annotations
 
-import numpy as np
 from typing import Callable, Dict
+
+import numpy as np
 
 from geometry.entities import Mesh
 from runtime.steppers.line_search import backtracking_line_search
+
 from .base import BaseStepper
+
 
 class ConjugateGradient(BaseStepper):
     """Conjugate gradient stepper with Armijo backtracking line search."""

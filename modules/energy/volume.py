@@ -1,10 +1,12 @@
 # modules/volume.py
 
-from geometry.entities import Body, _fast_cross
-from typing import Dict, Tuple
 from collections import defaultdict
+from typing import Dict, Tuple
+
 import numpy as np
-from logging_config import setup_logging
+
+from geometry.entities import Body, _fast_cross
+from runtime.logging_config import setup_logging
 
 logger = setup_logging("membrane_solver.log")
 
@@ -31,7 +33,7 @@ def calculate_volume_energy(mesh, global_params):
         V0 = (body.target_volume
               if body.target_volume is not None
               else body.options.get("target_volume", 0))
-        logger.debug(f"Default target_volume is 0!")
+        logger.debug("Default target_volume is 0!")
         k = body.options.get("volume_stiffness", global_params.volume_stiffness)
 
         volume_energy += 0.5 * k * (V - V0)**2
@@ -66,7 +68,7 @@ def _body_volume_batched(mesh, body: Body, positions: np.ndarray, index_map: Dic
 
     if valid_count == 0:
         return 0.0
-    
+
     # If valid_count < n_facets (shouldn't happen given the check above), slice.
     tri_indices = tri_indices[:valid_count]
 
@@ -82,7 +84,7 @@ def _body_volume_batched(mesh, body: Body, positions: np.ndarray, index_map: Dic
 
 def _batched_volume_and_gradient(mesh, body: Body, positions: np.ndarray, index_map: Dict[int, int]) -> Tuple[float, Dict[int, np.ndarray]]:
     """Compute volume and gradient for a body using vectorized operations on triangles.
-    
+
     Returns:
         Tuple of (volume, gradient_dict)
     """
@@ -96,12 +98,12 @@ def _batched_volume_and_gradient(mesh, body: Body, positions: np.ndarray, index_
         if loop is None or len(loop) != 3:
             # Fallback for non-triangular facets
             return body.compute_volume_and_gradient(mesh)
-        
+
         tri_indices[valid_count, 0] = index_map[int(loop[0])]
         tri_indices[valid_count, 1] = index_map[int(loop[1])]
         tri_indices[valid_count, 2] = index_map[int(loop[2])]
         valid_count += 1
-        
+
     if valid_count == 0:
         return 0.0, {}
 
@@ -118,7 +120,7 @@ def _batched_volume_and_gradient(mesh, body: Body, positions: np.ndarray, index_
     # grad(v0) = (v1 x v2) / 6
     # grad(v1) = (v2 x v0) / 6
     # grad(v2) = (v0 x v1) / 6
-    
+
     g0 = cross_v1_v2 / 6.0
     g1 = _fast_cross(v2, v0) / 6.0
     g2 = _fast_cross(v0, v1) / 6.0
@@ -126,7 +128,7 @@ def _batched_volume_and_gradient(mesh, body: Body, positions: np.ndarray, index_
     # Accumulate into per-vertex gradient array
     n_vertices = len(mesh.vertex_ids)
     grad_arr = np.zeros((n_vertices, 3), dtype=float)
-    
+
     i0 = tri_indices[:, 0]
     i1 = tri_indices[:, 1]
     i2 = tri_indices[:, 2]
@@ -137,7 +139,7 @@ def _batched_volume_and_gradient(mesh, body: Body, positions: np.ndarray, index_
 
     # Convert to dict
     grad = {vid: grad_arr[row] for vid, row in index_map.items() if np.any(grad_arr[row])}
-    
+
     return volume, grad
 
 

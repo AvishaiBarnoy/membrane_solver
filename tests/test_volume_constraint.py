@@ -1,5 +1,6 @@
 import numpy as np
-from geometry.entities import Mesh, Vertex, Edge, Facet, Body
+
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from modules.constraints.volume import enforce_constraint
 
 

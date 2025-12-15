@@ -1,9 +1,8 @@
 import logging
-from logging import handlers
 
 """
 Example for usage of logger.*
-from logging_config import setup_logging
+from runtime.logging_config import setup_logging
 
 logger = setup_logging()
 logger.info('Starting geometry calculation.')
@@ -26,7 +25,7 @@ def setup_logging(
     - Uses a FileHandler opened with ``mode='w'`` so each run overwrites
       any existing log file.
     """
-    logger = logging.getLogger("membrane_solver.log")
+    logger = logging.getLogger("membrane_solver")
     level = logging.DEBUG if debug else logging.INFO
 
     # If logger already has handlers, just adjust levels / quietness.
