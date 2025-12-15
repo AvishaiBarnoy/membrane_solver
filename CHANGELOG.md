@@ -35,6 +35,9 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - `load_data` accepts `Path` objects (needed for tests writing tmp JSONs).
 - `cube_good_min_routine` converges again (energy ≈ 4.85) when run under penalty mode.
 
+### Maintenance
+- Fixed F821 lint errors for undefined names in steppers and tests.
+
 ## [0.3.0] - 2025-12-05
 ### Added
 - Body/facet surface-area constraints with Lagrange-style enforcement.

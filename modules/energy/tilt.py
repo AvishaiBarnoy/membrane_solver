@@ -1,4 +1,5 @@
 # tilt.py
+import numpy as np
 
 def compute_energy_and_gradient(mesh, gp, resolver):
     κt = resolver.get(None, 'tilt_rigidity')

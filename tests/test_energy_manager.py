@@ -76,10 +76,11 @@ def test_minimizer_with_mock_energy_manager():
         mock_surface_module if mod == "surface" else mock_surface_module
     )
 
-    # Mock get_module to return the mocked constraint fuctions
+    # Mock get_module to return mocked constraint functions
     mock_constraint_manager = MagicMock()
-    mock_constraint_manager.get_module.side_effect = lambda mods: (
-        mock_volume_module if mod == "volume" else pin_to_place_module
+    pin_to_place_module = MagicMock()
+    mock_constraint_manager.get_module.side_effect = (
+        lambda mod: mock_volume_module if mod == "volume" else pin_to_place_module
     )
 
     # Mock stepper

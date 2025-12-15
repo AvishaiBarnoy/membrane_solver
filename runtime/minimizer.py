@@ -13,7 +13,7 @@ from parameters.global_parameters import GlobalParameters
 from runtime.energy_manager import EnergyModuleManager
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.steppers.base import BaseStepper
-
+from geometry.entities import Body
 
 logger = logging.getLogger('membrane_solver')
 

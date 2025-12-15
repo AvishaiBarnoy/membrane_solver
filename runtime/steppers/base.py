@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, Dict
 
 import numpy as np
+from geometry.entities import Mesh
 
 class BaseStepper(ABC):
     """Base interface for classes performing optimization steps."""

@@ -1,4 +1,5 @@
 # gaussian_curvature.py
+import numpy as np
 
 def compute_energy_and_gradient(mesh, gp, resolver):
     κbar = resolver.get(None, 'gaussian_modulus')
