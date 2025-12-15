@@ -26,8 +26,6 @@ def load_data(filename):
     with open(filename_str, 'r') as f:
         if filename_str.endswith((".yaml", ".yml")):
             data = yaml.safe_load(f)
-            logger.error("Currently yaml format not supported.")
-            raise ValueError("Currently yaml format not supported.")
         elif filename_str.endswith(".json"):
             data = json.load(f)
         else:
@@ -86,10 +84,28 @@ def parse_geometry(data: dict) -> Mesh:
     if mesh.global_parameters.get("target_surface_area") is not None:
         constraint_module_names.append("global_area")
 
+    definitions = data.get("definitions", {})
+
+    def resolve_options(raw_options):
+        if not raw_options:
+            return {}
+        preset_name = raw_options.get("preset")
+        if preset_name:
+            if preset_name not in definitions:
+                 raise ValueError(f"Preset '{preset_name}' not found in definitions.")
+            # Merge: preset first, then raw_options overrides
+            merged = definitions[preset_name].copy()
+            merged.update(raw_options)
+            # Remove the 'preset' key from the final dict to avoid confusion
+            merged.pop("preset", None)
+            return merged
+        return raw_options
+
     # TODO: add option to read both lowercase and uppercase title Vertices/vertices
     # Vertices
     for i, entry in enumerate(data["vertices"]):
-        *position, options = entry if isinstance(entry[-1], dict) else (*entry, {})
+        *position, raw_opts = entry if isinstance(entry[-1], dict) else (*entry, {})
+        options = resolve_options(raw_opts)
         mesh.vertices[i] = Vertex(index=i, position=np.asarray(position,
                                                                dtype=float), options=options)
 
@@ -136,7 +152,8 @@ def parse_geometry(data: dict) -> Mesh:
 
     for i, entry in enumerate(data["edges"]):
         tail_index, head_index, *opts = entry
-        options = opts[0] if opts else {}
+        raw_opts = opts[0] if opts else {}
+        options = resolve_options(raw_opts)
         mesh.edges[i+1] = Edge(index=i+1, tail_index=tail_index,
                                head_index=head_index, options=options)
 
@@ -175,7 +192,9 @@ def parse_geometry(data: dict) -> Mesh:
     # Facets (optional for line‑only geometries)
     faces_section = data.get("faces", [])
     for i, entry in enumerate(faces_section):
-        *raw_edges, options = entry if isinstance(entry[-1], dict) else (*entry, {})
+        *raw_edges, raw_opts = entry if isinstance(entry[-1], dict) else (*entry, {})
+        options = resolve_options(raw_opts)
+
         def parse_edge(e):
             if isinstance(e, str) and e.startswith("r"):
                 return -(int(e[1:]) + 1)    # "r0" -> -1
