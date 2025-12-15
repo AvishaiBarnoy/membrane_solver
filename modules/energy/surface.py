@@ -1,7 +1,7 @@
 # modules/surface.py
 # Here goes energy functions relevant for area of facets
 
-from geometry.entities import Mesh, Facet
+from geometry.entities import Mesh, Facet, _fast_cross
 from typing import Dict, Tuple
 from collections import defaultdict
 from logging_config import setup_logging
@@ -35,27 +35,25 @@ def calculate_surface_energy(mesh: Mesh, global_params) -> float:
         positions = mesh.positions_view()
         index_map = mesh.vertex_index_to_row
 
-        tri_rows = []
-        gammas = []
-        for facet in mesh.facets.values():
+        n_facets = len(mesh.facets)
+        tri_rows = np.empty((n_facets, 3), dtype=int)
+        gammas = np.empty(n_facets, dtype=float)
+
+        for idx, facet in enumerate(mesh.facets.values()):
             loop = mesh.facet_vertex_loops[facet.index]
-            i0 = index_map[int(loop[0])]
-            i1 = index_map[int(loop[1])]
-            i2 = index_map[int(loop[2])]
-            tri_rows.append((i0, i1, i2))
-            gammas.append(
-                facet.options.get(
-                    "surface_tension",
-                    global_params.get("surface_tension"),
-                )
+            tri_rows[idx, 0] = index_map[int(loop[0])]
+            tri_rows[idx, 1] = index_map[int(loop[1])]
+            tri_rows[idx, 2] = index_map[int(loop[2])]
+            gammas[idx] = facet.options.get(
+                "surface_tension",
+                global_params.get("surface_tension"),
             )
 
-        tri_rows_arr = np.asarray(tri_rows, dtype=int)
-        tri_pos = positions[tri_rows_arr]  # (n_facets, 3, 3)
+        tri_pos = positions[tri_rows]  # (n_facets, 3, 3)
         v0 = tri_pos[:, 0, :]
         v1 = tri_pos[:, 1, :]
         v2 = tri_pos[:, 2, :]
-        cross = np.cross(v1 - v0, v2 - v0)
+        cross = _fast_cross(v1 - v0, v2 - v0)
         areas = 0.5 * np.linalg.norm(cross, axis=1)
         return float(np.dot(np.asarray(gammas, dtype=float), areas))
 
@@ -160,21 +158,27 @@ def _batched_surface_energy_and_gradient_triangles(
     positions = mesh.positions_view()
     idx_map = mesh.vertex_index_to_row
 
-    tri_rows = []
+    n_facets = len(mesh.facets)
+    tri_rows_arr = np.empty((n_facets, 3), dtype=int)
     gammas = []
-    for facet in mesh.facets.values():
+    
+    # We collect gammas in a list because usually they are scalars, 
+    # but creating a numpy array from them at the end is fine. 
+    # However, tri_rows is the big one.
+    # Actually, let's preallocate gammas too for consistency.
+    gammas_arr = np.empty(n_facets, dtype=float)
+
+    for idx, facet in enumerate(mesh.facets.values()):
         loop = mesh.facet_vertex_loops[facet.index]
-        i0 = idx_map[int(loop[0])]
-        i1 = idx_map[int(loop[1])]
-        i2 = idx_map[int(loop[2])]
-        tri_rows.append((i0, i1, i2))
+        tri_rows_arr[idx, 0] = idx_map[int(loop[0])]
+        tri_rows_arr[idx, 1] = idx_map[int(loop[1])]
+        tri_rows_arr[idx, 2] = idx_map[int(loop[2])]
 
         surface_tension = param_resolver.get(facet, "surface_tension")
         if surface_tension is None:
             surface_tension = global_params.get("surface_tension")
-        gammas.append(surface_tension)
+        gammas_arr[idx] = surface_tension
 
-    tri_rows_arr = np.asarray(tri_rows, dtype=int)  # (nF, 3)
     tri_pos = positions[tri_rows_arr]              # (nF, 3, 3)
     v0 = tri_pos[:, 0, :]
     v1 = tri_pos[:, 1, :]
@@ -182,7 +186,7 @@ def _batched_surface_energy_and_gradient_triangles(
 
     e1 = v1 - v0
     e2 = v2 - v0
-    n = np.cross(e1, e2)
+    n = _fast_cross(e1, e2)
     A = np.linalg.norm(n, axis=1)
     mask = A >= 1e-12
     if not np.any(mask):
@@ -192,10 +196,10 @@ def _batched_surface_energy_and_gradient_triangles(
 
     n_hat = n[mask] / A[mask][:, None]
     areas = 0.5 * A[mask]
-    gammas_arr = np.asarray(gammas, dtype=float)[mask]
+    gammas_masked = gammas_arr[mask]
 
     # Energy: sum_i gamma_i * area_i
-    E = float(np.dot(gammas_arr, areas))
+    E = float(np.dot(gammas_masked, areas))
 
     # Gradient per triangle, following the same formulas as
     # Facet.compute_area_and_gradient specialised to the triangle case.
@@ -203,12 +207,12 @@ def _batched_surface_energy_and_gradient_triangles(
     v1m = v1[mask]
     v2m = v2[mask]
 
-    g0 = 0.5 * np.cross(v1m - v0m, n_hat)          # dA/dv0
-    g1 = 0.5 * np.cross(v2m - v1m, n_hat)          # dA/dv1
-    g2 = 0.5 * np.cross(v0m - v2m, n_hat)          # dA/dv2
+    g0 = 0.5 * _fast_cross(v1m - v0m, n_hat)          # dA/dv0
+    g1 = 0.5 * _fast_cross(v2m - v1m, n_hat)          # dA/dv1
+    g2 = 0.5 * _fast_cross(v0m - v2m, n_hat)          # dA/dv2
 
     # Scale by per-facet surface tension.
-    scale = gammas_arr[:, None]
+    scale = gammas_masked[:, None]
     g0 *= scale
     g1 *= scale
     g2 *= scale

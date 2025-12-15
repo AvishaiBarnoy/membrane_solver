@@ -1,7 +1,7 @@
 # modules/volume.py
 
-from geometry.entities import Body
-from typing import Dict
+from geometry.entities import Body, _fast_cross
+from typing import Dict, Tuple
 from collections import defaultdict
 import numpy as np
 from logging_config import setup_logging
@@ -47,11 +47,11 @@ def _body_volume_batched(mesh, body: Body, positions: np.ndarray, index_map: Dic
     """Compute body volume by batching over its triangular facets.
 
     Assumes each facet in ``body.facet_indices`` has a cached vertex loop of
-    length 3 in ``mesh.facet_vertex_loops``.
+    length = 3 in ``mesh.facet_vertex_loops``.
     """
-    tri_v0 = []
-    tri_v1 = []
-    tri_v2 = []
+    n_facets = len(body.facet_indices)
+    tri_indices = np.empty((n_facets, 3), dtype=int)
+    valid_count = 0
 
     for facet_idx in body.facet_indices:
         loop = mesh.facet_vertex_loops.get(facet_idx)
@@ -59,24 +59,87 @@ def _body_volume_batched(mesh, body: Body, positions: np.ndarray, index_map: Dic
             # Fallback will be used by caller if any facet is not a triangle.
             return body.compute_volume(mesh)
 
-        i0 = index_map[int(loop[0])]
-        i1 = index_map[int(loop[1])]
-        i2 = index_map[int(loop[2])]
-        tri_v0.append(i0)
-        tri_v1.append(i1)
-        tri_v2.append(i2)
+        tri_indices[valid_count, 0] = index_map[int(loop[0])]
+        tri_indices[valid_count, 1] = index_map[int(loop[1])]
+        tri_indices[valid_count, 2] = index_map[int(loop[2])]
+        valid_count += 1
 
-    if not tri_v0:
+    if valid_count == 0:
         return 0.0
+    
+    # If valid_count < n_facets (shouldn't happen given the check above), slice.
+    tri_indices = tri_indices[:valid_count]
 
-    v0 = positions[np.array(tri_v0, dtype=int)]
-    v1 = positions[np.array(tri_v1, dtype=int)]
-    v2 = positions[np.array(tri_v2, dtype=int)]
+    v0 = positions[tri_indices[:, 0]]
+    v1 = positions[tri_indices[:, 1]]
+    v2 = positions[tri_indices[:, 2]]
 
     # For each triangle, volume contribution is dot(cross(v1, v2), v0) / 6
-    cross = np.cross(v1, v2)
+    cross = _fast_cross(v1, v2)
     vol_contrib = np.einsum("ij,ij->i", cross, v0)
     return float(vol_contrib.sum() / 6.0)
+
+
+def _batched_volume_and_gradient(mesh, body: Body, positions: np.ndarray, index_map: Dict[int, int]) -> Tuple[float, Dict[int, np.ndarray]]:
+    """Compute volume and gradient for a body using vectorized operations on triangles.
+    
+    Returns:
+        Tuple of (volume, gradient_dict)
+    """
+    n_facets = len(body.facet_indices)
+    tri_indices = np.empty((n_facets, 3), dtype=int)
+    valid_count = 0
+
+    # Collect indices
+    for facet_idx in body.facet_indices:
+        loop = mesh.facet_vertex_loops.get(facet_idx)
+        if loop is None or len(loop) != 3:
+            # Fallback for non-triangular facets
+            return body.compute_volume_and_gradient(mesh)
+        
+        tri_indices[valid_count, 0] = index_map[int(loop[0])]
+        tri_indices[valid_count, 1] = index_map[int(loop[1])]
+        tri_indices[valid_count, 2] = index_map[int(loop[2])]
+        valid_count += 1
+        
+    if valid_count == 0:
+        return 0.0, {}
+
+    v0 = positions[tri_indices[:, 0]]
+    v1 = positions[tri_indices[:, 1]]
+    v2 = positions[tri_indices[:, 2]]
+
+    # Volume: sum(dot(cross(v1, v2), v0)) / 6
+    cross_v1_v2 = _fast_cross(v1, v2)
+    vol_contrib = np.einsum("ij,ij->i", cross_v1_v2, v0)
+    volume = float(vol_contrib.sum() / 6.0)
+
+    # Gradients
+    # grad(v0) = (v1 x v2) / 6
+    # grad(v1) = (v2 x v0) / 6
+    # grad(v2) = (v0 x v1) / 6
+    
+    g0 = cross_v1_v2 / 6.0
+    g1 = _fast_cross(v2, v0) / 6.0
+    g2 = _fast_cross(v0, v1) / 6.0
+
+    # Accumulate into per-vertex gradient array
+    n_vertices = len(mesh.vertex_ids)
+    grad_arr = np.zeros((n_vertices, 3), dtype=float)
+    
+    i0 = tri_indices[:, 0]
+    i1 = tri_indices[:, 1]
+    i2 = tri_indices[:, 2]
+
+    np.add.at(grad_arr, i0, g0)
+    np.add.at(grad_arr, i1, g1)
+    np.add.at(grad_arr, i2, g2)
+
+    # Convert to dict
+    grad = {vid: grad_arr[row] for vid, row in index_map.items() if np.any(grad_arr[row])}
+    
+    return volume, grad
+
 
 def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_gradient: bool = True):
     """Volume energy and gradient.
@@ -98,10 +161,10 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_
         defaultdict(lambda: np.zeros(3)) if compute_gradient else None
     )
 
-    # For energy-only path we can batch volume over triangles using cached loops.
+    # Prepare positions and index_map if we can use batched operations
     positions = None
     index_map: Dict[int, int] | None = None
-    if not compute_gradient and getattr(mesh, "facet_vertex_loops", None):
+    if getattr(mesh, "facet_vertex_loops", None):
         positions = mesh.positions_view()
         index_map = mesh.vertex_index_to_row
 
@@ -115,7 +178,10 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_
               else body.options.get('target_volume', 0))
 
         if compute_gradient:
-            V, volume_gradient = body.compute_volume_and_gradient(mesh)
+            if positions is not None and index_map is not None:
+                V, volume_gradient = _batched_volume_and_gradient(mesh, body, positions, index_map)
+            else:
+                V, volume_gradient = body.compute_volume_and_gradient(mesh)
         else:
             # Try batched triangle volume if we have positions and loops.
             if positions is not None and index_map is not None:

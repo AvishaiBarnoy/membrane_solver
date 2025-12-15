@@ -10,6 +10,23 @@ import logging
 logger = logging.getLogger("membrane_solver")
 
 
+def _fast_cross(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """
+    Compute cross product of two arrays of 3D vectors along the last axis.
+    Optimized to avoid np.cross overhead for small arrays or simple cases.
+    Inputs must be shape (..., 3) or (3,).
+    """
+    x = a[..., 1] * b[..., 2] - a[..., 2] * b[..., 1]
+    y = a[..., 2] * b[..., 0] - a[..., 0] * b[..., 2]
+    z = a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0]
+    
+    out = np.empty(x.shape + (3,), dtype=x.dtype)
+    out[..., 0] = x
+    out[..., 1] = y
+    out[..., 2] = z
+    return out
+
+
 class MeshError(Exception):
     """Custom exception for invalid mesh topology or geometry."""
 
@@ -156,7 +173,7 @@ class Facet:
         # Note: cyclic cross products
         v_curr = v_pos
         v_next = np.roll(v_pos, -1, axis=0)
-        cross_sum = np.cross(v_curr, v_next).sum(axis=0)
+        cross_sum = _fast_cross(v_curr, v_next).sum(axis=0)
         return 0.5 * float(np.linalg.norm(cross_sum))
 
     def compute_area_gradient(self, mesh: "Mesh") -> Dict[int, np.ndarray]:
@@ -186,7 +203,7 @@ class Facet:
         v_next = np.roll(v_pos, -1, axis=0)
         
         # Calculate area vector first to get normal
-        cross_sum = np.cross(v_pos, v_next).sum(axis=0)
+        cross_sum = _fast_cross(v_pos, v_next).sum(axis=0)
         area_doubled = np.linalg.norm(cross_sum)
         
         if area_doubled < 1e-12:
@@ -196,7 +213,7 @@ class Facet:
 
         # Term for each vertex v_i: 0.5 * n_hat x (v_{i-1} - v_{i+1})
         diff = v_prev - v_next
-        grads = 0.5 * np.cross(n_hat, diff)
+        grads = 0.5 * _fast_cross(n_hat, diff)
 
         for i, vid in enumerate(v_ids):
             grad[vid] += grads[i]
@@ -242,7 +259,7 @@ class Facet:
         v_curr = v_pos
         v_next = np.roll(v_pos, -1, axis=0)
         
-        cross_sum = np.cross(v_curr, v_next).sum(axis=0)
+        cross_sum = _fast_cross(v_curr, v_next).sum(axis=0)
         area_doubled = float(np.linalg.norm(cross_sum))
         area = 0.5 * area_doubled
 
@@ -254,7 +271,7 @@ class Facet:
         # Gradient term for each vertex v_i: 0.5 * n_hat x (v_{i-1} - v_{i+1})
         v_prev = np.roll(v_pos, 1, axis=0)
         diff = v_prev - v_next
-        grads = 0.5 * np.cross(n_hat, diff)
+        grads = 0.5 * _fast_cross(n_hat, diff)
 
         for i, vid in enumerate(v_ids):
             grad[vid] += grads[i]
@@ -297,7 +314,7 @@ class Body:
             # triangulate into (v0, v_i, v_{i+1}) for i=1..len-2 using vectorized operations
             v1 = v_pos[1:-1]
             v2 = v_pos[2:]
-            cross_prod = np.cross(v1, v2)
+            cross_prod = _fast_cross(v1, v2)
             volume += np.dot(cross_prod, v0).sum() / 6.0
         return volume
 
@@ -343,11 +360,11 @@ class Body:
             va = v_pos[1:-1]
             vb = v_pos[2:]
 
-            cross_va_vb = np.cross(va, vb)
+            cross_va_vb = _fast_cross(va, vb)
             grad[v_ids[0]] += cross_va_vb.sum(axis=0) / 6
 
-            cross_vb_v0 = np.cross(vb, v0)
-            cross_v0_va = np.cross(v0, va)
+            cross_vb_v0 = _fast_cross(vb, v0)
+            cross_v0_va = _fast_cross(v0, va)
 
             for idx, (a, b) in enumerate(zip(v_ids[1:-1], v_ids[2:])):
                 grad[a] += cross_vb_v0[idx] / 6
@@ -373,7 +390,7 @@ class Body:
             v0 = v_pos[0]
             v1 = v_pos[1:-1] - v0
             v2 = v_pos[2:] - v0
-            cross = np.cross(v1, v2)
+            cross = _fast_cross(v1, v2)
             area += 0.5 * np.linalg.norm(cross, axis=1).sum()
         return area
 
@@ -411,7 +428,7 @@ class Body:
             vb = v_pos[2:]
 
             # Volume contribution using vectorized tetrahedron fan at v0
-            cross_prod = np.cross(va, vb)
+            cross_prod = _fast_cross(va, vb)
             volume += float(np.dot(cross_prod, v0).sum() / 6.0)
 
             # Gradient contributions (same formula as compute_volume_gradient)
@@ -420,8 +437,8 @@ class Body:
                 grad[v_ids[0]] = np.zeros(3)
             grad[v_ids[0]] += cross_va_vb.sum(axis=0) / 6.0
 
-            cross_vb_v0 = np.cross(vb, v0)
-            cross_v0_va = np.cross(v0, va)
+            cross_vb_v0 = _fast_cross(vb, v0)
+            cross_v0_va = _fast_cross(v0, va)
 
             for idx, (a, b) in enumerate(zip(v_ids[1:-1], v_ids[2:])):
                 if a not in grad:
@@ -546,7 +563,14 @@ class Mesh:
         import numpy as np
 
         self.build_position_cache()
-        return np.array([self.vertices[vid].position for vid in self.vertex_ids])
+        # Optimization: pre-allocate to avoid creating a large intermediate list
+        n_verts = len(self.vertex_ids)
+        pos = np.empty((n_verts, 3), dtype=float)
+        
+        for i, vid in enumerate(self.vertex_ids):
+            pos[i] = self.vertices[vid].position
+            
+        return pos
 
     def build_facet_vertex_loops(self):
         """Precompute ordered vertex loops for all facets.

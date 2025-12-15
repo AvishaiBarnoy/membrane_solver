@@ -8,6 +8,8 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Benchmarks now run in read-only sandboxes (no temp files); README/manual updated with benchmark usage.
 - Integration tests covering the cube penalty scenario (energy decrease, volume preservation, refine+equiangulate validity) and parsing tests for the interactive `rN` command.
 - Perimeter constraint coverage: `tests/test_perimeter_minimization.py` now drives a constrained square loop through minimization, refinement, and equiangulation, checking that perimeter returns to its target while area stays near 1 even in the presence of small discretisation errors.
+- A dedicated `visualization` package with a reusable `plot_geometry` helper and a CLI (`visualize_geometry.py`) supporting toggling facets/edges, transparency, axes, scatter, and saving figures.
+- Command-line line-tension controls: `--line-tension` and `--line-tension-edges` on `main.py` allow tagging edges with `line_tension` energy without editing JSON.
 
 ### Changed
 - Volume handling:
@@ -16,6 +18,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - `main.py` now imports `visualize_geometry` lazily so headless runs/benchmarks don’t crash when Matplotlib can’t create cache dirs.
 - `benchmark_cube_good.py` runs directly on `cube_good_min_routine.json` without writing outputs.
 - Interactive mode: `rN` now repeat-refines without scripting loops, `i` is a shorthand for the properties command, and README/manual document the updated syntax. The old README TODO list was moved to `docs/ROADMAP.md`.
+- Visualization: `visualize_geometry.py` is now a thin wrapper around the `visualization` CLI, and facet rendering skips <3-edge facets so line-only meshes can be displayed cleanly.
 
 ### Fixed
 - `load_data` accepts `Path` objects (needed for tests writing tmp JSONs).

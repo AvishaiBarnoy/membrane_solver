@@ -271,6 +271,19 @@ Configuration:
 This is commonly used for 2D problems (e.g. square relaxing to a circle) or
 for boundary tension in open membranes.
 
+You can also assign line tension from the CLI without editing JSON:
+
+- `--line-tension VALUE`  
+  Apply a uniform line‑tension modulus to edges.
+
+- `--line-tension-edges ID1,ID2,...`  
+  Restrict the CLI‑assigned line tension to the listed edge IDs. Without this
+  option, all edges are tagged.
+
+These flags update `mesh.energy_modules` and edge options at load time, so
+the rest of the pipeline (`EnergyModuleManager`, refinement, constraints) sees
+them as if they had been specified in the input file.
+
 ---
 
 ## 6. Constraints
@@ -441,6 +454,24 @@ You can inspect the final geometry with:
 ```bash
 python visualize_geometry.py cube_sphere_out.json
 ```
+
+For more control over rendering, the visualization CLI supports:
+
+```bash
+# Solid, facet-only view
+python visualize_geometry.py cube_sphere_out.json --no-edges
+
+# Semi-transparent facets with axes removed, saved to PNG
+python visualize_geometry.py cube_sphere_out.json --transparent --no-axes \
+                                                  --save outputs/cube_sphere.png
+
+# Line-only meshes (edges only, no facets)
+python visualize_geometry.py meshes/simple_line.json --no-facets --scatter
+```
+
+Internally, this uses the shared helper
+`visualization.plotting.plot_geometry(mesh, ...)`, which is also exercised by
+`tests/test_visualize_geometry.py`.
 
 ---
 

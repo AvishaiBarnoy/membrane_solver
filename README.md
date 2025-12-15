@@ -21,6 +21,36 @@ path. File names may be given with or without the `.json` suffix.
 using `refine_polygonal_facets`. Triangular facets remain unchanged. The
 returned mesh is therefore ready for optimization without further refinement.
 
+For edge‑only or “wire‑frame” geometries, the `faces` section in the JSON is
+optional: meshes with just `vertices` and `edges` can be loaded and visualized
+without defining facets.
+
+## Visualization
+
+Use the visualization script to inspect geometries:
+
+```bash
+python visualize_geometry.py meshes/cube.json
+```
+
+The script now delegates to a small CLI under `visualization/cli.py` and
+accepts several flags:
+
+- `python visualize_geometry.py meshes/cube.json --transparent`  
+  Draw facets semi‑transparent.
+
+- `python visualize_geometry.py meshes/cube.json --no-edges`  
+  Hide edges and show only filled facets (useful for solid views).
+
+- `python visualize_geometry.py meshes/simple_line.json --no-facets --scatter`  
+  Visualize line‑only meshes: edges only, plus vertex scatter points.
+
+- `python visualize_geometry.py meshes/cube.json --no-axes --save outputs/cube.png`  
+  Remove axes and save the figure to an image file instead of only showing it.
+
+All interactive visualizations are based on the shared `visualization.plotting.plot_geometry`
+helper, which is also used in the test suite.
+
 ## Constraint modules
 
 Membrane Solver mirrors Evolver’s mix of penalties and hard constraints. Surface
