@@ -58,5 +58,8 @@
     [5, 12, -11, -17]
   ],
   "global_parameters": {"surface_tension": 2.0},
-  "instructions": ["r2", "V3", "g50", "V5", "g50", "V5", "gd", "g50", "V3", "g50", "r", "V5", "g50"]
+  "instructions": ["r2", "V3", "g20", "V5",
+                  "g20", "V5", "gd", "g20",
+                  "V3", "g20", "r", "V5", "g20",
+                  "r", "g10", "u", "V"]
 }

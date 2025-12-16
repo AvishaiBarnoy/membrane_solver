@@ -120,6 +120,10 @@ def execute_command(cmd, mesh, minimizer, stepper):
         print("  u             Equiangulate mesh")
         print("  visualize / s Plot current geometry")
         print("  properties    Print physical properties (area, volume, etc.)")
+        print("  print [entity] [id|filter] Query geometry (e.g. print edges len > 0.1)")
+        print("  set [param] [value]       Set global parameter (e.g. set surface_tension 1.0)")
+        print("                            or entity property (e.g. set vertex 0 fixed true)")
+        print("  live_vis / lv Turn on/off live visualization during minimization")
         print("  save          Save geometry to 'interactive.temp'")
         print("  quit / exit / q  Leave interactive mode")
         print()
@@ -131,6 +135,11 @@ def execute_command(cmd, mesh, minimizer, stepper):
         print("  -q, --quiet               Suppress console output")
         print("  --debug                   Enable verbose debug logging")
         print("  --non-interactive         Do not enter interactive prompt after instructions")
+    elif cmd == 'live_vis' or cmd == 'lv':
+        if not hasattr(minimizer, 'live_vis'):
+            minimizer.live_vis = False
+        minimizer.live_vis = not minimizer.live_vis
+        logger.info(f"Live visualization {'enabled' if minimizer.live_vis else 'disabled'}")
     elif cmd == 'cg':
         logger.info("Switching to Conjugate Gradient stepper.")
         stepper = ConjugateGradient()
@@ -160,8 +169,27 @@ def execute_command(cmd, mesh, minimizer, stepper):
         logger.debug(
             f"Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}"
         )
-        result = minimizer.minimize(n_steps=n_steps)
+
+        callback = None
+        if getattr(minimizer, 'live_vis', False):
+             import matplotlib.pyplot as plt
+
+             from visualization.plotting import plot_geometry
+
+             plt.ion() # Enable interactive mode
+
+             def cb(mesh, i):
+                 plt.clf()
+                 ax = plt.axes(projection='3d')
+                 plot_geometry(mesh, ax=ax, show=False)
+                 plt.title(f"Step {i}")
+                 plt.draw()
+                 plt.pause(0.001)
+             callback = cb
+
+        result = minimizer.minimize(n_steps=n_steps, callback=callback)
         mesh = result["mesh"]
+
         logger.info(
             f"Minimization complete. Final energy: {result['energy'] if result else 'N/A'}"
         )
@@ -241,6 +269,187 @@ def execute_command(cmd, mesh, minimizer, stepper):
 
     return mesh, stepper
 
+def process_complex_command(tokens, mesh):
+    """
+    Handle verbose commands like 'print' and 'set'.
+    tokens: list of strings, e.g. ['print', 'edges', 'len', '>', '0.5']
+    """
+    cmd = tokens[0].lower()
+
+    if cmd == 'print':
+        if len(tokens) < 2:
+            print("Usage: print [vertices|edges|facets|bodies] [id|filter] ...")
+            return mesh
+
+        entity_type = tokens[1].lower()
+
+        # Helper to get entity dict
+        entities = None
+        if entity_type in ['vertices', 'vertex']:
+            entities = mesh.vertices
+            name = "Vertex"
+        elif entity_type in ['edges', 'edge']:
+            entities = mesh.edges
+            name = "Edge"
+        elif entity_type in ['facets', 'facet', 'faces', 'face']:
+            entities = mesh.facets
+            name = "Facet"
+        elif entity_type in ['bodies', 'body']:
+            entities = mesh.bodies
+            name = "Body"
+        else:
+            print(f"Unknown entity type: {entity_type}")
+            return mesh
+
+        # Parse filter/selection
+        # Mode 1: print entity ID (e.g., print vertex 5)
+        if len(tokens) == 3 and tokens[2].isdigit():
+            idx = int(tokens[2])
+            if idx in entities:
+                print(f"{name} {idx}: {entities[idx]}")
+                if hasattr(entities[idx], "options"):
+                    print(f"  Options: {entities[idx].options}")
+                if hasattr(entities[idx], "position"):
+                    print(f"  Position: {entities[idx].position}")
+            else:
+                print(f"{name} {idx} not found.")
+            return mesh
+
+        # Mode 2: print all or filter
+        # e.g. print edges
+        # e.g. print edges len > 0.5
+
+        targets = entities.items()
+
+        if len(tokens) >= 5:
+            # Simple filter: property operator value
+            prop = tokens[2]
+            op = tokens[3]
+            val_str = tokens[4]
+
+            try:
+                val = float(val_str)
+            except ValueError:
+                val = val_str
+
+            def get_val(obj, key):
+                # Try attributes then options
+                if hasattr(obj, key):
+                    return getattr(obj, key)
+                if hasattr(obj, "options") and obj.options and key in obj.options:
+                    return obj.options[key]
+                # Derived properties
+                if key == "len" and hasattr(obj, "compute_length"):
+                    return obj.compute_length(mesh)
+                if key == "area" and hasattr(obj, "compute_area"):
+                    return obj.compute_area(mesh)
+                return None
+
+            filtered = []
+            for k, obj in targets:
+                v = get_val(obj, prop)
+                if v is None: continue
+
+                match = False
+                if op == '>': match = v > val
+                elif op == '<': match = v < val
+                elif op == '>=': match = v >= val
+                elif op == '<=': match = v <= val
+                elif op == '==' or op == '=': match = v == val
+                elif op == '!=': match = v != val
+
+                if match:
+                    filtered.append((k, obj))
+            targets = filtered
+            print(f"Found {len(targets)} {entity_type} matching filter.")
+
+        # Print results (limit to 20 unless 'all' is specified?)
+        # For now just print IDs and basic info
+        print(f"List of {entity_type} ({len(targets)}):")
+        for k, obj in list(targets)[:20]:
+            info = ""
+            if entity_type.startswith("edge"):
+                info = f"len={obj.compute_length(mesh):.4f}"
+            elif entity_type.startswith("facet"):
+                info = f"area={obj.compute_area(mesh):.4f}"
+            print(f"  [{k}]: {info} {obj.options if hasattr(obj, 'options') else ''}")
+        if len(targets) > 20:
+            print("  ... (showing first 20)")
+
+    elif cmd == 'set':
+        # set [global_param] [value]
+        # set [entity] [id] [prop] [value]
+        if len(tokens) < 3:
+            print("Usage: set [param] [value] OR set [entity] [id] [prop] [value]")
+            return mesh
+
+        # Check if first token is an entity type
+        first = tokens[1].lower()
+        if first in ['vertex', 'edge', 'facet', 'body', 'vertices', 'edges', 'facets', 'bodies']:
+            # Entity set
+            if len(tokens) < 5:
+                print("Usage: set [entity] [id] [prop] [value]")
+                return mesh
+
+            entity_type = first
+            try:
+                idx = int(tokens[2])
+            except ValueError:
+                print("ID must be an integer.")
+                return mesh
+
+            prop = tokens[3]
+            val_str = tokens[4]
+
+            # Helper to interpret value
+            if val_str.lower() == 'true': val = True
+            elif val_str.lower() == 'false': val = False
+            else:
+                try:
+                    val = float(val_str)
+                except ValueError:
+                    val = val_str
+
+            # Find entity
+            obj = None
+            if entity_type.startswith('vert'):
+                obj = mesh.vertices.get(idx)
+            elif entity_type.startswith('edge'):
+                obj = mesh.edges.get(idx)
+            elif entity_type.startswith('facet') or entity_type.startswith('face'):
+                obj = mesh.facets.get(idx)
+            elif entity_type.startswith('body'):
+                obj = mesh.bodies.get(idx)
+
+            if not obj:
+                print(f"Entity {idx} not found.")
+                return mesh
+
+            # Set property
+            # Special handling for 'fixed' which is an attribute
+            if prop == 'fixed':
+                obj.fixed = bool(val)
+                print(f"Set {entity_type} {idx} fixed={obj.fixed}")
+            else:
+                # Set in options
+                if not obj.options: obj.options = {}
+                obj.options[prop] = val
+                print(f"Set {entity_type} {idx} options['{prop}'] = {val}")
+
+        else:
+            # Global parameter set
+            param = tokens[1]
+            val_str = tokens[2]
+            try:
+                val = float(val_str)
+            except ValueError:
+                val = val_str
+
+            mesh.global_parameters.set(param, val)
+            print(f"Global parameter '{param}' set to {val}")
+
+    return mesh
+
 def interactive_loop(mesh, minimizer, stepper):
     """Run an interactive command loop."""
 
@@ -253,6 +462,13 @@ def interactive_loop(mesh, minimizer, stepper):
             continue
         if line.lower() in {'quit', 'exit', 'q'}:
             break
+
+        # Check for complex commands
+        tokens = line.split()
+        if tokens and tokens[0].lower() in ['print', 'set']:
+            mesh = process_complex_command(tokens, mesh)
+            continue
+
         commands = parse_instructions(''.join(line.split()))
         for cmd in commands:
             mesh, stepper = execute_command(cmd, mesh, minimizer, stepper)

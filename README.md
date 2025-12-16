@@ -6,24 +6,32 @@ Membrane Solver is a simulation platform inspired by Surface Evolver, designed t
 
 `main.py` starts in interactive mode by default, presenting a simple command
 prompt after any initial instructions execute. Use `--non-interactive` to skip
-the prompt. Commands such as `g5` perform five minimization steps while `r`
-refines the mesh (`rN` repeats refinement N times). Use `p` (or the new alias
-`i`) to print physical properties at any time. Type `quit` or `exit` to stop
-the loop and save the final
-mesh.
+the prompt.
+
+Commands:
+- `g5`: Perform five minimization steps.
+- `r` / `rN`: Refine the mesh (N times).
+- `u`: Equiangulate the mesh.
+- `V`: Vertex average.
+- `p` / `i`: Print physical properties.
+- `print [entity] [filter]`: Query geometry (e.g., `print vertex 0`, `print edges len > 0.5`).
+- `set [param/entity] [value]`: Set properties (e.g., `set surface_tension 1.5`, `set vertex 0 fixed true`).
+- `lv` / `live_vis`: Toggle live 3D visualization during minimization.
+- `quit` / `exit`: Stop the loop and save the final mesh.
 
 If no input file is specified on the command line you will be prompted for the
 path. File names may be given with or without the `.json` suffix.
 
-## Geometry loading
+## Geometry loading and Input Formats
 
-`parse_geometry` automatically triangulates any facet with more than three edges
+`parse_geometry` supports both JSON (`.json`) and YAML (`.yaml`, `.yml`) formats.
+YAML is recommended for adding comments and using anchors/aliases.
+
+The loader automatically triangulates any facet with more than three edges
 using `refine_polygonal_facets`. Triangular facets remain unchanged. The
 returned mesh is therefore ready for optimization without further refinement.
 
-For edge‑only or “wire‑frame” geometries, the `faces` section in the JSON is
-optional: meshes with just `vertices` and `edges` can be loaded and visualized
-without defining facets.
+For edge‑only or “wire‑frame” geometries, the `faces` section is optional.
 
 ## Visualization
 
@@ -32,6 +40,8 @@ Use the visualization module to inspect geometries:
 ```bash
 python -m visualization.cli meshes/cube.json
 ```
+
+**Live Visualization**: Inside the interactive console, type `lv` (or `live_vis`) to open a real-time plotting window that updates with every minimization step.
 
 The CLI accepts several flags:
 

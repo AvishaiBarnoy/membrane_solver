@@ -1,7 +1,7 @@
 # runtime/minimizer.py
 
 import logging
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import numpy as np
 
@@ -352,7 +352,7 @@ STEP SIZE:\t {self.step_size}
             context="mesh_operation",
         )
 
-    def minimize(self, n_steps: int = 1):
+    def minimize(self, n_steps: int = 1, callback: Optional[Callable[["Mesh", int], None]] = None):
         """Run the optimization loop for ``n_steps`` iterations."""
         zero_step_counter = 0
         step_success = True
@@ -370,6 +370,9 @@ STEP SIZE:\t {self.step_size}
             }
 
         for i in range(n_steps):
+            if callback:
+                callback(self.mesh, i)
+
             E, grad = self.compute_energy_and_gradient()
             self.project_constraints(grad)
 

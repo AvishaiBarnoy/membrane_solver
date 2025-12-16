@@ -71,3 +71,19 @@ intended for development and planning; users should consult `README.md` and
     - User defines target refinement or mesh quality criteria; the program
       iterates between minimization, refinement, equiangulation and averaging
       to reach a prescribed resolution and energy tolerance.
+
+## 5. Engineering & Infrastructure
+
+15. CLI & Usability
+    - [x] Query/Adjustment commands (`print`, `set`).
+    - [x] Live Visualization (`lv`) via Matplotlib interactive mode.
+    - [ ] Add `history` command to replay interactive session.
+
+16. Performance & Architecture
+    - [ ] **Hybrid SoA Architecture**: Implement "Scatter-Gather" pattern where optimization runs on dense arrays (Structure of Arrays) while topology remains object-oriented.
+    - [ ] **Compiled Extensions**: Port the hot-loop `compute_energy_and_gradient` to Fortran (f2py) or Rust (PyO3) for ~100x speedup.
+    - [ ] **Parallelism**: Explore OpenMP for energy summation.
+
+17. Code Quality
+    - [ ] Refactor `fixed` constraints to be core entity properties (removing them from the constraint module list).
+    - [ ] Add regression testing for performance (CI integration with thresholds).
