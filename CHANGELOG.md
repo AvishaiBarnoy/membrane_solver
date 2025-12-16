@@ -4,6 +4,10 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ## [Unreleased]
 ### Added
+- **CLI Enhancements**:
+  - `print [entity] [filter]`: Query geometry (e.g., `print edges len > 0.5`).
+  - `set [target] [value]`: Modify global parameters or entity properties (e.g., `set vertex 0 fixed true`).
+  - `live_vis` / `lv`: Real-time 3D visualization during minimization steps.
 - **Spherical Cap Benchmark**: Added `benchmarks/benchmark_cap.py` to verify spherical cap geometry (apex height, radius, RMSE) against theoretical values. This script doubles as a standalone analysis tool.
 - **Catenoid Benchmark**: Added `benchmarks/benchmark_catenoid.py` and `meshes/catenoid_good_min.json` to validate surface tension minimization between two fixed rings.
 - **YAML Support**: `load_data` now supports `.yaml` and `.yml` files for mesh definitions, enabling comments and anchors/aliases.
@@ -18,6 +22,8 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Optimized memory allocation in hot loops (using `np.empty` instead of list comprehensions).
   - Total simulation runtime reduced by ~64% (from ~15.5s to ~5.6s on `cube_good_min_routine`).
 - New benchmark suite: `benchmarks/suite.py` runs and compares multiple scenarios (`cube_good`, `square_to_circle`, `catenoid`, `spherical_cap`) and tracks performance history.
+- **CI**: Added benchmark suite execution to the CI workflow.
+- **Cleanup**: Removed broken `modules/gaussan_curvature.py` and obsolete methods in `energy_manager.py`.
 - Automatic target-area detection on bodies/facets and regression tests (square with area constraint, tetra with volume constraint).
 - Benchmarks now run in read-only sandboxes (no temp files); README/manual updated with benchmark usage.
 - Integration tests covering the cube penalty scenario (energy decrease, volume preservation, refine+equiangulate validity) and parsing tests for the interactive `rN` command.

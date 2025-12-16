@@ -62,3 +62,10 @@ jobs:
           PYTHONPATH: .
         run: |
           pytest -q
+
+      - name: Run benchmarks
+        continue-on-error: true
+        env:
+          PYTHONPATH: .
+        run: |
+          python benchmarks/suite.py

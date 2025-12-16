@@ -165,7 +165,6 @@ def benchmark(runs: int = RUNS) -> float:
     times = []
     OUTPUT_JSON.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"Running benchmark on {BASE_JSON} -> {OUTPUT_JSON}...")
     for i in range(runs):
         elapsed = _run_simulation(BASE_JSON, OUTPUT_JSON)
         times.append(elapsed)

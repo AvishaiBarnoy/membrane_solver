@@ -44,8 +44,8 @@
     "volume_constraint_mode": "lagrange"
   },
   "instructions": [
-    "r2", "g20", "u", "V2", "g50",
-    "r", "g20", "u", "V2", "g50",
-    "r", "g20", "u", "V2", "g50"
+    "r2", "g15", "u", "V2", "g20",
+    "r", "g15", "u", "V2", "g30",
+    "r", "g15", "u", "V2", "g10"
   ]
 }
