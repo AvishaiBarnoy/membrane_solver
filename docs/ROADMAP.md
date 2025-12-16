@@ -21,9 +21,9 @@ intended for development and planning; users should consult `README.md` and
    - [x] Two circles at fixed distance; tests surface tension and surface constraint.
    - [x] Validated in `benchmarks/benchmark_catenoid.py` using `pin_to_circle`.
 
-4. Pinned hemisphere under tension
-   - Yield spherical caps using boundary constraints and
-     mean‑curvature/pressure balance.
+4. Pinned spherical cap under tension
+   - [x] Yield spherical caps using boundary constraints and pressure balance.
+   - [x] Validated in `benchmarks/benchmark_cap.py`.
 
 ## 2. Curvature‑driven phenomena
 

@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-BASE_JSON = Path(__file__).resolve().parent.parent / "meshes" / "cube_good_min.json"
+BASE_JSON = Path(__file__).resolve().parent.parent / "meshes" / "good_min_cube.json"
 RUNS = 3
 
 

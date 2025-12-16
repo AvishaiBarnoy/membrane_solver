@@ -27,7 +27,7 @@ def enforce_constraint(
       - Otherwise, if ``global_params.volume_constraint_mode == "lagrange"``,
         we still project here because downstream callers expect a hard volume
         correction (e.g., after refinement/equiangulation/averaging).
-      - In legacy \"projection\" mode (or when ``force_projection`` is True),
+      - In legacy "projection" mode (or when ``force_projection`` is True),
         bodies are displaced along the volume gradient so that their volume
         matches the target exactly, using a Lagrange‑multiplier step.
     """

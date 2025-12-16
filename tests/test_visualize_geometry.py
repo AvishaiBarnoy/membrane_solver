@@ -43,7 +43,7 @@ def test_plot_geometry_draws_standalone_edges_by_default():
     fig = plt.figure()
     ax = fig.add_subplot(111, projection="3d")
 
-    plot_geometry(mesh, ax=ax, scatter=False, show=False)
+    plot_geometry(mesh, ax=ax, scatter=False, show=False, draw_edges=True)
 
     assert any(isinstance(coll, Line3DCollection) for coll in ax.collections)
 

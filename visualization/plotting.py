@@ -2,6 +2,7 @@ import logging
 from typing import Any, Dict, Optional
 
 import matplotlib.pyplot as plt
+import numpy as np
 from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
 
 from geometry.entities import Mesh
@@ -16,7 +17,7 @@ def plot_geometry(
     ax=None,
     transparent: bool = False,
     draw_facets: bool = True,
-    draw_edges: bool = True,
+    draw_edges: bool = False,
     facet_color: Any = None,
     edge_color: str = "k",
     facet_colors: Optional[Dict[int, Any]] = None,
@@ -106,7 +107,7 @@ def plot_geometry(
             face_colors.append(color)
 
         if triangles:
-            alpha = 0.7 if transparent else 1.0
+            alpha = 0.4 if transparent else 1.0
             tri_collection = Poly3DCollection(
                 triangles,
                 alpha=alpha,
@@ -147,9 +148,20 @@ def plot_geometry(
     ax.set_ylabel("Y")
     ax.set_zlabel("Z")
     ax.set_title("Refined Geometry")
-    ax.auto_scale_xyz(X, Y, Z)
+
+    # Set equal aspect ratio
+    max_range = np.array([X, Y, Z]).max() - np.array([X, Y, Z]).min()
+    mid_x = (np.array(X).max() + np.array(X).min()) * 0.5
+    mid_y = (np.array(Y).max() + np.array(Y).min()) * 0.5
+    mid_z = (np.array(Z).max() + np.array(Z).min()) * 0.5
+
+    ax.set_xlim(mid_x - max_range / 2, mid_x + max_range / 2)
+    ax.set_ylim(mid_y - max_range / 2, mid_y + max_range / 2)
+    ax.set_zlim(mid_z - max_range / 2, mid_z + max_range / 2)
+
     if no_axes:
         ax.set_axis_off()
+
     plt.tight_layout()
 
     if show:

@@ -509,8 +509,8 @@ class Mesh:
         for facet_idx in self.facets.keys():
             for signed_index in self.facets[facet_idx].edge_indices:
                 edge_index = abs(signed_index)
-                if not (1 <= edge_index <= len(self.edges)):
-                    raise ValueError(f"Facet {facet_idx} uses invalid edge index {signed_index}.")
+                if edge_index not in self.edges:
+                    raise ValueError(f"Facet {facet_idx} uses invalid edge index {signed_index} (not found in edge list).")
         return True
 
     def build_connectivity_maps(self):

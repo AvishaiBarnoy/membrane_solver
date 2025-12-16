@@ -14,6 +14,7 @@ from pathlib import Path
 # Add local directory to path to import benchmark modules
 sys.path.append(os.path.dirname(__file__))
 
+import benchmark_cap
 import benchmark_catenoid
 import benchmark_cube_good
 import benchmark_square_to_circle
@@ -24,6 +25,7 @@ BENCHMARKS = {
     "cube_good": benchmark_cube_good.benchmark,
     "square_to_circle": benchmark_square_to_circle.benchmark,
     "catenoid": benchmark_catenoid.benchmark,
+    "spherical_cap": benchmark_cap.benchmark,
 }
 
 def load_results():

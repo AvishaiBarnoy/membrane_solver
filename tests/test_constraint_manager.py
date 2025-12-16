@@ -110,7 +110,6 @@ def test_constraints_loaded_from_file(monkeypatch, tmp_path):
 
     # Initialize the ConstraintModuleManager
     constraint_manager = ConstraintModuleManager(mesh.constraint_modules)
-    print(mesh.constraint_modules)
 
     # Check that the correct constraint modules were loaded
     assert "pin_to_plane" in constraint_manager.modules
@@ -122,5 +121,9 @@ def test_constraints_loaded_from_file(monkeypatch, tmp_path):
     assert "constraints" in mesh.vertices[1].options
     assert mesh.vertices[1].options["constraints"] == ["pin_to_plane"]
 
-    assert "constraints" in mesh.facets[0].options
-    assert mesh.facets[0].options["constraints"] == ["fix_facet_area"]
+    # Facet 0 is a quad (4 edges), so parse_geometry automatically refines it
+    # into triangles. The original Facet 0 is replaced by child facets (starting at index 1).
+    # We check that the constraints are inherited by the children.
+    first_child_id = next(iter(mesh.facets))
+    assert "constraints" in mesh.facets[first_child_id].options
+    assert mesh.facets[first_child_id].options["constraints"] == ["fix_facet_area"]

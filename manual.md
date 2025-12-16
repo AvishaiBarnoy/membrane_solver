@@ -507,21 +507,21 @@ which roughly corresponds to:
 You can inspect the final geometry with:
 
 ```bash
-python visualize_geometry.py cube_sphere_out.json
+python -m visualization.cli cube_sphere_out.json
 ```
 
 For more control over rendering, the visualization CLI supports:
 
 ```bash
 # Solid, facet-only view
-python visualize_geometry.py cube_sphere_out.json --no-edges
+python -m visualization.cli cube_sphere_out.json --no-edges
 
 # Semi-transparent facets with axes removed, saved to PNG
-python visualize_geometry.py cube_sphere_out.json --transparent --no-axes \
-                                                  --save outputs/cube_sphere.png
+python -m visualization.cli cube_sphere_out.json --transparent --no-axes \
+                                                 --save outputs/cube_sphere.png
 
 # Line-only meshes (edges only, no facets)
-python visualize_geometry.py meshes/simple_line.json --no-facets --scatter
+python -m visualization.cli meshes/simple_line.json --no-facets --scatter
 ```
 
 Internally, this uses the shared helper

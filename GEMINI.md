@@ -8,6 +8,7 @@ organized under `geometry/`, `modules/`, `runtime/` and other directories.
 - Employ dataclasses for domain objects and include type hints where practical.
 - Document public functions with standard docstrings.
 - Prioritize efficient algorithms and data structures.
+- Debugging should be through logger.
 
 ## Testing
 - Install dependencies with `pip install -r requirements.txt`.

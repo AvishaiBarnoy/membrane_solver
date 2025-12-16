@@ -68,6 +68,8 @@ def refine_polygonal_facets(mesh):
     new_mesh.vertices = new_vertices.copy()
     new_facets = {}
     next_edge_idx = max(e for e in new_edges.keys()) + 1 if new_edges else 0
+    # Safe counter for new facet IDs to avoid collisions with existing IDs
+    next_facet_idx = max(mesh.facets.keys()) + 1 if mesh.facets else 0
 
     new_mesh.edges = new_edges.copy()
 
@@ -162,7 +164,8 @@ def refine_polygonal_facets(mesh):
             # build the new facet's edge‐list **in the correct orientation**:
             child_edges = [boundary_edge.index, spoke_b.index, -spoke_a.index]
 
-            child_idx = len(new_facets)
+            child_idx = next_facet_idx
+            next_facet_idx += 1
 
             cycled_edges = orient_edges_cycle(child_edges, new_mesh)
 
