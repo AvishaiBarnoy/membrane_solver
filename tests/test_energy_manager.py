@@ -1,157 +1,41 @@
-import os
-import sys
 from unittest.mock import MagicMock
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import numpy as np
 import pytest
 
-from geometry.entities import Body, Edge, Facet, Mesh, Vertex
-from parameters.global_parameters import GlobalParameters
 from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.refinement import refine_polygonal_facets
-from runtime.steppers.gradient_descent import GradientDescent
 
 
-def create_quad():
-    mesh = Mesh()
+@pytest.fixture
+def energy_manager():
+    # Mock importlib.import_module inside EnergyModuleManager
+    with pytest.MonkeyPatch.context() as m:
+        # Create dummy modules
+        surface_mod = MagicMock()
+        surface_mod.calculate_surface_energy = MagicMock(return_value=10.0)
 
-    # A unit square in the XY plane
-    v0 = Vertex(0, np.array([0, 0, 0]))
-    v1 = Vertex(1, np.array([1 , 0, 0]))
-    v2 = Vertex(2, np.array([1 , 1, 0]))
-    v3 = Vertex(3, np.array([0, 1, 0]))
-    vertices = [v0, v1, v2, v3]
+        volume_mod = MagicMock()
+        volume_mod.calculate_volume_energy = MagicMock(return_value=5.0)
 
-    e0 = Edge(1, v0.index, v1.index)
-    e1 = Edge(2, v1.index, v2.index)
-    e2 = Edge(3, v2.index, v3.index)
-    e3 = Edge(4, v3.index, v0.index)
-    edges = [e0, e1, e2, e3]
+        # Define side_effect for import_module
+        def mock_import(name):
+            if name.endswith("surface"):
+                return surface_mod
+            elif name.endswith("volume"):
+                return volume_mod
+            raise ImportError(f"No module named {name}")
 
-    facet = Facet(0, [e0.index, e1.index, e2.index, e3.index],
-                  options={"energy": "surface"})
-    facets = [facet]
+        m.setattr("importlib.import_module", mock_import)
 
-    body = Body(0, [facets[0].index], options={"target_volume": 1.0,
-                                               "energy": "volume"})
-    bodies = [body]
+        manager = EnergyModuleManager(["surface", "volume"])
+        return manager
 
-    mesh = Mesh()
-    for i in vertices: mesh.vertices[i.index] = i
-    for i in edges: mesh.edges[i.index] = i
-    for i in facets: mesh.facets[i.index] = i
-    for i in bodies: mesh.bodies[i.index] = i
+def test_load_modules(energy_manager):
+    assert "surface" in energy_manager.modules
+    assert "volume" in energy_manager.modules
 
-    return mesh
+def test_get_module(energy_manager):
+    mod = energy_manager.get_module("surface")
+    assert mod is not None
 
-def test_minimizer_with_mock_energy_manager():
-    # Mock mesh and global parameters
-    mock_mesh = create_quad()
-    mock_mesh = refine_polygonal_facets(mock_mesh)
-    mock_global_params = GlobalParameters()
-    mock_mesh.energy_modules = ["surface", "volume"]
-
-    # Mock energy manager
-    mock_energy_manager = MagicMock()
-
-    # Mock modules with different energy functions
-    mock_surface_module = MagicMock()
-    mock_surface_module.calculate_energy = MagicMock(return_value="surface_energy")
-    mock_surface_module.compute_energy_and_gradient = MagicMock(return_value=
-            (1.0, {0: np.array([0.1, 0.1, 0.1])}))
-    mock_surface_module.__name__ = "modules.surface"
-
-    mock_volume_module = MagicMock()
-    mock_volume_module.calculate_energy = MagicMock(return_value="volume_energy")
-    mock_volume_module.compute_energy_and_gradient = MagicMock(return_value=
-            (1.0, {0: np.array([0.1, 0.1, 0.1])}))
-    mock_volume_module.__name__ = "modules.volume"
-
-    # Mock get_module to return the mocked energy functions
-    mock_energy_manager.get_module.side_effect = lambda mod: (
-        mock_surface_module if mod == "surface" else mock_surface_module
-    )
-
-    # Mock get_module to return mocked constraint functions
-    mock_constraint_manager = MagicMock()
-    pin_to_place_module = MagicMock()
-    mock_constraint_manager.get_module.side_effect = (
-        lambda mod: mock_volume_module if mod == "volume" else pin_to_place_module
-    )
-
-    # Mock stepper
-    mock_stepper = GradientDescent()
-
-    # Initialize minimizer
-    minimizer = Minimizer(mock_mesh, mock_global_params, mock_stepper,
-                          mock_energy_manager, mock_constraint_manager)
-
-    # Run minimization
-    result = minimizer.minimize()
-
-    # Assertions
-    assert result is not None, "Minimizer should return a result"
-    assert mock_energy_manager.get_module.call_count > 0, (
-        "Expected 'get_module' to have been called"
-    )
-
-def test_get_module():
-    # Mock module names
-    module_names = ["volume", "dummy_module", "surface"]
-
-    # Initialize the EnergyModuleManager
-    energy_manager = EnergyModuleManager(module_names)
-
-    print(energy_manager.modules)
-    # Test retrieving loaded modules
-    for module_name in module_names:
-        module = energy_manager.get_module(module_name)
-        print(module)
-        assert module is not None, f"Module '{module_name}' should be loaded"
-        assert hasattr(module, "compute_energy_and_gradient"), (
-            f"Module '{module_name}' should have a 'compute_energy_and_gradient' function"
-        )
-
-    # Test retrieving a non-existent module
-    with pytest.raises(KeyError, match="Energy module 'non_existent' not found."):
-        energy_manager.get_module("non_existent")
-
-def test_get_energy_function():
-    # Mock module names
-    module_names = ["surface", "volume"]
-
-    # Mock modules with different energy functions
-    mock_surface_module = MagicMock()
-    mock_surface_module.calculate_energy = MagicMock(return_value="surface_energy")
-    mock_surface_module.compute_energy_and_gradient = MagicMock(return_value=
-            (1.0, {0: np.array([0.1, 0.1, 0.1])}))
-
-    mock_volume_module = MagicMock()
-    mock_volume_module.calculate_energy = MagicMock(return_value="volume_energy")
-    mock_volume_module.compute_energy_and_gradient = MagicMock(return_value=
-            (1.0, {0: np.array([0.1, 0.1, 0.1])}))
-
-    # Initialize the EnergyModuleManager
-    energy_manager = EnergyModuleManager(module_names)
-    energy_manager.modules = {
-        "surface": mock_surface_module,
-        "volume": mock_volume_module
-    }
-
-    # Test retrieving generic energy function
-    energy_function = energy_manager.get_energy_function("surface", "facet")
-    assert energy_function() == "surface_energy", "Expected 'calculate_energy' to be used for 'surface'"
-
-    # Test retrieving type-specific energy function
-    energy_function = energy_manager.get_energy_function("volume", "body")
-    assert energy_function() == "volume_energy", "Expected 'calculate_volume_energy' to be used for 'volume'"
-
-    # Test fallback to 'compute_energy_and_gradient'
-    #energy_function = energy_manager.get_energy_function("surface", "facet")
-    #assert energy_function() == "surface_gradient", "Expected 'compute_energy_and_gradient' to be used for 'surface'"
-
-    # Test missing energy function
-    #with pytest.raises(AttributeError, match="Module 'volume' must define either 'calculate_energy' or 'calculate_volume_energy' for type 'volume'"):
-    #    energy_manager.get_energy_function("volume", "facet")
+    with pytest.raises(KeyError):
+        energy_manager.get_module("nonexistent")

@@ -14,7 +14,7 @@ logger = setup_logging('membrane_solver.log')
 def load_data(filename):
     """Load geometry from a JSON file.
 
-    Expected JSON format:
+    Expected JSON or YAML format:
     {
         "vertices": [[x, y, z], ...],
         "faces": [
@@ -101,9 +101,12 @@ def parse_geometry(data: dict) -> Mesh:
             return merged
         return raw_options
 
-    # TODO: add option to read both lowercase and uppercase title Vertices/vertices
     # Vertices
-    for i, entry in enumerate(data["vertices"]):
+    vertices = data.get("vertices") or data.get("Vertices")
+    if vertices is None:
+        raise ValueError("Geometry file must contain 'vertices'")
+
+    for i, entry in enumerate(vertices):
         *position, raw_opts = entry if isinstance(entry[-1], dict) else (*entry, {})
         options = resolve_options(raw_opts)
         mesh.vertices[i] = Vertex(index=i, position=np.asarray(position,
@@ -145,12 +148,13 @@ def parse_geometry(data: dict) -> Mesh:
             mesh.vertices[i].fixed = True # Ensure fixed flag is set if from top-level option
 
     # Edges
-    if "edges" not in data:
+    edges = data.get("edges") or data.get("Edges")
+    if edges is None:
         err_msg = "Input geometry is missing required 'edges' section."
         logger.error(err_msg)
         raise KeyError(err_msg)
 
-    for i, entry in enumerate(data["edges"]):
+    for i, entry in enumerate(edges):
         tail_index, head_index, *opts = entry
         raw_opts = opts[0] if opts else {}
         options = resolve_options(raw_opts)
@@ -190,7 +194,7 @@ def parse_geometry(data: dict) -> Mesh:
             mesh.edges[i+1].fixed = True # Ensure fixed flag is set if from top-level option
 
     # Facets (optional for line‑only geometries)
-    faces_section = data.get("faces", [])
+    faces_section = data.get("faces") or data.get("Faces") or data.get("Facets") or []
     for i, entry in enumerate(faces_section):
         *raw_edges, raw_opts = entry if isinstance(entry[-1], dict) else (*entry, {})
         options = resolve_options(raw_opts)
@@ -258,8 +262,8 @@ def parse_geometry(data: dict) -> Mesh:
         energy_module_names.add("volume")
 
     # Bodies
-    if "bodies" in data:
-        bodies_section = data["bodies"]
+    bodies_section = data.get("bodies") or data.get("Bodies")
+    if bodies_section:
         face_groups = bodies_section["faces"]
         volumes = bodies_section.get("target_volume", [None] * len(face_groups))
         areas = bodies_section.get("target_area", [None] * len(face_groups))

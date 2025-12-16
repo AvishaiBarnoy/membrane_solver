@@ -27,42 +27,47 @@ intended for development and planning; users should consult `README.md` and
 
 ## 2. Curvature‑driven phenomena
 
-5. Pure Gaussian curvature
+5. Mean curvature
+    - [] a sheet that changes into a minimum shape bent sheet
+    - [] a cube turns into a sphere with 0 surface tension and no volume
+
+6. Pure Gaussian curvature
    - Check invariance under topology‑preserving deformations: no net change in
      energy for a closed surface with fixed topology.
 
-6. Tilt source decay
+7. Tilt source decay
    - Introduce localized tilt sources that decay away from the source region;
      should form a “dimple” or invagination.
 
-7. Dimpled sphere with one embedded caveolin disk
+8. Dimpled sphere with one embedded caveolin disk
    - First 3D generalization of the 1D caveolin model (see
      `docs/caveolin_generate_curvature.pdf`).
 
-8. Box that minimizes into a sphere with a dent
+9. Box that minimizes into a sphere with a dent
    - Use fixed / `no_refine` regions to pin parts of the surface while the
      rest relaxes.
 
-9. Plane with an inner disk and outer perimeter
+10. Plane with an inner disk and outer perimeter
    - Test mixed boundary conditions and perimeter constraints.
 
 ## 3. Mean curvature examples
 
-10. After implementing mean‑curvature energy
-    - Membrane between two fixed parallel circles forming a catenoid.
+11. After implementing mean‑curvature energy
+    - Membrane between two fixed parallel circles forming a catenoid mean
+        curvature should zero.
     - 10.1 Compare against Surface Evolver `cat.fe`, including how it treats
           fixed surface area of the soap film.
 
-11. Flat sheet that folds to its spontaneous curvature
+12. Flat sheet that folds to its spontaneous curvature
     - Benchmark for bending energy and spontaneous curvature terms.
 
 ## 4. Caveolin and complex inclusions
 
-12. Single caveolin with outer membrane decay
+13. Single caveolin with outer membrane decay
     - Full 3D generalization of the caveolin model with a local curvature /
       tilt source and far‑field membrane.
 
-13. Automatic minimization workflow
+14. Automatic minimization workflow
     - User defines target refinement or mesh quality criteria; the program
       iterates between minimization, refinement, equiangulation and averaging
       to reach a prescribed resolution and energy tolerance.
