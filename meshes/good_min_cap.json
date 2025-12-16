@@ -1,9 +1,16 @@
 {
   "definitions": {
-    "fixed_node": {"fixed": true}
+    "fixed_node": {"fixed": true},
+    "bottom_ring":{
+      "fixed": true,
+      "constraints": ["pin_to_circle"],
+      "pin_to_circle_normal": [0, 0, 1],
+      "pin_to_circle_point": [0, 0, 0],
+      "pin_to_circle_radius": 1.5088795
+    }
   },
   "vertices": [
-    [0.0, 0.0, 0.5, {}],
+    [0.0, 0.0, 0.0, {}],
     [1.0, 0.0, 0.0, {"preset": "fixed_node"}],
     [0.5, 0.86602540378, 0.0, {"preset": "fixed_node"}],
     [-0.5, 0.86602540378, 0.0, {"preset": "fixed_node"}],
@@ -13,12 +20,12 @@
   ],
   "edges": [
     [0, 1], [0, 2], [0, 3], [0, 4], [0, 5], [0, 6],
-    [1, 2, {"preset": "fixed_node"}],
-    [2, 3, {"preset": "fixed_node"}],
-    [3, 4, {"preset": "fixed_node"}],
-    [4, 5, {"preset": "fixed_node"}],
-    [5, 6, {"preset": "fixed_node"}],
-    [6, 1, {"preset": "fixed_node"}]
+    [1, 2, {"preset": "bottom_ring"}],
+    [2, 3, {"preset": "bottom_ring"}],
+    [3, 4, {"preset": "bottom_ring"}],
+    [4, 5, {"preset": "bottom_ring"}],
+    [5, 6, {"preset": "bottom_ring"}],
+    [6, 1, {"preset": "bottom_ring"}]
   ],
   "faces": [
     [0, 6, "r1"],
@@ -37,9 +44,8 @@
     "volume_constraint_mode": "lagrange"
   },
   "instructions": [
-    "r", "g20", "u", "V", "g50",
-    "r", "g20", "u", "V", "g50",
-    "r", "g20", "u", "V", "g50",
-    "g100"
+    "r2", "g20", "u", "V2", "g50",
+    "r", "g20", "u", "V2", "g50",
+    "r", "g20", "u", "V2", "g50"
   ]
 }

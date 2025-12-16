@@ -27,29 +27,28 @@ without defining facets.
 
 ## Visualization
 
-Use the visualization script to inspect geometries:
+Use the visualization module to inspect geometries:
 
 ```bash
-python visualize_geometry.py meshes/cube.json
+python -m visualization.cli meshes/cube.json
 ```
 
-The script now delegates to a small CLI under `visualization/cli.py` and
-accepts several flags:
+The CLI accepts several flags:
 
-- `python visualize_geometry.py meshes/cube.json --transparent`
-  Draw facets semi‑transparent.
+- `python -m visualization.cli meshes/cube.json --transparent`
+  Draw facets semi‑transparent (now with corrected alpha rendering).
 
-- `python visualize_geometry.py meshes/cube.json --no-edges`
+- `python -m visualization.cli meshes/cube.json --no-edges`
   Hide edges and show only filled facets (useful for solid views).
 
-- `python visualize_geometry.py meshes/simple_line.json --no-facets --scatter`
+- `python -m visualization.cli meshes/simple_line.json --no-facets --scatter`
   Visualize line‑only meshes: edges only, plus vertex scatter points.
 
-- `python visualize_geometry.py meshes/cube.json --no-axes --save outputs/cube.png`
+- `python -m visualization.cli meshes/cube.json --no-axes --save outputs/cube.png`
   Remove axes and save the figure to an image file instead of only showing it.
 
 All interactive visualizations are based on the shared `visualization.plotting.plot_geometry`
-helper, which is also used in the test suite.
+helper, which ensures equal aspect ratios to prevent distortion.
 
 ## Constraint modules
 
@@ -113,7 +112,8 @@ near‑term goals include:
 
 ## Performance benchmarks
 
-- `python benchmarks/suite.py` is the main entry point for performance testing. It runs a set of standard scenarios (including `cube_good` and `square_to_circle`), tracks execution time history in `benchmarks/results.json`, and highlights regressions or improvements.
+- `python benchmarks/suite.py` is the main entry point for performance testing. It runs a set of standard scenarios (`cube_good`, `square_to_circle`, `catenoid`, `spherical_cap`), tracks execution time history in `benchmarks/results.json`, and highlights regressions or improvements.
 - `python benchmarks/benchmark_cube_good.py` runs the full `cube_good_min_routine` recipe (minimization, refinement, equiangulation, vertex averaging, etc.) and reports the average wall-clock time.
 - `python benchmarks/benchmark_square_to_circle.py` runs the `square_to_circle` scenario (square sheet relaxing to a circle with line tension), serving as a stress test for mesh maintenance operations.
 - `python benchmarks/benchmark_catenoid.py` runs the `catenoid` scenario (surface tension minimization between two fixed rings), validating `pin_to_circle` constraints and surface minimization.
+- `python benchmarks/benchmark_cap.py` validates the spherical cap scenario, checking apex height, radius, and spherical fit quality against theoretical predictions. It can also be used as a standalone analysis tool: `python benchmarks/benchmark_cap.py outputs/result.json`.

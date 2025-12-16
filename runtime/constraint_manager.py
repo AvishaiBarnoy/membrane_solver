@@ -82,11 +82,18 @@ class ConstraintModuleManager:
                         "hard volume is handled via gradient projection."
                     )
                     continue
+
+                # Filter force_projection from kwargs if it's there to avoid duplication
+                call_kwargs = kwargs.copy()
+                if "force_projection" in call_kwargs:
+                    del call_kwargs["force_projection"]
+
                 if name == "volume":
-                    module.enforce_constraint(mesh, force_projection=True, **kwargs)
+                    module.enforce_constraint(mesh, force_projection=True, **call_kwargs)
                 else:
                     module.enforce_constraint(mesh, **kwargs)
-            except TypeError:
+            except TypeError as e:
+                print(f"DEBUG: Caught TypeError: {e}")
                 # Older modules may not accept extra keyword arguments.
                 module.enforce_constraint(mesh)
 
