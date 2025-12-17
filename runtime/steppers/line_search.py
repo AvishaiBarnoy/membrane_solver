@@ -118,6 +118,7 @@ def backtracking_line_search(
                 vertex.position[:] = vertex.constraint.project_position(
                     vertex.position
                 )
+        mesh.increment_version()
 
         # Stability Check: Only run expensive check if step is large
         if not is_safe_small_step:
@@ -127,6 +128,7 @@ def backtracking_line_search(
                     if getattr(vertex, "fixed", False):
                         continue
                     vertex.position[:] = original_positions[vidx]
+                mesh.increment_version()
 
                 alpha *= beta
                 backtracks += 1
@@ -142,6 +144,7 @@ def backtracking_line_search(
 
         if constraint_enforcer is not None:
             constraint_enforcer(mesh)
+            mesh.increment_version()
             trial_energy_after_constraint = energy_fn()
             vio_after = constraint_violation(mesh)
         else:
@@ -176,6 +179,7 @@ def backtracking_line_search(
             if getattr(vertex, "fixed", False):
                 continue
             vertex.position[:] = original_positions[vidx]
+        mesh.increment_version()
 
         alpha *= beta
         backtracks += 1
@@ -193,6 +197,7 @@ def backtracking_line_search(
         if getattr(vertex, "fixed", False):
             continue
         vertex.position[:] = original_positions[vidx]
+    mesh.increment_version()
 
     logger.debug(
         "Zero-step detected: no trial step reduced energy (alpha reached %.2e).",

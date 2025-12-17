@@ -286,11 +286,18 @@ class Body:
     target_volume: Optional[float] = 0.0
     options: Dict[str, Any] = field(default_factory=dict)
 
+    _cached_volume: Optional[float] = field(init=False, default=None)
+    _cached_volume_grad: Optional[Dict[int, np.ndarray]] = field(init=False, default=None)
+    _cached_version: int = field(init=False, default=-1)
+
     def copy(self):
         return Body(self.index, self.facet_indices[:],
                     self.target_volume, self.options.copy())
 
     def compute_volume(self, mesh) -> float:
+        if self._cached_version == mesh._version and self._cached_volume is not None:
+             return self._cached_volume
+
         volume = 0.0
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
@@ -402,6 +409,11 @@ class Body:
         This combines the work of ``compute_volume`` and ``compute_volume_gradient``
         so callers that need both can avoid redundant geometric computation.
         """
+        if (self._cached_version == mesh._version
+                and self._cached_volume is not None
+                and self._cached_volume_grad is not None):
+            return self._cached_volume, self._cached_volume_grad
+
         volume = 0.0
         grad: Dict[int, np.ndarray] = {}
 
@@ -449,6 +461,10 @@ class Body:
                 grad[a] += cross_vb_v0[idx] / 6.0
                 grad[b] += cross_v0_va[idx] / 6.0
 
+        self._cached_volume = volume
+        self._cached_volume_grad = grad
+        self._cached_version = mesh._version
+
         return volume, grad
 
 @dataclass
@@ -470,6 +486,11 @@ class Mesh:
     vertex_ids: "np.ndarray | None" = None
     vertex_index_to_row: Dict[int, int] = field(default_factory=dict)
     facet_vertex_loops: Dict[int, "np.ndarray"] = field(default_factory=dict)
+
+    _version: int = 0
+
+    def increment_version(self):
+        self._version += 1
 
     def copy(self):
         import copy

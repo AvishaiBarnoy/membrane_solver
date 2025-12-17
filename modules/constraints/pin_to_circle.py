@@ -16,7 +16,7 @@ import logging
 
 import numpy as np
 
-logger = logging.getLogger("membrane_solver.log")
+logger = logging.getLogger("membrane_solver")
 
 
 def _normalize(vec: np.ndarray) -> np.ndarray | None:

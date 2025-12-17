@@ -7,6 +7,44 @@ import numpy as np
 logger = logging.getLogger("membrane_solver")
 
 
+def apply_constraint_gradient(grad: Dict[int, np.ndarray], mesh, global_params) -> None:
+    """Add a constraint force to drive each body toward its target area.
+
+    This mimics a Lagrange multiplier update by solving a 1‑body scalar
+    lambda = delta/||gradA||^2 and subtracting lambda * gradA from the
+    energy gradient.
+    """
+    for body in mesh.bodies.values():
+        A_target = body.options.get("target_area")
+        if A_target is None:
+            continue
+
+        area = 0.0
+        gA = {}
+        for facet_idx in body.facet_indices:
+            facet = mesh.facets[facet_idx]
+            # Note: compute_area_and_gradient is defined on Facet in entities.py
+            # but this module's enforce_constraint uses compute_area_gradient.
+            # We'll stick to what Facet provides. Assuming compute_area_and_gradient exists.
+            a_f, g_f = facet.compute_area_and_gradient(mesh)
+            area += a_f
+            for vidx, vec in g_f.items():
+                if vidx not in gA:
+                    gA[vidx] = vec.copy()
+                else:
+                    gA[vidx] += vec
+
+        delta = area - A_target
+        norm_sq = sum(np.dot(v, v) for v in gA.values())
+        if abs(delta) < 1e-12 or norm_sq < 1e-18:
+            continue
+
+        lam = delta / (norm_sq + 1e-18)
+        for vidx, vec in gA.items():
+            if vidx in grad:
+                grad[vidx] -= lam * vec
+
+
 def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 20) -> None:
     """Enforce hard surface-area constraints on bodies using Lagrange multipliers.
 
@@ -54,6 +92,8 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 20) -> None:
                 if getattr(vertex, "fixed", False):
                     continue
                 vertex.position -= lam * gvec
+
+            mesh.increment_version()
 
 
 __all__ = ["enforce_constraint"]

@@ -127,3 +127,5 @@ def vertex_average(mesh):
 
         for vid, pos_sum in accum.items():
             mesh.vertices[vid].position = pos_sum / counts[vid]
+
+    mesh.increment_version()

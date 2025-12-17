@@ -5,7 +5,7 @@ from typing import Callable, Dict, List, Optional
 
 import numpy as np
 
-from geometry.entities import Body, Mesh
+from geometry.entities import Mesh
 from parameters.global_parameters import GlobalParameters
 from parameters.resolver import ParameterResolver
 from runtime.constraint_manager import ConstraintModuleManager
@@ -72,20 +72,6 @@ STEP SIZE:\t {self.step_size}
     def compute_energy_and_gradient(self):
         """Return total energy and gradient for the current mesh."""
 
-        # Invalidate any cached body volume/gradient before computing new values
-        # since vertex positions may have changed after the last step.
-        for body in self.mesh.bodies.values():
-            if hasattr(body, "_last_volume"):
-                body._last_volume = None
-            if hasattr(body, "_last_volume_grad"):
-                body._last_volume_grad = None
-
-        # First, compute volume gradients for constrained bodies when using
-        # Lagrange‑style hard volume constraints. This mirrors Evolver's
-        # ``calc_volgrads`` phase and lets us reuse the same gradients both
-        # for constraint projection and diagnostics.
-        self._update_volume_gradients()
-
         total_energy = 0.0
         # initialize per-vertex gradient dict
         grad: Dict[int, np.ndarray] = {
@@ -101,13 +87,8 @@ STEP SIZE:\t {self.step_size}
             for vidx, gvec in g_mod.items():
                 grad[vidx] += gvec
 
-        # Integrate hard volume constraints via a Lagrange‑style projection
-        # of the gradient onto the tangent space of fixed‑volume manifolds,
-        # analogous to Evolver's ``calc_lagrange`` + ``lagrange_adjust``.
-        self._apply_volume_constraints_lagrange(grad)
-
-        # Apply area constraint forces to drive bodies toward their target areas.
-        self._apply_area_constraint_forces(grad)
+        # Apply constraint modifications to the gradient (e.g., Lagrange multipliers)
+        self.constraint_manager.apply_gradient_modifications(grad, self.mesh, self.global_params)
 
         # Optional DEBUG‑level diagnostic: in Lagrange mode the projected
         # gradient should be (numerically) tangent to each fixed‑volume
@@ -119,9 +100,17 @@ STEP SIZE:\t {self.step_size}
             if mode == "lagrange" and self.mesh.bodies:
                 max_abs_dot = 0.0
                 for body in self.mesh.bodies.values():
-                    vol_grad = getattr(body, "_last_volume_grad", None)
-                    if not vol_grad:
+                    # Check for target volume
+                    V_target = body.target_volume
+                    if V_target is None:
+                        V_target = body.options.get("target_volume")
+
+                    if V_target is None:
                         continue
+
+                    # Use robust cache via method call
+                    _, vol_grad = body.compute_volume_and_gradient(self.mesh)
+
                     dot = 0.0
                     for vidx, gVi in vol_grad.items():
                         gE = grad.get(vidx)
@@ -135,138 +124,9 @@ STEP SIZE:\t {self.step_size}
 
         return total_energy, grad
 
-    def _update_volume_gradients(self) -> None:
-        """Compute and cache body volume gradients when needed.
 
-        In ``\"lagrange\"`` mode this plays the role of Evolver's
-        ``calc_volgrads``: for each body with a target volume we compute
-        ``(V, ∇V)`` once per iteration and stash them on the body for later
-        use by the projection routine.
-        """
 
-        mode = self.global_params.get("volume_constraint_mode", "lagrange")
-        if mode != "lagrange":
-            return
 
-        if not self.mesh.bodies:
-            return
-
-        for body in self.mesh.bodies.values():
-            V_target = body.target_volume
-            if V_target is None:
-                V_target = body.options.get("target_volume")
-            if V_target is None:
-                continue
-
-            vol, vol_grad = body.compute_volume_and_gradient(self.mesh)
-            body._last_volume = vol
-            body._last_volume_grad = vol_grad
-
-    def _apply_volume_constraints_lagrange(self, grad: Dict[int, np.ndarray]) -> None:
-        """Project the gradient to respect volume constraints.
-
-        When ``global_parameters.volume_constraint_mode == "lagrange"``,
-        project the gradient onto the subspace orthogonal to all active body
-        volume gradients. This solves a small linear system in the space of
-        volume constraints, analogous to a multi‑constraint Lagrange
-        multiplier update, and generalises cleanly to multiple bodies.
-        """
-
-        mode = self.global_params.get("volume_constraint_mode", "lagrange")
-        if mode != "lagrange":
-            return
-
-        # Gather all bodies that actually have a target volume and cached
-        # gradients from ``_update_volume_gradients``.
-        constrained_bodies: list[tuple["Body", Dict[int, np.ndarray]]] = []
-        for body in self.mesh.bodies.values():
-            V_target = body.target_volume
-            if V_target is None:
-                V_target = body.options.get("target_volume")
-            if V_target is None:
-                continue
-
-            vol_grad = getattr(body, "_last_volume_grad", None)
-            if not vol_grad:
-                continue
-            constrained_bodies.append((body, vol_grad))
-
-        if not constrained_bodies:
-            return
-
-        k = len(constrained_bodies)
-        # A_ij = <∇V_i, ∇V_j>; b_i = <∇E, ∇V_i>
-        A = np.zeros((k, k), dtype=float)
-        b_vec = np.zeros(k, dtype=float)
-
-        # Build A and b by looping over vertices once per body pair.
-        for i, (_, gradVi) in enumerate(constrained_bodies):
-            for vidx, gVi in gradVi.items():
-                if vidx in grad:
-                    b_vec[i] += float(np.dot(grad[vidx], gVi))
-                for j in range(i, k):
-                    gVj = constrained_bodies[j][1].get(vidx)
-                    if gVj is None:
-                        continue
-                    val = float(np.dot(gVi, gVj))
-                    A[i, j] += val
-                    if j != i:
-                        A[j, i] += val
-
-        # Regularise and solve A λ = b. If the system is ill‑conditioned or
-        # singular, fall back to no projection rather than risking instability.
-        eps = 1e-18
-        A[np.diag_indices_from(A)] += eps
-        try:
-            lam = np.linalg.solve(A, b_vec)
-        except np.linalg.LinAlgError:
-            return
-
-        # Apply the combined projection to the gradient.
-        for (body, gradVi), lam_i in zip(constrained_bodies, lam):
-            if lam_i == 0.0:
-                continue
-            for vidx, gVi in gradVi.items():
-                if vidx in grad:
-                    grad[vidx] -= lam_i * gVi
-
-    def _apply_area_constraint_forces(self, grad: Dict[int, np.ndarray]) -> None:
-        """Add a constraint force to drive each body toward its target area.
-
-        This mimics a Lagrange multiplier update by solving a 1‑body scalar
-        lambda = delta/||gradA||^2 and subtracting lambda * gradA from the
-        energy gradient, so the direction both reduces energy (when feasible)
-        and restores area when off‑target.
-        """
-        if not self.mesh.bodies:
-            return
-
-        for body in self.mesh.bodies.values():
-            A_target = body.options.get("target_area")
-            if A_target is None:
-                continue
-
-            area = 0.0
-            gA = {}
-            for facet_idx in body.facet_indices:
-                facet = self.mesh.facets[facet_idx]
-                a_f, g_f = facet.compute_area_and_gradient(self.mesh)
-                area += a_f
-                for vidx, vec in g_f.items():
-                    if vidx not in gA:
-                        gA[vidx] = vec.copy()
-                    else:
-                        gA[vidx] += vec
-
-            delta = area - A_target
-            norm_sq = sum(np.dot(v, v) for v in gA.values())
-            if abs(delta) < 1e-12 or norm_sq < 1e-18:
-                continue
-
-            lam = delta / (norm_sq + 1e-18)
-            for vidx, vec in gA.items():
-                if vidx in grad:
-                    grad[vidx] -= lam * vec
 
     def compute_energy(self):
         """Compute the total energy using the loaded modules."""

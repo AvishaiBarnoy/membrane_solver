@@ -7,7 +7,7 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
 
 from geometry.entities import Mesh
 
-logger = logging.getLogger("membrane_solver.log")
+logger = logging.getLogger("membrane_solver")
 
 
 def plot_geometry(

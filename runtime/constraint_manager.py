@@ -42,6 +42,17 @@ class ConstraintModuleManager:
                 logger.warning(f"Could not load constraint module '{name}': {e}")
         return loaded
 
+    def apply_gradient_modifications(self, grad, mesh, global_params):
+        """Invoke ``apply_constraint_gradient`` on all loaded constraint modules.
+
+        This allows constraints to modify the energy gradient directly, for example
+        by applying Lagrange multipliers (soft constraints) or projection forces.
+        """
+        for name, module in self.modules.items():
+            if hasattr(module, "apply_constraint_gradient"):
+                # Pass the global_params to the module so it can check configuration
+                module.apply_constraint_gradient(grad, mesh, global_params)
+
     def enforce_all(self, mesh, **kwargs):
         """Invoke ``enforce_constraint`` on all loaded constraint modules.
 

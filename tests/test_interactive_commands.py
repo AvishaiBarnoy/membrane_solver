@@ -1,17 +1,20 @@
 from sample_meshes import cube_soft_volume_input
 
+from commands.context import CommandContext
+from commands.io import PropertiesCommand
+from commands.mesh_ops import RefineCommand
+from commands.registry import get_command
 from geometry.geom_io import parse_geometry
-from main import execute_command, parse_instructions
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.conjugate_gradient import ConjugateGradient
 
 
-def _build_minimizer():
+def _build_context():
     mesh = parse_geometry(cube_soft_volume_input("penalty"))
     mesh.global_parameters.set("step_size", 1e-2)
-    return Minimizer(
+    minim = Minimizer(
         mesh,
         mesh.global_parameters,
         ConjugateGradient(),
@@ -19,19 +22,31 @@ def _build_minimizer():
         ConstraintModuleManager(mesh.constraint_modules),
         quiet=True,
     )
+    return CommandContext(mesh, minim, minim.stepper)
 
 
-def test_parse_instructions_accepts_refine_counts():
-    assert parse_instructions('r5') == ['r5']
+def test_get_command_parsing():
+    # Test 'r5' -> RefineCommand with args=['5']
+    cmd, args = get_command('r5')
+    assert isinstance(cmd, RefineCommand)
+    assert args == ['5']
 
 
-def test_parse_instructions_properties_alias():
-    assert parse_instructions('i') == ['properties']
+def test_get_command_aliases():
+    # Test 'i' -> PropertiesCommand
+    cmd, args = get_command('i')
+    assert isinstance(cmd, PropertiesCommand)
+
+    cmd, args = get_command('props')
+    assert isinstance(cmd, PropertiesCommand)
 
 
-def test_execute_command_multiple_refine_passes():
-    minim = _build_minimizer()
-    mesh = minim.mesh
-    facets_before = len(mesh.facets)
-    mesh, _ = execute_command('r2', mesh, minim, minim.stepper)
-    assert len(mesh.facets) > facets_before
+def test_execute_refine_command():
+    ctx = _build_context()
+    facets_before = len(ctx.mesh.facets)
+
+    cmd, args = get_command('r2')
+    # r2 returns args=['2']
+    cmd.execute(ctx, args)
+
+    assert len(ctx.mesh.facets) > facets_before

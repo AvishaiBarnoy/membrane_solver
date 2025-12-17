@@ -9,7 +9,7 @@ from geometry.geom_io import load_data, parse_geometry
 from runtime.logging_config import setup_logging
 from visualization.plotting import plot_geometry
 
-logger = logging.getLogger("membrane_solver.log")
+logger = logging.getLogger("membrane_solver")
 
 
 def create_parser() -> argparse.ArgumentParser:
