@@ -95,9 +95,13 @@ def test_go_command_runs_minimizer_and_warns_on_collisions(monkeypatch, caplog):
             assert callback is None
             return {"mesh": self.mesh, "energy": 1.23}
 
-    ctx = SimpleNamespace(mesh=mesh, minimizer=DummyMinimizer(mesh), stepper=ConjugateGradient())
+    ctx = SimpleNamespace(
+        mesh=mesh, minimizer=DummyMinimizer(mesh), stepper=ConjugateGradient()
+    )
 
-    monkeypatch.setattr("commands.minimization.detect_vertex_edge_collisions", lambda m: [(2, 1)])
+    monkeypatch.setattr(
+        "commands.minimization.detect_vertex_edge_collisions", lambda m: [(2, 1)]
+    )
 
     with caplog.at_level("WARNING"):
         GoCommand().execute(ctx, ["3"])

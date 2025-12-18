@@ -16,7 +16,9 @@ class DummyEnergyModule:
         self._energy = energy
         self._grad_value = grad_value
 
-    def compute_energy_and_gradient(self, mesh, global_params, resolver, compute_gradient=True):
+    def compute_energy_and_gradient(
+        self, mesh, global_params, resolver, compute_gradient=True
+    ):
         if not compute_gradient:
             return self._energy, {}
         grad = {vid: np.array([self._grad_value, 0.0, 0.0]) for vid in mesh.vertices}
@@ -103,7 +105,9 @@ def test_minimize_converges_when_grad_norm_below_tol():
     energy = DummyEnergyModule(energy=2.0, grad_value=0.0)
     cm = DummyConstraintManager()
     stepper = DummyStepper(results=[(True, 1e-3)])
-    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True, tol=1e-6)
+    minim = Minimizer(
+        mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True, tol=1e-6
+    )
 
     out = minim.minimize(n_steps=5)
     assert out["terminated_early"] is True

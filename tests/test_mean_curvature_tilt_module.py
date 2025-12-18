@@ -22,10 +22,14 @@ class DummyFacet:
         return 3.0
 
     def dJ_dvertex(self, vidx):
-        return np.array([1.0, 0.0, 0.0]) if vidx == self.vertex_indices[0] else np.zeros(3)
+        return (
+            np.array([1.0, 0.0, 0.0]) if vidx == self.vertex_indices[0] else np.zeros(3)
+        )
 
     def dDivT_dvertex(self, vidx):
-        return np.array([0.0, 1.0, 0.0]) if vidx == self.vertex_indices[1] else np.zeros(3)
+        return (
+            np.array([0.0, 1.0, 0.0]) if vidx == self.vertex_indices[1] else np.zeros(3)
+        )
 
     def dDivT_dtilt(self, vidx):
         return np.array([1.0, -1.0]) if vidx == self.vertex_indices[2] else np.zeros(2)
