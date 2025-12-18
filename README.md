@@ -91,6 +91,19 @@ refinement and equiangulation.
   tracked alongside the code. Refer to that document for design sketches,
   medium-term research targets, and open questions.
 
+## Testing & quality checks
+
+- Install deps with `pip install -r requirements.txt` (adds pytest, pytest-cov, Ruff, etc.).
+- Run `pytest -q` before and after significant edits. Recent suites add coverage for the volume penalty path (`tests/test_volume_energy.py`) and low-level error handling (`tests/test_exceptions.py`).
+- Lint via `ruff check .` (or `pre-commit run -a`) to match CI.
+- Coverage hotspots are tracked via `pytest --cov=. --cov-report=term-missing`; focus on geometry entities, module managers, and CLI commands.
+
+## Architecture overview
+
+- A living dependency diagram is stored at `docs/mermaid_diagram.txt` (render with any Mermaid-compatible viewer). It ties CLI entry points, geometry entities, runtime managers, and modules together.
+- Shared exception types (e.g., `InvalidEdgeIndexError`) live in `exceptions.py` so both geometry and runtime code can surface actionable error messages.
+- Runtime components (`runtime/topology.py`, `runtime/refinement.py`, etc.) now have targeted regression tests to keep mesh maintenance stable as new energy/constraint modules land.
+
 ## Linting
 
 This repo uses Ruff for linting (and can adopt Ruff formatting later).

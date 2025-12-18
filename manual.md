@@ -168,7 +168,15 @@ Interactive commands:
 
 ---
 
-## 4. Mesh JSON structure (overview)
+## 4. Error handling & diagnostics
+
+- Edge and facet connectivity strictly use **1-based** IDs. If a command or mesh attempts to access edge `0` (or a missing index), the solver raises `InvalidEdgeIndexError` from `exceptions.py`, making failures easier to trace in logs and in tests (`tests/test_exceptions.py`).
+- Volume penalty calculations are covered by `tests/test_volume_energy.py`, which exercises both energy and gradient paths so future modules can safely rely on the helpers in `modules/energy/volume.py`.
+- When `parse_geometry` detects NaN/inf vertex coordinates or edges that reference unknown vertices, it aborts immediately and writes a detailed message to the configured log file (`--log`), helping diagnose malformed inputs.
+
+---
+
+## 5. Mesh JSON structure (overview)
 
 Meshes are JSON files describing vertices, edges, facets, bodies, global
 parameters, energy modules and constraint modules. The exact schema is

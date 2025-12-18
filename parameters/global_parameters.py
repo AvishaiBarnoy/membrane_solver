@@ -37,6 +37,32 @@ class GlobalParameters:
         if initial_params:
             self.update(initial_params)
 
+    def __getattr__(self, name):
+        """Backwards-compatible attribute access for parameters.
+
+        Many parts of the codebase access parameters as attributes
+        (e.g. ``global_params.volume_stiffness``) while the canonical storage
+        is the internal ``_params`` dict. This ensures both access patterns
+        remain consistent for known parameter keys.
+        """
+        params = self.__dict__.get("_params")
+        if params is not None and name in params:
+            return params[name]
+        raise AttributeError(
+            f"{type(self).__name__!s} object has no attribute {name!r}"
+        )
+
+    def __setattr__(self, name, value):
+        """Backwards-compatible attribute assignment for known parameter keys."""
+        if name == "_params":
+            object.__setattr__(self, name, value)
+            return
+        params = self.__dict__.get("_params")
+        if params is not None and name in params:
+            params[name] = value
+            return
+        object.__setattr__(self, name, value)
+
     def get(self, key, default=None):
         """Retrieve a parameter value, or return a default if not found."""
         return self._params.get(key, default)

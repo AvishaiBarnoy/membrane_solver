@@ -30,14 +30,17 @@ intended for development and planning; users should consult `README.md` and
 5. Mean curvature
     - [] a sheet that changes into a minimum shape bent sheet
     - [] a cube turns into a sphere with 0 surface tension and no volume
+    - [] Provide module stubs (`modules/energy/mean_curvature.py`) plus constraint placeholders so integration and documentation can reference the API before physics is implemented.
 
 6. Pure Gaussian curvature
    - Check invariance under topology‑preserving deformations: no net change in
      energy for a closed surface with fixed topology.
+   - [] Document and scaffold a Gaussian curvature module (`modules/energy/gaussian_curvature.py`) with baseline tests asserting `NotImplementedError`.
 
 7. Tilt source decay
    - Introduce localized tilt sources that decay away from the source region;
      should form a “dimple” or invagination.
+   - [] Placeholder module for tilt energy with CLI toggles so users can enable the hook even before the math lands.
 
 8. Dimpled sphere with one embedded caveolin disk
    - First 3D generalization of the 1D caveolin model (see
@@ -87,3 +90,9 @@ intended for development and planning; users should consult `README.md` and
 17. Code Quality
     - [ ] Refactor `fixed` constraints to be core entity properties (removing them from the constraint module list).
     - [ ] Add regression testing for performance (CI integration with thresholds).
+    - [x] Add targeted unit tests for core helpers (volume penalties, edge-index exceptions).
+    - [ ] Continue raising coverage around energy/constraint managers, CLI commands, and visualization glue.
+
+18. Documentation
+    - [x] README + manual now describe testing/diagnostics, and reference the Mermaid architecture diagram.
+    - [ ] Expand API docs for future curvature/tilt modules once the placeholders evolve into full features.
