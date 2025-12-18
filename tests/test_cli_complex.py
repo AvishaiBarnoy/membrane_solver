@@ -14,8 +14,8 @@ class MockMesh:
     def __init__(self):
         self.vertices = {0: Vertex(0, np.array([0.,0.,0.])),
                          1: Vertex(1, np.array([1.,0.,0.]), options={'fixed': False})}
-        self.edges = {0: Edge(0, 0, 1, options={'len': 1.0})}
-        self.facets = {0: Facet(0, [0], options={'area': 0.5})}
+        self.edges = {1: Edge(1, 0, 1, options={'len': 1.0})}
+        self.facets = {0: Facet(0, [1], options={'area': 0.5})}
         self.bodies = {0: Body(0, [0], options={'vol': 1.0})}
         self.global_parameters = GlobalParameters()
         self.global_parameters.set("surface_tension", 1.0)
@@ -52,10 +52,10 @@ def test_set_edge_option():
     ctx = _get_context(mesh)
     cmd = SetCommand()
 
-    # set edge 0 line_tension 5.0
-    cmd.execute(ctx, ["edge", "0", "line_tension", "5.0"])
+    # set edge 1 line_tension 5.0
+    cmd.execute(ctx, ["edge", "1", "line_tension", "5.0"])
 
-    assert mesh.edges[0].options["line_tension"] == 5.0
+    assert mesh.edges[1].options["line_tension"] == 5.0
 
 def test_print_commands(capsys):
     mesh = MockMesh()
@@ -85,7 +85,7 @@ def test_print_commands(capsys):
 def test_print_filter(capsys):
     mesh = MockMesh()
     # Mock compute_length for edge
-    mesh.edges[0].compute_length = lambda m: 1.0
+    mesh.edges[1].compute_length = lambda m: 1.0
     ctx = _get_context(mesh)
     cmd = PrintEntityCommand()
 

@@ -103,6 +103,10 @@ def test_stepper_increments_version():
 
     data = cube_soft_volume_input("lagrange")
     mesh = parse_geometry(data)
+    # Ensure vertex 0 is not fixed so it can move
+    for v in mesh.vertices.values():
+        v.fixed = False
+
     initial_version = mesh._version
 
     # Create a simple energy function: E = (x - 1)^2 for vertex 0

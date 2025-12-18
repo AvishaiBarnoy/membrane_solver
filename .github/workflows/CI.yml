@@ -25,19 +25,18 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install lint tool
+      - name: Install lint and format tools
         run: |
           python -m pip install --upgrade pip
-          pip install flake8
+          pip install ruff
 
-      - name: Run flake8 (syntax + undefined names)
+      - name: Run ruff check (linting)
         run: |
-          # Only fail CI on "this will break at runtime"-type issues
-          flake8 . \
-            --count \
-            --select=E9,F63,F7,F82,F821 \
-            --show-source \
-            --statistics
+          ruff check .
+
+      - name: Run ruff format check
+        run: |
+          ruff format --check
 
   test:
     name: Tests (pytest)
@@ -55,13 +54,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install pytest
+          pip install pytest pytest-cov
 
-      - name: Run pytest
+      - name: Run pytest with coverage
         env:
           PYTHONPATH: .
         run: |
-          pytest -q
+          pytest --cov=. --cov-report=xml -q
 
       - name: Run benchmarks
         continue-on-error: true

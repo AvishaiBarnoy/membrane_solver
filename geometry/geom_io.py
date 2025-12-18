@@ -109,8 +109,14 @@ def parse_geometry(data: dict) -> Mesh:
     for i, entry in enumerate(vertices):
         *position, raw_opts = entry if isinstance(entry[-1], dict) else (*entry, {})
         options = resolve_options(raw_opts)
-        mesh.vertices[i] = Vertex(index=i, position=np.asarray(position,
-                                                               dtype=float), options=options)
+
+        pos_array = np.asarray(position, dtype=float)
+        if np.any(np.isnan(pos_array)):
+            raise ValueError(f"Vertex {i} has NaN coordinates.")
+        if np.any(np.isinf(pos_array)):
+            raise ValueError(f"Vertex {i} has infinite coordinates.")
+
+        mesh.vertices[i] = Vertex(index=i, position=pos_array, options=options)
 
         if "energy" in options:
             if isinstance(options["energy"], list):
@@ -156,6 +162,12 @@ def parse_geometry(data: dict) -> Mesh:
 
     for i, entry in enumerate(edges):
         tail_index, head_index, *opts = entry
+
+        if tail_index not in mesh.vertices:
+            raise ValueError(f"Edge {i+1} references missing tail vertex {tail_index}")
+        if head_index not in mesh.vertices:
+            raise ValueError(f"Edge {i+1} references missing head vertex {head_index}")
+
         raw_opts = opts[0] if opts else {}
         options = resolve_options(raw_opts)
         mesh.edges[i+1] = Edge(index=i+1, tail_index=tail_index,
@@ -375,10 +387,28 @@ def parse_geometry(data: dict) -> Mesh:
     mesh.build_connectivity_maps()
     mesh.build_facet_vertex_loops()
 
+    # Basic validation (connectivity)
+    try:
+        mesh.validate_edge_indices()
+    except Exception as e:
+        logger.error(f"Mesh connectivity validation failed: {e}")
+        raise
+
     # Automatically triangulate polygonal facets if needed
     if any(len(f.edge_indices) > 3 for f in mesh.facets.values()):
         refined = refine_polygonal_facets(mesh)
+        try:
+            refined.full_mesh_validate()
+        except Exception as e:
+            logger.error(f"Refined mesh validation failed: {e}")
+            raise
         return refined
+
+    try:
+        mesh.full_mesh_validate()
+    except Exception as e:
+        logger.error(f"Mesh validation failed: {e}")
+        raise
 
     return mesh
 
