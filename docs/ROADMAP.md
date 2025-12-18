@@ -27,42 +27,54 @@ intended for development and planning; users should consult `README.md` and
 
 ## 2. Curvature‑driven phenomena
 
-5. Mean curvature
-    - [] a sheet that changes into a minimum shape bent sheet
-    - [] a cube turns into a sphere with 0 surface tension and no volume
-    - [] Provide module stubs (`modules/energy/mean_curvature.py`) plus constraint placeholders so integration and documentation can reference the API before physics is implemented.
+5. Mean curvature (bending / Helfrich) implementation
+   - [ ] Standardize the discrete mean‑curvature definition used by the core mesh
+         objects (sign convention, where it lives: facet/edge/vertex).
+   - [ ] Provide a bending‑energy module API under `modules/energy/mean_curvature.py`
+         (or migrate the existing prototype in `modules/mean_curvature_tilt.py`
+         into the standard energy module layout).
+   - [ ] Add unit‑level validation (e.g., invariance to rigid transforms, finite
+         difference checks for gradients) on small synthetic meshes.
+   - [ ] Add/confirm parameter plumbing (`bending_rigidity`,
+         `spontaneous_curvature`) so end‑to‑end examples can be run via the CLI.
 
 6. Pure Gaussian curvature
    - Check invariance under topology‑preserving deformations: no net change in
      energy for a closed surface with fixed topology.
-   - [] Document and scaffold a Gaussian curvature module (`modules/energy/gaussian_curvature.py`) with baseline tests asserting `NotImplementedError`.
+   - [ ] Document and scaffold a Gaussian curvature module (`modules/energy/gaussian_curvature.py`)
+         with baseline tests asserting `NotImplementedError`.
 
 7. Tilt source decay
    - Introduce localized tilt sources that decay away from the source region;
      should form a “dimple” or invagination.
-   - [] Placeholder module for tilt energy with CLI toggles so users can enable the hook even before the math lands.
+   - [ ] Placeholder module for tilt energy with CLI toggles so users can enable
+         the hook even before the math lands.
 
 8. Dimpled sphere with one embedded caveolin disk
    - First 3D generalization of the 1D caveolin model (see
      `docs/caveolin_generate_curvature.pdf`).
 
 9. Box that minimizes into a sphere with a dent
-   - Use fixed / `no_refine` regions to pin parts of the surface while the
-     rest relaxes.
+   - [ ] Use fixed / `no_refine` regions to pin parts of the surface while the
+         rest relaxes.
 
 10. Plane with an inner disk and outer perimeter
-   - Test mixed boundary conditions and perimeter constraints.
+   - [ ] Test mixed boundary conditions and perimeter constraints.
 
 ## 3. Mean curvature examples
 
-11. After implementing mean‑curvature energy
-    - Membrane between two fixed parallel circles forming a catenoid mean
-        curvature should zero.
-    - 10.1 Compare against Surface Evolver `cat.fe`, including how it treats
-          fixed surface area of the soap film.
+11. After implementing mean‑curvature energy (end‑to‑end benchmarks)
+   - [ ] Sheet relaxes under bending toward a minimal‑mean‑curvature surface
+         (with appropriate area/volume constraints to avoid trivial collapse).
+   - [ ] Cube relaxes toward a sphere primarily under bending (with fixed area
+         and/or volume constraint; no surface tension term).
+   - [ ] Membrane between two fixed parallel circles: catenoid has mean curvature
+         ~0, so it should be a near‑zero‑bending‑energy reference solution.
+   - [ ] Compare against Surface Evolver `cat.fe`, including how Evolver treats
+         fixed surface area of the soap film.
 
 12. Flat sheet that folds to its spontaneous curvature
-    - Benchmark for bending energy and spontaneous curvature terms.
+   - Benchmark for bending energy and spontaneous curvature terms.
 
 ## 4. Caveolin and complex inclusions
 
