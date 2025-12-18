@@ -154,7 +154,9 @@ def refine_polygonal_facets(mesh):
 
             child_options = facet.options.copy()
             child_options.pop("target_area", None)
-            child_options["surface_tension"] = facet.options.get("surface_tension", mesh.global_parameters.get("surface_tension", 1.0))
+            child_options["surface_tension"] = facet.options.get(
+                "surface_tension", mesh.global_parameters.get("surface_tension", 1.0)
+            )
             child_options["parent_facet"] = facet.index
             child_options["constraints"] = facet.options.get("constraints", [])
             # Ensure child facets have energy module set
@@ -190,11 +192,15 @@ def refine_polygonal_facets(mesh):
         # Distribute facet target area across children if needed
         child_ids = children_map.get(facet.index, [])
         if parent_target_area is not None and child_ids:
-            child_areas = [(cid, new_facets[cid].compute_area(new_mesh)) for cid in child_ids]
+            child_areas = [
+                (cid, new_facets[cid].compute_area(new_mesh)) for cid in child_ids
+            ]
             total = sum(area for _, area in child_areas)
             if total > 1e-12:
                 for cid, area in child_areas:
-                    new_facets[cid].options["target_area"] = parent_target_area * (area / total)
+                    new_facets[cid].options["target_area"] = parent_target_area * (
+                        area / total
+                    )
 
     # Step 3: Build updated bodies
     new_bodies = {}
@@ -329,14 +335,20 @@ def refine_triangle_mesh(mesh):
             for ei in oriented:
                 edge = mesh.get_edge(ei)
                 if ei > 0:
-                    e = get_or_create_edge(edge.tail_index, edge.head_index, parent_edge=edge)
+                    e = get_or_create_edge(
+                        edge.tail_index, edge.head_index, parent_edge=edge
+                    )
                     raw_edges.append(e.index)
                 else:
-                    e = get_or_create_edge(edge.head_index, edge.tail_index, parent_edge=edge)
+                    e = get_or_create_edge(
+                        edge.head_index, edge.tail_index, parent_edge=edge
+                    )
                     raw_edges.append(-e.index)
             new_mesh.edges.update(new_edges)
             cyc = orient_edges_cycle(raw_edges, new_mesh)
-            nf = Facet(facet.index, cyc, fixed=facet.fixed, options=facet.options.copy())
+            nf = Facet(
+                facet.index, cyc, fixed=facet.fixed, options=facet.options.copy()
+            )
             new_facets[facet.index] = nf
             facet_to_new_facets[facet.index] = [facet.index]
             continue
@@ -346,9 +358,21 @@ def refine_triangle_mesh(mesh):
             raise ValueError(f"Degenerate triangle: verts {v0},{v1},{v2}")
 
         # Get midpoints for refinable edges, or use original vertices for non-refinable edges
-        m01 = edge_midpoints[(min(v0, v1), max(v0, v1))].index if refinable_edges[0] else None
-        m12 = edge_midpoints[(min(v1, v2), max(v1, v2))].index if refinable_edges[1] else None
-        m20 = edge_midpoints[(min(v2, v0), max(v2, v0))].index if refinable_edges[2] else None
+        m01 = (
+            edge_midpoints[(min(v0, v1), max(v0, v1))].index
+            if refinable_edges[0]
+            else None
+        )
+        m12 = (
+            edge_midpoints[(min(v1, v2), max(v1, v2))].index
+            if refinable_edges[1]
+            else None
+        )
+        m20 = (
+            edge_midpoints[(min(v2, v0), max(v2, v0))].index
+            if refinable_edges[2]
+            else None
+        )
 
         child_facets = []
         parent_normal = facet.normal(mesh)
@@ -462,7 +486,9 @@ def refine_triangle_mesh(mesh):
                 f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=child_opts)
                 child_opts = facet.options.copy()
                 child_opts.pop("target_area", None)
-                f2 = Facet(next_facet_idx + 1, cyc2, fixed=facet.fixed, options=child_opts)
+                f2 = Facet(
+                    next_facet_idx + 1, cyc2, fixed=facet.fixed, options=child_opts
+                )
                 new_facets[next_facet_idx] = f1
                 new_facets[next_facet_idx + 1] = f2
                 next_facet_idx += 2
@@ -478,19 +504,35 @@ def refine_triangle_mesh(mesh):
                     # We need to triangulate this polygon into 3 triangles using diagonal triangulation
 
                     # Triangle 1: (v0, v1, m12) - uses original edge v0-v1 and half of refined edge v1-v2
-                    e1 = get_or_create_edge(v0, v1, parent_edge=parent_edges[0])  # original edge
-                    e2 = get_or_create_edge(v1, m12, parent_edge=parent_edges[1])  # split from v1-v2
+                    e1 = get_or_create_edge(
+                        v0, v1, parent_edge=parent_edges[0]
+                    )  # original edge
+                    e2 = get_or_create_edge(
+                        v1, m12, parent_edge=parent_edges[1]
+                    )  # split from v1-v2
                     e3 = get_or_create_edge(m12, v0, parent_facet=facet)  # diagonal
 
                     # Triangle 2: (v0, m12, m20) - diagonal triangle connecting the two midpoints
-                    e4 = get_or_create_edge(v0, m12, parent_facet=facet)  # diagonal (reused)
-                    e5 = get_or_create_edge(m12, m20, parent_facet=facet)  # connecting edge
-                    e6 = get_or_create_edge(m20, v0, parent_edge=parent_edges[2])  # split from v2-v0
+                    e4 = get_or_create_edge(
+                        v0, m12, parent_facet=facet
+                    )  # diagonal (reused)
+                    e5 = get_or_create_edge(
+                        m12, m20, parent_facet=facet
+                    )  # connecting edge
+                    e6 = get_or_create_edge(
+                        m20, v0, parent_edge=parent_edges[2]
+                    )  # split from v2-v0
 
                     # Triangle 3: (m12, v2, m20) - uses the other halves of the refined edges
-                    e7 = get_or_create_edge(m12, v2, parent_edge=parent_edges[1])  # split from v1-v2
-                    e8 = get_or_create_edge(v2, m20, parent_edge=parent_edges[2])  # split from v2-v0
-                    e9 = get_or_create_edge(m20, m12, parent_facet=facet)  # connecting edge
+                    e7 = get_or_create_edge(
+                        m12, v2, parent_edge=parent_edges[1]
+                    )  # split from v1-v2
+                    e8 = get_or_create_edge(
+                        v2, m20, parent_edge=parent_edges[2]
+                    )  # split from v2-v0
+                    e9 = get_or_create_edge(
+                        m20, m12, parent_facet=facet
+                    )  # connecting edge
 
                     raw1 = [e1.index, e2.index, e3.index]
                     raw2 = [e4.index, e5.index, e6.index]
@@ -503,16 +545,22 @@ def refine_triangle_mesh(mesh):
                     # Triangle 1: (v2, m20, v1) - corner triangle at v2
                     e1 = get_or_create_edge(v2, m20, parent_edge=parent_edges[2])
                     e2 = get_or_create_edge(m20, v1, parent_facet=facet)  # diagonal
-                    e3 = get_or_create_edge(v1, v2, parent_edge=parent_edges[1])  # original edge
+                    e3 = get_or_create_edge(
+                        v1, v2, parent_edge=parent_edges[1]
+                    )  # original edge
 
                     # Triangle 2: (m20, v0, m01) - triangle using both midpoints
                     e4 = get_or_create_edge(m20, v0, parent_edge=parent_edges[2])
                     e5 = get_or_create_edge(v0, m01, parent_edge=parent_edges[0])
-                    e6 = get_or_create_edge(m01, m20, parent_facet=facet)  # connecting edge
+                    e6 = get_or_create_edge(
+                        m01, m20, parent_facet=facet
+                    )  # connecting edge
 
                     # Triangle 3: (m01, v1, v2) - triangle connecting back to non-refinable edge
                     e7 = get_or_create_edge(m01, v1, parent_edge=parent_edges[0])
-                    e8 = get_or_create_edge(v1, v2, parent_edge=parent_edges[1])  # original edge (reused)
+                    e8 = get_or_create_edge(
+                        v1, v2, parent_edge=parent_edges[1]
+                    )  # original edge (reused)
                     e9 = get_or_create_edge(v2, m01, parent_facet=facet)  # diagonal
 
                     raw1 = [e1.index, e2.index, e3.index]
@@ -526,16 +574,22 @@ def refine_triangle_mesh(mesh):
                     # Triangle 1: (v0, m01, v2) - corner triangle at v0
                     e1 = get_or_create_edge(v0, m01, parent_edge=parent_edges[0])
                     e2 = get_or_create_edge(m01, v2, parent_facet=facet)  # diagonal
-                    e3 = get_or_create_edge(v2, v0, parent_edge=parent_edges[2])  # original edge
+                    e3 = get_or_create_edge(
+                        v2, v0, parent_edge=parent_edges[2]
+                    )  # original edge
 
                     # Triangle 2: (m01, v1, m12) - triangle using both midpoints
                     e4 = get_or_create_edge(m01, v1, parent_edge=parent_edges[0])
                     e5 = get_or_create_edge(v1, m12, parent_edge=parent_edges[1])
-                    e6 = get_or_create_edge(m12, m01, parent_facet=facet)  # connecting edge
+                    e6 = get_or_create_edge(
+                        m12, m01, parent_facet=facet
+                    )  # connecting edge
 
                     # Triangle 3: (m12, v2, v0) - triangle connecting back to non-refinable edge
                     e7 = get_or_create_edge(m12, v2, parent_edge=parent_edges[1])
-                    e8 = get_or_create_edge(v2, v0, parent_edge=parent_edges[2])  # original edge (reused)
+                    e8 = get_or_create_edge(
+                        v2, v0, parent_edge=parent_edges[2]
+                    )  # original edge (reused)
                     e9 = get_or_create_edge(v0, m12, parent_facet=facet)  # diagonal
 
                     raw1 = [e1.index, e2.index, e3.index]
@@ -552,10 +606,14 @@ def refine_triangle_mesh(mesh):
                 f1 = Facet(next_facet_idx, cyc1, fixed=facet.fixed, options=child_opts)
                 child_opts = facet.options.copy()
                 child_opts.pop("target_area", None)
-                f2 = Facet(next_facet_idx + 1, cyc2, fixed=facet.fixed, options=child_opts)
+                f2 = Facet(
+                    next_facet_idx + 1, cyc2, fixed=facet.fixed, options=child_opts
+                )
                 child_opts = facet.options.copy()
                 child_opts.pop("target_area", None)
-                f3 = Facet(next_facet_idx + 2, cyc3, fixed=facet.fixed, options=child_opts)
+                f3 = Facet(
+                    next_facet_idx + 2, cyc3, fixed=facet.fixed, options=child_opts
+                )
 
                 new_facets[next_facet_idx] = f1
                 new_facets[next_facet_idx + 1] = f2
@@ -567,19 +625,29 @@ def refine_triangle_mesh(mesh):
         for child_facet in child_facets:
             child_normal = child_facet.normal(new_mesh)
             if np.dot(child_normal, parent_normal) < 0:
-                child_facet.edge_indices = [-idx for idx in reversed(child_facet.edge_indices)]
+                child_facet.edge_indices = [
+                    -idx for idx in reversed(child_facet.edge_indices)
+                ]
             new_facets[child_facet.index] = child_facet
 
         facet_to_new_facets[facet.index] = [f.index for f in child_facets]
 
         # distribute target area if needed
         child_ids = facet_to_new_facets.get(facet.index, [])
-        if parent_target_area is not None and child_ids and not (len(child_ids) == 1 and child_ids[0] == facet.index):
-            child_areas = [(cid, new_facets[cid].compute_area(new_mesh)) for cid in child_ids]
+        if (
+            parent_target_area is not None
+            and child_ids
+            and not (len(child_ids) == 1 and child_ids[0] == facet.index)
+        ):
+            child_areas = [
+                (cid, new_facets[cid].compute_area(new_mesh)) for cid in child_ids
+            ]
             total = sum(area for _, area in child_areas)
             if total > 1e-12:
                 for cid, area in child_areas:
-                    new_facets[cid].options["target_area"] = parent_target_area * (area / total)
+                    new_facets[cid].options["target_area"] = parent_target_area * (
+                        area / total
+                    )
 
     # Step 3: Build updated bodies
     new_bodies = {}

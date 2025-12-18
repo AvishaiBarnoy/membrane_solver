@@ -28,10 +28,12 @@ def test_geometry_loads_correctly(sample_geometry_file):
     assert len(mesh.facets) > 0
     assert len(mesh.bodies) > 0
 
+
 def test_mesh_validation_passes(sample_geometry_file):
     data = load_data(sample_geometry_file)
     mesh = parse_geometry(data)
     assert mesh.validate_edge_indices()
+
 
 def test_edge_orientation_signs_preserved(sample_geometry_file):
     data = load_data(sample_geometry_file)
@@ -40,6 +42,7 @@ def test_edge_orientation_signs_preserved(sample_geometry_file):
     for facet_idx in mesh.facets.keys():
         for ei in mesh.facets[facet_idx].edge_indices:
             assert ei != 0, "Zero edge index should not exist (shifted system)"
+
 
 def test_round_trip_consistency(sample_geometry_file, tmp_path):
     data = load_data(sample_geometry_file)
@@ -54,6 +57,7 @@ def test_round_trip_consistency(sample_geometry_file, tmp_path):
     assert len(mesh1.edges) == len(mesh2.edges)
     assert len(mesh1.facets) == len(mesh2.facets)
 
+
 def test_facet_vertex_sequence_is_consistent(sample_geometry_file):
     data = load_data(sample_geometry_file)
     mesh = parse_geometry(data)
@@ -62,12 +66,17 @@ def test_facet_vertex_sequence_is_consistent(sample_geometry_file):
         verts = []
         for signed_index in mesh.facets[facet].edge_indices:
             edge = mesh.edges[abs(signed_index)]
-            tail, head = (edge.tail_index, edge.head_index) if signed_index > 0 else (edge.head_index, edge.tail_index)
+            tail, head = (
+                (edge.tail_index, edge.head_index)
+                if signed_index > 0
+                else (edge.head_index, edge.tail_index)
+            )
             if not verts:
                 verts.append(tail)
             verts.append(head)
         # It should form a closed loop: first == last
         assert verts[0] == verts[-1], f"Facet {facet.index} is not closed: {verts}"
+
 
 # TDD placeholder for future feature
 def test_body_volume_is_positive(sample_geometry_file):
@@ -81,6 +90,7 @@ def test_body_volume_is_positive(sample_geometry_file):
     mesh_volume = mesh.compute_total_volume()
     assert round(mesh_volume, 3) == 1.0, f"Expected positive volume, got {mesh_volume}"
 
+
 def test_body_surface_area_positive(sample_geometry_file):
     data = load_data(sample_geometry_file)
     mesh = parse_geometry(data)
@@ -90,17 +100,23 @@ def test_body_surface_area_positive(sample_geometry_file):
 
     mesh_tri = refine_polygonal_facets(mesh)
     mesh_area = mesh_tri.compute_total_surface_area()
-    assert round(mesh_area, 3) == 6.0, f"Surface area should be positive, got {mesh_area}"
+    assert round(mesh_area, 3) == 6.0, (
+        f"Surface area should be positive, got {mesh_area}"
+    )
+
 
 def test_default_energy_assignment(sample_geometry_file):
     data = load_data(sample_geometry_file)
     mesh = parse_geometry(data)
     for facet in mesh.facets.values():
-        assert len(facet.options["energy"]) != 0, "Energy should be assigned to each facet"
-        assert isinstance(facet.options["energy"], list), f"Energy module list should be a list, but it is a {type(facet.options['energy'])}"
+        assert len(facet.options["energy"]) != 0, (
+            "Energy should be assigned to each facet"
+        )
+        assert isinstance(facet.options["energy"], list), (
+            f"Energy module list should be a list, but it is a {type(facet.options['energy'])}"
+        )
 
-
-    #if len(mesh.bodies) > 0:
+    # if len(mesh.bodies) > 0:
     #    for body in mesh.bodies.values():
     #        print(body.options["energy"])
     #        assert len(body.options["energy"]) != 0, "Energy should be assigned to each body"

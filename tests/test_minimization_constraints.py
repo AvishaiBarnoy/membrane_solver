@@ -74,7 +74,10 @@ def _tetra_mesh(target_volume):
         "edges": edges,
         "faces": faces,
         "bodies": bodies,
-        "global_parameters": {"surface_tension": 1.0, "volume_constraint_mode": "lagrange"},
+        "global_parameters": {
+            "surface_tension": 1.0,
+            "volume_constraint_mode": "lagrange",
+        },
         "instructions": [],
     }
 

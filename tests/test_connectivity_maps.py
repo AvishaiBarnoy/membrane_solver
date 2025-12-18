@@ -16,20 +16,14 @@ def test_build_connectivity_maps():
     mesh.vertices = {
         0: Vertex(0, np.array([0.0, 0.0, 0.0])),
         1: Vertex(1, np.array([1.0, 0.0, 0.0])),
-        2: Vertex(2, np.array([0.0, 1.0, 0.0]))
+        2: Vertex(2, np.array([0.0, 1.0, 0.0])),
     }
 
     # Define 3 edges: 0->1, 1->2, 2->0
-    mesh.edges = {
-        1: Edge(1, 0, 1),
-        2: Edge(2, 1, 2),
-        3: Edge(3, 2, 0)
-    }
+    mesh.edges = {1: Edge(1, 0, 1), 2: Edge(2, 1, 2), 3: Edge(3, 2, 0)}
 
     # Define one facet using these 3 edges (triangle)
-    mesh.facets = {
-        0: Facet(0, edge_indices=[1, 2, 3])
-    }
+    mesh.facets = {0: Facet(0, edge_indices=[1, 2, 3])}
 
     # Build connectivity
     mesh.build_connectivity_maps()
@@ -47,26 +41,22 @@ def test_build_connectivity_maps():
     assert mesh.vertex_to_facets[1] == {0}
     assert mesh.vertex_to_facets[2] == {0}
 
+
 def create_simple_triangle_mesh():
     mesh = Mesh()
 
     mesh.vertices = {
         0: Vertex(0, np.array([0.0, 0.0, 0.0])),
         1: Vertex(1, np.array([1.0, 0.0, 0.0])),
-        2: Vertex(2, np.array([0.0, 1.0, 0.0]))
+        2: Vertex(2, np.array([0.0, 1.0, 0.0])),
     }
 
-    mesh.edges = {
-        1: Edge(1, 0, 1),
-        2: Edge(2, 1, 2),
-        3: Edge(3, 2, 0)
-    }
+    mesh.edges = {1: Edge(1, 0, 1), 2: Edge(2, 1, 2), 3: Edge(3, 2, 0)}
 
-    mesh.facets = {
-        0: Facet(0, edge_indices=[1, 2, 3])
-    }
+    mesh.facets = {0: Facet(0, edge_indices=[1, 2, 3])}
 
     return mesh
+
 
 def test_connectivity_after_refinement():
     mesh = create_simple_triangle_mesh()
@@ -82,7 +72,9 @@ def test_connectivity_after_refinement():
 
     # Should be updated automatically inside refine_mesh
     assert len(mesh.facets) > 1  # refinement added facets
-    assert any(len(f.edge_indices) == 3 for f in mesh.facets.values())  # still triangles
+    assert any(
+        len(f.edge_indices) == 3 for f in mesh.facets.values()
+    )  # still triangles
 
     # Verify connectivity maps still valid
     for v_id, connected_edges in mesh.vertex_to_edges.items():

@@ -40,13 +40,21 @@ def test_volume_energy_and_gradient():
     facets = {0: f0, 1: f1, 2: f2, 3: f3}
 
     # Body (the tetrahedron)
-    body = Body(0, [0, 1, 2, 3], options={"target_volume": 0.1,
-                                          "volume_stiffness": 2.0},
-                target_volume=0.1)
+    body = Body(
+        0,
+        [0, 1, 2, 3],
+        options={"target_volume": 0.1, "volume_stiffness": 2.0},
+        target_volume=0.1,
+    )
     bodies = {0: body}
 
-    mesh = Mesh(vertices=vertices, edges=edges, facets=facets, bodies=bodies,
-               energy_modules=["volume"])
+    mesh = Mesh(
+        vertices=vertices,
+        edges=edges,
+        facets=facets,
+        bodies=bodies,
+        energy_modules=["volume"],
+    )
 
     # Set up global parameters
     global_params = GlobalParameters()
@@ -67,7 +75,6 @@ def test_volume_energy_and_gradient():
     expected_energy = 0.5 * k * (expected_volume - V0) ** 2
 
     print(f"target volume: {mesh.bodies[0]}")
-
 
     print(f"body:\n{body}")
     assert np.isclose(E, expected_energy), f"Expected energy {expected_energy}, got {E}"
@@ -103,9 +110,12 @@ def test_calculate_volume_energy():
     f3 = Facet(3, [2, 6, -5])
     facets = {0: f0, 1: f1, 2: f2, 3: f3}
 
-    body = Body(0, [0, 1, 2, 3], options={"target_volume": 0.1,
-                                          "volume_stiffness": 2.0},
-                target_volume=0.1)
+    body = Body(
+        0,
+        [0, 1, 2, 3],
+        options={"target_volume": 0.1, "volume_stiffness": 2.0},
+        target_volume=0.1,
+    )
     bodies = {0: body}
 
     mesh = Mesh(vertices=vertices, edges=edges, facets=facets, bodies=bodies)

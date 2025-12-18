@@ -9,7 +9,6 @@ from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
 
 
 def create_quad():
-
     mesh = Mesh()
 
     # A unit square in the XY plane
@@ -49,43 +48,43 @@ def test_triangle_refinement_updates_bodies():
 
     # Testing polygonal refinement
     mesh_tri = refine_polygonal_facets(mesh)
-    assert len(mesh_tri.vertices) == len(mesh.vertices) + len(
-        mesh.facets
-    ), "Initial triangulation of square should add a vertex at centroid, 5 total."
-    assert (
-        len(mesh_tri.edges) == len(mesh.edges) * 2
-    ), "Initial triangulation of square should end with 8 edges."
+    assert len(mesh_tri.vertices) == len(mesh.vertices) + len(mesh.facets), (
+        "Initial triangulation of square should add a vertex at centroid, 5 total."
+    )
+    assert len(mesh_tri.edges) == len(mesh.edges) * 2, (
+        "Initial triangulation of square should end with 8 edges."
+    )
     assert all(
         len(mesh_tri.facets[f_idx].edge_indices) == 3
         for f_idx in mesh_tri.facets.keys()
     ), "All refined facets must be triangles"
-    assert len(mesh_tri.facets) == len(
-        mesh.vertices
-    ), "Initial triangulation of square should end with 4 facets."
+    assert len(mesh_tri.facets) == len(mesh.vertices), (
+        "Initial triangulation of square should end with 4 facets."
+    )
     # assert all(isinstance(f, Facet) for f in mesh.b_tri[0].facets), "All body facets must be Facets"
-    assert len(mesh_tri.bodies[0].facet_indices) == len(
-        mesh_tri.facets
-    ), "Body should include all refined facets"
+    assert len(mesh_tri.bodies[0].facet_indices) == len(mesh_tri.facets), (
+        "Body should include all refined facets"
+    )
 
     # Testing triangular refinement
     mesh_ref = refine_triangle_mesh(mesh_tri)
 
-    assert len(mesh_ref.vertices) == len(mesh_tri.vertices) + len(
-        mesh_tri.edges
-    ), "Refinemenet should add len(edges) new vertex per facet"
-    assert len(mesh_ref.edges) == 2 * len(mesh_tri.edges) + 3 * len(
-        mesh_tri.facets
-    ), "Refining splits edges and adds 3 more for each facet"
-    assert len(mesh_ref.facets) == 2 ** len(
-        mesh_tri.facets
-    ), "Refiningt increases number of facets by factor of 2^k"
+    assert len(mesh_ref.vertices) == len(mesh_tri.vertices) + len(mesh_tri.edges), (
+        "Refinemenet should add len(edges) new vertex per facet"
+    )
+    assert len(mesh_ref.edges) == 2 * len(mesh_tri.edges) + 3 * len(mesh_tri.facets), (
+        "Refining splits edges and adds 3 more for each facet"
+    )
+    assert len(mesh_ref.facets) == 2 ** len(mesh_tri.facets), (
+        "Refiningt increases number of facets by factor of 2^k"
+    )
     assert all(
         len(mesh_ref.facets[f_idx].edge_indices) == 3
         for f_idx in mesh_ref.facets.keys()
     ), "All refined facets must be triangles"
-    assert len(mesh_ref.bodies[0].facet_indices) == len(
-        mesh_ref.facets
-    ), "Body should include all refined facets"
+    assert len(mesh_ref.bodies[0].facet_indices) == len(mesh_ref.facets), (
+        "Body should include all refined facets"
+    )
 
 
 def test_child_facets_are_closed_loops():
@@ -146,13 +145,13 @@ def test_edge_and_vertex_options_inheritance_triangle_refinement():
             break
     assert midpoint is not None, "Midpoint vertex not found"
     # Should inherit the constraint and be fixed
-    assert "test_constraint" in midpoint.options.get(
-        "constraints", []
-    ), "Midpoint should inherit constraint"
+    assert "test_constraint" in midpoint.options.get("constraints", []), (
+        "Midpoint should inherit constraint"
+    )
     # Should be fixed if the edge is fixed, regardless of parent vertices
-    assert (
-        midpoint.fixed
-    ), "Midpoint should be fixed if edge is fixed, regardless of parent vertices"
+    assert midpoint.fixed, (
+        "Midpoint should be fixed if edge is fixed, regardless of parent vertices"
+    )
 
     # Check that new edges splitting edge 1 inherit options and fixed
     found = False
@@ -165,9 +164,9 @@ def test_edge_and_vertex_options_inheritance_triangle_refinement():
             (midpoint.index, v1.index),
         ]:
             found = True
-            assert "test_constraint" in e.options.get(
-                "constraints", []
-            ), "Child edge should inherit constraint"
+            assert "test_constraint" in e.options.get("constraints", []), (
+                "Child edge should inherit constraint"
+            )
             assert e.fixed, "Child edge should be fixed"
     assert found, "Child edges of split should be present"
 
@@ -181,12 +180,12 @@ def test_facet_options_inheritance_polygonal_refinement():
     mesh_tri = refine_polygonal_facets(mesh)
     # All child facets should inherit the parent's options
     for f in mesh_tri.facets.values():
-        assert "facet_constraint" in f.options.get(
-            "constraints", []
-        ), "Child facet should inherit constraint"
-        assert "facet_energy" in f.options.get(
-            "energy", []
-        ), "Child facet should inherit energy"
+        assert "facet_constraint" in f.options.get("constraints", []), (
+            "Child facet should inherit constraint"
+        )
+        assert "facet_energy" in f.options.get("energy", []), (
+            "Child facet should inherit energy"
+        )
 
 
 def test_middle_edge_inherits_facet_constraint_polygonal_refinement():
@@ -198,9 +197,9 @@ def test_middle_edge_inherits_facet_constraint_polygonal_refinement():
     centroid_idx = 4
     for e in mesh_tri.edges.values():
         if centroid_idx in (e.tail_index, e.head_index):
-            assert "facet_constraint" in e.options.get(
-                "constraints", []
-            ), "Middle edge should inherit facet constraint"
+            assert "facet_constraint" in e.options.get("constraints", []), (
+                "Middle edge should inherit facet constraint"
+            )
 
 
 def test_midpoint_fixed_if_edge_fixed_even_if_vertices_not_fixed():
@@ -221,9 +220,9 @@ def test_midpoint_fixed_if_edge_fixed_even_if_vertices_not_fixed():
             midpoint = v
             break
     assert midpoint is not None, "Midpoint vertex not found"
-    assert (
-        midpoint.fixed
-    ), "Midpoint should be fixed if edge is fixed, even if parent vertices are not"
+    assert midpoint.fixed, (
+        "Midpoint should be fixed if edge is fixed, even if parent vertices are not"
+    )
 
 
 def test_connectivity_maps_after_polygonal_refinement():
@@ -250,9 +249,9 @@ def test_connectivity_maps_after_polygonal_refinement():
     # 2. Each edge maps to a facet that includes it
     for e_id, facets in mesh_tri.edge_to_facets.items():
         for f_id in facets:
-            assert e_id in [
-                abs(i) for i in mesh_tri.facets[f_id].edge_indices
-            ], f"Edge {e_id} not found in facet {f_id}'s edge list"
+            assert e_id in [abs(i) for i in mesh_tri.facets[f_id].edge_indices], (
+                f"Edge {e_id} not found in facet {f_id}'s edge list"
+            )
 
     # 3. Each vertex's edge map is consistent
     for v_id, edges in mesh_tri.vertex_to_edges.items():

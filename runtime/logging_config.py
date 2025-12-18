@@ -14,7 +14,7 @@ logger.critical('Critical error! Cannot proceed further.')
 
 
 def setup_logging(
-    log_file: str = "membrane_solver.log",
+    log_file: str = "membrane_solver",
     quiet: bool = False,
     debug: bool = False,
 ) -> logging.Logger:

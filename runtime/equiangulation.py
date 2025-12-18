@@ -70,8 +70,7 @@ def equiangulate_mesh(mesh: Mesh, max_iterations: int = 100) -> Mesh:
             current_mesh.full_mesh_validate()
     except Exception as exc:  # defensive guardrail
         logger.error(
-            "Mesh validation failed after equiangulation "
-            "(returning original mesh): %s",
+            "Mesh validation failed after equiangulation (returning original mesh): %s",
             exc,
         )
         return mesh
@@ -169,12 +168,12 @@ def should_flip_edge(mesh: Mesh, edge: Edge, facet1: Facet, facet2: Facet) -> bo
     # Triangle 1: (v1, v2, off_vertex1)
     a1 = np.linalg.norm(pos2 - pos_off1)  # edge opposite to v1
     b1 = np.linalg.norm(pos1 - pos_off1)  # edge from off_vertex1 to v1
-    c1 = np.linalg.norm(pos2 - pos1)      # shared edge (common edge)
+    c1 = np.linalg.norm(pos2 - pos1)  # shared edge (common edge)
 
     # Triangle 2: (v1, v2, off_vertex2)
     a2 = np.linalg.norm(pos2 - pos_off2)  # edge opposite to v1
     d2 = np.linalg.norm(pos1 - pos_off2)  # edge from off_vertex2 to v1
-    e2 = np.linalg.norm(pos2 - pos1)      # shared edge (common edge)
+    e2 = np.linalg.norm(pos2 - pos1)  # shared edge (common edge)
 
     # Calculate cos θ₁ and cos θ₂ using law of cosines
     # For triangle 1, angle at off_vertex1: cos θ₁ = (b1² + c1² - a1²) / (2*b1*c1)
@@ -243,7 +242,9 @@ def get_off_vertex(mesh: Mesh, facet: Facet, edge: Edge) -> int | None:
     return off_vertices.pop()
 
 
-def flip_edge_safe(mesh: Mesh, edge_idx: int, facet1: Facet, facet2: Facet, new_edge_idx: int) -> bool:
+def flip_edge_safe(
+    mesh: Mesh, edge_idx: int, facet1: Facet, facet2: Facet, new_edge_idx: int
+) -> bool:
     """
     Safely flip an edge by replacing it with the other diagonal of the
     quadrilateral.  Returns True if the flip was successful, False otherwise.
@@ -327,9 +328,10 @@ def flip_edge_safe(mesh: Mesh, edge_idx: int, facet1: Facet, facet2: Facet, new_
             new_normal2 = facet2.normal(mesh)
 
             # Normals should be roughly in the same hemisphere as originals.
-            if np.dot(new_normal1, normal1_orig) < -0.5 or np.dot(
-                new_normal2, normal2_orig
-            ) < -0.5:
+            if (
+                np.dot(new_normal1, normal1_orig) < -0.5
+                or np.dot(new_normal2, normal2_orig) < -0.5
+            ):
                 logger.warning(
                     "Edge flip created inverted normals, reverting edge %d",
                     edge_idx,
@@ -356,20 +358,25 @@ def flip_edge_safe(mesh: Mesh, edge_idx: int, facet1: Facet, facet2: Facet, new_
         return False
 
 
-def find_connecting_edge(mesh: Mesh, v1: int, v2: int, candidate_edges: list) -> int | None:
+def find_connecting_edge(
+    mesh: Mesh, v1: int, v2: int, candidate_edges: list
+) -> int | None:
     """
     Find an edge that connects two vertices from a list of candidate signed edge indices.
     """
     for signed_edge_idx in candidate_edges:
         edge = mesh.get_edge(signed_edge_idx)
-        if (edge.tail_index == v1 and edge.head_index == v2) or \
-           (edge.tail_index == v2 and edge.head_index == v1):
+        if (edge.tail_index == v1 and edge.head_index == v2) or (
+            edge.tail_index == v2 and edge.head_index == v1
+        ):
             return abs(signed_edge_idx)
 
     return None
 
 
-def get_oriented_edge(mesh: Mesh, from_vertex: int, to_vertex: int, edge_idx: int) -> int:
+def get_oriented_edge(
+    mesh: Mesh, from_vertex: int, to_vertex: int, edge_idx: int
+) -> int:
     """
     Get the correctly oriented edge index for going from from_vertex to to_vertex.
     Returns positive index if edge goes from->to, negative if edge goes to->from.
@@ -381,5 +388,7 @@ def get_oriented_edge(mesh: Mesh, from_vertex: int, to_vertex: int, edge_idx: in
     elif edge.tail_index == to_vertex and edge.head_index == from_vertex:
         return -edge_idx
     else:
-        logger.error(f"Edge {edge_idx} does not connect vertices {from_vertex} and {to_vertex}")
+        logger.error(
+            f"Edge {edge_idx} does not connect vertices {from_vertex} and {to_vertex}"
+        )
         return edge_idx  # fallback

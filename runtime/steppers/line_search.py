@@ -6,7 +6,7 @@ import numpy as np
 from geometry.entities import Mesh
 from runtime.topology import check_max_normal_change, get_min_edge_length
 
-logger = logging.getLogger('membrane_solver')
+logger = logging.getLogger("membrane_solver")
 
 
 def backtracking_line_search(
@@ -62,7 +62,7 @@ def backtracking_line_search(
 
     # Pre-compute stability threshold
     min_edge_len = get_min_edge_length(mesh)
-    safe_step_limit = 0.3 * min_edge_len if min_edge_len > 0 else float('inf')
+    safe_step_limit = 0.3 * min_edge_len if min_edge_len > 0 else float("inf")
 
     # Calculate max possible displacement vector magnitude (unscaled)
     max_dir_norm = 0.0
@@ -115,9 +115,8 @@ def backtracking_line_search(
             disp = alpha * direction.get(vidx, np.zeros(3))
             vertex.position[:] = original_positions[vidx] + disp
             if hasattr(vertex, "constraint"):
-                vertex.position[:] = vertex.constraint.project_position(
-                    vertex.position
-                )
+                vertex.position[:] = vertex.constraint.project_position(vertex.position)
+        mesh.increment_version()
 
         # Stability Check: Only run expensive check if step is large
         if not is_safe_small_step:
@@ -127,6 +126,7 @@ def backtracking_line_search(
                     if getattr(vertex, "fixed", False):
                         continue
                     vertex.position[:] = original_positions[vidx]
+                mesh.increment_version()
 
                 alpha *= beta
                 backtracks += 1
@@ -142,6 +142,7 @@ def backtracking_line_search(
 
         if constraint_enforcer is not None:
             constraint_enforcer(mesh)
+            mesh.increment_version()
             trial_energy_after_constraint = energy_fn()
             vio_after = constraint_violation(mesh)
         else:
@@ -176,6 +177,7 @@ def backtracking_line_search(
             if getattr(vertex, "fixed", False):
                 continue
             vertex.position[:] = original_positions[vidx]
+        mesh.increment_version()
 
         alpha *= beta
         backtracks += 1
@@ -193,6 +195,7 @@ def backtracking_line_search(
         if getattr(vertex, "fixed", False):
             continue
         vertex.position[:] = original_positions[vidx]
+    mesh.increment_version()
 
     logger.debug(
         "Zero-step detected: no trial step reduced energy (alpha reached %.2e).",

@@ -34,7 +34,9 @@ def _edges_with_line_tension(mesh: Mesh) -> Iterable[int]:
             yield idx
 
 
-def _edge_length_and_grad(mesh: Mesh, edge_index: int) -> tuple[float, Dict[int, np.ndarray]]:
+def _edge_length_and_grad(
+    mesh: Mesh, edge_index: int
+) -> tuple[float, Dict[int, np.ndarray]]:
     edge = mesh.edges[edge_index]
     tail = mesh.vertices[edge.tail_index].position
     head = mesh.vertices[edge.head_index].position

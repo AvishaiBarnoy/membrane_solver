@@ -6,13 +6,16 @@ from collections import Counter
 
 logger = logging.getLogger("membrane_solver")
 
+
 class EnergyModuleManager:
     def __init__(self, module_names):
         self.modules = {}
         counted = Counter(module_names)
         for name, count in counted.items():
             if count > 1:
-                logger.warning(f"Energy module '{name}' specified {count} times; using only one instance.")
+                logger.warning(
+                    f"Energy module '{name}' specified {count} times; using only one instance."
+                )
 
             try:
                 self.modules[name] = importlib.import_module(f"modules.energy.{name}")

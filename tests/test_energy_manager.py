@@ -29,9 +29,11 @@ def energy_manager():
         manager = EnergyModuleManager(["surface", "volume"])
         return manager
 
+
 def test_load_modules(energy_manager):
     assert "surface" in energy_manager.modules
     assert "volume" in energy_manager.modules
+
 
 def test_get_module(energy_manager):
     mod = energy_manager.get_module("surface")

@@ -1,5 +1,6 @@
 # global_parameters.py
 
+
 class GlobalParameters:
     def __init__(self, initial_params=None):
         """
@@ -30,7 +31,7 @@ class GlobalParameters:
             "step_size": 1e-3,
             "intrinsic_curvature": 0.0,
             "bending_modulus": 0.0,
-            "gaussian_modulus": 0.0
+            "gaussian_modulus": 0.0,
         }
         # Load initial parameters if provided
         if initial_params:

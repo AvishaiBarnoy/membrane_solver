@@ -3,10 +3,10 @@ import numpy as np
 
 
 def compute_energy_and_gradient(mesh, gp, resolver):
-    κt = resolver.get(None, 'tilt_rigidity')
+    κt = resolver.get(None, "tilt_rigidity")
     E = 0.0
     shape_grad = {i: np.zeros(3) for i in mesh.vertices}
-    tilt_grad  = {i: np.zeros(2) for i in mesh.vertices}
+    tilt_grad = {i: np.zeros(2) for i in mesh.vertices}
 
     for v in mesh.vertices.values():
         t = v.tilt

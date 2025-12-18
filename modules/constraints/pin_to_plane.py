@@ -27,12 +27,16 @@ import numpy as np
 logger = logging.getLogger("membrane_solver")
 
 
-def _project_onto_plane(pos: np.ndarray, normal: np.ndarray, point: np.ndarray) -> np.ndarray:
+def _project_onto_plane(
+    pos: np.ndarray, normal: np.ndarray, point: np.ndarray
+) -> np.ndarray:
     """Project ``pos`` onto the plane defined by (normal, point)."""
     return pos - np.dot(pos - point, normal) * normal
 
 
-def _resolve_plane_from_options(mesh, options: dict | None) -> tuple[np.ndarray, np.ndarray] | None:
+def _resolve_plane_from_options(
+    mesh, options: dict | None
+) -> tuple[np.ndarray, np.ndarray] | None:
     gp = getattr(mesh, "global_parameters", None)
 
     normal_raw = None

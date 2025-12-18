@@ -1,524 +1,82 @@
 import argparse
-import json
 import logging
 import os
 import sys
 
-from geometry.entities import Mesh
+from commands.context import CommandContext
+from commands.registry import get_command
 from geometry.geom_io import load_data, parse_geometry, save_geometry
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
-from runtime.equiangulation import equiangulate_mesh
 from runtime.logging_config import setup_logging
 from runtime.minimizer import Minimizer
-from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
 from runtime.steppers.conjugate_gradient import ConjugateGradient
-from runtime.steppers.gradient_descent import GradientDescent
-from runtime.topology import detect_vertex_edge_collisions
-from runtime.vertex_average import vertex_average
 
-logger = logging.getLogger("membrane_solver.log")
-logger.addHandler(logging.NullHandler())
-
-
-def print_physical_properties(mesh: Mesh) -> None:
-    """Print basic physical properties of the mesh.
-
-    Includes global surface area and volume, as well as per‑body volumes
-    and surface areas when bodies are present.
-    """
-    total_area = mesh.compute_total_surface_area()
-    total_volume = mesh.compute_total_volume()
-
-    print("=== Physical Properties ===")
-    print(f"Vertices: {len(mesh.vertices)}")
-    print(f"Edges   : {len(mesh.edges)}")
-    print(f"Facets  : {len(mesh.facets)}")
-    print(f"Bodies  : {len(mesh.bodies)}")
-    print()
-    print(f"Total surface area: {total_area:.6f}")
-    print(f"Total volume      : {total_volume:.6f}")
-
-    if mesh.bodies:
-        print()
-        print("Per‑body properties:")
-        for body_idx, body in mesh.bodies.items():
-            body_vol = body.compute_volume(mesh)
-            body_area = body.compute_surface_area(mesh)
-            print(
-                f"  Body {body_idx}: volume = {body_vol:.6f}, "
-                f"surface area = {body_area:.6f}"
-            )
+logger = logging.getLogger("membrane_solver")
 
 
 def resolve_json_path(path: str) -> str:
     """Return a valid JSON file path, allowing path without extension."""
     if os.path.isfile(path):
         return path
-    if not path.lower().endswith('.json'):
-        alt = path + '.json'
+    if not path.lower().endswith(".json"):
+        alt = path + ".json"
         if os.path.isfile(alt):
             return alt
     raise FileNotFoundError(f"Cannot find file '{path}' or '{path}.json'")
 
-def load_mesh_from_json(path):
-    with open(path, 'r') as f:
-        data = json.load(f)
-    # You need to implement this function to construct a Mesh from JSON
-    return Mesh.from_json(data)
-
-def save_mesh_to_json(mesh, path):
-    with open(path, 'w') as f:
-        json.dump(mesh.to_json(), f, indent=2)
-
-def parse_instructions(instr):
-    # Accepts a string or list of instructions, returns a list of (cmd, arg) tuples
-    result = []
-    if isinstance(instr, str):
-        instr = instr.split()
-
-    for inst in instr:
-        cmd = inst
-        if cmd.startswith('g'):
-            result.append(cmd)
-        elif cmd.startswith('r'):
-            result.append(cmd)
-        elif cmd == 'cg':
-            result.append('cg')
-        elif cmd == 'gd':
-            result.append('gd')
-        elif cmd in {'h', 'help', '?'}:
-            result.append('help')
-        elif cmd in {'properties', 'props', 'p', 'i'}:
-            result.append('properties')
-        elif cmd == "visualize" or cmd == "s":
-            result.append(cmd)
-        elif cmd.startswith("V") or cmd == "vertex_average":
-            result.append(cmd)
-        elif cmd == 'u':
-            result.append('u')
-        elif cmd.startswith('t'):
-            result.append(cmd)
-        elif cmd == "save":
-            result.append(cmd)
-        else:
-            logger.warning(f"Unknown instruction: {cmd}")
-    return result
-
-def execute_command(cmd, mesh, minimizer, stepper):
-    """Handle a single simulation command."""
-
-    if cmd == 'help':
-        # Print interactive command help and CLI options
-        print("Interactive commands:")
-        print("  gN            Run N minimization steps (e.g. g5, g10)")
-        print("  gd / cg       Switch to Gradient Descent / Conjugate Gradient stepper")
-        print("  tX            Set step size to X (e.g. t1e-3)")
-        print("  r             Refine mesh (triangle refinement + polygonal)")
-        print("  V / Vn        Vertex averaging once or n times (e.g. V5)")
-        print("  vertex_average Same as V")
-        print("  u             Equiangulate mesh")
-        print("  visualize / s Plot current geometry")
-        print("  properties    Print physical properties (area, volume, etc.)")
-        print("  print [entity] [id|filter] Query geometry (e.g. print edges len > 0.1)")
-        print("  set [param] [value]       Set global parameter (e.g. set surface_tension 1.0)")
-        print("                            or entity property (e.g. set vertex 0 fixed true)")
-        print("  live_vis / lv Turn on/off live visualization during minimization")
-        print("  save          Save geometry to 'interactive.temp'")
-        print("  quit / exit / q  Leave interactive mode")
-        print()
-        print("Command-line options (when starting the solver):")
-        print("  -i, --input PATH          Input mesh JSON file")
-        print("  -o, --output PATH         Output mesh JSON file (default: output.json)")
-        print("  --instructions PATH       Instruction file (one command per line)")
-        print("  --log PATH                Log file path (default: membrane_solver.log)")
-        print("  -q, --quiet               Suppress console output")
-        print("  --debug                   Enable verbose debug logging")
-        print("  --non-interactive         Do not enter interactive prompt after instructions")
-    elif cmd == 'live_vis' or cmd == 'lv':
-        if not hasattr(minimizer, 'live_vis'):
-            minimizer.live_vis = False
-        minimizer.live_vis = not minimizer.live_vis
-        logger.info(f"Live visualization {'enabled' if minimizer.live_vis else 'disabled'}")
-    elif cmd == 'cg':
-        logger.info("Switching to Conjugate Gradient stepper.")
-        stepper = ConjugateGradient()
-        minimizer.stepper = stepper
-    elif cmd == 'gd':
-        logger.info("Switching to Gradient Descent stepper.")
-        stepper = GradientDescent()
-        minimizer.stepper = stepper
-    elif cmd.startswith('g'):
-        cmd = cmd.replace(' ', '')
-        # Accept bare 'g' as one step; otherwise require integer suffix.
-        if cmd == 'g':
-            n_steps = 1
-        else:
-            steps_str = cmd[1:]
-            if not steps_str.isnumeric():
-                logger.warning(
-                    "Invalid minimization command '%s'; expected 'g' or 'gN' with integer N.",
-                    cmd,
-                )
-                return mesh, stepper
-            n_steps = int(steps_str)
-
-        logger.debug(
-            f"Minimizing for {n_steps} steps using {stepper.__class__.__name__}"
-        )
-        logger.debug(
-            f"Step size: {minimizer.step_size}, Tolerance: {minimizer.tol}"
-        )
-
-        callback = None
-        if getattr(minimizer, 'live_vis', False):
-             import matplotlib.pyplot as plt
-
-             from visualization.plotting import plot_geometry
-
-             plt.ion() # Enable interactive mode
-
-             def cb(mesh, i):
-                 plt.clf()
-                 ax = plt.axes(projection='3d')
-                 plot_geometry(mesh, ax=ax, show=False)
-                 plt.title(f"Step {i}")
-                 plt.draw()
-                 plt.pause(0.001)
-             callback = cb
-
-        result = minimizer.minimize(n_steps=n_steps, callback=callback)
-        mesh = result["mesh"]
-
-        logger.info(
-            f"Minimization complete. Final energy: {result['energy'] if result else 'N/A'}"
-        )
-        # NEW: Check for collisions after minimization
-        collisions = detect_vertex_edge_collisions(mesh)
-        if collisions:
-            logger.warning(f"TOPOLOGY WARNING: {len(collisions)} vertex-edge collisions detected!")
-            # Optional: Visualize them or auto-correct (future work)
-
-    elif cmd.startswith('t'):
-        new_ts = cmd.replace(' ', '')
-        try:
-            minimizer.step_size = float(new_ts[1:])
-        except ValueError as exc:
-            raise ValueError(f"Invalid step size format {new_ts[1:]}") from exc
-        logger.info(f"Updated step size to {minimizer.step_size}")
-    elif cmd.startswith('r'):
-        count = 1
-        arg = cmd[1:]
-        if arg:
-            if arg.isdigit():
-                count = int(arg)
-            else:
-                logger.warning("Invalid refine command '%s'; expected 'r' or 'rN'.", cmd)
-                return mesh, stepper
-        for i in range(count):
-            logger.info("Refining mesh... (%d/%d)", i + 1, count)
-            mesh = refine_polygonal_facets(mesh)
-            mesh = refine_triangle_mesh(mesh)
-            minimizer.mesh = mesh
-            minimizer.enforce_constraints_after_mesh_ops(mesh)
-        logger.info("Mesh refinement complete after %d pass(es).", count)
-    elif cmd.startswith('V'):
-        # Vertex averaging: V for a single pass, or VN for N passes.
-        cmd = cmd.replace(" ", "")
-        if cmd == "V":
-            n_passes = 1
-        else:
-            passes_str = cmd[1:]
-            if not passes_str.isnumeric():
-                logger.warning(
-                    "Invalid vertex averaging command '%s'; expected 'V' or 'VN' "
-                    "with integer N.",
-                    cmd,
-                )
-                return mesh, stepper
-            n_passes = int(passes_str)
-
-        for _ in range(n_passes):
-            vertex_average(mesh)
-        logger.info("Vertex averaging done.")
-        # After vertex averaging, explicitly re‑enforce hard constraints such
-        # as fixed volume so subsequent minimization starts from a consistent
-        # state, even if averaging introduced small drifts.
-        minimizer.enforce_constraints_after_mesh_ops(mesh)
-    elif cmd == 'vertex_average':
-        vertex_average(mesh)
-        logger.info("Vertex averaging done.")
-    elif cmd == 'u':
-        logger.info("Starting equiangulation...")
-        mesh = equiangulate_mesh(mesh)
-        minimizer.mesh = mesh
-        minimizer.enforce_constraints_after_mesh_ops(mesh)
-        logger.info("Equiangulation complete.")
-    elif cmd == 'properties':
-        print_physical_properties(mesh)
-    elif cmd == 'visualize' or cmd == "s":
-        #from visualize_geometry import plot_geometry
-        from visualization.plotting import plot_geometry
-        plot_geometry(mesh, show_indices=False, )
-    elif cmd == 'save':
-        # fall back to a default name
-        save_geometry(mesh, 'interactive.temp')
-        logger.info("Saved geometry to interactive.temp")
-    else:
-        logger.warning(f"Unknown instruction: {cmd}")
-
-    return mesh, stepper
-
-def process_complex_command(tokens, mesh):
-    """
-    Handle verbose commands like 'print' and 'set'.
-    tokens: list of strings, e.g. ['print', 'edges', 'len', '>', '0.5']
-    """
-    cmd = tokens[0].lower()
-
-    if cmd == 'print':
-        if len(tokens) < 2:
-            print("Usage: print [vertices|edges|facets|bodies] [id|filter] ...")
-            return mesh
-
-        entity_type = tokens[1].lower()
-
-        # Helper to get entity dict
-        entities = None
-        if entity_type in ['vertices', 'vertex']:
-            entities = mesh.vertices
-            name = "Vertex"
-        elif entity_type in ['edges', 'edge']:
-            entities = mesh.edges
-            name = "Edge"
-        elif entity_type in ['facets', 'facet', 'faces', 'face']:
-            entities = mesh.facets
-            name = "Facet"
-        elif entity_type in ['bodies', 'body']:
-            entities = mesh.bodies
-            name = "Body"
-        else:
-            print(f"Unknown entity type: {entity_type}")
-            return mesh
-
-        # Parse filter/selection
-        # Mode 1: print entity ID (e.g., print vertex 5)
-        if len(tokens) == 3 and tokens[2].isdigit():
-            idx = int(tokens[2])
-            if idx in entities:
-                print(f"{name} {idx}: {entities[idx]}")
-                if hasattr(entities[idx], "options"):
-                    print(f"  Options: {entities[idx].options}")
-                if hasattr(entities[idx], "position"):
-                    print(f"  Position: {entities[idx].position}")
-            else:
-                print(f"{name} {idx} not found.")
-            return mesh
-
-        # Mode 2: print all or filter
-        # e.g. print edges
-        # e.g. print edges len > 0.5
-
-        targets = entities.items()
-
-        if len(tokens) >= 5:
-            # Simple filter: property operator value
-            prop = tokens[2]
-            op = tokens[3]
-            val_str = tokens[4]
-
-            try:
-                val = float(val_str)
-            except ValueError:
-                val = val_str
-
-            def get_val(obj, key):
-                # Try attributes then options
-                if hasattr(obj, key):
-                    return getattr(obj, key)
-                if hasattr(obj, "options") and obj.options and key in obj.options:
-                    return obj.options[key]
-                # Derived properties
-                if key == "len" and hasattr(obj, "compute_length"):
-                    return obj.compute_length(mesh)
-                if key == "area" and hasattr(obj, "compute_area"):
-                    return obj.compute_area(mesh)
-                return None
-
-            filtered = []
-            for k, obj in targets:
-                v = get_val(obj, prop)
-                if v is None: continue
-
-                match = False
-                if op == '>': match = v > val
-                elif op == '<': match = v < val
-                elif op == '>=': match = v >= val
-                elif op == '<=': match = v <= val
-                elif op == '==' or op == '=': match = v == val
-                elif op == '!=': match = v != val
-
-                if match:
-                    filtered.append((k, obj))
-            targets = filtered
-            print(f"Found {len(targets)} {entity_type} matching filter.")
-
-        # Print results (limit to 20 unless 'all' is specified?)
-        # For now just print IDs and basic info
-        print(f"List of {entity_type} ({len(targets)}):")
-        for k, obj in list(targets)[:20]:
-            info = ""
-            if entity_type.startswith("edge"):
-                info = f"len={obj.compute_length(mesh):.4f}"
-            elif entity_type.startswith("facet"):
-                info = f"area={obj.compute_area(mesh):.4f}"
-            print(f"  [{k}]: {info} {obj.options if hasattr(obj, 'options') else ''}")
-        if len(targets) > 20:
-            print("  ... (showing first 20)")
-
-    elif cmd == 'set':
-        # set [global_param] [value]
-        # set [entity] [id] [prop] [value]
-        if len(tokens) < 3:
-            print("Usage: set [param] [value] OR set [entity] [id] [prop] [value]")
-            return mesh
-
-        # Check if first token is an entity type
-        first = tokens[1].lower()
-        if first in ['vertex', 'edge', 'facet', 'body', 'vertices', 'edges', 'facets', 'bodies']:
-            # Entity set
-            if len(tokens) < 5:
-                print("Usage: set [entity] [id] [prop] [value]")
-                return mesh
-
-            entity_type = first
-            try:
-                idx = int(tokens[2])
-            except ValueError:
-                print("ID must be an integer.")
-                return mesh
-
-            prop = tokens[3]
-            val_str = tokens[4]
-
-            # Helper to interpret value
-            if val_str.lower() == 'true': val = True
-            elif val_str.lower() == 'false': val = False
-            else:
-                try:
-                    val = float(val_str)
-                except ValueError:
-                    val = val_str
-
-            # Find entity
-            obj = None
-            if entity_type.startswith('vert'):
-                obj = mesh.vertices.get(idx)
-            elif entity_type.startswith('edge'):
-                obj = mesh.edges.get(idx)
-            elif entity_type.startswith('facet') or entity_type.startswith('face'):
-                obj = mesh.facets.get(idx)
-            elif entity_type.startswith('body'):
-                obj = mesh.bodies.get(idx)
-
-            if not obj:
-                print(f"Entity {idx} not found.")
-                return mesh
-
-            # Set property
-            # Special handling for 'fixed' which is an attribute
-            if prop == 'fixed':
-                obj.fixed = bool(val)
-                print(f"Set {entity_type} {idx} fixed={obj.fixed}")
-            else:
-                # Set in options
-                if not obj.options: obj.options = {}
-                obj.options[prop] = val
-                print(f"Set {entity_type} {idx} options['{prop}'] = {val}")
-
-        else:
-            # Global parameter set
-            param = tokens[1]
-            val_str = tokens[2]
-            try:
-                val = float(val_str)
-            except ValueError:
-                val = val_str
-
-            mesh.global_parameters.set(param, val)
-            print(f"Global parameter '{param}' set to {val}")
-
-    return mesh
-
-def interactive_loop(mesh, minimizer, stepper):
-    """Run an interactive command loop."""
-
-    while True:
-        try:
-            line = input('> ').strip()
-        except EOFError:
-            break
-        if not line:
-            continue
-        if line.lower() in {'quit', 'exit', 'q'}:
-            break
-
-        # Check for complex commands
-        tokens = line.split()
-        if tokens and tokens[0].lower() in ['print', 'set']:
-            mesh = process_complex_command(tokens, mesh)
-            continue
-
-        commands = parse_instructions(''.join(line.split()))
-        for cmd in commands:
-            mesh, stepper = execute_command(cmd, mesh, minimizer, stepper)
-
-    return mesh
 
 def main():
     parser = argparse.ArgumentParser(description="Membrane Solver Simulation Driver")
-    parser.add_argument('-i', '--input', help='Input mesh JSON file')
-    parser.add_argument('-o', '--output', default=None, help='Output mesh JSON file')
-    parser.add_argument('--instructions', help='Optional instruction file (one command per line)')
-    parser.add_argument('--log', default=None, help='Optional log file')
-    parser.add_argument('-q', '--quiet', action='store_true',
-                        help='Suppress console output')
-    parser.add_argument('--debug', action='store_true',
-                        help='Enable verbose debug logging')
-    parser.add_argument('--non-interactive', action='store_true',
-                        help="Skip interactive mode after executing instructions")
+    parser.add_argument("-i", "--input", help="Input mesh JSON file")
+    parser.add_argument("-o", "--output", default=None, help="Output mesh JSON file")
     parser.add_argument(
-        '--properties',
-        action='store_true',
-        help='Print basic physical properties (volume, surface area, etc.) and exit',
+        "--instructions", help="Optional instruction file (one command per line)"
+    )
+    parser.add_argument("--log", default=None, help="Optional log file")
+    parser.add_argument(
+        "-q", "--quiet", action="store_true", help="Suppress console output"
     )
     parser.add_argument(
-        '--volume-mode',
-        choices=['lagrange', 'penalty'],
+        "--debug", action="store_true", help="Enable verbose debug logging"
+    )
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Skip interactive mode after executing instructions",
+    )
+    parser.add_argument(
+        "--properties",
+        action="store_true",
+        help="Print basic physical properties (volume, surface area, etc.) and exit",
+    )
+    parser.add_argument(
+        "--volume-mode",
+        choices=["lagrange", "penalty"],
         default=None,
-        help='Override volume constraint mode (lagrange = hard constraint; penalty = soft energy).',
+        help="Override volume constraint mode (lagrange = hard constraint; penalty = soft energy).",
     )
     parser.add_argument(
-        '--line-tension',
+        "--line-tension",
         type=float,
         default=None,
-        help='Assign a line-tension modulus to edges. When combined with '
-        '`--line-tension-edges`, only the specified edge IDs are tagged. '
-        'Otherwise all edges receive line tension.',
+        help="Assign a line-tension modulus to edges. When combined with "
+        "`--line-tension-edges`, only the specified edge IDs are tagged. "
+        "Otherwise all edges receive line tension.",
     )
     parser.add_argument(
-        '--line-tension-edges',
+        "--line-tension-edges",
         type=str,
         default=None,
-        help='Comma-separated edge IDs to receive CLI line tension.',
+        help="Comma-separated edge IDs to receive CLI line tension.",
     )
     args = parser.parse_args()
 
     if not args.input:
         try:
-            args.input = input('Input mesh JSON file: ').strip()
+            args.input = input("Input mesh JSON file: ").strip()
         except EOFError:
-            print('No input file provided.', file=sys.stderr)
+            print("No input file provided.", file=sys.stderr)
             sys.exit(1)
     try:
         args.input = resolve_json_path(args.input)
@@ -528,7 +86,7 @@ def main():
 
     global logger
     logger = setup_logging(
-        args.log if args.log else 'membrane_solver.log',
+        args.log if args.log else "membrane_solver.log",
         quiet=args.quiet,
         debug=args.debug,
     )
@@ -576,9 +134,8 @@ def main():
                 sys.exit(1)
         _apply_cli_line_tension(args.line_tension, ids)
 
-    fixed_count = sum(1 for v in mesh.vertices.values() if getattr(v, 'fixed', False))
+    fixed_count = sum(1 for v in mesh.vertices.values() if getattr(v, "fixed", False))
     logger.debug(f"Number of fixed vertices: {fixed_count} / {len(mesh.vertices)}")
-    # Log target volume information only when a body and target are defined.
     if mesh.bodies:
         body0 = mesh.bodies.get(0)
         if body0 is not None:
@@ -589,51 +146,74 @@ def main():
     if args.volume_mode:
         global_params.set("volume_constraint_mode", args.volume_mode)
     energy_manager = EnergyModuleManager(mesh.energy_modules)
-
-    logger.debug(mesh.energy_modules)
-
     constraint_manager = ConstraintModuleManager(mesh.constraint_modules)
-    # Use Conjugate Gradient as the default stepper for faster convergence.
     stepper = ConjugateGradient()
 
-    # Optional: report physical properties and exit early if requested.
-    if args.properties:
-        print_physical_properties(mesh)
-        return
-
-    # Load instructions
-    if args.instructions:
-        with open(args.instructions, 'r') as f:
-            instr = f.read().split()
-    else:
-        instr = mesh.instructions if hasattr(mesh, 'instructions') else []
-    instructions = parse_instructions(instr)
-    logger.debug(f"Instructions to execute: {instructions}")
-
-    if not args.quiet:
-        print("=== Membrane Solver ===")
-        print(f"Input file: {args.input}")
-        print(f"Output file: {args.output or '(not saving)'}")
-        print(f"Energy modules: {mesh.energy_modules}")
-        print(f"Constraint modules: {mesh.constraint_modules}")
-        print(f"Instructions: {instructions}")
-
-    minimizer = Minimizer(mesh, global_params, stepper, energy_manager,
-                          constraint_manager, quiet=args.quiet)
-    logger.debug(global_params)
-
+    # Initialize Minimizer
+    minimizer = Minimizer(
+        mesh,
+        global_params,
+        stepper,
+        energy_manager,
+        constraint_manager,
+        quiet=args.quiet,
+    )
     minimizer.step_size = global_params.get("step_size", 0.001)
 
-    # Simulation loop
-    for cmd in instructions:
-        mesh, stepper = execute_command(cmd, mesh, minimizer, stepper)
+    # Initialize Command Context
+    context = CommandContext(mesh, minimizer, stepper)
+
+    if args.properties:
+        cmd, _ = get_command("properties")
+        cmd.execute(context, [])
+        return
+
+    # Load instructions from file or mesh
+    if args.instructions:
+        with open(args.instructions, "r") as f:
+            lines = f.readlines()
+    else:
+        lines = mesh.instructions if hasattr(mesh, "instructions") else []
+
+    # Execute initial instructions
+    logger.debug(f"Executing {len(lines)} initial instructions.")
+    for line in lines:
+        parts = line.strip().split()
+        if not parts:
+            continue
+        cmd_name = parts[0]
+        cmd_args = parts[1:]
+
+        command, extra_args = get_command(cmd_name)
+        if command:
+            command.execute(context, extra_args + cmd_args)
+        else:
+            logger.warning(f"Unknown instruction: {cmd_name}")
 
     if not args.non_interactive:
-        mesh = interactive_loop(mesh, minimizer, stepper)
-    # Save final mesh
-    #save_mesh_to_json(mesh, args.output)
+        while not context.should_exit:
+            try:
+                line = input("> ").strip()
+            except EOFError:
+                break
+            if not line:
+                continue
+
+            parts = line.split()
+            cmd_name = parts[0]
+            cmd_args = parts[1:]
+
+            command, extra_args = get_command(cmd_name)
+            if command:
+                try:
+                    command.execute(context, extra_args + cmd_args)
+                except Exception as e:
+                    logger.error(f"Error executing command '{cmd_name}': {e}")
+            else:
+                print(f"Unknown command: {cmd_name}")
+
     if args.output:
-        save_geometry(mesh, args.output)
+        save_geometry(context.mesh, args.output)
         logger.info(f"Simulation complete. Output saved to {args.output}")
     else:
         logger.info("Simulation complete. No output file written.")

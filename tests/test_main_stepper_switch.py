@@ -3,9 +3,10 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from commands.context import CommandContext
+from commands.minimization import SetStepperCommand
 from geometry.entities import Mesh, Vertex
-from main import parse_instructions
 from parameters.global_parameters import GlobalParameters
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
@@ -23,34 +24,32 @@ def create_mesh():
     return mesh
 
 
-def test_stepper_switch_between_cg_and_gd(monkeypatch):
+def test_stepper_switch_between_cg_and_gd():
     mesh = create_mesh()
     energy_manager = EnergyModuleManager(mesh.energy_modules)
     constraint_manager = ConstraintModuleManager(mesh.constraint_modules)
 
     stepper = GradientDescent()
-    minimizer = Minimizer(mesh, mesh.global_parameters, stepper,
-                          energy_manager, constraint_manager)
+    minimizer = Minimizer(
+        mesh, mesh.global_parameters, stepper, energy_manager, constraint_manager
+    )
 
-    called = []
+    ctx = CommandContext(mesh, minimizer, stepper)
 
-    def fake_minimize(self, n_steps=1):
-        called.append(self.stepper.__class__.__name__)
-        return {"mesh": self.mesh, "energy": 0.0}
+    # Initial state is GradientDescent
+    assert isinstance(ctx.stepper, GradientDescent)
+    assert isinstance(ctx.minimizer.stepper, GradientDescent)
 
-    monkeypatch.setattr(Minimizer, "minimize", fake_minimize)
+    # Switch to CG
+    cmd = SetStepperCommand("cg")
+    cmd.execute(ctx, [])
 
-    instructions = parse_instructions(["cg", "g1", "gd", "g1"])
+    assert isinstance(ctx.stepper, ConjugateGradient)
+    assert isinstance(ctx.minimizer.stepper, ConjugateGradient)
 
-    for cmd in instructions:
-        if cmd == "cg":
-            stepper = ConjugateGradient()
-            minimizer.stepper = stepper
-        elif cmd == "gd":
-            stepper = GradientDescent()
-            minimizer.stepper = stepper
-        elif cmd.startswith("g"):
-            cmd = cmd.replace(" ", "")
-            minimizer.minimize(n_steps=int(cmd[1:]))
+    # Switch back to GD
+    cmd = SetStepperCommand("gd")
+    cmd.execute(ctx, [])
 
-    assert called == ["ConjugateGradient", "GradientDescent"]
+    assert isinstance(ctx.stepper, GradientDescent)
+    assert isinstance(ctx.minimizer.stepper, GradientDescent)

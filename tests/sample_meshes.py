@@ -104,9 +104,7 @@ SQUARE_PERIMETER_GEOMETRY = {
         "surface_tension": 0.5,
         "volume_constraint_mode": "penalty",
         "volume_projection_during_minimization": True,
-        "perimeter_constraints": [
-            {"edges": [1, 2, 3, 4], "target_perimeter": 4.0}
-        ],
+        "perimeter_constraints": [{"edges": [1, 2, 3, 4], "target_perimeter": 4.0}],
     },
     "instructions": [],
 }
@@ -142,13 +140,15 @@ def generate_open_cylinder(radius=1.0, height=2.0, n_segments=16):
         mesh.vertices[i] = Vertex(i, np.array([x, y, z_bottom]), fixed=True)
 
         # Top vertex (fixed)
-        mesh.vertices[i + n_segments] = Vertex(i + n_segments, np.array([x, y, z_top]), fixed=True)
+        mesh.vertices[i + n_segments] = Vertex(
+            i + n_segments, np.array([x, y, z_top]), fixed=True
+        )
 
     # Edges
     edge_idx = 1
 
     # 1. Bottom ring edges
-    b_ring_edges = [] # stored as indices
+    b_ring_edges = []  # stored as indices
     for i in range(n_segments):
         mesh.edges[edge_idx] = Edge(edge_idx, i, (i + 1) % n_segments, fixed=True)
         b_ring_edges.append(edge_idx)
@@ -157,7 +157,9 @@ def generate_open_cylinder(radius=1.0, height=2.0, n_segments=16):
     # 2. Top ring edges
     t_ring_edges = []
     for i in range(n_segments):
-        mesh.edges[edge_idx] = Edge(edge_idx, i + n_segments, (i + 1) % n_segments + n_segments, fixed=True)
+        mesh.edges[edge_idx] = Edge(
+            edge_idx, i + n_segments, (i + 1) % n_segments + n_segments, fixed=True
+        )
         t_ring_edges.append(edge_idx)
         edge_idx += 1
 
@@ -200,7 +202,9 @@ def generate_open_cylinder(radius=1.0, height=2.0, n_segments=16):
         # t_{i+1} -> t_i is -t_ring_edges[i]
         # t_i -> b_{i+1} is -d_edges[i]
 
-        f2 = Facet(facet_idx, [v_edges[(i + 1) % n_segments], -t_ring_edges[i], -d_edges[i]])
+        f2 = Facet(
+            facet_idx, [v_edges[(i + 1) % n_segments], -t_ring_edges[i], -d_edges[i]]
+        )
         mesh.facets[facet_idx] = f2
         facet_list.append(facet_idx)
         facet_idx += 1
@@ -211,7 +215,7 @@ def generate_open_cylinder(radius=1.0, height=2.0, n_segments=16):
     # it gives volume of cone from origin.
     # We set target_volume to this computed value to keep it "constant".
 
-    mesh.bodies[1] = Body(1, facet_list, target_volume=0.0) # Will update target later
+    mesh.bodies[1] = Body(1, facet_list, target_volume=0.0)  # Will update target later
 
     mesh.build_connectivity_maps()
     mesh.build_facet_vertex_loops()
