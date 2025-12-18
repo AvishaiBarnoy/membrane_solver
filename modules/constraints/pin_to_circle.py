@@ -67,7 +67,9 @@ def _resolve_circle(mesh, options: dict | None):
     return normal, center, radius
 
 
-def _project_point_to_circle(pos: np.ndarray, normal: np.ndarray, center: np.ndarray, radius: float) -> np.ndarray:
+def _project_point_to_circle(
+    pos: np.ndarray, normal: np.ndarray, center: np.ndarray, radius: float
+) -> np.ndarray:
     # Project onto plane.
     pos_plane = pos - np.dot(pos - center, normal) * normal
     offset = pos_plane - center
@@ -91,15 +93,25 @@ def _entity_has_constraint(options: dict | None) -> bool:
 
 
 def enforce_constraint(mesh, **_kwargs):
-    tagged_vertices = [v for v in mesh.vertices.values() if _entity_has_constraint(getattr(v, "options", None))]
-    tagged_edges = [e for e in mesh.edges.values() if _entity_has_constraint(getattr(e, "options", None))]
+    tagged_vertices = [
+        v
+        for v in mesh.vertices.values()
+        if _entity_has_constraint(getattr(v, "options", None))
+    ]
+    tagged_edges = [
+        e
+        for e in mesh.edges.values()
+        if _entity_has_constraint(getattr(e, "options", None))
+    ]
 
     for vertex in tagged_vertices:
         params = _resolve_circle(mesh, getattr(vertex, "options", None))
         if params is None:
             continue
         normal, center, radius = params
-        vertex.position[:] = _project_point_to_circle(vertex.position, normal, center, radius)
+        vertex.position[:] = _project_point_to_circle(
+            vertex.position, normal, center, radius
+        )
 
     for edge in tagged_edges:
         params = _resolve_circle(mesh, getattr(edge, "options", None))
@@ -110,7 +122,9 @@ def enforce_constraint(mesh, **_kwargs):
             vertex = mesh.vertices.get(vidx)
             if vertex is None:
                 continue
-            vertex.position[:] = _project_point_to_circle(vertex.position, normal, center, radius)
+            vertex.position[:] = _project_point_to_circle(
+                vertex.position, normal, center, radius
+            )
 
 
 __all__ = ["enforce_constraint"]

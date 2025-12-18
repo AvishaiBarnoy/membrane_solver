@@ -8,6 +8,7 @@ from runtime.steppers.base import BaseStepper
 @dataclass
 class CommandContext:
     """Holds the shared state for the simulation session."""
+
     mesh: Mesh
     minimizer: Minimizer
     stepper: BaseStepper

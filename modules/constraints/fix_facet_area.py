@@ -34,7 +34,9 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 5) -> None:
         if len(v_ids) < 3:
             continue
         coords = np.array([mesh.vertices[vid].position for vid in v_ids])
-        diameter = np.max(np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=2))
+        diameter = np.max(
+            np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=2)
+        )
         max_move = 0.1 * diameter if diameter > 0 else 1e-3
 
         for _ in range(max_iter):
@@ -52,7 +54,9 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 5) -> None:
                 )
                 break
 
-            base_positions = {vidx: mesh.vertices[vidx].position.copy() for vidx in grad.keys()}
+            base_positions = {
+                vidx: mesh.vertices[vidx].position.copy() for vidx in grad.keys()
+            }
             lam = delta / (norm_sq + 1e-18)
 
             success = False
@@ -97,7 +101,6 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 5) -> None:
             target_area,
             facet.compute_area(mesh),
         )
-
 
         logger.debug(
             "Facet %s area constraint applied: target=%.6f, final=%.6f",

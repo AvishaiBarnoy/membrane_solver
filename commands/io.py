@@ -6,15 +6,18 @@ from visualization.plotting import plot_geometry
 
 logger = logging.getLogger("membrane_solver")
 
+
 class SaveCommand(Command):
     def execute(self, context, args):
-        filename = args[0] if args else 'interactive.temp'
+        filename = args[0] if args else "interactive.temp"
         save_geometry(context.mesh, filename)
         logger.info(f"Saved geometry to {filename}")
+
 
 class VisualizeCommand(Command):
     def execute(self, context, args):
         plot_geometry(context.mesh, show_indices=False)
+
 
 class PropertiesCommand(Command):
     def execute(self, context, args):

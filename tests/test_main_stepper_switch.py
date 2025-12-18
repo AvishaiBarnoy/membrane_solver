@@ -3,7 +3,7 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from commands.context import CommandContext
 from commands.minimization import SetStepperCommand
 from geometry.entities import Mesh, Vertex
@@ -30,8 +30,9 @@ def test_stepper_switch_between_cg_and_gd():
     constraint_manager = ConstraintModuleManager(mesh.constraint_modules)
 
     stepper = GradientDescent()
-    minimizer = Minimizer(mesh, mesh.global_parameters, stepper,
-                          energy_manager, constraint_manager)
+    minimizer = Minimizer(
+        mesh, mesh.global_parameters, stepper, energy_manager, constraint_manager
+    )
 
     ctx = CommandContext(mesh, minimizer, stepper)
 
@@ -40,14 +41,14 @@ def test_stepper_switch_between_cg_and_gd():
     assert isinstance(ctx.minimizer.stepper, GradientDescent)
 
     # Switch to CG
-    cmd = SetStepperCommand('cg')
+    cmd = SetStepperCommand("cg")
     cmd.execute(ctx, [])
 
     assert isinstance(ctx.stepper, ConjugateGradient)
     assert isinstance(ctx.minimizer.stepper, ConjugateGradient)
 
     # Switch back to GD
-    cmd = SetStepperCommand('gd')
+    cmd = SetStepperCommand("gd")
     cmd.execute(ctx, [])
 
     assert isinstance(ctx.stepper, GradientDescent)

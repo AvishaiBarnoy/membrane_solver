@@ -12,22 +12,25 @@ from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.steppers.base import BaseStepper
 
-logger = logging.getLogger('membrane_solver')
+logger = logging.getLogger("membrane_solver")
+
 
 class Minimizer:
     """Coordinate the optimization loop for a mesh."""
 
-    def __init__(self,
-                 mesh: Mesh,
-                 global_params: GlobalParameters,
-                 stepper: BaseStepper,
-                 energy_manager: EnergyModuleManager,
-                 constraint_manager: ConstraintModuleManager,
-                 energy_modules: Optional[List[str]] = None,
-                 constraint_modules: Optional[List[str]] = None,
-                 step_size: float = 1e-3,
-                 tol: float = 1e-6,
-                 quiet: bool = False) -> None:
+    def __init__(
+        self,
+        mesh: Mesh,
+        global_params: GlobalParameters,
+        stepper: BaseStepper,
+        energy_manager: EnergyModuleManager,
+        constraint_manager: ConstraintModuleManager,
+        energy_modules: Optional[List[str]] = None,
+        constraint_modules: Optional[List[str]] = None,
+        step_size: float = 1e-3,
+        tol: float = 1e-6,
+        quiet: bool = False,
+    ) -> None:
         self.mesh = mesh
         self.global_params = global_params
         self.energy_manager = energy_manager
@@ -40,16 +43,21 @@ class Minimizer:
         self.step_size_floor = float(global_params.get("step_size_floor", 1e-8))
 
         # Use provided module lists or fall back to those defined on the mesh
-        module_list = energy_modules if energy_modules is not None else mesh.energy_modules
+        module_list = (
+            energy_modules if energy_modules is not None else mesh.energy_modules
+        )
         self.energy_modules = [
             self.energy_manager.get_module(mod) for mod in module_list
         ]
 
         constraint_list = (
-            constraint_modules if constraint_modules is not None else mesh.constraint_modules
+            constraint_modules
+            if constraint_modules is not None
+            else mesh.constraint_modules
         )
         self.constraint_modules = [
-            self.constraint_manager.get_constraint(constraint) for constraint in constraint_list
+            self.constraint_manager.get_constraint(constraint)
+            for constraint in constraint_list
         ]
         self._has_enforceable_constraints = any(
             hasattr(mod, "enforce_constraint") for mod in self.constraint_modules
@@ -74,21 +82,22 @@ STEP SIZE:\t {self.step_size}
 
         total_energy = 0.0
         # initialize per-vertex gradient dict
-        grad: Dict[int, np.ndarray] = {
-            idx: np.zeros(3) for idx in self.mesh.vertices
-        }
+        grad: Dict[int, np.ndarray] = {idx: np.zeros(3) for idx in self.mesh.vertices}
 
         for module in self.energy_modules:
             # Each energy module must implement compute_energy_and_gradient
             E_mod, g_mod = module.compute_energy_and_gradient(
-                self.mesh, self.global_params, self.param_resolver)
+                self.mesh, self.global_params, self.param_resolver
+            )
 
             total_energy += E_mod
             for vidx, gvec in g_mod.items():
                 grad[vidx] += gvec
 
         # Apply constraint modifications to the gradient (e.g., Lagrange multipliers)
-        self.constraint_manager.apply_gradient_modifications(grad, self.mesh, self.global_params)
+        self.constraint_manager.apply_gradient_modifications(
+            grad, self.mesh, self.global_params
+        )
 
         # Optional DEBUG‑level diagnostic: in Lagrange mode the projected
         # gradient should be (numerically) tangent to each fixed‑volume
@@ -124,16 +133,15 @@ STEP SIZE:\t {self.step_size}
 
         return total_energy, grad
 
-
-
-
-
     def compute_energy(self):
         """Compute the total energy using the loaded modules."""
         total_energy = 0.0
         for module in self.energy_modules:
             E_mod, _ = module.compute_energy_and_gradient(
-                self.mesh, self.global_params, self.param_resolver, compute_gradient=False
+                self.mesh,
+                self.global_params,
+                self.param_resolver,
+                compute_gradient=False,
             )
             total_energy += E_mod
         return total_energy
@@ -143,33 +151,32 @@ STEP SIZE:\t {self.step_size}
 
         # zero out fixed vertices and project others
         for vidx, vertex in self.mesh.vertices.items():
-            if getattr(vertex, 'fixed', False):
+            if getattr(vertex, "fixed", False):
                 grad[vidx][:] = 0.0
-            elif hasattr(vertex, 'constraint'):
+            elif hasattr(vertex, "constraint"):
                 # project the gradient into tangent space of constraint
                 grad[vidx] = vertex.constraint.project_gradient(grad[vidx])
 
         for eidx, edge in self.mesh.edges.items():
             # If has fixed attribute uncomment and change hasattr to elif
             # if geattr(edge, 'fixed', False): grad[eidx][:] = 0.0
-            if hasattr(edge, 'constraint'):
+            if hasattr(edge, "constraint"):
                 # project the gradient into tangent space of constraint
                 grad[eidx] = edge.constraint.project_gradient(grad[eidx])
 
         for fidx, facet in self.mesh.facets.items():
             # If has fixed attribute uncomment and change hasattr to elif
             # if geattr(facet, 'fixed', False): grad[fidx][:] = 0.0
-            if hasattr(facet, 'constraint'):
+            if hasattr(facet, "constraint"):
                 # project the gradient into tangent space of constraint
                 grad[fidx] = facet.constraint.project_gradient(grad[fidx])
 
         for bidx, body in self.mesh.bodies.items():
             # If has fixed attribute uncomment and change hasattr to elif
             # if geattr(body, 'fixed', False): grad[bidx][:] = 0.0
-            if hasattr(body, 'constraint'):
+            if hasattr(body, "constraint"):
                 # project the gradient into tangent space of constraint
                 grad[bidx] = body.constraint.project_gradient(grad[bidx])
-
 
     def _enforce_constraints(self, mesh: Mesh | None = None):
         """Invoke all constraint modules on the current mesh.
@@ -212,7 +219,9 @@ STEP SIZE:\t {self.step_size}
             context="mesh_operation",
         )
 
-    def minimize(self, n_steps: int = 1, callback: Optional[Callable[["Mesh", int], None]] = None):
+    def minimize(
+        self, n_steps: int = 1, callback: Optional[Callable[["Mesh", int], None]] = None
+    ):
         """Run the optimization loop for ``n_steps`` iterations."""
         zero_step_counter = 0
         step_success = True
@@ -241,9 +250,14 @@ STEP SIZE:\t {self.step_size}
             if grad_norm < self.tol:
                 logger.debug("Converged: gradient norm below tolerance.")
                 logger.info(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
-                return {"energy": E, "gradient": grad, "mesh": self.mesh,
-                        "step_success": True, "iterations": i + 1,
-                        "terminated_early": True}
+                return {
+                    "energy": E,
+                    "gradient": grad,
+                    "mesh": self.mesh,
+                    "step_success": True,
+                    "iterations": i + 1,
+                    "terminated_early": True,
+                }
             logger.debug("Iteration %d: |∇E|=%.3e", i, grad_norm)
 
             if not self.quiet:
@@ -251,14 +265,18 @@ STEP SIZE:\t {self.step_size}
                 total_area = sum(
                     facet.compute_area(self.mesh) for facet in self.mesh.facets.values()
                 )
-                print(f"Step {i:4d}: Area = {total_area:.5f}, Energy = {E:.5f}, Step Size  = {self.step_size:.2e}")
+                print(
+                    f"Step {i:4d}: Area = {total_area:.5f}, Energy = {E:.5f}, Step Size  = {self.step_size:.2e}"
+                )
 
             step_success, self.step_size = self.stepper.step(
                 self.mesh,
                 grad,
                 self.step_size,
                 self.compute_energy,
-                constraint_enforcer=self._enforce_constraints if self._has_enforceable_constraints else None,
+                constraint_enforcer=self._enforce_constraints
+                if self._has_enforceable_constraints
+                else None,
             )
 
             if not step_success:
@@ -305,9 +323,7 @@ STEP SIZE:\t {self.step_size}
                             current = body.compute_volume(self.mesh)
                             denom = max(abs(target), 1.0)
                             rel = (current - target) / denom
-                            max_rel_violation_dbg = max(
-                                max_rel_violation_dbg, abs(rel)
-                            )
+                            max_rel_violation_dbg = max(max_rel_violation_dbg, abs(rel))
                             vol_msgs.append(
                                 "body %d: V=%.6f, V0=%.6f, relΔV=%.3e"
                                 % (body.index, current, target, rel)
@@ -335,11 +351,7 @@ STEP SIZE:\t {self.step_size}
                     "volume_projection_during_minimization", True
                 )
                 vol_tol = float(self.global_params.get("volume_tolerance", 1e-3))
-                if (
-                    mode == "lagrange"
-                    and not proj_flag
-                    and self.mesh.bodies
-                ):
+                if mode == "lagrange" and not proj_flag and self.mesh.bodies:
                     max_rel_violation = 0.0
                     for body in self.mesh.bodies.values():
                         target = body.target_volume

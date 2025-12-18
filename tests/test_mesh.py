@@ -5,13 +5,12 @@ from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
 
 
 def create_quad():
-
     mesh = Mesh()
 
     # A unit square in the XY plane
     v0 = Vertex(0, np.array([0, 0, 0]))
-    v1 = Vertex(1, np.array([1 , 0, 0]))
-    v2 = Vertex(2, np.array([1 , 1, 0]))
+    v1 = Vertex(1, np.array([1, 0, 0]))
+    v2 = Vertex(2, np.array([1, 1, 0]))
     v3 = Vertex(3, np.array([0, 1, 0]))
     vertices = [v0, v1, v2, v3]
 
@@ -39,12 +38,13 @@ def create_quad():
 
     return mesh
 
+
 def test_get_edge_directionality():
     # Create a sample mesh and edges
     mesh = Mesh()
     mesh.edges = {
         1: Edge(tail_index=0, head_index=1, index=1, refine=True),
-        2: Edge(tail_index=1, head_index=2, index=2)
+        2: Edge(tail_index=1, head_index=2, index=2),
     }
 
     # Forward access
@@ -59,52 +59,54 @@ def test_get_edge_directionality():
     assert edge_rev.head_index == 0
     assert edge_rev.refine is True
 
+
 def test_types_in_mesh():
     mesh = create_quad()
 
     # testing initial loading
-    assert all(
-        isinstance(v, Vertex) for v in mesh.vertices.values()
-    ), "Not all vertices are Vertex instances"
-    assert all(
-        isinstance(e, Edge) for e in mesh.edges.values()
-    ), "Not all edges are Edge instances"
-    assert all(
-        isinstance(f, Facet) for f in mesh.facets.values()
-    ), "Not all facets are Facet instances"
-    assert all(
-        isinstance(b, Body) for b in mesh.bodies.values()
-    ), "Not all bodies are Body instances"
+    assert all(isinstance(v, Vertex) for v in mesh.vertices.values()), (
+        "Not all vertices are Vertex instances"
+    )
+    assert all(isinstance(e, Edge) for e in mesh.edges.values()), (
+        "Not all edges are Edge instances"
+    )
+    assert all(isinstance(f, Facet) for f in mesh.facets.values()), (
+        "Not all facets are Facet instances"
+    )
+    assert all(isinstance(b, Body) for b in mesh.bodies.values()), (
+        "Not all bodies are Body instances"
+    )
 
     # testing after polygonal refinement
     mesh_poly = refine_polygonal_facets(mesh)
-    assert all(
-        isinstance(v, Vertex) for v in mesh_poly.vertices.values()
-    ), "Vertices corrupted by polygonal refinement"
-    assert all(
-        isinstance(e, Edge) for e in mesh_poly.edges.values()
-    ), "Edges corrupted by polygonal refinement"
-    assert all(
-        isinstance(f, Facet) for f in mesh_poly.facets.values()
-    ), "Facets corrupted by polygonal refinement"
-    assert all(
-        isinstance(b, Body) for b in mesh_poly.bodies.values()
-    ), "Bodies corrupted by polygonal refinement"
+    assert all(isinstance(v, Vertex) for v in mesh_poly.vertices.values()), (
+        "Vertices corrupted by polygonal refinement"
+    )
+    assert all(isinstance(e, Edge) for e in mesh_poly.edges.values()), (
+        "Edges corrupted by polygonal refinement"
+    )
+    assert all(isinstance(f, Facet) for f in mesh_poly.facets.values()), (
+        "Facets corrupted by polygonal refinement"
+    )
+    assert all(isinstance(b, Body) for b in mesh_poly.bodies.values()), (
+        "Bodies corrupted by polygonal refinement"
+    )
 
     # testing after triangular refinement
     mesh_tri = refine_triangle_mesh(mesh_poly)
-    assert all(
-        isinstance(v, Vertex) for v in mesh_tri.vertices.values()
-    ), "Vertices corrupted by triangular refinement"
-    assert all(
-        isinstance(e, Edge) for e in mesh_tri.edges.values()
-    ), "Edges corrupted by triangular refinement"
-    assert all(
-        isinstance(f, Facet) for f in mesh_tri.facets.values()
-    ), "Facets corrupted by triangular refinement"
-    assert all(
-        isinstance(b, Body) for b in mesh_tri.bodies.values()
-    ), "Bodies corrupted by triangular refinement"
+    assert all(isinstance(v, Vertex) for v in mesh_tri.vertices.values()), (
+        "Vertices corrupted by triangular refinement"
+    )
+    assert all(isinstance(e, Edge) for e in mesh_tri.edges.values()), (
+        "Edges corrupted by triangular refinement"
+    )
+    assert all(isinstance(f, Facet) for f in mesh_tri.facets.values()), (
+        "Facets corrupted by triangular refinement"
+    )
+    assert all(isinstance(b, Body) for b in mesh_tri.bodies.values()), (
+        "Bodies corrupted by triangular refinement"
+    )
+
 
 def test_indices_match_keys():
     mesh = create_quad()

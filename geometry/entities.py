@@ -32,6 +32,7 @@ def _fast_cross(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 class MeshError(Exception):
     """Custom exception for invalid mesh topology or geometry."""
 
+
 @dataclass
 class Vertex:
     index: int
@@ -40,16 +41,15 @@ class Vertex:
     options: Dict[str, Any] = field(default_factory=dict)
 
     def copy(self):
-        return Vertex(self.index, self.position.copy(), self.fixed,
-                      self.options.copy())
+        return Vertex(self.index, self.position.copy(), self.fixed, self.options.copy())
 
     def project_position(self, pos: np.ndarray) -> np.ndarray:
         """
         Project the given position onto the constraint, if any.
         If no constraint is defined, return the position unchanged.
         """
-        if 'constraint' in self.options:
-            constraint = self.options['constraint']
+        if "constraint" in self.options:
+            constraint = self.options["constraint"]
             return constraint.project_position(pos)
         return pos
 
@@ -58,8 +58,8 @@ class Vertex:
         Project the given gradient into the tangent space of the constraint, if any.
         If no constraint is defined, return the gradient unchanged.
         """
-        if 'constraint' in self.options:
-            constraint = self.options['constraint']
+        if "constraint" in self.options:
+            constraint = self.options["constraint"]
             return constraint.project_gradient(grad)
         return grad
 
@@ -68,6 +68,7 @@ class Vertex:
         Compute the distance to another vertex.
         """
         return np.linalg.norm(self.position - other.position)
+
 
 @dataclass
 class Edge:
@@ -79,8 +80,14 @@ class Edge:
     options: Dict[str, Any] = field(default_factory=dict)
 
     def copy(self):
-        return Edge(self.index, self.tail_index, self.head_index, self.refine,
-                    self.fixed, self.options.copy())
+        return Edge(
+            self.index,
+            self.tail_index,
+            self.head_index,
+            self.refine,
+            self.fixed,
+            self.options.copy(),
+        )
 
     def reversed(self) -> "Edge":
         return Edge(
@@ -89,7 +96,7 @@ class Edge:
             head_index=self.tail_index,
             refine=self.refine,
             fixed=self.fixed,
-            options=self.options
+            options=self.options,
         )
 
     def compute_length(self, mesh):
@@ -97,10 +104,13 @@ class Edge:
         head = mesh.vertices[self.head_index]
         return np.linalg.norm(head.position - tail.position)
 
+
 @dataclass
 class Facet:
     index: int
-    edge_indices: List[int]  # Signed indices: +n = forward, -n = reversed (including -1 for "r0")
+    edge_indices: List[
+        int
+    ]  # Signed indices: +n = forward, -n = reversed (including -1 for "r0")
     refine: bool = True
     fixed: bool = False
     surface_tension: float = 1.0
@@ -111,12 +121,14 @@ class Facet:
     # the same facet data within a single minimization step.
 
     def copy(self):
-        return Facet(index=self.index,
-                     edge_indices=self.edge_indices[:],
-                     refine=self.refine,
-                     fixed=self.fixed,
-                     surface_tension=self.surface_tension,
-                     options=self.options.copy())
+        return Facet(
+            index=self.index,
+            edge_indices=self.edge_indices[:],
+            refine=self.refine,
+            fixed=self.fixed,
+            surface_tension=self.surface_tension,
+            options=self.options.copy(),
+        )
 
     def compute_normal(self, mesh) -> np.ndarray:
         """Compute (non-normalized) normal vector using right-hand rule from first three vertices."""
@@ -130,7 +142,7 @@ class Facet:
             tail, head = edge.tail_index, edge.head_index
             if not verts:
                 verts.append(tail)
-            if head != verts[-1]:   # Prevent duplicates
+            if head != verts[-1]:  # Prevent duplicates
                 verts.append(head)
 
         # Only need first 3 vertices to define normal
@@ -158,11 +170,15 @@ class Facet:
         for signed_index in self.edge_indices:
             edge = mesh.edges[abs(signed_index)]
             tail, head = (
-                edge.tail_index,
-                edge.head_index,
-            ) if signed_index > 0 else (
-                edge.head_index,
-                edge.tail_index,
+                (
+                    edge.tail_index,
+                    edge.head_index,
+                )
+                if signed_index > 0
+                else (
+                    edge.head_index,
+                    edge.tail_index,
+                )
             )
             if not verts:
                 verts.append(tail)
@@ -240,7 +256,10 @@ class Facet:
         Uses the Shoelace formula.
         """
         # ordered vertex loop
-        if getattr(mesh, "facet_vertex_loops", None) and self.index in mesh.facet_vertex_loops:
+        if (
+            getattr(mesh, "facet_vertex_loops", None)
+            and self.index in mesh.facet_vertex_loops
+        ):
             v_ids_array = mesh.facet_vertex_loops[self.index]
             v_ids = v_ids_array.tolist()
         else:
@@ -284,6 +303,7 @@ class Facet:
 
         return area, grad
 
+
 @dataclass
 class Body:
     index: int
@@ -292,12 +312,15 @@ class Body:
     options: Dict[str, Any] = field(default_factory=dict)
 
     _cached_volume: Optional[float] = field(init=False, default=None)
-    _cached_volume_grad: Optional[Dict[int, np.ndarray]] = field(init=False, default=None)
+    _cached_volume_grad: Optional[Dict[int, np.ndarray]] = field(
+        init=False, default=None
+    )
     _cached_version: int = field(init=False, default=-1)
 
     def copy(self):
-        return Body(self.index, self.facet_indices[:],
-                    self.target_volume, self.options.copy())
+        return Body(
+            self.index, self.facet_indices[:], self.target_volume, self.options.copy()
+        )
 
     def compute_volume(
         self,
@@ -306,7 +329,7 @@ class Body:
         index_map: Dict[int, int] | None = None,
     ) -> float:
         if self._cached_version == mesh._version and self._cached_volume is not None:
-             return self._cached_volume
+            return self._cached_volume
 
         volume = 0.0
 
@@ -341,7 +364,10 @@ class Body:
         # Fallback path (polygonal or no batched inputs)
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
-            if getattr(mesh, "facet_vertex_loops", None) and facet_idx in mesh.facet_vertex_loops:
+            if (
+                getattr(mesh, "facet_vertex_loops", None)
+                and facet_idx in mesh.facet_vertex_loops
+            ):
                 v_ids_array = mesh.facet_vertex_loops[facet_idx]
                 v_ids = v_ids_array.tolist()
             else:
@@ -386,7 +412,10 @@ class Body:
 
             # Reuse the same ordered vertex loop as in compute_volume when
             # cached, otherwise reconstruct it from edges.
-            if getattr(mesh, "facet_vertex_loops", None) and facet_idx in mesh.facet_vertex_loops:
+            if (
+                getattr(mesh, "facet_vertex_loops", None)
+                and facet_idx in mesh.facet_vertex_loops
+            ):
                 v_ids_array = mesh.facet_vertex_loops[facet_idx]
                 v_ids = v_ids_array.tolist()
             else:
@@ -420,7 +449,10 @@ class Body:
         area = 0.0
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
-            if getattr(mesh, "facet_vertex_loops", None) and facet_idx in mesh.facet_vertex_loops:
+            if (
+                getattr(mesh, "facet_vertex_loops", None)
+                and facet_idx in mesh.facet_vertex_loops
+            ):
                 v_ids_array = mesh.facet_vertex_loops[facet_idx]
                 v_ids = v_ids_array.tolist()
             else:
@@ -451,9 +483,11 @@ class Body:
         This combines the work of ``compute_volume`` and ``compute_volume_gradient``
         so callers that need both can avoid redundant geometric computation.
         """
-        if (self._cached_version == mesh._version
-                and self._cached_volume is not None
-                and self._cached_volume_grad is not None):
+        if (
+            self._cached_version == mesh._version
+            and self._cached_volume is not None
+            and self._cached_volume_grad is not None
+        ):
             return self._cached_volume, self._cached_volume_grad
 
         volume = 0.0
@@ -518,7 +552,10 @@ class Body:
             facet = mesh.facets[facet_idx]
 
             # Reuse cached vertex loop if available, otherwise reconstruct.
-            if getattr(mesh, "facet_vertex_loops", None) and facet_idx in mesh.facet_vertex_loops:
+            if (
+                getattr(mesh, "facet_vertex_loops", None)
+                and facet_idx in mesh.facet_vertex_loops
+            ):
                 v_ids_array = mesh.facet_vertex_loops[facet_idx]
                 v_ids = v_ids_array.tolist()
             else:
@@ -564,6 +601,7 @@ class Body:
 
         return volume, grad
 
+
 @dataclass
 class Mesh:
     vertices: Dict[int, "Vertex"] = field(default_factory=dict)
@@ -591,13 +629,14 @@ class Mesh:
 
     def copy(self):
         import copy
+
         new_mesh = Mesh()
         new_mesh.vertices = {vid: v.copy() for vid, v in self.vertices.items()}
         new_mesh.edges = {eid: e.copy() for eid, e in self.edges.items()}
         new_mesh.facets = {fid: f.copy() for fid, f in self.facets.items()}
-        if hasattr(self, 'bodies'):
+        if hasattr(self, "bodies"):
             new_mesh.bodies = {bid: b.copy() for bid, b in self.bodies.items()}
-        if hasattr(self, 'global_parameters'):
+        if hasattr(self, "global_parameters"):
             new_mesh.global_parameters = copy.deepcopy(self.global_parameters)
         return new_mesh
 
@@ -619,7 +658,9 @@ class Mesh:
         should only be called after initial triangulation."""
         for facet_idx in self.facets.keys():
             if len(self.facets[facet_idx].edge_indices) != 3:
-                raise ValueError(f"Facet {facet_idx} does not have 3 edges. Found {len(self.facets[facet_idx].edge_indices)}.")
+                raise ValueError(
+                    f"Facet {facet_idx} does not have 3 edges. Found {len(self.facets[facet_idx].edge_indices)}."
+                )
         return True
 
     def validate_edge_indices(self):
@@ -627,7 +668,9 @@ class Mesh:
             for signed_index in self.facets[facet_idx].edge_indices:
                 edge_index = abs(signed_index)
                 if edge_index not in self.edges:
-                    raise ValueError(f"Facet {facet_idx} uses invalid edge index {signed_index} (not found in edge list).")
+                    raise ValueError(
+                        f"Facet {facet_idx} uses invalid edge index {signed_index} (not found in edge list)."
+                    )
         return True
 
     def build_connectivity_maps(self):
@@ -708,10 +751,13 @@ class Mesh:
                     v_ids.append(tail)
             if v_ids:
                 self.facet_vertex_loops[fid] = np.array(v_ids, dtype=int)
+
     def get_facets_of_vertex(self, v_id: int) -> List["Facet"]:
         return [self.facets[fid] for fid in self.vertex_to_facets.get(v_id, [])]
+
     def get_edges_of_vertex(self, v_id: int) -> List["Edge"]:
         return [self.edges[eid] for eid in self.vertex_to_edges.get(v_id, [])]
+
     def get_facets_of_edge(self, e_id: int) -> List["Facet"]:
         return [self.facets[fid] for fid in self.edge_to_facets.get(e_id, [])]
 
@@ -733,10 +779,15 @@ class Mesh:
 
     def __str__(self):
         return f"Mesh with {len(self.vertices)} vertices, {len(self.edges)} edges, {len(self.facets)} facets, and {len(self.bodies)} bodies."
+
     def __repr__(self):
         return f"Mesh(vertices={self.vertices}, edges={self.edges}, facets={self.facets}, bodies={self.bodies})"
+
     def __len__(self):
-        return len(self.vertices) + len(self.edges) + len(self.facets) + len(self.bodies)
+        return (
+            len(self.vertices) + len(self.edges) + len(self.facets) + len(self.bodies)
+        )
+
     def __getitem__(self, index):
         if index in self.vertices:
             return self.vertices[index]
@@ -772,5 +823,11 @@ class Mesh:
             del self.bodies[index]
         else:
             raise KeyError(f"Index {index} not found in mesh.")
+
     def __contains__(self, index):
-        return index in self.vertices or index in self.edges or index in self.facets or index in self.bodies
+        return (
+            index in self.vertices
+            or index in self.edges
+            or index in self.facets
+            or index in self.bodies
+        )

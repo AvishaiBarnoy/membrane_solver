@@ -6,13 +6,15 @@ import numpy as np
 
 logger = logging.getLogger("membrane_solver")
 
-def compute_facet_centroid(mesh,facet, vertices):
+
+def compute_facet_centroid(mesh, facet, vertices):
     v_ids = set()
     for signed_ei in facet.edge_indices:
         edge = mesh.get_edge(signed_ei)
         v_ids.update([edge.tail_index, edge.head_index])
     coords = np.array([vertices[i].position for i in v_ids])
     return np.mean(coords, axis=0)
+
 
 def compute_facet_normal(mesh, facet, vertices):
     # Use the first 3 vertices to compute a normal
@@ -25,6 +27,7 @@ def compute_facet_normal(mesh, facet, vertices):
     a = vertices[v_ids[1]].position - vertices[v_ids[0]].position
     b = vertices[v_ids[2]].position - vertices[v_ids[0]].position
     return 0.5 * np.cross(a, b)  # area-weighted normal
+
 
 def vertex_average(mesh):
     """
@@ -69,7 +72,9 @@ def vertex_average(mesh):
 
         v_avg = weighted_sum / total_area
         v = vertex.position
-        lambda_ = (np.dot(v_avg, total_normal) - np.dot(v, total_normal)) / np.dot(total_normal, total_normal)
+        lambda_ = (np.dot(v_avg, total_normal) - np.dot(v, total_normal)) / np.dot(
+            total_normal, total_normal
+        )
         v_new = v_avg - lambda_ * total_normal
 
         new_positions[v_id] = v_new
@@ -81,9 +86,9 @@ def vertex_average(mesh):
 
     # Area restoration for cases with explicit targets; skip for unconstrained open patches
     # to retain smoothing behavior.
-    any_area_target = any(f.options.get("target_area") is not None for f in mesh.facets.values()) or any(
-        b.options.get("target_area") is not None for b in mesh.bodies.values()
-    )
+    any_area_target = any(
+        f.options.get("target_area") is not None for f in mesh.facets.values()
+    ) or any(b.options.get("target_area") is not None for b in mesh.bodies.values())
     if any_area_target:
         accum = {}
         counts = {}
@@ -97,7 +102,9 @@ def vertex_average(mesh):
             if len(v_ids) < 3:
                 continue
 
-            target_area = facet.options.get("target_area", facet_orig_area.get(f_id, None))
+            target_area = facet.options.get(
+                "target_area", facet_orig_area.get(f_id, None)
+            )
             orig_area = facet_orig_area.get(f_id, None)
             if target_area is None and orig_area is None:
                 continue

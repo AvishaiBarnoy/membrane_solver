@@ -28,6 +28,7 @@ BENCHMARKS = {
     "spherical_cap": benchmark_cap.benchmark,
 }
 
+
 def load_results():
     if not RESULTS_FILE.exists():
         return {}
@@ -37,9 +38,11 @@ def load_results():
     except json.JSONDecodeError:
         return {}
 
+
 def save_results(results):
     with open(RESULTS_FILE, "w") as f:
         json.dump(results, f, indent=2)
+
 
 def main():
     print(f"Running benchmarking suite on {sys.platform}...")
@@ -57,10 +60,7 @@ def main():
     for name, func in BENCHMARKS.items():
         # Run benchmark
         avg_time = func()
-        current_results[name] = {
-            "time": avg_time,
-            "timestamp": timestamp
-        }
+        current_results[name] = {"time": avg_time, "timestamp": timestamp}
 
         # Compare with best
         best_record = history.get(name)
@@ -73,10 +73,10 @@ def main():
             change_str = f"{pct:+.1f}%"
 
             # Simple color coding for CLI
-            if pct > 5.0: # Regression > 5%
+            if pct > 5.0:  # Regression > 5%
                 change_str += " (SLOW)"
                 any_regression = True
-            elif pct < -5.0: # Improvement > 5%
+            elif pct < -5.0:  # Improvement > 5%
                 change_str += " (FAST)"
 
         print(f"{name:<25} | {avg_time:.4f}s    | {best_time:.4f}s    | {change_str}")
@@ -96,6 +96,7 @@ def main():
 
     save_results(history)
     print(f"Results saved to {RESULTS_FILE}")
+
 
 if __name__ == "__main__":
     main()

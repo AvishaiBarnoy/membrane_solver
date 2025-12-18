@@ -7,7 +7,6 @@ from runtime.equiangulation import equiangulate_mesh
 
 
 class TestEquiangulation(unittest.TestCase):
-
     def test_equiangulation_improves_triangles(self):
         """Test that equiangulation improves triangle quality on a simple mesh."""
         # Create a simple quadrilateral mesh with a poor diagonal
@@ -15,10 +14,10 @@ class TestEquiangulation(unittest.TestCase):
 
         # Create vertices for a diamond shape with one very acute angle
         vertices = {
-            0: Vertex(0, np.array([0.0, 0.0, 0.0])),      # bottom
-            1: Vertex(1, np.array([1.0, 0.1, 0.0])),      # right (close to bottom)
-            2: Vertex(2, np.array([0.0, 1.0, 0.0])),      # top
-            3: Vertex(3, np.array([-1.0, 0.1, 0.0]))      # left (close to bottom)
+            0: Vertex(0, np.array([0.0, 0.0, 0.0])),  # bottom
+            1: Vertex(1, np.array([1.0, 0.1, 0.0])),  # right (close to bottom)
+            2: Vertex(2, np.array([0.0, 1.0, 0.0])),  # top
+            3: Vertex(3, np.array([-1.0, 0.1, 0.0])),  # left (close to bottom)
         }
 
         # Create edges
@@ -27,13 +26,13 @@ class TestEquiangulation(unittest.TestCase):
             2: Edge(2, 1, 2),  # right to top
             3: Edge(3, 2, 0),  # top to bottom (diagonal - bad)
             4: Edge(4, 0, 3),  # bottom to left
-            5: Edge(5, 3, 2)   # left to top
+            5: Edge(5, 3, 2),  # left to top
         }
 
         # Create two triangles sharing the bad diagonal (edge 3)
         facets = {
-            0: Facet(0, [1, 2, -3]),   # triangle: 0->1->2->0
-            1: Facet(1, [3, 5, -4])    # triangle: 0->2->3->0
+            0: Facet(0, [1, 2, -3]),  # triangle: 0->1->2->0
+            1: Facet(1, [3, 5, -4]),  # triangle: 0->2->3->0
         }
 
         # Create mesh
@@ -66,8 +65,8 @@ class TestEquiangulation(unittest.TestCase):
         vertices = {
             0: Vertex(0, np.array([0.0, 0.0, 0.0])),
             1: Vertex(1, np.array([1.0, 0.0, 0.0])),
-            2: Vertex(2, np.array([0.5, 0.1, 0.0])),      # very close to bottom edge
-            3: Vertex(3, np.array([0.5, 1.0, 0.0]))       # top vertex
+            2: Vertex(2, np.array([0.5, 0.1, 0.0])),  # very close to bottom edge
+            3: Vertex(3, np.array([0.5, 1.0, 0.0])),  # top vertex
         }
 
         mesh = Mesh()
@@ -84,18 +83,12 @@ class TestEquiangulation(unittest.TestCase):
         vertices = {
             0: Vertex(0, np.array([0.0, 0.0, 0.0])),
             1: Vertex(1, np.array([1.0, 0.0, 0.0])),
-            2: Vertex(2, np.array([0.5, 1.0, 0.0]))
+            2: Vertex(2, np.array([0.5, 1.0, 0.0])),
         }
 
-        edges = {
-            1: Edge(1, 0, 1),
-            2: Edge(2, 1, 2),
-            3: Edge(3, 2, 0)
-        }
+        edges = {1: Edge(1, 0, 1), 2: Edge(2, 1, 2), 3: Edge(3, 2, 0)}
 
-        facets = {
-            0: Facet(0, [1, 2, 3])
-        }
+        facets = {0: Facet(0, [1, 2, 3])}
 
         mesh = Mesh()
         mesh.vertices = vertices
@@ -112,5 +105,5 @@ class TestEquiangulation(unittest.TestCase):
         self.assertEqual(len(result_mesh.facets), 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

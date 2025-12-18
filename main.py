@@ -14,60 +14,69 @@ from runtime.steppers.conjugate_gradient import ConjugateGradient
 
 logger = logging.getLogger("membrane_solver")
 
+
 def resolve_json_path(path: str) -> str:
     """Return a valid JSON file path, allowing path without extension."""
     if os.path.isfile(path):
         return path
-    if not path.lower().endswith('.json'):
-        alt = path + '.json'
+    if not path.lower().endswith(".json"):
+        alt = path + ".json"
         if os.path.isfile(alt):
             return alt
     raise FileNotFoundError(f"Cannot find file '{path}' or '{path}.json'")
 
+
 def main():
     parser = argparse.ArgumentParser(description="Membrane Solver Simulation Driver")
-    parser.add_argument('-i', '--input', help='Input mesh JSON file')
-    parser.add_argument('-o', '--output', default=None, help='Output mesh JSON file')
-    parser.add_argument('--instructions', help='Optional instruction file (one command per line)')
-    parser.add_argument('--log', default=None, help='Optional log file')
-    parser.add_argument('-q', '--quiet', action='store_true',
-                        help='Suppress console output')
-    parser.add_argument('--debug', action='store_true',
-                        help='Enable verbose debug logging')
-    parser.add_argument('--non-interactive', action='store_true',
-                        help="Skip interactive mode after executing instructions")
+    parser.add_argument("-i", "--input", help="Input mesh JSON file")
+    parser.add_argument("-o", "--output", default=None, help="Output mesh JSON file")
     parser.add_argument(
-        '--properties',
-        action='store_true',
-        help='Print basic physical properties (volume, surface area, etc.) and exit',
+        "--instructions", help="Optional instruction file (one command per line)"
+    )
+    parser.add_argument("--log", default=None, help="Optional log file")
+    parser.add_argument(
+        "-q", "--quiet", action="store_true", help="Suppress console output"
     )
     parser.add_argument(
-        '--volume-mode',
-        choices=['lagrange', 'penalty'],
+        "--debug", action="store_true", help="Enable verbose debug logging"
+    )
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Skip interactive mode after executing instructions",
+    )
+    parser.add_argument(
+        "--properties",
+        action="store_true",
+        help="Print basic physical properties (volume, surface area, etc.) and exit",
+    )
+    parser.add_argument(
+        "--volume-mode",
+        choices=["lagrange", "penalty"],
         default=None,
-        help='Override volume constraint mode (lagrange = hard constraint; penalty = soft energy).',
+        help="Override volume constraint mode (lagrange = hard constraint; penalty = soft energy).",
     )
     parser.add_argument(
-        '--line-tension',
+        "--line-tension",
         type=float,
         default=None,
-        help='Assign a line-tension modulus to edges. When combined with '
-        '`--line-tension-edges`, only the specified edge IDs are tagged. '
-        'Otherwise all edges receive line tension.',
+        help="Assign a line-tension modulus to edges. When combined with "
+        "`--line-tension-edges`, only the specified edge IDs are tagged. "
+        "Otherwise all edges receive line tension.",
     )
     parser.add_argument(
-        '--line-tension-edges',
+        "--line-tension-edges",
         type=str,
         default=None,
-        help='Comma-separated edge IDs to receive CLI line tension.',
+        help="Comma-separated edge IDs to receive CLI line tension.",
     )
     args = parser.parse_args()
 
     if not args.input:
         try:
-            args.input = input('Input mesh JSON file: ').strip()
+            args.input = input("Input mesh JSON file: ").strip()
         except EOFError:
-            print('No input file provided.', file=sys.stderr)
+            print("No input file provided.", file=sys.stderr)
             sys.exit(1)
     try:
         args.input = resolve_json_path(args.input)
@@ -77,7 +86,7 @@ def main():
 
     global logger
     logger = setup_logging(
-        args.log if args.log else 'membrane_solver.log',
+        args.log if args.log else "membrane_solver.log",
         quiet=args.quiet,
         debug=args.debug,
     )
@@ -125,7 +134,7 @@ def main():
                 sys.exit(1)
         _apply_cli_line_tension(args.line_tension, ids)
 
-    fixed_count = sum(1 for v in mesh.vertices.values() if getattr(v, 'fixed', False))
+    fixed_count = sum(1 for v in mesh.vertices.values() if getattr(v, "fixed", False))
     logger.debug(f"Number of fixed vertices: {fixed_count} / {len(mesh.vertices)}")
     if mesh.bodies:
         body0 = mesh.bodies.get(0)
@@ -141,30 +150,37 @@ def main():
     stepper = ConjugateGradient()
 
     # Initialize Minimizer
-    minimizer = Minimizer(mesh, global_params, stepper, energy_manager,
-                          constraint_manager, quiet=args.quiet)
+    minimizer = Minimizer(
+        mesh,
+        global_params,
+        stepper,
+        energy_manager,
+        constraint_manager,
+        quiet=args.quiet,
+    )
     minimizer.step_size = global_params.get("step_size", 0.001)
 
     # Initialize Command Context
     context = CommandContext(mesh, minimizer, stepper)
 
     if args.properties:
-        cmd, _ = get_command('properties')
+        cmd, _ = get_command("properties")
         cmd.execute(context, [])
         return
 
     # Load instructions from file or mesh
     if args.instructions:
-        with open(args.instructions, 'r') as f:
+        with open(args.instructions, "r") as f:
             lines = f.readlines()
     else:
-        lines = mesh.instructions if hasattr(mesh, 'instructions') else []
+        lines = mesh.instructions if hasattr(mesh, "instructions") else []
 
     # Execute initial instructions
     logger.debug(f"Executing {len(lines)} initial instructions.")
     for line in lines:
         parts = line.strip().split()
-        if not parts: continue
+        if not parts:
+            continue
         cmd_name = parts[0]
         cmd_args = parts[1:]
 
@@ -177,10 +193,11 @@ def main():
     if not args.non_interactive:
         while not context.should_exit:
             try:
-                line = input('> ').strip()
+                line = input("> ").strip()
             except EOFError:
                 break
-            if not line: continue
+            if not line:
+                continue
 
             parts = line.split()
             cmd_name = parts[0]

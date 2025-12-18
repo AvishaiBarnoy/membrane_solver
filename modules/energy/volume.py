@@ -9,6 +9,7 @@ from runtime.logging_config import setup_logging
 
 logger = setup_logging("membrane_solver.log")
 
+
 def calculate_volume_energy(mesh, global_params):
     """
     Compute volume energy as a soft quadratic penalty:
@@ -26,17 +27,21 @@ def calculate_volume_energy(mesh, global_params):
 
     for body in mesh.bodies.values():
         V = body.compute_volume(mesh)
-        V0 = (body.target_volume
-              if body.target_volume is not None
-              else body.options.get("target_volume", 0))
+        V0 = (
+            body.target_volume
+            if body.target_volume is not None
+            else body.options.get("target_volume", 0)
+        )
         k = body.options.get("volume_stiffness", global_params.volume_stiffness)
 
-        volume_energy += 0.5 * k * (V - V0)**2
+        volume_energy += 0.5 * k * (V - V0) ** 2
 
     return volume_energy
 
 
-def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_gradient: bool = True):
+def compute_energy_and_gradient(
+    mesh, global_params, param_resolver, *, compute_gradient: bool = True
+):
     """Volume energy and gradient."""
 
     mode = global_params.get("volume_constraint_mode", "lagrange")
@@ -56,25 +61,25 @@ def compute_energy_and_gradient(mesh, global_params, param_resolver, *, compute_
         index_map = mesh.vertex_index_to_row
 
     for body in mesh.bodies.values():
-        k = param_resolver.get(body, 'volume_stiffness')
+        k = param_resolver.get(body, "volume_stiffness")
         if k is None:
             k = global_params.volume_stiffness
 
-        V0 = (body.target_volume
-              if body.target_volume is not None
-              else body.options.get('target_volume', 0))
+        V0 = (
+            body.target_volume
+            if body.target_volume is not None
+            else body.options.get("target_volume", 0)
+        )
 
         if compute_gradient:
             V, volume_gradient = body.compute_volume_and_gradient(
                 mesh, positions=positions, index_map=index_map
             )
         else:
-            V = body.compute_volume(
-                mesh, positions=positions, index_map=index_map
-            )
+            V = body.compute_volume(mesh, positions=positions, index_map=index_map)
 
         delta = V - V0
-        E += 0.5 * k * delta ** 2
+        E += 0.5 * k * delta**2
 
         if compute_gradient:
             factor = k * delta

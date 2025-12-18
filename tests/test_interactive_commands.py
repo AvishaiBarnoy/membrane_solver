@@ -27,17 +27,17 @@ def _build_context():
 
 def test_get_command_parsing():
     # Test 'r5' -> RefineCommand with args=['5']
-    cmd, args = get_command('r5')
+    cmd, args = get_command("r5")
     assert isinstance(cmd, RefineCommand)
-    assert args == ['5']
+    assert args == ["5"]
 
 
 def test_get_command_aliases():
     # Test 'i' -> PropertiesCommand
-    cmd, args = get_command('i')
+    cmd, args = get_command("i")
     assert isinstance(cmd, PropertiesCommand)
 
-    cmd, args = get_command('props')
+    cmd, args = get_command("props")
     assert isinstance(cmd, PropertiesCommand)
 
 
@@ -45,7 +45,7 @@ def test_execute_refine_command():
     ctx = _build_context()
     facets_before = len(ctx.mesh.facets)
 
-    cmd, args = get_command('r2')
+    cmd, args = get_command("r2")
     # r2 returns args=['2']
     cmd.execute(ctx, args)
 

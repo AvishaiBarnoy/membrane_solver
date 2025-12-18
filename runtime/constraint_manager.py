@@ -5,17 +5,20 @@ import logging
 
 logger = logging.getLogger("ConstraintManager")
 
+
 class ConstraintModuleManager:
     def __init__(self, module_names):
         self.modules = {}
         for name in module_names:
             try:
-                self.modules[name] = importlib.import_module(f"modules.constraints.{name}")
+                self.modules[name] = importlib.import_module(
+                    f"modules.constraints.{name}"
+                )
                 logger.info(f"Loaded constraint module: {name}")
             except ImportError as e:
                 logger.error(f"Could not load constraint module '{name}': {e}")
                 raise
-        #self.modules = self._load_modules(module_names)
+        # self.modules = self._load_modules(module_names)
 
     def get_module(self, mod):
         """
@@ -37,7 +40,9 @@ class ConstraintModuleManager:
                 if hasattr(module, "enforce_constraint"):
                     loaded[name] = module
                 else:
-                    logger.warning(f"Constraint module '{name}' lacks 'enforce_constraint' function.")
+                    logger.warning(
+                        f"Constraint module '{name}' lacks 'enforce_constraint' function."
+                    )
             except ImportError as e:
                 logger.warning(f"Could not load constraint module '{name}': {e}")
         return loaded
@@ -87,7 +92,11 @@ class ConstraintModuleManager:
                 #   - After discrete mesh operations such as refinement,
                 #     equiangulation or vertex averaging (other contexts), we
                 #     always apply a hard projection back to the target volume.
-                if name == "volume" and context == "minimize" and not project_in_minimize:
+                if (
+                    name == "volume"
+                    and context == "minimize"
+                    and not project_in_minimize
+                ):
                     logger.debug(
                         "Skipping geometric volume projection during minimization; "
                         "hard volume is handled via gradient projection."
@@ -100,7 +109,9 @@ class ConstraintModuleManager:
                     del call_kwargs["force_projection"]
 
                 if name == "volume":
-                    module.enforce_constraint(mesh, force_projection=True, **call_kwargs)
+                    module.enforce_constraint(
+                        mesh, force_projection=True, **call_kwargs
+                    )
                 else:
                     module.enforce_constraint(mesh, **kwargs)
             except TypeError as e:

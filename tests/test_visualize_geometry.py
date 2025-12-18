@@ -32,9 +32,7 @@ def test_plot_geometry_edges_only_does_not_crash():
     """plot_geometry should handle meshes with only edges."""
     mesh = _build_edge_only_mesh()
     # Should run without raising; drawing happens on an Agg canvas.
-    plot_geometry(
-        mesh, draw_facets=False, draw_edges=True, scatter=False, show=False
-    )
+    plot_geometry(mesh, draw_facets=False, draw_edges=True, scatter=False, show=False)
 
 
 def test_plot_geometry_draws_standalone_edges_by_default():

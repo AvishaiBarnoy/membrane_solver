@@ -9,7 +9,8 @@ from parameters.global_parameters import GlobalParameters
 from runtime.logging_config import setup_logging
 from runtime.refinement import refine_polygonal_facets
 
-logger = setup_logging('membrane_solver.log')
+logger = setup_logging("membrane_solver.log")
+
 
 def load_data(filename):
     """Load geometry from a JSON file.
@@ -23,7 +24,7 @@ def load_data(filename):
         ]
     }"""
     filename_str = str(filename)
-    with open(filename_str, 'r') as f:
+    with open(filename_str, "r") as f:
         if filename_str.endswith((".yaml", ".yml")):
             data = yaml.safe_load(f)
         elif filename_str.endswith(".json"):
@@ -33,6 +34,7 @@ def load_data(filename):
             raise ValueError(f"Unsupported file format for: {filename_str}")
 
     return data
+
 
 def parse_geometry(data: dict) -> Mesh:
     mesh = Mesh()
@@ -51,17 +53,23 @@ def parse_geometry(data: dict) -> Mesh:
         mesh.global_parameters.set("volume_constraint_mode", "lagrange")
         mesh.global_parameters.set("volume_projection_during_minimization", False)
     elif has_mode and not has_proj:
-        mode = str(mesh.global_parameters.get("volume_constraint_mode", "lagrange")).lower()
+        mode = str(
+            mesh.global_parameters.get("volume_constraint_mode", "lagrange")
+        ).lower()
         proj = False if mode == "lagrange" else True
         mesh.global_parameters.set("volume_projection_during_minimization", proj)
     elif has_proj and not has_mode:
-        proj = bool(mesh.global_parameters.get("volume_projection_during_minimization", True))
+        proj = bool(
+            mesh.global_parameters.get("volume_projection_during_minimization", True)
+        )
         mode = "penalty" if proj else "lagrange"
         mesh.global_parameters.set("volume_constraint_mode", mode)
 
     # Warn about unstable combinations.
     mode = str(mesh.global_parameters.get("volume_constraint_mode", "lagrange")).lower()
-    proj_flag = bool(mesh.global_parameters.get("volume_projection_during_minimization", False))
+    proj_flag = bool(
+        mesh.global_parameters.get("volume_projection_during_minimization", False)
+    )
     if mode == "lagrange" and proj_flag:
         logger.warning(
             "volume_constraint_mode='lagrange' with volume_projection_during_minimization=True "
@@ -92,7 +100,7 @@ def parse_geometry(data: dict) -> Mesh:
         preset_name = raw_options.get("preset")
         if preset_name:
             if preset_name not in definitions:
-                 raise ValueError(f"Preset '{preset_name}' not found in definitions.")
+                raise ValueError(f"Preset '{preset_name}' not found in definitions.")
             # Merge: preset first, then raw_options overrides
             merged = definitions[preset_name].copy()
             merged.update(raw_options)
@@ -128,8 +136,8 @@ def parse_geometry(data: dict) -> Mesh:
                 logger.error(err_msg)
                 raise err_msg
         # Uncomment to add a default energy moduel to Vertices
-        #elif "energy" not in options:
-            #mesh.vertices[i].options["energy"] = ["surface"]
+        # elif "energy" not in options:
+        # mesh.vertices[i].options["energy"] = ["surface"]
 
         # Vertex constraint modules
         if "constraints" in options:
@@ -137,7 +145,9 @@ def parse_geometry(data: dict) -> Mesh:
                 constraint_module_names.extend(options["constraints"])
             elif isinstance(options["constraints"], str):
                 constraint_module_names.append(options["constraints"])
-                mesh.vertices[i].options["constraints"] = [mesh.vertices[i].options["constraints"]]
+                mesh.vertices[i].options["constraints"] = [
+                    mesh.vertices[i].options["constraints"]
+                ]
             else:
                 err_msg = "constraint modules should be in a list or a single string"
                 logger.error(err_msg)
@@ -151,7 +161,9 @@ def parse_geometry(data: dict) -> Mesh:
                 mesh.vertices[i].fixed = True
         if options.get("fixed", False):
             # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
-            mesh.vertices[i].fixed = True # Ensure fixed flag is set if from top-level option
+            mesh.vertices[
+                i
+            ].fixed = True  # Ensure fixed flag is set if from top-level option
 
     # Edges
     edges = data.get("edges") or data.get("Edges")
@@ -164,14 +176,19 @@ def parse_geometry(data: dict) -> Mesh:
         tail_index, head_index, *opts = entry
 
         if tail_index not in mesh.vertices:
-            raise ValueError(f"Edge {i+1} references missing tail vertex {tail_index}")
+            raise ValueError(
+                f"Edge {i + 1} references missing tail vertex {tail_index}"
+            )
         if head_index not in mesh.vertices:
-            raise ValueError(f"Edge {i+1} references missing head vertex {head_index}")
+            raise ValueError(
+                f"Edge {i + 1} references missing head vertex {head_index}"
+            )
 
         raw_opts = opts[0] if opts else {}
         options = resolve_options(raw_opts)
-        mesh.edges[i+1] = Edge(index=i+1, tail_index=tail_index,
-                               head_index=head_index, options=options)
+        mesh.edges[i + 1] = Edge(
+            index=i + 1, tail_index=tail_index, head_index=head_index, options=options
+        )
 
         if "energy" in options:
             if isinstance(options["energy"], list):
@@ -184,8 +201,8 @@ def parse_geometry(data: dict) -> Mesh:
                 logger.error(err_msg)
                 raise err_msg
         # Uncomment to add a default energy moduel for Edges
-        #elif "energy" not in options:
-            #mesh.edges[i+1].options["energy"] = ["surface"]
+        # elif "energy" not in options:
+        # mesh.edges[i+1].options["energy"] = ["surface"]
 
         # Edges constraint modules
         if "constraints" in options:
@@ -193,17 +210,21 @@ def parse_geometry(data: dict) -> Mesh:
                 constraint_module_names.extend(options["constraints"])
             elif isinstance(options["constraints"], str):
                 constraint_module_names.append(options["constraints"])
-                mesh.edges[i+1].options["constraints"] = [mesh.edges[i+1].options["constraints"]]
+                mesh.edges[i + 1].options["constraints"] = [
+                    mesh.edges[i + 1].options["constraints"]
+                ]
             else:
                 err_msg = "constraint modules should be in a list or a single string"
                 logger.error(err_msg)
                 raise err_msg
             if "fixed" in options["constraints"]:
                 # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
-                mesh.edges[i+1].fixed = True
+                mesh.edges[i + 1].fixed = True
         if options.get("fixed", False):
             # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
-            mesh.edges[i+1].fixed = True # Ensure fixed flag is set if from top-level option
+            mesh.edges[
+                i + 1
+            ].fixed = True  # Ensure fixed flag is set if from top-level option
 
     # Facets (optional for line‑only geometries)
     faces_section = data.get("faces") or data.get("Faces") or data.get("Facets") or []
@@ -213,13 +234,15 @@ def parse_geometry(data: dict) -> Mesh:
 
         def parse_edge(e):
             if isinstance(e, str) and e.startswith("r"):
-                return -(int(e[1:]) + 1)    # "r0" -> -1
+                return -(int(e[1:]) + 1)  # "r0" -> -1
             i = int(e)
-            if i >= 0: return i + 1     # 0 -> 1, 1 -> 2, etc.
-            elif i < 0: return i - 1    # -11 -> -12
+            if i >= 0:
+                return i + 1  # 0 -> 1, 1 -> 2, etc.
+            elif i < 0:
+                return i - 1  # -11 -> -12
+
         edge_indices = [parse_edge(e) for e in raw_edges]
-        mesh.facets[i] = Facet(index=i, edge_indices=edge_indices,
-                                 options=options)
+        mesh.facets[i] = Facet(index=i, edge_indices=edge_indices, options=options)
 
         if "energy" in options:
             if isinstance(options["energy"], list):
@@ -237,11 +260,15 @@ def parse_geometry(data: dict) -> Mesh:
 
         # Ensure all facets have surface_tension set
         if "surface_tension" not in options:
-            mesh.facets[i].options["surface_tension"] = mesh.global_parameters.get("surface_tension", 1.0)
+            mesh.facets[i].options["surface_tension"] = mesh.global_parameters.get(
+                "surface_tension", 1.0
+            )
 
         # Facets constraint modules
         facet_constraints = options.get("constraints")
-        if facet_constraints is not None and not isinstance(facet_constraints, (list, str)):
+        if facet_constraints is not None and not isinstance(
+            facet_constraints, (list, str)
+        ):
             err_msg = "constraint modules should be in a list or a single string"
             logger.error(err_msg)
             raise err_msg
@@ -267,7 +294,9 @@ def parse_geometry(data: dict) -> Mesh:
 
         if options.get("fixed", False):
             # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
-            mesh.facets[i].fixed = True # Ensure fixed flag is set if from top-level option
+            mesh.facets[
+                i
+            ].fixed = True  # Ensure fixed flag is set if from top-level option
 
     vol_mode = mesh.global_parameters.get("volume_constraint_mode", "lagrange")
     if vol_mode == "penalty":
@@ -284,11 +313,17 @@ def parse_geometry(data: dict) -> Mesh:
         #   - a list parallel to ``faces`` (per‑body specs), or
         #   - a single string/dict applying to all bodies.
         energy_entries = bodies_section.get("energy", [None] * len(face_groups))
-        if not isinstance(energy_entries, list) or len(energy_entries) != len(face_groups):
+        if not isinstance(energy_entries, list) or len(energy_entries) != len(
+            face_groups
+        ):
             energy_entries = [energy_entries] * len(face_groups)
 
-        constraint_entries = bodies_section.get("constraints", [None] * len(face_groups))
-        if not isinstance(constraint_entries, list) or len(constraint_entries) != len(face_groups):
+        constraint_entries = bodies_section.get(
+            "constraints", [None] * len(face_groups)
+        )
+        if not isinstance(constraint_entries, list) or len(constraint_entries) != len(
+            face_groups
+        ):
             constraint_entries = [constraint_entries] * len(face_groups)
 
         for i, (facet_indices, volume, area, energy_spec, constraint_spec) in enumerate(
@@ -368,7 +403,10 @@ def parse_geometry(data: dict) -> Mesh:
             ):
                 body_constraints.append("volume")
 
-            if body.options.get("target_area") is not None and "body_area" not in body_constraints:
+            if (
+                body.options.get("target_area") is not None
+                and "body_area" not in body_constraints
+            ):
                 body_constraints.append("body_area")
 
             if body_constraints:
@@ -379,7 +417,7 @@ def parse_geometry(data: dict) -> Mesh:
     mesh.instructions = data.get("instructions", [])
 
     # Energy modules
-    mesh.energy_modules= list(energy_module_names)
+    mesh.energy_modules = list(energy_module_names)
 
     # Constraint modules
     mesh.constraint_modules = list(set(constraint_module_names))
@@ -412,11 +450,12 @@ def parse_geometry(data: dict) -> Mesh:
 
     return mesh
 
+
 def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
     def export_edge_index(i):
         if i < 0:
-            return f"r{abs(i) - 1}"     # -1 → "r0"
-        return i - 1                    # 1 → 0
+            return f"r{abs(i) - 1}"  # -1 → "r0"
+        return i - 1  # 1 → 0
 
     def prepare_options(entity):
         opts = entity.options.copy() if entity.options else {}
@@ -425,27 +464,47 @@ def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
         return opts if opts else None
 
     data = {
-        "vertices": [[*mesh.vertices[v].position.tolist(),
-                        prepare_options(mesh.vertices[v])] if prepare_options(mesh.vertices[v]) else
-                        mesh.vertices[v].position.tolist() for v in mesh.vertices.keys()],
-        "edges": [[mesh.edges[e].tail_index, mesh.edges[e].head_index,
-                   prepare_options(mesh.edges[e])] if prepare_options(mesh.edges[e]) else
-                  [mesh.edges[e].tail_index, mesh.edges[e].head_index] for e in mesh.edges.keys()],
+        "vertices": [
+            [*mesh.vertices[v].position.tolist(), prepare_options(mesh.vertices[v])]
+            if prepare_options(mesh.vertices[v])
+            else mesh.vertices[v].position.tolist()
+            for v in mesh.vertices.keys()
+        ],
+        "edges": [
+            [
+                mesh.edges[e].tail_index,
+                mesh.edges[e].head_index,
+                prepare_options(mesh.edges[e]),
+            ]
+            if prepare_options(mesh.edges[e])
+            else [mesh.edges[e].tail_index, mesh.edges[e].head_index]
+            for e in mesh.edges.keys()
+        ],
         "faces": [
-            [*map(export_edge_index, mesh.facets[facet_idx].edge_indices),
-             prepare_options(mesh.facets[facet_idx])] if prepare_options(mesh.facets[facet_idx]) else
-            list(map(export_edge_index, mesh.facets[facet_idx].edge_indices))
+            [
+                *map(export_edge_index, mesh.facets[facet_idx].edge_indices),
+                prepare_options(mesh.facets[facet_idx]),
+            ]
+            if prepare_options(mesh.facets[facet_idx])
+            else list(map(export_edge_index, mesh.facets[facet_idx].edge_indices))
             for facet_idx in mesh.facets.keys()
         ],
         "bodies": {
             "faces": [mesh.bodies[b].facet_indices for b in mesh.bodies.keys()],
             "target_volume": [mesh.bodies[b].target_volume for b in mesh.bodies.keys()],
-            "target_area": [mesh.bodies[b].options.get("target_area") for b in mesh.bodies.keys()],
-            "energy": [mesh.bodies[b].options.get("energy", {}) for b in mesh.bodies.keys()],
-            "constraints": [mesh.bodies[b].options.get("constraints", []) for b in mesh.bodies.keys()]
+            "target_area": [
+                mesh.bodies[b].options.get("target_area") for b in mesh.bodies.keys()
+            ],
+            "energy": [
+                mesh.bodies[b].options.get("energy", {}) for b in mesh.bodies.keys()
+            ],
+            "constraints": [
+                mesh.bodies[b].options.get("constraints", [])
+                for b in mesh.bodies.keys()
+            ],
         },
         "global_parameters": mesh.global_parameters.to_dict(),
-        "instructions": mesh.instructions
+        "instructions": mesh.instructions,
     }
     with open(path, "w") as f:
         json.dump(data, f, indent=4)

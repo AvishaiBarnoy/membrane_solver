@@ -19,13 +19,12 @@ def test_constraint_manager_init(monkeypatch):
 
     # Mock importlib to simulate loading modules
     import importlib
+
     mock_import_module = MagicMock()
     monkeypatch.setitem(
         sys.modules, "modules.constraints.dummy_constraint", MagicMock()
     )
-    monkeypatch.setitem(
-        sys.modules, "modules.constraints.pin_to_plane", MagicMock()
-    )
+    monkeypatch.setitem(sys.modules, "modules.constraints.pin_to_plane", MagicMock())
 
     monkeypatch.setattr(importlib, "import_module", mock_import_module)
 
@@ -37,6 +36,7 @@ def test_constraint_manager_init(monkeypatch):
     assert "pin_to_plane" in constraint_manager.modules
     mock_import_module.assert_any_call("modules.constraints.dummy_constraint")
     mock_import_module.assert_any_call("modules.constraints.pin_to_plane")
+
 
 def test_get_module():
     # Mock constraint module names
@@ -50,29 +50,29 @@ def test_get_module():
     constraint_manager = ConstraintModuleManager([])
     constraint_manager.modules = {
         "dummy_constraint": mock_dummy_module,
-        "pin_to_plane": mock_pin_to_plane_module
+        "pin_to_plane": mock_pin_to_plane_module,
     }
 
     # Test retrieving loaded modules
     for name in constraint_names:
         module = constraint_manager.get_module(name)
         assert module is not None, f"Module '{name}' should be loaded"
-        assert module == constraint_manager.modules[name], f"Module '{name}' should match the loaded module"
+        assert module == constraint_manager.modules[name], (
+            f"Module '{name}' should match the loaded module"
+        )
 
     # Test retrieving a non-existent module
     with pytest.raises(KeyError, match="Constraint module 'non_existent' not found."):
         constraint_manager.get_module("non_existent")
 
+
 def test_constraints_loaded_from_file(monkeypatch, tmp_path):
     # Mock importlib to simulate loading modules
     import importlib
+
     mock_import_module = MagicMock()
-    monkeypatch.setitem(
-        sys.modules, "modules.constraints.pin_to_plane", MagicMock()
-    )
-    monkeypatch.setitem(
-        sys.modules, "modules.constraints.fix_facet_area", MagicMock()
-    )
+    monkeypatch.setitem(sys.modules, "modules.constraints.pin_to_plane", MagicMock())
+    monkeypatch.setitem(sys.modules, "modules.constraints.fix_facet_area", MagicMock())
 
     monkeypatch.setattr(importlib, "import_module", mock_import_module)
 
@@ -83,23 +83,13 @@ def test_constraints_loaded_from_file(monkeypatch, tmp_path):
             [0, 0, 0, {"fixed": "true"}],
             [1, 0, 0, {"constraints": ["pin_to_plane"]}],
             [1, 1, 0, {"constraints": ["fixed"]}],
-            [0, 1, 0]
+            [0, 1, 0],
         ],
-        "edges": [
-            [0, 1, {"constraints": "pin_to_plane"}],
-            [1, 2],
-            [2, 3],
-            [3, 0]
-        ],
-        "faces": [
-            [0, 1, 2, 3, {"constraints": ["fix_facet_area"]}]
-        ],
-        "bodies": {
-            "faces": [[0]],
-            "target_volume": [1.0]
-        },
+        "edges": [[0, 1, {"constraints": "pin_to_plane"}], [1, 2], [2, 3], [3, 0]],
+        "faces": [[0, 1, 2, 3, {"constraints": ["fix_facet_area"]}]],
+        "bodies": {"faces": [[0]], "target_volume": [1.0]},
         "global_parameters": {},
-        "instructions": []
+        "instructions": [],
     }
     with open(sample_geometry_path, "w") as f:
         json.dump(sample_geometry_content, f)

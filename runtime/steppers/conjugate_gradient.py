@@ -69,9 +69,7 @@ class ConjugateGradient(BaseStepper):
             else:
                 prev_g = self.prev_grad[vidx]
                 prev_d = self.prev_dir[vidx]
-                beta_pr = np.dot(g, g - prev_g) / (
-                    np.dot(prev_g, prev_g) + 1e-20
-                )
+                beta_pr = np.dot(g, g - prev_g) / (np.dot(prev_g, prev_g) + 1e-20)
                 if beta_pr < 0:
                     d = -g
                 else:

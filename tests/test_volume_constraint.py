@@ -25,8 +25,12 @@ def create_tetrahedron(target_volume: float) -> Mesh:
     f3 = Facet(3, [2, 6, -5])
     facets = {0: f0, 1: f1, 2: f2, 3: f3}
 
-    body = Body(0, [0, 1, 2, 3], target_volume=target_volume,
-                options={"target_volume": target_volume})
+    body = Body(
+        0,
+        [0, 1, 2, 3],
+        target_volume=target_volume,
+        options={"target_volume": target_volume},
+    )
     bodies = {0: body}
 
     mesh = Mesh(vertices=vertices, edges=edges, facets=facets, bodies=bodies)

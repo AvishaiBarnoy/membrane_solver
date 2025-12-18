@@ -71,8 +71,10 @@ def calculate_surface_energy(mesh: Mesh, global_params) -> float:
         areas.append(facet.compute_area(mesh))
     if not gammas:
         return 0.0
-    return float(np.dot(np.asarray(gammas, dtype=float),
-                        np.asarray(areas, dtype=float)))
+    return float(
+        np.dot(np.asarray(gammas, dtype=float), np.asarray(areas, dtype=float))
+    )
+
 
 def compute_energy_and_gradient(
     mesh: Mesh,
@@ -179,7 +181,7 @@ def _batched_surface_energy_and_gradient_triangles(
             surface_tension = global_params.get("surface_tension")
         gammas_arr[idx] = surface_tension
 
-    tri_pos = positions[tri_rows_arr]              # (nF, 3, 3)
+    tri_pos = positions[tri_rows_arr]  # (nF, 3, 3)
     v0 = tri_pos[:, 0, :]
     v1 = tri_pos[:, 1, :]
     v2 = tri_pos[:, 2, :]
@@ -207,9 +209,9 @@ def _batched_surface_energy_and_gradient_triangles(
     v1m = v1[mask]
     v2m = v2[mask]
 
-    g0 = 0.5 * _fast_cross(v1m - v0m, n_hat)          # dA/dv0
-    g1 = 0.5 * _fast_cross(v2m - v1m, n_hat)          # dA/dv1
-    g2 = 0.5 * _fast_cross(v0m - v2m, n_hat)          # dA/dv2
+    g0 = 0.5 * _fast_cross(v1m - v0m, n_hat)  # dA/dv0
+    g1 = 0.5 * _fast_cross(v2m - v1m, n_hat)  # dA/dv1
+    g2 = 0.5 * _fast_cross(v0m - v2m, n_hat)  # dA/dv2
 
     # Scale by per-facet surface tension.
     scale = gammas_masked[:, None]

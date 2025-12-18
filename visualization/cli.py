@@ -56,11 +56,7 @@ def create_parser() -> argparse.ArgumentParser:
         help="Save the rendered figure to PATH instead of only showing it.",
     )
 
-    parser.add_argument(
-        "--no-axes",
-        action="store_true",
-        help="Removes axes from plot"
-    )
+    parser.add_argument("--no-axes", action="store_true", help="Removes axes from plot")
     return parser
 
 

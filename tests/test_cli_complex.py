@@ -12,20 +12,27 @@ from parameters.global_parameters import GlobalParameters
 
 class MockMesh:
     def __init__(self):
-        self.vertices = {0: Vertex(0, np.array([0.,0.,0.])),
-                         1: Vertex(1, np.array([1.,0.,0.]), options={'fixed': False})}
-        self.edges = {1: Edge(1, 0, 1, options={'len': 1.0})}
-        self.facets = {0: Facet(0, [1], options={'area': 0.5})}
-        self.bodies = {0: Body(0, [0], options={'vol': 1.0})}
+        self.vertices = {
+            0: Vertex(0, np.array([0.0, 0.0, 0.0])),
+            1: Vertex(1, np.array([1.0, 0.0, 0.0]), options={"fixed": False}),
+        }
+        self.edges = {1: Edge(1, 0, 1, options={"len": 1.0})}
+        self.facets = {0: Facet(0, [1], options={"area": 0.5})}
+        self.bodies = {0: Body(0, [0], options={"vol": 1.0})}
         self.global_parameters = GlobalParameters()
         self.global_parameters.set("surface_tension", 1.0)
 
-    def compute_total_surface_area(self): return 1.0
-    def compute_total_volume(self): return 1.0
+    def compute_total_surface_area(self):
+        return 1.0
+
+    def compute_total_volume(self):
+        return 1.0
+
 
 def _get_context(mesh):
     # Dummy minimizer/stepper as they aren't used here
     return CommandContext(mesh, None, None)
+
 
 def test_set_global_param():
     mesh = MockMesh()
@@ -37,6 +44,7 @@ def test_set_global_param():
 
     assert mesh.global_parameters.get("surface_tension") == 2.0
 
+
 def test_set_vertex_fixed():
     mesh = MockMesh()
     ctx = _get_context(mesh)
@@ -47,6 +55,7 @@ def test_set_vertex_fixed():
 
     assert mesh.vertices[1].fixed is True
 
+
 def test_set_edge_option():
     mesh = MockMesh()
     ctx = _get_context(mesh)
@@ -56,6 +65,7 @@ def test_set_edge_option():
     cmd.execute(ctx, ["edge", "1", "line_tension", "5.0"])
 
     assert mesh.edges[1].options["line_tension"] == 5.0
+
 
 def test_print_commands(capsys):
     mesh = MockMesh()
@@ -81,6 +91,7 @@ def test_print_commands(capsys):
     cmd.execute(ctx, ["bodies"])
     captured = capsys.readouterr()
     assert "List of bodies" in captured.out
+
 
 def test_print_filter(capsys):
     mesh = MockMesh()

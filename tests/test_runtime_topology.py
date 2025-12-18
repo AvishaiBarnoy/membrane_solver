@@ -29,6 +29,7 @@ def create_triangle_mesh():
     mesh.build_position_cache()
     return mesh
 
+
 def test_get_min_edge_length():
     mesh = create_triangle_mesh()
     # Edges lengths: 1.0, sqrt(2)=1.414, 1.0. Min is 1.0.
@@ -41,6 +42,7 @@ def test_get_min_edge_length():
     min_len = get_min_edge_length(mesh)
     assert np.isclose(min_len, 0.1)
 
+
 def test_check_max_normal_change_safe():
     mesh = create_triangle_mesh()
     original_positions = {v.index: v.position.copy() for v in mesh.vertices.values()}
@@ -50,6 +52,7 @@ def test_check_max_normal_change_safe():
 
     is_safe = check_max_normal_change(mesh, original_positions, limit_radians=0.5)
     assert is_safe
+
 
 def test_check_max_normal_change_unsafe():
     mesh = create_triangle_mesh()
@@ -63,6 +66,7 @@ def test_check_max_normal_change_unsafe():
 
     is_safe = check_max_normal_change(mesh, original_positions, limit_radians=0.5)
     assert not is_safe
+
 
 def test_detect_vertex_edge_collisions():
     mesh = Mesh()

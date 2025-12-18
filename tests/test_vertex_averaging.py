@@ -19,7 +19,7 @@ def test_vertex_averaging_smooths_mesh():
         1: Vertex(1, np.array([1.0, 0.0, 0.0])),
         2: Vertex(2, np.array([1.0, 1.0, 0.0])),
         3: Vertex(3, np.array([0.0, 1.0, 0.0])),
-        4: Vertex(4, np.array([0.5, 0.5, 1.0]))  # Apex vertex
+        4: Vertex(4, np.array([0.5, 0.5, 1.0])),  # Apex vertex
     }
 
     # Define edges for each triangle face of the pyramid

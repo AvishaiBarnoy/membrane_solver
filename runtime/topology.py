@@ -9,10 +9,9 @@ from geometry.entities import Mesh, _fast_cross
 
 logger = logging.getLogger("membrane_solver")
 
+
 def check_max_normal_change(
-    mesh: Mesh,
-    original_positions: Dict[int, np.ndarray],
-    limit_radians: float = 0.5
+    mesh: Mesh, original_positions: Dict[int, np.ndarray], limit_radians: float = 0.5
 ) -> bool:
     """
     Check if any facet rotates more than `limit_radians` from original_positions.
@@ -107,7 +106,9 @@ def check_max_normal_change(
     return True
 
 
-def detect_vertex_edge_collisions(mesh: Mesh, threshold: float = 1e-3) -> List[Tuple[int, int]]:
+def detect_vertex_edge_collisions(
+    mesh: Mesh, threshold: float = 1e-3
+) -> List[Tuple[int, int]]:
     """
     Finds (vertex_id, edge_id) pairs where the vertex is dangerously close to the edge.
     Returns a list of collisions to be handled (e.g., by refining/popping).

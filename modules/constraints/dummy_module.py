@@ -2,7 +2,7 @@
 
 import logging
 
-logger = logging.getLogger('membrane_solver')
+logger = logging.getLogger("membrane_solver")
 
 
 def compute_energy_and_gradient():

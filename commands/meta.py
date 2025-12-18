@@ -1,4 +1,3 @@
-
 from commands.base import Command
 
 
@@ -6,6 +5,7 @@ class QuitCommand(Command):
     def execute(self, context, args):
         context.should_exit = True
         print("Exiting interactive mode.")
+
 
 class HelpCommand(Command):
     def execute(self, context, args):
@@ -19,15 +19,23 @@ class HelpCommand(Command):
         print("  u             Equiangulate mesh")
         print("  visualize / s Plot current geometry")
         print("  properties    Print physical properties (area, volume, etc.)")
-        print("  print [entity] [id|filter] Query geometry (e.g. print edges len > 0.1)")
-        print("  set [param] [value]       Set global parameter (e.g. set surface_tension 1.0)")
-        print("                            or entity property (e.g. set vertex 0 fixed true)")
+        print(
+            "  print [entity] [id|filter] Query geometry (e.g. print edges len > 0.1)"
+        )
+        print(
+            "  set [param] [value]       Set global parameter (e.g. set surface_tension 1.0)"
+        )
+        print(
+            "                            or entity property (e.g. set vertex 0 fixed true)"
+        )
         print("  live_vis / lv Turn on/off live visualization during minimization")
         print("  save          Save geometry to 'interactive.temp'")
         print("  quit / exit / q  Leave interactive mode")
 
+
 class SetCommand(Command):
     """Refactored logic for 'set'."""
+
     def execute(self, context, args):
         # args expected to be tokens after 'set', e.g. ['vertex', '0', 'fixed', 'true']
         if len(args) < 2:
@@ -38,7 +46,16 @@ class SetCommand(Command):
         first = args[0].lower()
 
         # Check if first token is an entity type
-        if first in ['vertex', 'edge', 'facet', 'body', 'vertices', 'edges', 'facets', 'bodies']:
+        if first in [
+            "vertex",
+            "edge",
+            "facet",
+            "body",
+            "vertices",
+            "edges",
+            "facets",
+            "bodies",
+        ]:
             if len(args) < 4:
                 print("Usage: set [entity] [id] [prop] [value]")
                 return
@@ -54,8 +71,10 @@ class SetCommand(Command):
             val_str = args[3]
 
             # Helper to interpret value
-            if val_str.lower() == 'true': val = True
-            elif val_str.lower() == 'false': val = False
+            if val_str.lower() == "true":
+                val = True
+            elif val_str.lower() == "false":
+                val = False
             else:
                 try:
                     val = float(val_str)
@@ -64,13 +83,13 @@ class SetCommand(Command):
 
             # Find entity
             obj = None
-            if entity_type.startswith('vert'):
+            if entity_type.startswith("vert"):
                 obj = mesh.vertices.get(idx)
-            elif entity_type.startswith('edge'):
+            elif entity_type.startswith("edge"):
                 obj = mesh.edges.get(idx)
-            elif entity_type.startswith('facet') or entity_type.startswith('face'):
+            elif entity_type.startswith("facet") or entity_type.startswith("face"):
                 obj = mesh.facets.get(idx)
-            elif entity_type.startswith('body'):
+            elif entity_type.startswith("body"):
                 obj = mesh.bodies.get(idx)
 
             if not obj:
@@ -78,11 +97,12 @@ class SetCommand(Command):
                 return
 
             # Set property
-            if prop == 'fixed':
+            if prop == "fixed":
                 obj.fixed = bool(val)
                 print(f"Set {entity_type} {idx} fixed={obj.fixed}")
             else:
-                if not obj.options: obj.options = {}
+                if not obj.options:
+                    obj.options = {}
                 obj.options[prop] = val
                 print(f"Set {entity_type} {idx} options['{prop}'] = {val}")
 
@@ -98,8 +118,10 @@ class SetCommand(Command):
             mesh.global_parameters.set(param, val)
             print(f"Global parameter '{param}' set to {val}")
 
+
 class PrintEntityCommand(Command):
     """Refactored logic for 'print'."""
+
     def execute(self, context, args):
         if len(args) < 1:
             print("Usage: print [vertices|edges|facets|bodies] [id|filter] ...")
@@ -110,16 +132,16 @@ class PrintEntityCommand(Command):
 
         entities = None
         name = ""
-        if entity_type in ['vertices', 'vertex']:
+        if entity_type in ["vertices", "vertex"]:
             entities = mesh.vertices
             name = "Vertex"
-        elif entity_type in ['edges', 'edge']:
+        elif entity_type in ["edges", "edge"]:
             entities = mesh.edges
             name = "Edge"
-        elif entity_type in ['facets', 'facet', 'faces', 'face']:
+        elif entity_type in ["facets", "facet", "faces", "face"]:
             entities = mesh.facets
             name = "Facet"
-        elif entity_type in ['bodies', 'body']:
+        elif entity_type in ["bodies", "body"]:
             entities = mesh.bodies
             name = "Body"
         else:
@@ -167,15 +189,22 @@ class PrintEntityCommand(Command):
             filtered = []
             for k, obj in targets:
                 v = get_val(obj, prop)
-                if v is None: continue
+                if v is None:
+                    continue
 
                 match = False
-                if op == '>': match = v > val
-                elif op == '<': match = v < val
-                elif op == '>=': match = v >= val
-                elif op == '<=': match = v <= val
-                elif op == '==' or op == '=': match = v == val
-                elif op == '!=': match = v != val
+                if op == ">":
+                    match = v > val
+                elif op == "<":
+                    match = v < val
+                elif op == ">=":
+                    match = v >= val
+                elif op == "<=":
+                    match = v <= val
+                elif op == "==" or op == "=":
+                    match = v == val
+                elif op == "!=":
+                    match = v != val
 
                 if match:
                     filtered.append((k, obj))
