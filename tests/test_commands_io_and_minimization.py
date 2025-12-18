@@ -1,0 +1,108 @@
+import os
+import sys
+from types import SimpleNamespace
+
+import numpy as np
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from commands.io import PropertiesCommand, SaveCommand, VisualizeCommand
+from commands.minimization import GoCommand, LiveVisCommand, SetStepperCommand
+from geometry.entities import Edge, Mesh, Vertex
+from runtime.steppers.conjugate_gradient import ConjugateGradient
+from runtime.steppers.gradient_descent import GradientDescent
+
+
+def build_line_mesh():
+    mesh = Mesh()
+    mesh.vertices[0] = Vertex(0, np.array([0.0, 0.0, 0.0]))
+    mesh.vertices[1] = Vertex(1, np.array([1.0, 0.0, 0.0]))
+    mesh.edges[1] = Edge(1, 0, 1)
+    mesh.build_position_cache()
+    return mesh
+
+
+def test_save_command_writes_to_default_filename(monkeypatch):
+    mesh = build_line_mesh()
+    ctx = SimpleNamespace(mesh=mesh)
+    called = {}
+
+    def fake_save(m, filename):
+        called["mesh"] = m
+        called["filename"] = filename
+
+    monkeypatch.setattr("commands.io.save_geometry", fake_save)
+    SaveCommand().execute(ctx, [])
+    assert called["mesh"] is mesh
+    assert called["filename"] == "interactive.temp"
+
+
+def test_visualize_command_calls_plot(monkeypatch):
+    mesh = build_line_mesh()
+    ctx = SimpleNamespace(mesh=mesh)
+    called = {}
+
+    def fake_plot(m, show_indices=False):
+        called["mesh"] = m
+        called["show_indices"] = show_indices
+
+    monkeypatch.setattr("commands.io.plot_geometry", fake_plot)
+    VisualizeCommand().execute(ctx, [])
+    assert called["mesh"] is mesh
+    assert called["show_indices"] is False
+
+
+def test_properties_command_prints_header(capsys):
+    mesh = build_line_mesh()
+    ctx = SimpleNamespace(mesh=mesh)
+    PropertiesCommand().execute(ctx, [])
+    out = capsys.readouterr().out
+    assert "=== Physical Properties ===" in out
+    assert "Vertices:" in out
+
+
+def test_live_vis_toggles_on_minimizer():
+    ctx = SimpleNamespace(minimizer=SimpleNamespace(live_vis=False))
+    LiveVisCommand().execute(ctx, [])
+    assert ctx.minimizer.live_vis is True
+    LiveVisCommand().execute(ctx, [])
+    assert ctx.minimizer.live_vis is False
+
+
+def test_set_stepper_command_updates_context_and_minimizer():
+    ctx = SimpleNamespace(stepper=GradientDescent(), minimizer=SimpleNamespace())
+    ctx.minimizer.stepper = ctx.stepper
+
+    SetStepperCommand("cg").execute(ctx, [])
+    assert isinstance(ctx.stepper, ConjugateGradient)
+    assert isinstance(ctx.minimizer.stepper, ConjugateGradient)
+
+    SetStepperCommand("gd").execute(ctx, [])
+    assert isinstance(ctx.stepper, GradientDescent)
+    assert isinstance(ctx.minimizer.stepper, GradientDescent)
+
+
+def test_go_command_runs_minimizer_and_warns_on_collisions(monkeypatch, caplog):
+    mesh = build_line_mesh()
+
+    class DummyMinimizer:
+        def __init__(self, m):
+            self.mesh = m
+            self.live_vis = False
+
+        def minimize(self, n_steps=1, callback=None):
+            assert n_steps == 3
+            assert callback is None
+            return {"mesh": self.mesh, "energy": 1.23}
+
+    ctx = SimpleNamespace(
+        mesh=mesh, minimizer=DummyMinimizer(mesh), stepper=ConjugateGradient()
+    )
+
+    monkeypatch.setattr(
+        "commands.minimization.detect_vertex_edge_collisions", lambda m: [(2, 1)]
+    )
+
+    with caplog.at_level("WARNING"):
+        GoCommand().execute(ctx, ["3"])
+    assert "vertex-edge collisions detected" in caplog.text
