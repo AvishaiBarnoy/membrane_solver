@@ -223,7 +223,9 @@ def parse_geometry(data: dict) -> Mesh:
         # Edges constraint modules
         constraints = normalize_constraints(
             mesh.edges[i + 1].options,
-            fixed_setter=lambda flag, idx=i: setattr(mesh.edges[idx + 1], "fixed", flag),
+            fixed_setter=lambda flag, idx=i: setattr(
+                mesh.edges[idx + 1], "fixed", flag
+            ),
         )
         constraint_module_names.extend(constraints)
 
@@ -526,9 +528,7 @@ def save_geometry(
                 [facet_id_map[int(fid)] for fid in mesh.bodies[b].facet_indices]
                 for b in mesh.bodies.keys()
             ],
-            "target_volume": [
-                mesh.bodies[b].target_volume for b in mesh.bodies.keys()
-            ],
+            "target_volume": [mesh.bodies[b].target_volume for b in mesh.bodies.keys()],
             "target_area": [
                 mesh.bodies[b].options.get("target_area") for b in mesh.bodies.keys()
             ],
