@@ -109,6 +109,41 @@ def parse_geometry(data: dict) -> Mesh:
             return merged
         return raw_options
 
+    def normalize_constraints(options: dict, *, fixed_setter) -> list[str]:
+        """Normalize an entity 'constraints' option to a list and handle 'fixed'.
+
+        The string 'fixed' is treated as a structural flag (sets entity.fixed)
+        and is not kept as a constraint module name.
+        """
+        raw = options.get("constraints")
+        if raw is None:
+            if options.get("fixed", False):
+                fixed_setter(True)
+            return []
+
+        if isinstance(raw, str):
+            constraints = [raw]
+        elif isinstance(raw, list):
+            constraints = list(raw)
+        else:
+            err_msg = "constraint modules should be in a list or a single string"
+            logger.error(err_msg)
+            raise TypeError(err_msg)
+
+        if "fixed" in constraints:
+            fixed_setter(True)
+            constraints = [c for c in constraints if c != "fixed"]
+
+        if constraints:
+            options["constraints"] = constraints
+        else:
+            options.pop("constraints", None)
+
+        if options.get("fixed", False):
+            fixed_setter(True)
+
+        return constraints
+
     # Vertices
     vertices = data.get("vertices") or data.get("Vertices")
     if vertices is None:
@@ -140,30 +175,11 @@ def parse_geometry(data: dict) -> Mesh:
         # mesh.vertices[i].options["energy"] = ["surface"]
 
         # Vertex constraint modules
-        if "constraints" in options:
-            if isinstance(options["constraints"], list):
-                constraint_module_names.extend(options["constraints"])
-            elif isinstance(options["constraints"], str):
-                constraint_module_names.append(options["constraints"])
-                mesh.vertices[i].options["constraints"] = [
-                    mesh.vertices[i].options["constraints"]
-                ]
-            else:
-                err_msg = "constraint modules should be in a list or a single string"
-                logger.error(err_msg)
-                raise err_msg
-            if "fixed" in options["constraints"]:
-                # TODO: move fixed out of out constraints and make
-                #       a fixed_edges_map in meshes, when we do energy/grad
-                #       calculations the map zeros or just skips these edges
-                #       make sure the fixed flag is turned on
-                # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
-                mesh.vertices[i].fixed = True
-        if options.get("fixed", False):
-            # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
-            mesh.vertices[
-                i
-            ].fixed = True  # Ensure fixed flag is set if from top-level option
+        constraints = normalize_constraints(
+            mesh.vertices[i].options,
+            fixed_setter=lambda flag, idx=i: setattr(mesh.vertices[idx], "fixed", flag),
+        )
+        constraint_module_names.extend(constraints)
 
     # Edges
     edges = data.get("edges") or data.get("Edges")
@@ -205,26 +221,11 @@ def parse_geometry(data: dict) -> Mesh:
         # mesh.edges[i+1].options["energy"] = ["surface"]
 
         # Edges constraint modules
-        if "constraints" in options:
-            if isinstance(options["constraints"], list):
-                constraint_module_names.extend(options["constraints"])
-            elif isinstance(options["constraints"], str):
-                constraint_module_names.append(options["constraints"])
-                mesh.edges[i + 1].options["constraints"] = [
-                    mesh.edges[i + 1].options["constraints"]
-                ]
-            else:
-                err_msg = "constraint modules should be in a list or a single string"
-                logger.error(err_msg)
-                raise err_msg
-            if "fixed" in options["constraints"]:
-                # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
-                mesh.edges[i + 1].fixed = True
-        if options.get("fixed", False):
-            # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
-            mesh.edges[
-                i + 1
-            ].fixed = True  # Ensure fixed flag is set if from top-level option
+        constraints = normalize_constraints(
+            mesh.edges[i + 1].options,
+            fixed_setter=lambda flag, idx=i: setattr(mesh.edges[idx + 1], "fixed", flag),
+        )
+        constraint_module_names.extend(constraints)
 
     # Facets (optional for line‑only geometries)
     faces_section = data.get("faces") or data.get("Faces") or data.get("Facets") or []
@@ -265,22 +266,13 @@ def parse_geometry(data: dict) -> Mesh:
             )
 
         # Facets constraint modules
-        facet_constraints = options.get("constraints")
-        if facet_constraints is not None and not isinstance(
-            facet_constraints, (list, str)
-        ):
-            err_msg = "constraint modules should be in a list or a single string"
-            logger.error(err_msg)
-            raise err_msg
-
-        if isinstance(facet_constraints, str):
-            facet_constraints = [facet_constraints]
-            mesh.facets[i].options["constraints"] = facet_constraints
-        elif isinstance(facet_constraints, list):
-            facet_constraints = list(facet_constraints)
+        facet_constraints = normalize_constraints(
+            mesh.facets[i].options,
+            fixed_setter=lambda flag, idx=i: setattr(mesh.facets[idx], "fixed", flag),
+        )
 
         if options.get("target_area") is not None:
-            if facet_constraints is None:
+            if not facet_constraints:
                 facet_constraints = []
             if "fix_facet_area" not in facet_constraints:
                 facet_constraints.append("fix_facet_area")
@@ -288,15 +280,6 @@ def parse_geometry(data: dict) -> Mesh:
 
         if facet_constraints:
             constraint_module_names.extend(facet_constraints)
-            if "fixed" in facet_constraints:
-                # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
-                mesh.facets[i].fixed = True
-
-        if options.get("fixed", False):
-            # constraint_module_names.append("fixed") # Removed: 'fixed' is not a module
-            mesh.facets[
-                i
-            ].fixed = True  # Ensure fixed flag is set if from top-level option
 
     vol_mode = mesh.global_parameters.get("volume_constraint_mode", "lagrange")
     if vol_mode == "penalty":
@@ -451,11 +434,45 @@ def parse_geometry(data: dict) -> Mesh:
     return mesh
 
 
-def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
-    def export_edge_index(i):
-        if i < 0:
-            return f"r{abs(i) - 1}"  # -1 → "r0"
-        return i - 1  # 1 → 0
+def save_geometry(
+    mesh: Mesh,
+    path: str = "outputs/temp_output_file.json",
+    *,
+    compact: bool = False,
+):
+    def _sorted_keys(dct):
+        return sorted(dct.keys())
+
+    # IMPORTANT: The on-disk format encodes indices implicitly by list order:
+    # - vertices are 0..N-1 by position in "vertices" list
+    # - edges are 1..E by position in "edges" list (with 0-based references in faces)
+    # - faces are 0..F-1 by position in "faces" list
+    #
+    # In-memory meshes can have sparse/non-contiguous IDs after refinement or
+    # equiangulation (e.g. deleting edge 10 and creating edge 500). When saving,
+    # reindex all entities to a compact, contiguous numbering so that a
+    # save→load roundtrip produces a valid mesh.
+    vertex_ids = _sorted_keys(mesh.vertices)
+    vertex_id_map = {old: new for new, old in enumerate(vertex_ids)}
+
+    edge_ids = _sorted_keys(mesh.edges)
+    edge_id_map = {old: new + 1 for new, old in enumerate(edge_ids)}  # 1-based
+
+    facet_ids = _sorted_keys(mesh.facets)
+    facet_id_map = {old: new for new, old in enumerate(facet_ids)}  # 0-based
+
+    def export_edge_index(old_signed_edge_index: int):
+        sign = -1 if old_signed_edge_index < 0 else 1
+        old_abs = abs(int(old_signed_edge_index))
+        if old_abs not in edge_id_map:
+            raise KeyError(
+                f"Cannot save geometry: facet references missing edge {old_signed_edge_index}."
+            )
+        new_abs = edge_id_map[old_abs]
+        new_signed = sign * new_abs
+        if new_signed < 0:
+            return f"r{new_abs - 1}"  # -1 → "r0"
+        return new_abs - 1  # 1 → 0
 
     def prepare_options(entity):
         opts = entity.options.copy() if entity.options else {}
@@ -465,33 +482,53 @@ def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
 
     data = {
         "vertices": [
-            [*mesh.vertices[v].position.tolist(), prepare_options(mesh.vertices[v])]
-            if prepare_options(mesh.vertices[v])
-            else mesh.vertices[v].position.tolist()
-            for v in mesh.vertices.keys()
+            (
+                [
+                    *mesh.vertices[old_vid].position.tolist(),
+                    prepare_options(mesh.vertices[old_vid]),
+                ]
+                if prepare_options(mesh.vertices[old_vid])
+                else mesh.vertices[old_vid].position.tolist()
+            )
+            for old_vid in vertex_ids
         ],
         "edges": [
-            [
-                mesh.edges[e].tail_index,
-                mesh.edges[e].head_index,
-                prepare_options(mesh.edges[e]),
-            ]
-            if prepare_options(mesh.edges[e])
-            else [mesh.edges[e].tail_index, mesh.edges[e].head_index]
-            for e in mesh.edges.keys()
+            (
+                [
+                    vertex_id_map[int(mesh.edges[old_eid].tail_index)],
+                    vertex_id_map[int(mesh.edges[old_eid].head_index)],
+                    prepare_options(mesh.edges[old_eid]),
+                ]
+                if prepare_options(mesh.edges[old_eid])
+                else [
+                    vertex_id_map[int(mesh.edges[old_eid].tail_index)],
+                    vertex_id_map[int(mesh.edges[old_eid].head_index)],
+                ]
+            )
+            for old_eid in edge_ids
         ],
         "faces": [
-            [
-                *map(export_edge_index, mesh.facets[facet_idx].edge_indices),
-                prepare_options(mesh.facets[facet_idx]),
-            ]
-            if prepare_options(mesh.facets[facet_idx])
-            else list(map(export_edge_index, mesh.facets[facet_idx].edge_indices))
-            for facet_idx in mesh.facets.keys()
+            (
+                [
+                    *map(
+                        export_edge_index,
+                        mesh.facets[old_fid].edge_indices,
+                    ),
+                    prepare_options(mesh.facets[old_fid]),
+                ]
+                if prepare_options(mesh.facets[old_fid])
+                else list(map(export_edge_index, mesh.facets[old_fid].edge_indices))
+            )
+            for old_fid in facet_ids
         ],
         "bodies": {
-            "faces": [mesh.bodies[b].facet_indices for b in mesh.bodies.keys()],
-            "target_volume": [mesh.bodies[b].target_volume for b in mesh.bodies.keys()],
+            "faces": [
+                [facet_id_map[int(fid)] for fid in mesh.bodies[b].facet_indices]
+                for b in mesh.bodies.keys()
+            ],
+            "target_volume": [
+                mesh.bodies[b].target_volume for b in mesh.bodies.keys()
+            ],
             "target_area": [
                 mesh.bodies[b].options.get("target_area") for b in mesh.bodies.keys()
             ],
@@ -507,4 +544,7 @@ def save_geometry(mesh: Mesh, path: str = "outputs/temp_output_file.json"):
         "instructions": mesh.instructions,
     }
     with open(path, "w") as f:
-        json.dump(data, f, indent=4)
+        if compact:
+            json.dump(data, f, separators=(",", ":"), ensure_ascii=False)
+        else:
+            json.dump(data, f, indent=4, ensure_ascii=False)

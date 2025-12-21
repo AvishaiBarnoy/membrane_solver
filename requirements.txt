@@ -35,3 +35,4 @@ typing_extensions==4.14.0
 urllib3==2.5.0
 virtualenv==20.35.4
 vtk==9.4.2
+ipdb==0.13.13

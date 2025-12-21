@@ -3,6 +3,8 @@ import logging
 import os
 import sys
 
+import matplotlib.pyplot as plt
+
 from commands.context import CommandContext
 from commands.registry import get_command
 from geometry.geom_io import load_data, parse_geometry, save_geometry
@@ -31,7 +33,57 @@ def main():
     parser.add_argument("-i", "--input", help="Input mesh JSON file")
     parser.add_argument("-o", "--output", default=None, help="Output mesh JSON file")
     parser.add_argument(
+        "--debugger",
+        action="store_true",
+        help="Enter a post-mortem debugger (ipdb/pdb) on uncaught exceptions.",
+    )
+    parser.add_argument(
+        "--compact-output-json",
+        action="store_true",
+        help="Write output JSON in compact (single-line) form.",
+    )
+    parser.add_argument(
         "--instructions", help="Optional instruction file (one command per line)"
+    )
+    parser.add_argument(
+        "--viz",
+        action="store_true",
+        help="Visualize the input geometry and exit (no minimization).",
+    )
+    parser.add_argument(
+        "--viz-save",
+        default=None,
+        help="Save the visualization image to PATH instead of only showing it.",
+    )
+    parser.add_argument(
+        "--viz-no-facets",
+        action="store_true",
+        help="Disable drawing of polygonal facets in --viz mode.",
+    )
+    parser.add_argument(
+        "--viz-no-edges",
+        action="store_true",
+        help="Disable drawing of edges in --viz mode.",
+    )
+    parser.add_argument(
+        "--viz-scatter",
+        action="store_true",
+        help="Draw vertices as red scatter points in --viz mode.",
+    )
+    parser.add_argument(
+        "--viz-show-indices",
+        action="store_true",
+        help="Annotate vertices with their indices in --viz mode.",
+    )
+    parser.add_argument(
+        "--viz-transparent",
+        action="store_true",
+        help="Render facets semi-transparent in --viz mode.",
+    )
+    parser.add_argument(
+        "--viz-no-axes",
+        action="store_true",
+        help="Remove axes from the plot in --viz mode.",
     )
     parser.add_argument("--log", default=None, help="Optional log file")
     parser.add_argument(
@@ -72,6 +124,25 @@ def main():
     )
     args = parser.parse_args()
 
+    old_excepthook = sys.excepthook
+    if args.debugger:
+        import traceback
+
+        def _post_mortem_excepthook(exc_type, exc, tb):
+            if issubclass(exc_type, KeyboardInterrupt):
+                return old_excepthook(exc_type, exc, tb)
+            traceback.print_exception(exc_type, exc, tb)
+            try:
+                import ipdb  # type: ignore
+
+                ipdb.post_mortem(tb)
+            except Exception:
+                import pdb
+
+                pdb.post_mortem(tb)
+
+        sys.excepthook = _post_mortem_excepthook
+
     if not args.input:
         try:
             args.input = input("Input mesh JSON file: ").strip()
@@ -94,6 +165,26 @@ def main():
     # Load mesh and parameters
     data = load_data(args.input)
     mesh = parse_geometry(data)
+
+    if args.viz or args.viz_save:
+        from visualization.plotting import plot_geometry
+
+        show = args.viz_save is None
+        plot_geometry(
+            mesh,
+            show_indices=args.viz_show_indices,
+            scatter=args.viz_scatter,
+            transparent=args.viz_transparent,
+            draw_facets=not args.viz_no_facets,
+            draw_edges=not args.viz_no_edges,
+            no_axes=args.viz_no_axes,
+            show=show,
+        )
+        if args.viz_save:
+            fig = plt.gcf()
+            fig.savefig(args.viz_save, bbox_inches="tight")
+            logger.info("Saved visualization to %s", args.viz_save)
+        return
 
     def _apply_cli_line_tension(value: float, edge_ids: list[int] | None) -> None:
         targets = edge_ids or list(mesh.edges.keys())
@@ -212,11 +303,15 @@ def main():
             else:
                 print(f"Unknown command: {cmd_name}")
 
-    if args.output:
-        save_geometry(context.mesh, args.output)
-        logger.info(f"Simulation complete. Output saved to {args.output}")
-    else:
-        logger.info("Simulation complete. No output file written.")
+    try:
+        if args.output:
+            save_geometry(context.mesh, args.output, compact=args.compact_output_json)
+            logger.info(f"Simulation complete. Output saved to {args.output}")
+        else:
+            logger.info("Simulation complete. No output file written.")
+    finally:
+        if args.debugger:
+            sys.excepthook = old_excepthook
 
 
 if __name__ == "__main__":

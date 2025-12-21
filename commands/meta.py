@@ -71,10 +71,13 @@ class SetCommand(Command):
             val_str = args[3]
 
             # Helper to interpret value
-            if val_str.lower() == "true":
+            val_lower = val_str.lower()
+            if val_lower == "true":
                 val = True
-            elif val_str.lower() == "false":
+            elif val_lower == "false":
                 val = False
+            elif val_lower in {"none", "null"}:
+                val = None
             else:
                 try:
                     val = float(val_str)
@@ -100,6 +103,12 @@ class SetCommand(Command):
             if prop == "fixed":
                 obj.fixed = bool(val)
                 print(f"Set {entity_type} {idx} fixed={obj.fixed}")
+            elif entity_type.startswith("body") and prop == "target_volume":
+                obj.target_volume = None if val is None else float(val)
+                if not obj.options:
+                    obj.options = {}
+                obj.options["target_volume"] = obj.target_volume
+                print(f"Set {entity_type} {idx} target_volume={obj.target_volume}")
             else:
                 if not obj.options:
                     obj.options = {}

@@ -11,8 +11,15 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - `print [entity] [filter]`: Query geometry (e.g., `print edges len > 0.5`).
   - `set [target] [value]`: Modify global parameters or entity properties (e.g., `set vertex 0 fixed true`).
   - `live_vis` / `lv`: Real-time 3D visualization during minimization steps.
+  - `--viz` / `--viz-save`: Visualize an input JSON and exit (no minimization).
+  - `--compact-output-json`: Save output JSON in compact (single-line) form.
+  - `--debugger`: Drop into `ipdb`/`pdb` post-mortem on uncaught exceptions.
+- Debugging docs: added `docs/DEBUGGING.md` and `ipdb` to `requirements.txt`.
 - **Spherical Cap Benchmark**: Added `benchmarks/benchmark_cap.py` to verify spherical cap geometry (apex height, radius, RMSE) against theoretical values. This script doubles as a standalone analysis tool.
 - **Catenoid Benchmark**: Added `benchmarks/benchmark_catenoid.py` and `meshes/catenoid_good_min.json` to validate surface tension minimization between two fixed rings.
+- New benchmarks:
+  - `benchmarks/benchmark_dented_cube.py` using `meshes/bench_dented_cube.json`.
+  - `benchmarks/benchmark_two_disks_sphere.py` using `meshes/bench_two_disks_sphere.json`.
 - **YAML Support**: `load_data` now supports `.yaml` and `.yml` files for mesh definitions, enabling comments and anchors/aliases.
 - **JSON Presets**: Added support for a `definitions` block in input files. Entities can use `"preset": "definition_name"` to inherit properties, reducing duplication for constraints and options.
 - Stability improvements:
@@ -50,6 +57,9 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Fixed `square_to_circle.json`: Added missing instruction list and updated it to interleave minimization with mesh maintenance (`r`, `g10`, `u`, `V`) to prevent mesh tangling/overlap during large deformations.
 - `load_data` accepts `Path` objects (needed for tests writing tmp JSONs).
 - `cube_good_min_routine` converges again (energy ≈ 4.85) when run under penalty mode.
+- `save_geometry` now reindexes sparse IDs so save→load roundtrips remain valid after refinement/equiangulation.
+- `detect_vertex_edge_collisions` now builds the vertex cache when missing.
+- Parsing treats `"fixed"` inside an entity `constraints` list as a fixed flag (not a constraint module name).
 
 ### Maintenance
 - **Consolidated Analysis**: Merged `analyze_hemisphere.py` logic into `benchmarks/benchmark_cap.py`.

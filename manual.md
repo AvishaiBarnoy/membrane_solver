@@ -62,22 +62,29 @@ Key command‑line options:
   interactive command (e.g. `g100`, `r`, `u`, …). These commands are executed
   before interactive mode starts.
 
-- `--properties` / `-p` / `-i`
+- `--properties`
   Compute and print basic physical properties (total area, volume, per‑body
   area/volume) and exit without minimization.
+
+- `--viz` / `--viz-save PATH`
+  Visualize the input geometry and exit (no minimization). Use `--viz-save` to
+  save an image instead of only showing the figure.
+
+- `--compact-output-json`
+  Write the output mesh JSON in compact form (single line). Useful for large
+  meshes or when diffing output files.
+
+- `--debugger`
+  Enter a post‑mortem debugger (prefers `ipdb`, falls back to `pdb`) on uncaught
+  exceptions.
 
 - `--volume-mode {lagrange,penalty}`
   Override the global `volume_constraint_mode`.
   - `lagrange` – treat volume as a hard constraint (default). Best paired with
-    `--volume-projection false` to avoid redundant geometric projections.
+    `global_parameters.volume_projection_during_minimization=false` to avoid
+    redundant geometric projections.
   - `penalty` – add a quadratic volume energy term (soft constraint). Works
-    best with `--volume-projection true`.
-
-- `--volume-projection {true,false}`
-  Control geometric projection during minimization.
-  - `false` is recommended when using the hard `lagrange` constraint (prevents
-    double enforcement in the line search).
-  - `true` is the historical behaviour and remains the default in penalty mode.
+    best with `global_parameters.volume_projection_during_minimization=true`.
 
 - `--log PATH`
   Log file path (default: `membrane_solver.log`, overwritten each run).
