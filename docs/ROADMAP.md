@@ -44,19 +44,28 @@ intended for development and planning; users should consult `README.md` and
    - [ ] Document and scaffold a Gaussian curvature module (`modules/energy/gaussian_curvature.py`)
          with baseline tests asserting `NotImplementedError`.
 
-7. Tilt source decay
+7. Inclusion disk (geometry scaffold)
+   - A tagged/fixed inclusion patch on an approximately spherical surface.
+     This is a geometry + infrastructure benchmark (explicitly not caveolin physics yet).
+   - [x] Benchmark scaffold: `benchmarks/benchmark_two_disks_sphere.py` using
+     `meshes/bench_two_disks_sphere.json` (currently modeled as two small disks).
+   - Reference (future): `docs/caveolin_generate_curvature.pdf`.
+
+8. Dented sphere with flat circular patch (from cube)
+   - Goal: one face stays planar and its boundary relaxes toward a circle,
+     while the rest of the surface relaxes toward a (nearly) spherical shape.
+   - Start with one planar face, then repeat with two planar faces.
+   - Stretch goal: change target volume mid‑simulation and verify the shape
+     inflates/deflates correctly under volume constraints.
+   - [x] Benchmark scaffold: `benchmarks/benchmark_dented_cube.py` using
+     `meshes/bench_dented_cube.json` (currently a coarse placeholder; the
+     “planar + circular rim” behavior needs a per‑vertex/region plane constraint).
+
+9. Tilt source decay
    - Introduce localized tilt sources that decay away from the source region;
      should form a “dimple” or invagination.
    - [ ] Placeholder module for tilt energy with CLI toggles so users can enable
          the hook even before the math lands.
-
-8. Dimpled sphere with one embedded caveolin disk
-   - First 3D generalization of the 1D caveolin model (see
-     `docs/caveolin_generate_curvature.pdf`).
-
-9. Box that minimizes into a sphere with a dent
-   - [ ] Use fixed / `no_refine` regions to pin parts of the surface while the
-         rest relaxes.
 
 10. Plane with an inner disk and outer perimeter
    - [ ] Test mixed boundary conditions and perimeter constraints.

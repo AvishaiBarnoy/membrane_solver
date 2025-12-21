@@ -117,6 +117,10 @@ def detect_vertex_edge_collisions(
     """
     collisions = []
 
+    # Ensure cached vertex order/index map exists before accessing mesh.vertex_ids.
+    if getattr(mesh, "vertex_ids", None) is None:
+        mesh.build_position_cache()
+
     # Pre-cache positions to avoid dictionary lookups in inner loop
     # We can use mesh.positions_view() but we need a mapping back to IDs
     # mesh.vertex_ids contains the IDs in order

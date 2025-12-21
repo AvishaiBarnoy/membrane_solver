@@ -1,0 +1,86 @@
+{
+  "definitions": {
+    "fixed_node": {"fixed": true},
+    "bottom_ring": {
+      "fixed": true,
+      "constraints": ["pin_to_circle"],
+      "pin_to_circle_normal": [0, 0, 1],
+      "pin_to_circle_point": [0, 0, 0],
+      "pin_to_circle_radius": 0.5
+    }
+  },
+  "vertices": [
+    [0.0, 0.0, 0.0, {}],
+    [0.5, 0.0, 0.0, {"preset": "fixed_node"}],
+    [0.25, 0.43301270189, 0.0, {"preset": "fixed_node"}],
+    [-0.25, 0.43301270189, 0.0, {"preset": "fixed_node"}],
+    [-0.5, 0.0, 0.0, {"preset": "fixed_node"}],
+    [-0.25, -0.43301270189, 0.0, {"preset": "fixed_node"}],
+    [0.25, -0.43301270189, 0.0, {"preset": "fixed_node"}]
+  ],
+  "edges": [
+    [0, 1],
+    [0, 2],
+    [0, 3],
+    [0, 4],
+    [0, 5],
+    [0, 6],
+    [1, 2, {"preset": "bottom_ring"}],
+    [2, 3, {"preset": "bottom_ring"}],
+    [3, 4, {"preset": "bottom_ring"}],
+    [4, 5, {"preset": "bottom_ring"}],
+    [5, 6, {"preset": "bottom_ring"}],
+    [6, 1, {"preset": "bottom_ring"}]
+  ],
+  "faces": [
+    [0, 6, "r1"],
+    [1, 7, "r2"],
+    [2, 8, "r3"],
+    [3, 9, "r4"],
+    [4, 10, "r5"],
+    [5, 11, "r0"]
+  ],
+  "bodies": {
+    "faces": [[0, 1, 2, 3, 4, 5]],
+    "target_volume": [0.2]
+  },
+  "global_parameters": {
+    "surface_tension": 1.0,
+    "volume_constraint_mode": "lagrange"
+  },
+  "instructions": [
+    "r2",
+    "g15",
+    "u",
+    "V2",
+    "g30",
+    "set body 0 target_volume 0.4",
+    "g30",
+    "set body 0 target_volume 0.8",
+    "g40",
+    "r",
+    "u",
+    "V2",
+    "g40",
+    "set body 0 target_volume 1.6",
+    "g50",
+    "set body 0 target_volume 3.2",
+    "g60",
+    "r",
+    "u",
+    "V2",
+    "g50",
+    "set body 0 target_volume 5.0",
+    "g80",
+    "set body 0 target_volume 7.5",
+    "g90",
+    "set body 0 target_volume 10.0",
+    "g110",
+    "r",
+    "u",
+    "V2",
+    "g60",
+    "set body 0 target_volume 12.5",
+    "g140"
+  ]
+}

@@ -41,6 +41,13 @@ Use the visualization module to inspect geometries:
 python -m visualization.cli meshes/cube.json
 ```
 
+You can also visualize any input mesh directly via `main.py`:
+
+```bash
+python main.py -i meshes/cube.json --viz
+python main.py -i meshes/cube.json --viz-save outputs/cube.png --viz-no-axes
+```
+
 **Live Visualization**: Inside the interactive console, type `lv` (or `live_vis`) to open a real-time plotting window that updates with every minimization step.
 
 The CLI accepts several flags:
@@ -135,8 +142,10 @@ near‑term goals include:
 
 ## Performance benchmarks
 
-- `python benchmarks/suite.py` is the main entry point for performance testing. It runs a set of standard scenarios (`cube_good`, `square_to_circle`, `catenoid`, `spherical_cap`), tracks execution time history in `benchmarks/results.json`, and highlights regressions or improvements.
+- `python benchmarks/suite.py` is the main entry point for performance testing. It runs a set of standard scenarios (`cube_good`, `square_to_circle`, `catenoid`, `spherical_cap`, `dented_cube`, `two_disks_sphere`), tracks execution time history in `benchmarks/results.json`, and highlights regressions or improvements.
 - `python benchmarks/benchmark_cube_good.py` runs the full `cube_good_min_routine` recipe (minimization, refinement, equiangulation, vertex averaging, etc.) and reports the average wall-clock time.
 - `python benchmarks/benchmark_square_to_circle.py` runs the `square_to_circle` scenario (square sheet relaxing to a circle with line tension), serving as a stress test for mesh maintenance operations.
 - `python benchmarks/benchmark_catenoid.py` runs the `catenoid` scenario (surface tension minimization between two fixed rings), validating `pin_to_circle` constraints and surface minimization.
 - `python benchmarks/benchmark_cap.py` validates the spherical cap scenario, checking apex height, radius, and spherical fit quality against theoretical predictions. It can also be used as a standalone analysis tool: `python benchmarks/benchmark_cap.py outputs/result.json`.
+- `python benchmarks/benchmark_dented_cube.py` runs a cube→(nearly) sphere benchmark while keeping one face tagged as a planar/circular dent scaffold.
+- `python benchmarks/benchmark_two_disks_sphere.py` runs a sphere scaffold with two small flat disk patches, exercising circle/plane constraints on a closed surface.

@@ -17,15 +17,19 @@ sys.path.append(os.path.dirname(__file__))
 import benchmark_cap
 import benchmark_catenoid
 import benchmark_cube_good
+import benchmark_dented_cube
 import benchmark_square_to_circle
+import benchmark_two_disks_sphere
 
 RESULTS_FILE = Path(__file__).parent / "results.json"
 
 BENCHMARKS = {
     "cube_good": benchmark_cube_good.benchmark,
+    "dented_cube": benchmark_dented_cube.benchmark,
     "square_to_circle": benchmark_square_to_circle.benchmark,
     "catenoid": benchmark_catenoid.benchmark,
     "spherical_cap": benchmark_cap.benchmark,
+    "two_disks_sphere": benchmark_two_disks_sphere.benchmark,
 }
 
 

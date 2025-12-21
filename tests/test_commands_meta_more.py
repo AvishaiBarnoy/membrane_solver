@@ -7,7 +7,7 @@ import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from commands.meta import HelpCommand, PrintEntityCommand, QuitCommand, SetCommand
-from geometry.entities import Edge, Facet, Mesh, Vertex
+from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from parameters.global_parameters import GlobalParameters
 
 
@@ -68,3 +68,16 @@ def test_print_entity_command_filter_len(capsys):
     out = capsys.readouterr().out
     assert "Found 1 edges matching filter." in out
     assert "List of edges" in out
+
+
+def test_set_command_updates_body_target_volume(capsys):
+    mesh = build_mesh()
+    mesh.bodies[0] = Body(
+        0, facet_indices=[], target_volume=1.0, options={"target_volume": 1.0}
+    )
+    ctx = SimpleNamespace(mesh=mesh)
+
+    SetCommand().execute(ctx, ["body", "0", "target_volume", "1.2"])
+    assert mesh.bodies[0].target_volume == 1.2
+    assert mesh.bodies[0].options["target_volume"] == 1.2
+    assert "target_volume=1.2" in capsys.readouterr().out
