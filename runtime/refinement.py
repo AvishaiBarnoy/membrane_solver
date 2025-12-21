@@ -545,7 +545,9 @@ def refine_triangle_mesh(mesh):
                 raw1 = [e1.index, e2.index, e3.index]
 
                 # Triangle 2: (a, m_bc, m_ac) connects the two midpoints
-                e4 = get_or_create_edge(a, m_bc, parent_facet=facet)  # diagonal (reused)
+                e4 = get_or_create_edge(
+                    a, m_bc, parent_facet=facet
+                )  # diagonal (reused)
                 e5 = get_or_create_edge(m_bc, m_ac, parent_facet=facet)  # connector
                 e6 = get_or_create_edge(m_ac, a, parent_edge=parent_ca)
                 raw2 = [e4.index, e5.index, e6.index]
@@ -553,7 +555,9 @@ def refine_triangle_mesh(mesh):
                 # Triangle 3: (m_bc, c, m_ac) uses the other halves of refined edges
                 e7 = get_or_create_edge(m_bc, c, parent_edge=parent_bc)
                 e8 = get_or_create_edge(c, m_ac, parent_edge=parent_ca)
-                e9 = get_or_create_edge(m_ac, m_bc, parent_facet=facet)  # connector (reused)
+                e9 = get_or_create_edge(
+                    m_ac, m_bc, parent_facet=facet
+                )  # connector (reused)
                 raw3 = [e7.index, e8.index, e9.index]
 
                 new_mesh.edges.update(new_edges)

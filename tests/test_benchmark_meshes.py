@@ -14,7 +14,9 @@ def test_benchmark_dented_cube_mesh_parses_and_tags_present():
         for f in mesh.facets.values()
         if f.options.get("dent_region") and f.options.get("no_refine")
     ]
-    assert tagged_facets, "Expected at least one dent_region/no_refine facet after parsing"
+    assert tagged_facets, (
+        "Expected at least one dent_region/no_refine facet after parsing"
+    )
 
 
 def test_fixed_constraint_is_treated_as_flag():
@@ -40,7 +42,8 @@ def test_benchmark_two_disks_sphere_mesh_parses_and_tags_present():
     disk_facets = [
         f
         for f in mesh.facets.values()
-        if f.options.get("no_refine") and f.options.get("disk_patch") in {"top", "bottom"}
+        if f.options.get("no_refine")
+        and f.options.get("disk_patch") in {"top", "bottom"}
     ]
     assert disk_facets, "Expected disk_patch facets tagged as top/bottom with no_refine"
 
