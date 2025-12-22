@@ -93,18 +93,18 @@ def apply_constraint_gradient(grad: dict[int, np.ndarray], mesh, global_params) 
                 grad[vidx] -= lam_i * gVi
 
 
-def constraint_gradient(mesh, global_params) -> dict[int, np.ndarray] | None:
-    """Return the constraint gradient for a single constrained body.
+def constraint_gradients(
+    mesh, global_params
+) -> list[dict[int, np.ndarray]] | None:
+    """Return constraint gradients for all constrained bodies.
 
-    This supports KKT-style projection in the constraint manager. If multiple
-    constrained bodies are present, return None so the manager can fall back
-    to module-specific logic.
+    This supports KKT-style projection in the constraint manager.
     """
     mode = global_params.get("volume_constraint_mode", "lagrange")
     if mode != "lagrange":
         return None
 
-    constrained = []
+    constrained: list[dict[int, np.ndarray]] = []
     for body in mesh.bodies.values():
         V_target = body.target_volume
         if V_target is None:
@@ -114,10 +114,7 @@ def constraint_gradient(mesh, global_params) -> dict[int, np.ndarray] | None:
         _, vol_grad = body.compute_volume_and_gradient(mesh)
         constrained.append(vol_grad)
 
-    if len(constrained) != 1:
-        return None
-
-    return constrained[0]
+    return constrained or None
 
 
 def enforce_constraint(
@@ -186,4 +183,4 @@ def enforce_constraint(
             mesh.increment_version()
 
 
-__all__ = ["enforce_constraint", "constraint_gradient"]
+__all__ = ["enforce_constraint", "constraint_gradients"]

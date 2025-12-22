@@ -40,9 +40,11 @@ def apply_constraint_gradient(grad: Dict[int, np.ndarray], mesh, global_params) 
                 grad[vidx] -= lam * vec
 
 
-def constraint_gradient(mesh, _global_params) -> Dict[int, np.ndarray] | None:
-    """Return the constraint gradient for a single body target area."""
-    gradients = []
+def constraint_gradients(
+    mesh, _global_params
+) -> list[Dict[int, np.ndarray]] | None:
+    """Return constraint gradients for body target areas."""
+    gradients: list[Dict[int, np.ndarray]] = []
     for body in mesh.bodies.values():
         if body.options.get("target_area") is None:
             continue
@@ -57,9 +59,7 @@ def constraint_gradient(mesh, _global_params) -> Dict[int, np.ndarray] | None:
                     gA[vidx] += vec
         gradients.append(gA)
 
-    if len(gradients) != 1:
-        return None
-    return gradients[0]
+    return gradients or None
 
 
 def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 20) -> None:
