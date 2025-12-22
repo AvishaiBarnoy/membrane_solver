@@ -25,6 +25,21 @@ with the `cg` command if needed.
 If no input file is specified on the command line you will be prompted for the
 path. File names may be given with or without the `.json` suffix.
 
+## Macros
+
+Input files may define named macros (similar to Evolver macros). Each macro is a
+sequence of existing interactive commands. In interactive mode you can invoke a
+macro by typing its name directly.
+
+Example:
+
+```yaml
+macros:
+  gogo: "g 5; r; g 5; u; g 5"
+instructions:
+  - gogo
+```
+
 ## Geometry loading and Input Formats
 
 `parse_geometry` supports both JSON (`.json`) and YAML (`.yaml`, `.yml`) formats.
