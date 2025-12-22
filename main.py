@@ -104,6 +104,11 @@ def main():
         help="Print basic physical properties (volume, surface area, etc.) and exit",
     )
     parser.add_argument(
+        "--radius-of-gyration",
+        action="store_true",
+        help="Print the surface radius of gyration and exit",
+    )
+    parser.add_argument(
         "--volume-mode",
         choices=["lagrange", "penalty"],
         default=None,
@@ -258,6 +263,16 @@ def main():
     if args.properties:
         cmd, _ = get_command("properties")
         cmd.execute(context, [])
+        return
+    if args.radius_of_gyration:
+        total_rg = mesh.compute_surface_radius_of_gyration()
+        print(f"Surface radius of gyration: {total_rg:.6f}")
+        if mesh.bodies:
+            print()
+            print("Per‑body surface radius of gyration:")
+            for body_idx, body in mesh.bodies.items():
+                body_rg = mesh.compute_surface_radius_of_gyration(body.facet_indices)
+                print(f"  Body {body_idx}: surface Rg = {body_rg:.6f}")
         return
 
     # Load instructions from file or mesh

@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 
@@ -654,6 +654,73 @@ class Mesh:
 
     def compute_total_volume(self) -> float:
         return sum(body.compute_volume(self) for body in self.bodies.values())
+
+    def compute_surface_radius_of_gyration(
+        self, facet_indices: Iterable[int] | None = None
+    ) -> float:
+        """Return the surface-area-weighted radius of gyration for the mesh."""
+        if facet_indices is None:
+            facet_indices = self.facets.keys()
+
+        total_area = 0.0
+        centroid_sum = np.zeros(3, dtype=float)
+        mean_r2_sum = 0.0
+
+        for facet_idx in facet_indices:
+            facet = self.facets.get(facet_idx)
+            if facet is None:
+                continue
+
+            if (
+                getattr(self, "facet_vertex_loops", None)
+                and facet_idx in self.facet_vertex_loops
+            ):
+                v_ids_array = self.facet_vertex_loops[facet_idx]
+                v_ids = v_ids_array.tolist()
+            else:
+                v_ids = []
+                for signed_ei in facet.edge_indices:
+                    edge = self.edges[abs(signed_ei)]
+                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
+                    if not v_ids or v_ids[-1] != tail:
+                        v_ids.append(tail)
+
+            if len(v_ids) < 3:
+                continue
+
+            v_pos = np.array([self.vertices[i].position for i in v_ids], dtype=float)
+            v0 = v_pos[0]
+            for i in range(1, len(v_pos) - 1):
+                a = v0
+                b = v_pos[i]
+                c = v_pos[i + 1]
+                cross = np.cross(b - a, c - a)
+                area = 0.5 * float(np.linalg.norm(cross))
+                if area == 0.0:
+                    continue
+                centroid = (a + b + c) / 3.0
+                mean_r2 = (
+                    np.dot(a, a)
+                    + np.dot(b, b)
+                    + np.dot(c, c)
+                    + np.dot(a, b)
+                    + np.dot(b, c)
+                    + np.dot(c, a)
+                ) / 6.0
+
+                total_area += area
+                centroid_sum += area * centroid
+                mean_r2_sum += area * mean_r2
+
+        if total_area == 0.0:
+            return 0.0
+
+        centroid = centroid_sum / total_area
+        mean_r2 = mean_r2_sum / total_area
+        rg2 = float(mean_r2 - np.dot(centroid, centroid))
+        if rg2 < 0.0 and rg2 > -1e-12:
+            rg2 = 0.0
+        return float(np.sqrt(max(rg2, 0.0)))
 
     def validate_triangles(self):
         """Validate that all facets are triangles (have exactly 3 oriented edges).

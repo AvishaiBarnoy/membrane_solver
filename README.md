@@ -13,7 +13,7 @@ Commands:
 - `r` / `rN`: Refine the mesh (N times).
 - `u`: Equiangulate the mesh.
 - `V`: Vertex average.
-- `p` / `i`: Print physical properties.
+- `p` / `i`: Print physical properties (area, volume, surface radius of gyration).
 - `print [entity] [filter]`: Query geometry (e.g., `print vertex 0`, `print edges len > 0.5`).
 - `set [param/entity] [value]`: Set properties (e.g., `set surface_tension 1.5`, `set vertex 0 fixed true`).
 - `lv` / `live_vis`: Toggle live 3D visualization during minimization.

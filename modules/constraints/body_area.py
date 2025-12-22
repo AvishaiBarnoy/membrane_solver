@@ -40,6 +40,28 @@ def apply_constraint_gradient(grad: Dict[int, np.ndarray], mesh, global_params) 
                 grad[vidx] -= lam * vec
 
 
+def constraint_gradient(mesh, _global_params) -> Dict[int, np.ndarray] | None:
+    """Return the constraint gradient for a single body target area."""
+    gradients = []
+    for body in mesh.bodies.values():
+        if body.options.get("target_area") is None:
+            continue
+        gA = {}
+        for facet_idx in body.facet_indices:
+            facet = mesh.facets[facet_idx]
+            _, g_f = facet.compute_area_and_gradient(mesh)
+            for vidx, vec in g_f.items():
+                if vidx not in gA:
+                    gA[vidx] = vec.copy()
+                else:
+                    gA[vidx] += vec
+        gradients.append(gA)
+
+    if len(gradients) != 1:
+        return None
+    return gradients[0]
+
+
 def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 20) -> None:
     """Enforce hard surface-area constraints on bodies using Lagrange multipliers.
 

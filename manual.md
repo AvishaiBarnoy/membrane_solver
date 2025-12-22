@@ -63,8 +63,12 @@ Key command‑line options:
   before interactive mode starts.
 
 - `--properties`
-  Compute and print basic physical properties (total area, volume, per‑body
-  area/volume) and exit without minimization.
+  Compute and print basic physical properties (total area, volume, surface
+  radius of gyration, per‑body area/volume) and exit without minimization.
+
+- `--radius-of-gyration`
+  Compute and print the surface radius of gyration and exit without
+  minimization.
 
 - `--viz` / `--viz-save PATH`
   Visualize the input geometry and exit (no minimization). Use `--viz-save` to
@@ -151,7 +155,7 @@ Interactive commands:
   constraint re‑enforcement.
 
 - `properties` / `props` / `p` / `i`
-  Print physical properties (global and per‑body area/volume).
+  Print physical properties (global/per‑body area, volume, surface Rg).
 
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.

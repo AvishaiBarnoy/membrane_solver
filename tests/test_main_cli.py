@@ -76,6 +76,30 @@ def test_main_cli_line_tension_unknown_edges_warns(tmp_path, caplog, monkeypatch
     assert "Ignoring unknown edge IDs for line tension" in caplog.text
 
 
+def test_main_radius_of_gyration_mode_runs(tmp_path, capsys, monkeypatch):
+    mesh_path = tmp_path / "mesh.json"
+    log_path = tmp_path / "run.log"
+    write_line_mesh(mesh_path)
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "main.py",
+            "-i",
+            str(mesh_path),
+            "--radius-of-gyration",
+            "--non-interactive",
+            "--log",
+            str(log_path),
+            "-q",
+        ],
+    )
+    main_module.main()
+    out = capsys.readouterr().out
+    assert "Surface radius of gyration" in out
+
+
 def test_main_cli_line_tension_edges_invalid_value_exits(tmp_path, monkeypatch):
     mesh_path = tmp_path / "mesh.json"
     log_path = tmp_path / "run.log"

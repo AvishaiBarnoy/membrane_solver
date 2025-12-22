@@ -140,3 +140,10 @@ def test_indices_match_keys():
         assert fid == f.index, f"Facet key {fid} != Facet.index {f.index}"
     for bid, b in mesh_tri.bodies.items():
         assert bid == b.index, f"Body key {bid} != Body.index {b.index}"
+
+
+def test_surface_radius_of_gyration_unit_square():
+    mesh = create_quad()
+    rg = mesh.compute_surface_radius_of_gyration()
+    expected = 1.0 / np.sqrt(6.0)
+    assert np.isclose(rg, expected), f"Expected {expected}, got {rg}"

@@ -101,6 +101,7 @@ intended for development and planning; users should consult `README.md` and
 15. CLI & Usability
     - [x] Query/Adjustment commands (`print`, `set`).
     - [x] Live Visualization (`lv`) via Matplotlib interactive mode.
+    - [x] Surface radius of gyration reporting in CLI properties output.
     - [ ] Add `history` command to replay interactive session.
 
 16. Performance & Architecture

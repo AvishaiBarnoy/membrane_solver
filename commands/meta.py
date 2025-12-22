@@ -18,7 +18,7 @@ class HelpCommand(Command):
         print("  vertex_average Same as V")
         print("  u             Equiangulate mesh")
         print("  visualize / s Plot current geometry")
-        print("  properties    Print physical properties (area, volume, etc.)")
+        print("  properties    Print physical properties (area, volume, surface Rg)")
         print(
             "  print [entity] [id|filter] Query geometry (e.g. print edges len > 0.1)"
         )

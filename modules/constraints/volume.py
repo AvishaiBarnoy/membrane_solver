@@ -47,12 +47,27 @@ def apply_constraint_gradient(grad: dict[int, np.ndarray], mesh, global_params) 
     b_vec = np.zeros(k, dtype=float)
 
     # Build A and b by looping over vertices once per body pair.
-    for i, (_, gradVi) in enumerate(constrained_bodies):
+    # We must use the projected gradients to correctly account for geometric constraints.
+    # Otherwise, we overestimate the ability of constrained vertices to change volume.
+
+    # Pre-process gradients to be projected
+    projected_bodies = []
+    for body, raw_vol_grad in constrained_bodies:
+        proj_grad = {}
+        for vidx, g in raw_vol_grad.items():
+            vertex = mesh.vertices.get(vidx)
+            if vertex:
+                proj_grad[vidx] = vertex.project_gradient(g)
+            else:
+                proj_grad[vidx] = g
+        projected_bodies.append((body, proj_grad))
+
+    for i, (_, gradVi) in enumerate(projected_bodies):
         for vidx, gVi in gradVi.items():
             if vidx in grad:
                 b_vec[i] += float(np.dot(grad[vidx], gVi))
             for j in range(i, k):
-                gVj = constrained_bodies[j][1].get(vidx)
+                gVj = projected_bodies[j][1].get(vidx)
                 if gVj is None:
                     continue
                 val = float(np.dot(gVi, gVj))
@@ -69,12 +84,40 @@ def apply_constraint_gradient(grad: dict[int, np.ndarray], mesh, global_params) 
         return
 
     # Apply the combined projection to the gradient.
-    for (body, gradVi), lam_i in zip(constrained_bodies, lam):
+    # We use the projected gradients here as well.
+    for (_, gradVi), lam_i in zip(projected_bodies, lam):
         if lam_i == 0.0:
             continue
         for vidx, gVi in gradVi.items():
             if vidx in grad:
                 grad[vidx] -= lam_i * gVi
+
+
+def constraint_gradient(mesh, global_params) -> dict[int, np.ndarray] | None:
+    """Return the constraint gradient for a single constrained body.
+
+    This supports KKT-style projection in the constraint manager. If multiple
+    constrained bodies are present, return None so the manager can fall back
+    to module-specific logic.
+    """
+    mode = global_params.get("volume_constraint_mode", "lagrange")
+    if mode != "lagrange":
+        return None
+
+    constrained = []
+    for body in mesh.bodies.values():
+        V_target = body.target_volume
+        if V_target is None:
+            V_target = body.options.get("target_volume")
+        if V_target is None:
+            continue
+        _, vol_grad = body.compute_volume_and_gradient(mesh)
+        constrained.append(vol_grad)
+
+    if len(constrained) != 1:
+        return None
+
+    return constrained[0]
 
 
 def enforce_constraint(
@@ -116,7 +159,7 @@ def enforce_constraint(
 
         for _ in range(max_iter):
             # Always compute volume and its gradient fresh inside this local
-            # projection loop. This keeps the caching strategy simple: any
+            # projection loop. This keeps the caching strategy simple.
             # persistent per‑body caches are owned by the minimizer's gradient
             # pipeline rather than by the constraint module.
             V_actual, grad = body.compute_volume_and_gradient(mesh)
@@ -143,4 +186,4 @@ def enforce_constraint(
             mesh.increment_version()
 
 
-__all__ = ["enforce_constraint"]
+__all__ = ["enforce_constraint", "constraint_gradient"]

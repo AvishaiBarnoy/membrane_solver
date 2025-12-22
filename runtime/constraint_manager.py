@@ -3,6 +3,8 @@
 import importlib
 import logging
 
+import numpy as np
+
 logger = logging.getLogger("ConstraintManager")
 
 
@@ -53,8 +55,35 @@ class ConstraintModuleManager:
         This allows constraints to modify the energy gradient directly, for example
         by applying Lagrange multipliers (soft constraints) or projection forces.
         """
+        kkt_candidates = []
+        for name, module in self.modules.items():
+            if hasattr(module, "constraint_gradient"):
+                try:
+                    gC = module.constraint_gradient(mesh, global_params)
+                except TypeError:
+                    gC = module.constraint_gradient(mesh)
+                if gC:
+                    kkt_candidates.append((name, gC))
+
+        if len(kkt_candidates) == 1:
+            _, gC = kkt_candidates[0]
+            norm_sq = 0.0
+            dot = 0.0
+            for vidx, gvec in gC.items():
+                if vidx in grad:
+                    dot += float(np.dot(grad[vidx], gvec))
+                norm_sq += float(np.dot(gvec, gvec))
+            if norm_sq > 1e-18:
+                lam = dot / norm_sq
+                for vidx, gvec in gC.items():
+                    if vidx in grad:
+                        grad[vidx] -= lam * gvec
+
         for name, module in self.modules.items():
             if hasattr(module, "apply_constraint_gradient"):
+                # Skip module-specific projection if we already did KKT for it.
+                if len(kkt_candidates) == 1 and name == kkt_candidates[0][0]:
+                    continue
                 # Pass the global_params to the module so it can check configuration
                 module.apply_constraint_gradient(grad, mesh, global_params)
 
