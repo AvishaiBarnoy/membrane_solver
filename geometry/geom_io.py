@@ -70,6 +70,17 @@ def parse_geometry(data: dict) -> Mesh:
     ):
         _coerce_float_param(_key)
 
+    def _parse_id(value, *, label: str) -> int:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            text = value.strip()
+            if text.lstrip("-").isdigit():
+                return int(text)
+        raise TypeError(
+            f"{label} IDs must be integers (or integer strings); got {value!r}"
+        )
+
     # Stabilise volume constraint defaults: enforce complementary pairs.
     has_mode = "volume_constraint_mode" in input_global_params
     has_proj = "volume_projection_during_minimization" in input_global_params
@@ -173,17 +184,26 @@ def parse_geometry(data: dict) -> Mesh:
     if vertices is None:
         raise ValueError("Geometry file must contain 'vertices'")
 
-    for i, entry in enumerate(vertices):
+    if isinstance(vertices, dict):
+        vertex_items = []
+        for raw_vid, entry in vertices.items():
+            vid = _parse_id(raw_vid, label="vertex")
+            vertex_items.append((vid, entry))
+        vertex_items.sort(key=lambda item: item[0])
+    else:
+        vertex_items = list(enumerate(vertices))
+
+    for vid, entry in vertex_items:
         *position, raw_opts = entry if isinstance(entry[-1], dict) else (*entry, {})
         options = resolve_options(raw_opts)
 
         pos_array = np.asarray(position, dtype=float)
         if np.any(np.isnan(pos_array)):
-            raise ValueError(f"Vertex {i} has NaN coordinates.")
+            raise ValueError(f"Vertex {vid} has NaN coordinates.")
         if np.any(np.isinf(pos_array)):
-            raise ValueError(f"Vertex {i} has infinite coordinates.")
+            raise ValueError(f"Vertex {vid} has infinite coordinates.")
 
-        mesh.vertices[i] = Vertex(index=i, position=pos_array, options=options)
+        mesh.vertices[vid] = Vertex(index=vid, position=pos_array, options=options)
 
         if "energy" in options:
             if isinstance(options["energy"], list):
@@ -200,8 +220,10 @@ def parse_geometry(data: dict) -> Mesh:
 
         # Vertex constraint modules
         constraints = normalize_constraints(
-            mesh.vertices[i].options,
-            fixed_setter=lambda flag, idx=i: setattr(mesh.vertices[idx], "fixed", flag),
+            mesh.vertices[vid].options,
+            fixed_setter=lambda flag, idx=vid: setattr(
+                mesh.vertices[idx], "fixed", flag
+            ),
         )
         constraint_module_names.extend(constraints)
 
@@ -212,22 +234,30 @@ def parse_geometry(data: dict) -> Mesh:
         logger.error(err_msg)
         raise KeyError(err_msg)
 
-    for i, entry in enumerate(edges):
+    edges_are_explicit = isinstance(edges, dict)
+    if edges_are_explicit:
+        edge_items = []
+        for raw_eid, entry in edges.items():
+            eid = _parse_id(raw_eid, label="edge")
+            edge_items.append((eid, entry))
+        edge_items.sort(key=lambda item: item[0])
+    else:
+        edge_items = [(i + 1, entry) for i, entry in enumerate(edges)]
+
+    for eid, entry in edge_items:
         tail_index, head_index, *opts = entry
+        tail_index = _parse_id(tail_index, label="vertex")
+        head_index = _parse_id(head_index, label="vertex")
 
         if tail_index not in mesh.vertices:
-            raise ValueError(
-                f"Edge {i + 1} references missing tail vertex {tail_index}"
-            )
+            raise ValueError(f"Edge {eid} references missing tail vertex {tail_index}")
         if head_index not in mesh.vertices:
-            raise ValueError(
-                f"Edge {i + 1} references missing head vertex {head_index}"
-            )
+            raise ValueError(f"Edge {eid} references missing head vertex {head_index}")
 
         raw_opts = opts[0] if opts else {}
         options = resolve_options(raw_opts)
-        mesh.edges[i + 1] = Edge(
-            index=i + 1, tail_index=tail_index, head_index=head_index, options=options
+        mesh.edges[eid] = Edge(
+            index=eid, tail_index=tail_index, head_index=head_index, options=options
         )
 
         if "energy" in options:
@@ -246,55 +276,68 @@ def parse_geometry(data: dict) -> Mesh:
 
         # Edges constraint modules
         constraints = normalize_constraints(
-            mesh.edges[i + 1].options,
-            fixed_setter=lambda flag, idx=i: setattr(
-                mesh.edges[idx + 1], "fixed", flag
-            ),
+            mesh.edges[eid].options,
+            fixed_setter=lambda flag, idx=eid: setattr(mesh.edges[idx], "fixed", flag),
         )
         constraint_module_names.extend(constraints)
 
     # Facets (optional for line‑only geometries)
     faces_section = data.get("faces") or data.get("Faces") or data.get("Facets") or []
-    for i, entry in enumerate(faces_section):
+    faces_are_explicit = isinstance(faces_section, dict)
+    if faces_are_explicit:
+        face_items = []
+        for raw_fid, entry in faces_section.items():
+            fid = _parse_id(raw_fid, label="face")
+            face_items.append((fid, entry))
+        face_items.sort(key=lambda item: item[0])
+    else:
+        face_items = list(enumerate(faces_section))
+
+    def parse_edge_ref(e):
+        if edges_are_explicit:
+            if isinstance(e, str) and e.startswith("r"):
+                return -_parse_id(e[1:], label="edge")
+            return _parse_id(e, label="edge")
+        if isinstance(e, str) and e.startswith("r"):
+            return -(int(e[1:]) + 1)  # "r0" -> -1
+        i = int(e)
+        if i >= 0:
+            return i + 1  # 0 -> 1, 1 -> 2, etc.
+        return i - 1  # -11 -> -12
+
+    for fid, entry in face_items:
         *raw_edges, raw_opts = entry if isinstance(entry[-1], dict) else (*entry, {})
         options = resolve_options(raw_opts)
 
-        def parse_edge(e):
-            if isinstance(e, str) and e.startswith("r"):
-                return -(int(e[1:]) + 1)  # "r0" -> -1
-            i = int(e)
-            if i >= 0:
-                return i + 1  # 0 -> 1, 1 -> 2, etc.
-            elif i < 0:
-                return i - 1  # -11 -> -12
-
-        edge_indices = [parse_edge(e) for e in raw_edges]
-        mesh.facets[i] = Facet(index=i, edge_indices=edge_indices, options=options)
+        edge_indices = [parse_edge_ref(e) for e in raw_edges]
+        mesh.facets[fid] = Facet(index=fid, edge_indices=edge_indices, options=options)
 
         if "energy" in options:
             if isinstance(options["energy"], list):
                 energy_module_names.update(options["energy"])
             elif isinstance(options["energy"], str):
                 energy_module_names.add(options["energy"])
-                mesh.facets[i].options["energy"] = [mesh.facets[i].options["energy"]]
+                mesh.facets[fid].options["energy"] = [
+                    mesh.facets[fid].options["energy"]
+                ]
             else:
                 err_msg = "energy modules should be in a list or a single string"
                 logger.error(err_msg)
                 raise err_msg
         elif "energy" not in options:
-            mesh.facets[i].options["energy"] = ["surface"]
+            mesh.facets[fid].options["energy"] = ["surface"]
             energy_module_names.add("surface")
 
         # Ensure all facets have surface_tension set
         if "surface_tension" not in options:
-            mesh.facets[i].options["surface_tension"] = mesh.global_parameters.get(
+            mesh.facets[fid].options["surface_tension"] = mesh.global_parameters.get(
                 "surface_tension", 1.0
             )
 
         # Facets constraint modules
         facet_constraints = normalize_constraints(
-            mesh.facets[i].options,
-            fixed_setter=lambda flag, idx=i: setattr(mesh.facets[idx], "fixed", flag),
+            mesh.facets[fid].options,
+            fixed_setter=lambda flag, idx=fid: setattr(mesh.facets[idx], "fixed", flag),
         )
 
         if options.get("target_area") is not None:
@@ -302,7 +345,7 @@ def parse_geometry(data: dict) -> Mesh:
                 facet_constraints = []
             if "fix_facet_area" not in facet_constraints:
                 facet_constraints.append("fix_facet_area")
-                mesh.facets[i].options["constraints"] = facet_constraints
+                mesh.facets[fid].options["constraints"] = facet_constraints
 
         if facet_constraints:
             constraint_module_names.extend(facet_constraints)
@@ -313,6 +356,69 @@ def parse_geometry(data: dict) -> Mesh:
 
     # Bodies
     bodies_section = data.get("bodies") or data.get("Bodies")
+    if bodies_section:
+        explicit_body_map = (
+            isinstance(bodies_section, dict)
+            and "faces" not in bodies_section
+            and all(
+                isinstance(spec, dict) and "faces" in spec
+                for spec in bodies_section.values()
+            )
+        )
+        if explicit_body_map:
+            for raw_bid, spec in bodies_section.items():
+                bid = _parse_id(raw_bid, label="body")
+                if not isinstance(spec, dict):
+                    raise TypeError("body specs must be mappings")
+                facet_indices = spec.get("faces")
+                if not isinstance(facet_indices, list):
+                    raise TypeError("body.faces must be a list of face IDs")
+                facet_indices = [_parse_id(fid, label="face") for fid in facet_indices]
+
+                body_options = {k: v for k, v in spec.items() if k not in {"faces"}}
+                target_volume = body_options.pop("target_volume", None)
+                target_area = body_options.get("target_area")
+                if target_area is not None:
+                    body_options["target_area"] = float(target_area)
+
+                body = Body(
+                    index=bid,
+                    facet_indices=facet_indices,
+                    target_volume=target_volume,
+                    options=body_options,
+                )
+                if target_volume is not None:
+                    body.options["target_volume"] = float(target_volume)
+
+                mesh.bodies[bid] = body
+
+                constraint_spec = body.options.get("constraints", [])
+                if isinstance(constraint_spec, str):
+                    body_constraints = [constraint_spec]
+                elif isinstance(constraint_spec, list):
+                    body_constraints = list(constraint_spec)
+                else:
+                    body_constraints = []
+
+                if (
+                    target_volume is not None
+                    and vol_mode == "lagrange"
+                    and "volume" not in body_constraints
+                ):
+                    body_constraints.append("volume")
+
+                if (
+                    body.options.get("target_area") is not None
+                    and "body_area" not in body_constraints
+                ):
+                    body_constraints.append("body_area")
+
+                if body_constraints:
+                    body.options["constraints"] = body_constraints
+                    constraint_module_names.extend(body_constraints)
+            # Skip legacy block.
+            bodies_section = None
+
     if bodies_section:
         face_groups = bodies_section["faces"]
         volumes = bodies_section.get("target_volume", [None] * len(face_groups))

@@ -5,6 +5,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 ## [Unreleased]
 ### Added
 - Evolver-style input `macros`: define named command sequences and invoke them directly by name in interactive mode or from `instructions`.
+- Optional explicit-ID input forms for `vertices`, `edges`, `faces`, and `bodies` (mapping form), improving readability when hand-authoring meshes.
 - Regression tests:
   - `tests/test_volume_energy.py` covers both penalty/laprange code paths in `modules/energy/volume.py`, including gradient accumulation.
   - `tests/test_exceptions.py` asserts that `InvalidEdgeIndexError` is raised when geometry routines see 0-based or missing edge IDs.

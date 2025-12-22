@@ -40,6 +40,28 @@ instructions:
   - gogo
 ```
 
+## Explicit IDs (Optional)
+
+For readability you can provide explicit IDs for `vertices`, `edges`, `faces`,
+and `bodies` using a mapping form instead of lists. This avoids “counting
+lines” when referring to faces/bodies and is closer to Evolver’s explicit IDs.
+
+Example:
+
+```yaml
+vertices:
+  10: [0, 0, 0]
+  20: [1, 0, 0]
+edges:
+  1: [10, 20]
+faces:
+  100: [1, r2, 3]
+bodies:
+  0:
+    faces: [100]
+    target_volume: 1.0
+```
+
 ## Geometry loading and Input Formats
 
 `parse_geometry` supports both JSON (`.json`) and YAML (`.yaml`, `.yml`) formats.

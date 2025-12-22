@@ -67,7 +67,7 @@ def refine_polygonal_facets(mesh):
     new_edges = mesh.edges.copy()
     new_mesh.vertices = new_vertices.copy()
     new_facets = {}
-    next_edge_idx = max(e for e in new_edges.keys()) + 1 if new_edges else 0
+    next_edge_idx = max(new_edges.keys()) + 1 if new_edges else 1
     # Safe counter for new facet IDs to avoid collisions with existing IDs
     next_facet_idx = max(mesh.facets.keys()) + 1 if mesh.facets else 0
 
@@ -106,7 +106,7 @@ def refine_polygonal_facets(mesh):
 
         # 3. Create centroid
         centroid_pos = np.mean([mesh.vertices[v].position for v in vertex_loop], axis=0)
-        centroid_idx = len(new_vertices)
+        centroid_idx = max(new_vertices.keys()) + 1 if new_vertices else 0
         centroid_options = {}
         if "constraints" in facet.options:
             centroid_options["constraints"] = facet.options["constraints"]
@@ -304,7 +304,7 @@ def refine_triangle_mesh(mesh):
             midpoint_position = 0.5 * (
                 mesh.vertices[v1].position + mesh.vertices[v2].position
             )
-            midpoint_idx = len(new_vertices)
+            midpoint_idx = max(new_vertices.keys()) + 1 if new_vertices else 0
             midpoint = Vertex(
                 midpoint_idx,
                 np.asarray(midpoint_position, dtype=float),

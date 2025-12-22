@@ -506,6 +506,31 @@ instructions:
   - gogo
 ```
 
+## 7.2 Explicit IDs (Optional)
+
+The input format supports an optional “explicit ID” mapping form for
+`vertices`, `edges`, `faces`, and `bodies`. This is useful when defining bodies
+and facets by hand, since it avoids counting list positions.
+
+Example:
+
+```yaml
+vertices:
+  10: [0, 0, 0]
+  20: [1, 0, 0]
+  30: [0, 1, 0]
+edges:
+  1: [10, 20]
+  2: [20, 30]
+  3: [30, 10]
+faces:
+  100: [1, 2, 3]
+bodies:
+  7:
+    faces: [100]
+    target_volume: 0.0
+```
+
 ---
 
 ## 8. Worked example: cube → sphere
