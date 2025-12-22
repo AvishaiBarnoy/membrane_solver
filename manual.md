@@ -165,6 +165,9 @@ Interactive commands:
 - `quit`, `exit`, `q`
   Leave interactive mode.
 
+- `MACRO_NAME`
+  If the input defines `macros`, typing a macro name runs its command sequence.
+
 > **Tip: Avoiding mesh tangling**
 > When running large deformations (e.g. relaxing a square to a circle), avoid
 > running many minimization steps (`g50`) in a single block immediately after
@@ -487,6 +490,21 @@ Some important tuning parameters in `global_parameters`:
 
 The default stepper is Gradient Descent with Armijo backtracking line search.
 You can switch to Conjugate Gradient with `cg` in interactive mode.
+
+## 7.1 Macros
+
+Input files can define macros (Evolver-style command sequences). A macro is a
+named list of command lines; in interactive mode, typing the macro name runs
+those commands in order. Macros may also be referenced from `instructions`.
+
+Example:
+
+```yaml
+macros:
+  gogo: "g 5; r; g 5; r; g 5"
+instructions:
+  - gogo
+```
 
 ---
 

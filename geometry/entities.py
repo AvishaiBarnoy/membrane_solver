@@ -612,6 +612,7 @@ class Mesh:
     energy_modules: List[str] = field(default_factory=list)
     constraint_modules: List[str] = field(default_factory=list)
     instructions: List[str] = field(default_factory=list)
+    macros: Dict[str, List[str]] = field(default_factory=dict)
 
     vertex_to_facets: Dict[int, set] = field(default_factory=dict)
     vertex_to_edges: Dict[int, set] = field(default_factory=dict)
@@ -638,6 +639,7 @@ class Mesh:
             new_mesh.bodies = {bid: b.copy() for bid, b in self.bodies.items()}
         if hasattr(self, "global_parameters"):
             new_mesh.global_parameters = copy.deepcopy(self.global_parameters)
+        new_mesh.macros = copy.deepcopy(getattr(self, "macros", {}))
         return new_mesh
 
     def get_edge(self, index: int) -> "Edge":

@@ -401,6 +401,39 @@ def parse_geometry(data: dict) -> Mesh:
     # Instructions
     mesh.instructions = data.get("instructions", [])
 
+    def _split_command_list(text: str) -> list[str]:
+        parts: list[str] = []
+        for chunk in text.replace("\n", ";").split(";"):
+            chunk = chunk.strip()
+            if chunk:
+                parts.append(chunk)
+        return parts
+
+    def _normalize_macro_body(value) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return _split_command_list(value)
+        if isinstance(value, list):
+            lines: list[str] = []
+            for item in value:
+                if isinstance(item, str):
+                    lines.extend(_split_command_list(item))
+                else:
+                    raise TypeError("macro entries must be strings")
+            return lines
+        raise TypeError("macros must be a string or a list of strings")
+
+    raw_macros = data.get("macros", {}) or {}
+    if not isinstance(raw_macros, dict):
+        raise TypeError("macros must be a mapping of name -> command string/list")
+    macros: dict[str, list[str]] = {}
+    for name, body in raw_macros.items():
+        if not isinstance(name, str) or not name.strip():
+            raise TypeError("macro names must be non-empty strings")
+        macros[name.strip()] = _normalize_macro_body(body)
+    mesh.macros = macros
+
     # Energy modules
     mesh.energy_modules = list(energy_module_names)
 

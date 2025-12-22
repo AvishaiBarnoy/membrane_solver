@@ -6,6 +6,7 @@ import sys
 import matplotlib.pyplot as plt
 
 from commands.context import CommandContext
+from commands.executor import execute_command_line
 from commands.registry import get_command
 from geometry.geom_io import load_data, parse_geometry, save_geometry
 from runtime.constraint_manager import ConstraintModuleManager
@@ -269,17 +270,7 @@ def main():
     # Execute initial instructions
     logger.debug(f"Executing {len(lines)} initial instructions.")
     for line in lines:
-        parts = line.strip().split()
-        if not parts:
-            continue
-        cmd_name = parts[0]
-        cmd_args = parts[1:]
-
-        command, extra_args = get_command(cmd_name)
-        if command:
-            command.execute(context, extra_args + cmd_args)
-        else:
-            logger.warning(f"Unknown instruction: {cmd_name}")
+        execute_command_line(context, line, get_command_fn=get_command)
 
     if not args.non_interactive:
         while not context.should_exit:
@@ -289,19 +280,10 @@ def main():
                 break
             if not line:
                 continue
-
-            parts = line.split()
-            cmd_name = parts[0]
-            cmd_args = parts[1:]
-
-            command, extra_args = get_command(cmd_name)
-            if command:
-                try:
-                    command.execute(context, extra_args + cmd_args)
-                except Exception as e:
-                    logger.error(f"Error executing command '{cmd_name}': {e}")
-            else:
-                print(f"Unknown command: {cmd_name}")
+            try:
+                execute_command_line(context, line, get_command_fn=get_command)
+            except Exception as e:
+                logger.error(f"Error executing command '{line}': {e}")
 
     try:
         if args.output:
