@@ -228,6 +228,7 @@ def refine_polygonal_facets(mesh):
     new_mesh.energy_modules = mesh.energy_modules
     new_mesh.constraint_modules = mesh.constraint_modules
     new_mesh.instructions = mesh.instructions
+    new_mesh.macros = getattr(mesh, "macros", {}).copy()
     new_mesh.build_connectivity_maps()
     new_mesh.build_facet_vertex_loops()
 
@@ -633,6 +634,7 @@ def refine_triangle_mesh(mesh):
     new_mesh.energy_modules = mesh.energy_modules
     new_mesh.constraint_modules = mesh.constraint_modules
     new_mesh.instructions = mesh.instructions
+    new_mesh.macros = getattr(mesh, "macros", {}).copy()
 
     new_mesh.build_connectivity_maps()
     new_mesh.build_facet_vertex_loops()

@@ -42,5 +42,6 @@
                         "volume_stiffness": 1e3,
                         "volume_constraint_mode": "penalty",
                         "volume_projection_during_minimization": true
-    }
+    },
+    "macros": {"gogo": ["g 50", "r", "u", "g 50"]}
 }

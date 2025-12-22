@@ -46,6 +46,30 @@ def parse_geometry(data: dict) -> Mesh:
     input_global_params = data.get("global_parameters", {})
     mesh.global_parameters.update(input_global_params)
 
+    def _coerce_float_param(key: str) -> None:
+        """Coerce numeric global parameters that may parse as strings in YAML."""
+        val = mesh.global_parameters.get(key)
+        if isinstance(val, str):
+            try:
+                mesh.global_parameters.set(key, float(val))
+            except ValueError:
+                logger.warning(
+                    "global_parameters.%s should be numeric; got %r", key, val
+                )
+
+    for _key in (
+        "surface_tension",
+        "volume_stiffness",
+        "volume_tolerance",
+        "step_size",
+        "step_size_floor",
+        "intrinsic_curvature",
+        "bending_modulus",
+        "gaussian_modulus",
+        "line_tension",
+    ):
+        _coerce_float_param(_key)
+
     # Stabilise volume constraint defaults: enforce complementary pairs.
     has_mode = "volume_constraint_mode" in input_global_params
     has_proj = "volume_projection_during_minimization" in input_global_params

@@ -74,3 +74,20 @@ def test_unknown_macro_logs_warning(caplog):
     with caplog.at_level("WARNING"):
         execute_command_line(ctx, "nope")
     assert "Unknown instruction" in caplog.text
+
+
+def test_macros_survive_polygon_triangulation():
+    data = {
+        "vertices": [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ],
+        "edges": [[0, 1], [1, 2], [2, 3], [3, 0]],
+        "faces": [[0, 1, 2, 3]],
+        "macros": {"gogo": "g 1; r; g 2"},
+        "instructions": [],
+    }
+    mesh = parse_geometry(data)
+    assert "gogo" in getattr(mesh, "macros", {})
