@@ -238,6 +238,9 @@ STEP SIZE:\t {self.step_size}
                 "terminated_early": True,
             }
 
+        if self._has_enforceable_constraints:
+            self.enforce_constraints_after_mesh_ops(self.mesh)
+
         for i in range(n_steps):
             if callback:
                 callback(self.mesh, i)

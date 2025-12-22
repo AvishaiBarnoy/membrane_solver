@@ -107,6 +107,7 @@ intended for development and planning; users should consult `README.md` and
     - [ ] **Hybrid SoA Architecture**: Implement "Scatter-Gather" pattern where optimization runs on dense arrays (Structure of Arrays) while topology remains object-oriented.
     - [ ] **Compiled Extensions**: Port the hot-loop `compute_energy_and_gradient` to Fortran (f2py) or Rust (PyO3) for ~100x speedup.
     - [ ] **Parallelism**: Explore OpenMP for energy summation.
+    - [ ] Re-evaluate Conjugate Gradient defaults once stability wins are locked in; keep GD as the conservative baseline.
 
 17. Code Quality
     - [ ] Refactor `fixed` constraints to be core entity properties (removing them from the constraint module list).

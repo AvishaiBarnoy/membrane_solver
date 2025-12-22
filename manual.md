@@ -132,7 +132,7 @@ Interactive commands:
   Run `N` minimization steps (e.g. `g5`, `g100`). Bare `g` runs one step.
 
 - `gd` / `cg`
-  Switch to Gradient Descent or Conjugate Gradient steppers. CG is the default.
+  Switch to Gradient Descent or Conjugate Gradient steppers. GD is the default.
 
 - `tX`
   Set step size to `X` (e.g. `t1e-3`).
@@ -485,8 +485,8 @@ Some important tuning parameters in `global_parameters`:
 - `volume_tolerance`
   Allowed relative volume drift before a corrective projection is triggered.
 
-The default stepper is Conjugate Gradient with Armijo backtracking line search.
-You can switch to plain Gradient Descent with `gd` in interactive mode.
+The default stepper is Gradient Descent with Armijo backtracking line search.
+You can switch to Conjugate Gradient with `cg` in interactive mode.
 
 ---
 

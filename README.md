@@ -19,6 +19,9 @@ Commands:
 - `lv` / `live_vis`: Toggle live 3D visualization during minimization.
 - `quit` / `exit`: Stop the loop and save the final mesh.
 
+The default minimization stepper is Gradient Descent; switch to Conjugate Gradient
+with the `cg` command if needed.
+
 If no input file is specified on the command line you will be prompted for the
 path. File names may be given with or without the `.json` suffix.
 

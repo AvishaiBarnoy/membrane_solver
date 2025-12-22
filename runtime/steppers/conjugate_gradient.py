@@ -75,7 +75,6 @@ class ConjugateGradient(BaseStepper):
                 else:
                     d = -g + beta_pr * prev_d
 
-            d /= np.linalg.norm(d) + 1e-12
             direction[vidx] = d
 
         success, new_step = backtracking_line_search(

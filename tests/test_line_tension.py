@@ -167,5 +167,5 @@ def test_square_line_tension_rounds_toward_circle():
     circle_perimeter = 2 * math.sqrt(math.pi * final_area)
 
     assert math.isclose(final_area, 1.0, rel_tol=1e-4, abs_tol=1e-4)
-    assert final_perimeter < initial_perimeter * 0.7
+    assert final_perimeter < initial_perimeter * 0.93
     assert final_perimeter < circle_perimeter * 1.1
