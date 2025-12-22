@@ -91,6 +91,7 @@ def equiangulate_iteration(mesh: Mesh) -> tuple[Mesh, bool]:
     new_mesh.energy_modules = mesh.energy_modules[:]
     new_mesh.constraint_modules = mesh.constraint_modules[:]
     new_mesh.instructions = mesh.instructions[:]
+    new_mesh.macros = getattr(mesh, "macros", {}).copy()
 
     # Build connectivity and facet loops for the new mesh
     new_mesh.build_connectivity_maps()

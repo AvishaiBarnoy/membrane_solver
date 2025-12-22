@@ -91,3 +91,18 @@ def test_macros_survive_polygon_triangulation():
     }
     mesh = parse_geometry(data)
     assert "gogo" in getattr(mesh, "macros", {})
+
+
+def test_macros_survive_equiangulation_copy():
+    from runtime.equiangulation import equiangulate_mesh
+
+    data = {
+        "vertices": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        "edges": [[0, 1], [1, 2], [2, 0]],
+        "faces": [[0, 1, 2]],
+        "macros": {"gogo": "g 1; u; g 2"},
+        "instructions": [],
+    }
+    mesh = parse_geometry(data)
+    out = equiangulate_mesh(mesh)
+    assert "gogo" in getattr(out, "macros", {})
