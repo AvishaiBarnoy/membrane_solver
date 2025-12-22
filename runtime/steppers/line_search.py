@@ -112,14 +112,13 @@ def backtracking_line_search(
                     break
                 continue
 
+        if constraint_enforcer is not None:
+            constraint_enforcer(mesh)
+            mesh.increment_version()
         trial_energy = energy_fn()
         armijo_pass = trial_energy <= energy0 + c * alpha * g_dot_d
 
         if armijo_pass:
-            if constraint_enforcer is not None:
-                constraint_enforcer(mesh)
-                mesh.increment_version()
-                trial_energy = energy_fn()
             logger.debug(
                 "Line search success: alpha=%.3e, backtracks=%d, "
                 "E0=%.6f, Etrial=%.6f, armijo=%s",

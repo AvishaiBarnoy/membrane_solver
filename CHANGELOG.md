@@ -45,6 +45,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Command-line line-tension controls: `--line-tension` and `--line-tension-edges` on `main.py` allow tagging edges with `line_tension` energy without editing JSON.
 
 ### Changed
+- Line search now evaluates Armijo acceptance on the post-constraint state to keep step acceptance consistent with enforced constraints.
 - Minimization defaults now use Gradient Descent in the CLI; Conjugate Gradient remains available via `cg`.
 - Line search acceptance is strict Armijo (no constraint-only acceptance path), improving stability at the cost of being more conservative.
 - Body-area constraint gradients now project onto the constraint manifold, and hard constraints are enforced once before minimization starts to align with target values.
