@@ -12,7 +12,7 @@ from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.logging_config import setup_logging
 from runtime.minimizer import Minimizer
-from runtime.steppers.conjugate_gradient import ConjugateGradient
+from runtime.steppers.gradient_descent import GradientDescent
 
 logger = logging.getLogger("membrane_solver")
 
@@ -238,7 +238,7 @@ def main():
         global_params.set("volume_constraint_mode", args.volume_mode)
     energy_manager = EnergyModuleManager(mesh.energy_modules)
     constraint_manager = ConstraintModuleManager(mesh.constraint_modules)
-    stepper = ConjugateGradient()
+    stepper = GradientDescent()
 
     # Initialize Minimizer
     minimizer = Minimizer(
