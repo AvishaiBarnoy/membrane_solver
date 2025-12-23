@@ -111,7 +111,9 @@ intended for development and planning; users should consult `README.md` and
     - [ ] Re-evaluate Conjugate Gradient defaults once stability wins are locked in; keep GD as the conservative baseline.
 
 17. Code Quality
-    - [ ] Refactor `fixed` constraints to be core entity properties (removing them from the constraint module list).
+- [ ] Refactor `fixed` constraints to be core entity properties (removing them from the constraint module list).
+- [x] Expression-based energies/constraints.
+    - [x] Add expression `defines` to share symbolic constants across input files.
     - [ ] Add regression testing for performance (CI integration with thresholds).
     - [x] Add targeted unit tests for core helpers (volume penalties, edge-index exceptions).
     - [ ] Continue raising coverage around energy/constraint managers, CLI commands, and visualization glue.

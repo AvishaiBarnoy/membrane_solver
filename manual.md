@@ -181,6 +181,21 @@ Interactive commands:
 - `MACRO_NAME`
   If the input defines `macros`, typing a macro name runs its command sequence.
 
+## Expression-based energy/constraints
+
+Entities may specify `expression` (energy) or `constraint_expression` with a
+`constraint_target` (hard constraint). Expressions can reference `x`, `y`, `z`,
+`x1/x2/x3`, global parameters, and safe math functions (`sin`, `cos`, `sqrt`,
+etc.).
+
+Default measures:
+- vertices: point
+- edges: length
+- facets: area
+- bodies: volume
+
+Override with `expression_measure` or `constraint_measure`.
+
 > **Tip: Avoiding mesh tangling**
 > When running large deformations (e.g. relaxing a square to a circle), avoid
 > running many minimization steps (`g50`) in a single block immediately after
@@ -295,6 +310,20 @@ Example (`catenoid_good_min.json` style):
 ```
 
 Any options provided in the entity's dictionary will merge with and override the preset values.
+
+**Defines (Expression Symbols):**
+For expression-based energies/constraints, you can define reusable symbols in a top-level `defines` block. These are evaluated as expressions using existing global parameters and other defines.
+
+Example:
+
+```yaml
+global_parameters:
+  angle: 60.0
+defines:
+  WALLT: "-cos(angle*pi/180)"
+edges:
+  1: [0, 1, {expression: "-(WALLT*y)", expression_measure: "length"}]
+```
 
 ---
 

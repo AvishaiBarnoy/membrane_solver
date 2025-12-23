@@ -41,6 +41,8 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Cached triangle row indices and position-array reuse to avoid per-step reallocation during surface energy/gradient evaluation.
 - Benchmark suite profiling: `benchmarks/suite.py --profile` emits per-case `.pstats` files (plus optional text summaries) for easier A/B performance analysis.
 - Fixed edges now freeze their endpoint vertices (including during refinement), matching Evolver-style behavior.
+- Expression-based energy and constraints with safe evaluation and numeric gradients.
+- Expression `defines`: top-level symbols evaluated from expressions (usable in energy/constraint expressions).
 - Benchmarks now run in read-only sandboxes (no temp files); README/manual updated with benchmark usage.
 - Documentation callouts: README, `manual.md`, and `docs/ROADMAP.md` now highlight testing requirements, shared exceptions, and upcoming placeholder modules for curvature/tilt energies.
 - Integration tests covering the cube penalty scenario (energy decrease, volume preservation, refine+equiangulate validity) and parsing tests for the interactive `rN` command.
