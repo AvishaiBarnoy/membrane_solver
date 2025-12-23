@@ -15,11 +15,8 @@ def _all_facets_are_triangles(mesh: Mesh) -> bool:
     """Return ``True`` if facet loops exist and all are triangles."""
     if not getattr(mesh, "facet_vertex_loops", None):
         return False
-    for facet in mesh.facets.values():
-        loop = mesh.facet_vertex_loops.get(facet.index)
-        if loop is None or len(loop) != 3:
-            return False
-    return True
+    tri_rows, tri_facets = mesh.triangle_row_cache()
+    return tri_rows is not None and len(tri_facets) == len(mesh.facets)
 
 
 def calculate_surface_energy(mesh: Mesh, global_params) -> float:
@@ -34,17 +31,11 @@ def calculate_surface_energy(mesh: Mesh, global_params) -> float:
     # Fast path: all facets are triangles with cached vertex loops.
     if _all_facets_are_triangles(mesh):
         positions = mesh.positions_view()
-        index_map = mesh.vertex_index_to_row
+        tri_rows, tri_facets = mesh.triangle_row_cache()
+        gammas = np.empty(len(tri_facets), dtype=float)
 
-        n_facets = len(mesh.facets)
-        tri_rows = np.empty((n_facets, 3), dtype=int)
-        gammas = np.empty(n_facets, dtype=float)
-
-        for idx, facet in enumerate(mesh.facets.values()):
-            loop = mesh.facet_vertex_loops[facet.index]
-            tri_rows[idx, 0] = index_map[int(loop[0])]
-            tri_rows[idx, 1] = index_map[int(loop[1])]
-            tri_rows[idx, 2] = index_map[int(loop[2])]
+        for idx, fid in enumerate(tri_facets):
+            facet = mesh.facets[fid]
             gammas[idx] = facet.options.get(
                 "surface_tension",
                 global_params.get("surface_tension"),
@@ -159,23 +150,12 @@ def _batched_surface_energy_and_gradient_triangles(
     facet loop has length three.
     """
     positions = mesh.positions_view()
-    idx_map = mesh.vertex_index_to_row
+    tri_rows_arr, tri_facets = mesh.triangle_row_cache()
 
-    n_facets = len(mesh.facets)
-    tri_rows_arr = np.empty((n_facets, 3), dtype=int)
+    gammas_arr = np.empty(len(tri_facets), dtype=float)
 
-    # We collect gammas in a list because usually they are scalars,
-    # but creating a numpy array from them at the end is fine.
-    # However, tri_rows is the big one.
-    # Actually, let's preallocate gammas too for consistency.
-    gammas_arr = np.empty(n_facets, dtype=float)
-
-    for idx, facet in enumerate(mesh.facets.values()):
-        loop = mesh.facet_vertex_loops[facet.index]
-        tri_rows_arr[idx, 0] = idx_map[int(loop[0])]
-        tri_rows_arr[idx, 1] = idx_map[int(loop[1])]
-        tri_rows_arr[idx, 2] = idx_map[int(loop[2])]
-
+    for idx, fid in enumerate(tri_facets):
+        facet = mesh.facets[fid]
         surface_tension = param_resolver.get(facet, "surface_tension")
         if surface_tension is None:
             surface_tension = global_params.get("surface_tension")
@@ -232,5 +212,6 @@ def _batched_surface_energy_and_gradient_triangles(
     np.add.at(grad_arr, i1, g1)
     np.add.at(grad_arr, i2, g2)
 
-    grad = {vid: grad_arr[idx_map[vid]] for vid in mesh.vertices.keys()}
+    vertex_ids = mesh.vertex_ids
+    grad = {vid: grad_arr[i] for i, vid in enumerate(vertex_ids)}
     return E, grad

@@ -38,6 +38,7 @@ def test_get_min_edge_length():
 
     # Modify vertex to shorten an edge
     mesh.vertices[1].position = np.array([0.1, 0.0, 0.0])
+    mesh.increment_version()
     # Edge 0 length is now 0.1
     min_len = get_min_edge_length(mesh)
     assert np.isclose(min_len, 0.1)

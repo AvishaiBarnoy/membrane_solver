@@ -5,8 +5,11 @@ This script executes available benchmark modules, calculates average runtimes,
 and compares them against a stored history of "best" results in ``results.json``.
 """
 
+import argparse
+import cProfile
 import json
 import os
+import pstats
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -19,9 +22,9 @@ import benchmark_catenoid
 import benchmark_cube_good
 import benchmark_dented_cube
 import benchmark_square_to_circle
-import benchmark_two_disks_sphere
 
 RESULTS_FILE = Path(__file__).parent / "inputs" / "results.json"
+DEFAULT_PROFILE_DIR = Path(__file__).parent / "outputs" / "profiles"
 
 BENCHMARKS = {
     "cube_good": benchmark_cube_good.benchmark,
@@ -29,7 +32,6 @@ BENCHMARKS = {
     "square_to_circle": benchmark_square_to_circle.benchmark,
     "catenoid": benchmark_catenoid.benchmark,
     "spherical_cap": benchmark_cap.benchmark,
-    "two_disks_sphere": benchmark_two_disks_sphere.benchmark,
 }
 
 
@@ -49,7 +51,52 @@ def save_results(results):
         json.dump(results, f, indent=2)
 
 
+def run_benchmark(name, func, *, profile: bool, profile_dir: Path, profile_top: int):
+    if not profile:
+        return func(), None
+
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    profile_path = profile_dir / f"{name}.pstats"
+    summary_path = profile_dir / f"{name}.txt"
+
+    profiler = cProfile.Profile()
+    profiler.enable()
+    avg_time = func()
+    profiler.disable()
+    profiler.dump_stats(profile_path)
+
+    if profile_top > 0:
+        stats = pstats.Stats(profiler)
+        stats.sort_stats("cumulative")
+        with summary_path.open("w") as summary_file:
+            stats.stream = summary_file
+            stats.print_stats(profile_top)
+
+    return avg_time, profile_path
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--profile",
+        action="store_true",
+        help="Profile each benchmark and emit per-case .pstats files.",
+    )
+    parser.add_argument(
+        "--profile-dir",
+        default=str(DEFAULT_PROFILE_DIR),
+        help="Directory for per-benchmark profile outputs.",
+    )
+    parser.add_argument(
+        "--profile-top",
+        type=int,
+        default=30,
+        help="Number of top cumulative entries to write to .txt summaries (0 to skip).",
+    )
+    args = parser.parse_args()
+
+    profile_dir = Path(args.profile_dir)
+
     print(f"Running benchmarking suite on {sys.platform}...")
     history = load_results()
     current_results = {}
@@ -64,7 +111,13 @@ def main():
 
     for name, func in BENCHMARKS.items():
         # Run benchmark
-        avg_time = func()
+        avg_time, profile_path = run_benchmark(
+            name,
+            func,
+            profile=args.profile,
+            profile_dir=profile_dir,
+            profile_top=args.profile_top,
+        )
         current_results[name] = {"time": avg_time, "timestamp": timestamp}
 
         # Compare with best
@@ -85,6 +138,8 @@ def main():
                 change_str += " (FAST)"
 
         print(f"{name:<25} | {avg_time:.4f}s    | {best_time:.4f}s    | {change_str}")
+        if profile_path is not None:
+            print(f"{'':<25}   profile: {profile_path}")
 
         # Update history if this is the new best (or if no history exists)
         # We also update if the "best" was significantly slower (improvement).
@@ -101,6 +156,8 @@ def main():
 
     save_results(history)
     print(f"Results saved to {RESULTS_FILE}")
+    if args.profile:
+        print(f"Profile outputs saved to {profile_dir}")
 
 
 if __name__ == "__main__":

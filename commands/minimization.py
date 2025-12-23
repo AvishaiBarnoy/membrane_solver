@@ -24,19 +24,14 @@ class GoCommand(Command):
 
         callback = None
         if getattr(context.minimizer, "live_vis", False):
-            import matplotlib.pyplot as plt
+            from visualization.plotting import update_live_vis
 
-            from visualization.plotting import plot_geometry
-
-            plt.ion()
+            state = getattr(context.minimizer, "live_vis_state", None)
 
             def cb(mesh, i):
-                plt.clf()
-                ax = plt.axes(projection="3d")
-                plot_geometry(mesh, ax=ax, show=False)
-                plt.title(f"Step {i}")
-                plt.draw()
-                plt.pause(0.001)
+                nonlocal state
+                state = update_live_vis(mesh, state=state, title=f"Step {i}")
+                context.minimizer.live_vis_state = state
 
             callback = cb
 
@@ -82,9 +77,19 @@ class HessianCommand(Command):
             steps = max(1, int(args[0]))
 
         stepper = BFGS()
-        for _ in range(steps):
+        for i in range(steps):
             energy, grad = context.minimizer.compute_energy_and_gradient()
             context.minimizer.project_constraints(grad)
+            if not getattr(context.minimizer, "quiet", False):
+                total_area = sum(
+                    facet.compute_area(context.mesh)
+                    for facet in context.mesh.facets.values()
+                )
+                print(
+                    f"Hess {i + 1:4d}: Area = {total_area:.5f}, "
+                    f"Energy = {energy:.5f}, "
+                    f"Step Size  = {context.minimizer.step_size:.2e}"
+                )
             step_success, context.minimizer.step_size = stepper.step(
                 context.mesh,
                 grad,
@@ -96,6 +101,12 @@ class HessianCommand(Command):
             )
             if not step_success:
                 break
+            if getattr(context.minimizer, "live_vis", False):
+                from visualization.plotting import update_live_vis
+
+                state = getattr(context.minimizer, "live_vis_state", None)
+                state = update_live_vis(context.mesh, state=state, title="Hessian step")
+                context.minimizer.live_vis_state = state
         logger.info(
             "Hessian step complete (%d step%s).",
             steps,
@@ -110,6 +121,15 @@ class LiveVisCommand(Command):
         if not hasattr(context.minimizer, "live_vis"):
             context.minimizer.live_vis = False
         context.minimizer.live_vis = not context.minimizer.live_vis
+        if context.minimizer.live_vis:
+            context.minimizer.live_vis_state = None
+        else:
+            state = getattr(context.minimizer, "live_vis_state", None)
+            if state and "fig" in state:
+                import matplotlib.pyplot as plt
+
+                plt.close(state["fig"])
+            context.minimizer.live_vis_state = None
         logger.info(
             f"Live visualization {'enabled' if context.minimizer.live_vis else 'disabled'}"
         )

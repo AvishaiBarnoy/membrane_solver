@@ -146,8 +146,9 @@ def should_flip_edge(mesh: Mesh, edge: Edge, facet1: Facet, facet2: Facet) -> bo
     """
     Determines if an edge should be flipped using the Delaunay criterion.
 
-    Returns True if cos θ₁ + cos θ₂ < 0, where θ₁ and θ₂ are the angles
-    at the off vertices (vertices not on the shared edge).
+    Returns True if the sum of the opposite angles exceeds π (with a small
+    margin), using a local tangent-plane projection to handle non-planar
+    quadrilaterals.
     """
     # Get vertices of the quadrilateral
     v1, v2 = edge.tail_index, edge.head_index
@@ -165,33 +166,60 @@ def should_flip_edge(mesh: Mesh, edge: Edge, facet1: Facet, facet2: Facet) -> bo
     pos_off1 = mesh.vertices[off_vertex1].position
     pos_off2 = mesh.vertices[off_vertex2].position
 
-    # Calculate side lengths for both triangles
-    # Triangle 1: (v1, v2, off_vertex1)
-    a1 = np.linalg.norm(pos2 - pos_off1)  # edge opposite to v1
-    b1 = np.linalg.norm(pos1 - pos_off1)  # edge from off_vertex1 to v1
-    c1 = np.linalg.norm(pos2 - pos1)  # shared edge (common edge)
+    # Construct a local tangent plane using the averaged normals.
+    n1 = np.cross(pos2 - pos1, pos_off1 - pos1)
+    n2 = np.cross(pos_off2 - pos1, pos2 - pos1)
+    n = n1 + n2
+    n_norm = np.linalg.norm(n)
+    if n_norm < 1e-12:
+        n_norm = np.linalg.norm(n1)
+        n = n1
+    if n_norm < 1e-12:
+        n_norm = np.linalg.norm(n2)
+        n = n2
+    if n_norm < 1e-12:
+        return False
+    n = n / n_norm
 
-    # Triangle 2: (v1, v2, off_vertex2)
-    a2 = np.linalg.norm(pos2 - pos_off2)  # edge opposite to v1
-    d2 = np.linalg.norm(pos1 - pos_off2)  # edge from off_vertex2 to v1
-    e2 = np.linalg.norm(pos2 - pos1)  # shared edge (common edge)
+    edge_vec = pos2 - pos1
+    edge_norm = np.linalg.norm(edge_vec)
+    if edge_norm < 1e-12:
+        return False
+    u = edge_vec / edge_norm
+    v = np.cross(n, u)
+    v_norm = np.linalg.norm(v)
+    if v_norm < 1e-12:
+        return False
+    v = v / v_norm
 
-    # Calculate cos θ₁ and cos θ₂ using law of cosines
-    # For triangle 1, angle at off_vertex1: cos θ₁ = (b1² + c1² - a1²) / (2*b1*c1)
-    # For triangle 2, angle at off_vertex2: cos θ₂ = (d2² + e2² - a2²) / (2*d2*e2)
+    def proj(p: np.ndarray) -> np.ndarray:
+        rel = p - pos1
+        return np.array([np.dot(rel, u), np.dot(rel, v)], dtype=float)
 
-    # Avoid division by zero / degenerate configurations
-    if b1 * c1 <= 0.0 or d2 * e2 <= 0.0:
+    p1 = np.array([0.0, 0.0], dtype=float)
+    p2 = proj(pos2)
+    p3 = proj(pos_off1)
+    p4 = proj(pos_off2)
+
+    def angle_at(p, a, b):
+        va = a - p
+        vb = b - p
+        na = np.linalg.norm(va)
+        nb = np.linalg.norm(vb)
+        if na < 1e-12 or nb < 1e-12:
+            return None
+        cos_theta = np.dot(va, vb) / (na * nb)
+        cos_theta = np.clip(cos_theta, -1.0, 1.0)
+        return float(np.arccos(cos_theta))
+
+    theta1 = angle_at(p3, p1, p2)
+    theta2 = angle_at(p4, p1, p2)
+    if theta1 is None or theta2 is None:
         return False
 
-    cos_theta1 = (b1**2 + c1**2 - a1**2) / (2 * b1 * c1)
-    cos_theta2 = (d2**2 + e2**2 - a2**2) / (2 * d2 * e2)
-
-    # Apply Delaunay/equiangular criterion with a small negative margin,
-    # similar in spirit to Evolver's -0.001 tolerance, to avoid cycling
-    # on nearly-flat quadrilaterals.
+    # Apply Delaunay/equiangular criterion with a small margin to avoid cycling.
     delaunay_margin = 1e-3
-    return (cos_theta1 + cos_theta2) < -delaunay_margin
+    return (theta1 + theta2) > (np.pi + delaunay_margin)
 
 
 def get_off_vertex(mesh: Mesh, facet: Facet, edge: Edge) -> int | None:

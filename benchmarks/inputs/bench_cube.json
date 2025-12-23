@@ -38,12 +38,9 @@
     "global_parameters": {"surface_tension": 1.0,
                         "intrinsic_curvature": 0,
                         "bending_modulus": 0,
-                        "gaussian_modulus": 0,
-                        "volume_stiffness": 1e3,
-                        "volume_constraint_mode": "penalty",
-                        "volume_projection_during_minimization": true
+                        "gaussian_modulus": 0
     },
-    "instructions": ["g20", "r", "u", "g20", "V",
-                    "g20", "r", "g20", "r", "g20"
+    "instructions": ["g20", "r", "V2", "g20", "V2",
+                    "g20", "r", "g20", "r", "V2", "g30", "V"
                     ]
 }

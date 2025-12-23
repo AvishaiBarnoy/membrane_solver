@@ -281,6 +281,10 @@ def parse_geometry(data: dict) -> Mesh:
         )
         constraint_module_names.extend(constraints)
 
+        if mesh.edges[eid].fixed:
+            mesh.vertices[tail_index].fixed = True
+            mesh.vertices[head_index].fixed = True
+
     # Facets (optional for line‑only geometries)
     faces_section = data.get("faces") or data.get("Faces") or data.get("Facets") or []
     faces_are_explicit = isinstance(faces_section, dict)

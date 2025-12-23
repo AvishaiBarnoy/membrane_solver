@@ -13,7 +13,7 @@ Commands:
 - `r` / `rN`: Refine the mesh (N times).
 - `u`: Equiangulate the mesh.
 - `V`: Vertex average.
-- `p` / `i`: Print physical properties (area, volume, surface radius of gyration).
+- `p` / `i`: Print physical properties (area, volume, surface radius of gyration, target volume).
 - `print [entity] [filter]`: Query geometry (e.g., `print vertex 0`, `print edges len > 0.5`).
 - `set [param/entity] [value]`: Set properties (e.g., `set surface_tension 1.5`, `set vertex 0 fixed true`).
 - `lv` / `live_vis`: Toggle live 3D visualization during minimization.
@@ -61,6 +61,20 @@ bodies:
     faces: [100]
     target_volume: 1.0
 ```
+
+Fixed edges imply fixed endpoints: marking an edge as `fixed` also freezes its
+two vertices and preserves that behavior through refinement.
+
+## Profiling
+
+To profile each benchmark case and generate per-case `.pstats` outputs:
+
+```bash
+./profile.sh
+```
+
+This runs `benchmarks/suite.py --profile` and writes results under
+`benchmarks/outputs/profiles` by default.
 
 ## Geometry loading and Input Formats
 

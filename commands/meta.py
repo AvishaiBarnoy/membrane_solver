@@ -102,6 +102,9 @@ class SetCommand(Command):
             # Set property
             if prop == "fixed":
                 obj.fixed = bool(val)
+                if obj.fixed and entity_type.startswith("edge"):
+                    mesh.vertices[obj.tail_index].fixed = True
+                    mesh.vertices[obj.head_index].fixed = True
                 print(f"Set {entity_type} {idx} fixed={obj.fixed}")
             elif entity_type.startswith("body") and prop == "target_volume":
                 obj.target_volume = None if val is None else float(val)
