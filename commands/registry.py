@@ -1,12 +1,19 @@
 from commands.io import PropertiesCommand, SaveCommand, VisualizeCommand
 from commands.mesh_ops import EquiangulateCommand, RefineCommand, VertexAverageCommand
 from commands.meta import HelpCommand, PrintEntityCommand, QuitCommand, SetCommand
-from commands.minimization import GoCommand, LiveVisCommand, SetStepperCommand
+from commands.minimization import (
+    GoCommand,
+    HessianCommand,
+    LiveVisCommand,
+    SetStepperCommand,
+)
 
 COMMAND_REGISTRY = {
     "g": GoCommand(),
+    "bfgs": SetStepperCommand("bfgs"),
     "cg": SetStepperCommand("cg"),
     "gd": SetStepperCommand("gd"),
+    "hessian": HessianCommand(),
     "lv": LiveVisCommand(),
     "live_vis": LiveVisCommand(),
     "r": RefineCommand(),

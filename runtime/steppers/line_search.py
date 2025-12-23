@@ -112,9 +112,11 @@ def backtracking_line_search(
                     break
                 continue
 
+        # Enforce constraints (e.g. volume) BEFORE checking energy
         if constraint_enforcer is not None:
             constraint_enforcer(mesh)
             mesh.increment_version()
+
         trial_energy = energy_fn()
         armijo_pass = trial_energy <= energy0 + c * alpha * g_dot_d
 

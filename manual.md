@@ -135,8 +135,12 @@ Interactive commands:
 - `gN`
   Run `N` minimization steps (e.g. `g5`, `g100`). Bare `g` runs one step.
 
-- `gd` / `cg`
-  Switch to Gradient Descent or Conjugate Gradient steppers. GD is the default.
+- `gd` / `cg` / `bfgs`
+  Switch to Gradient Descent, Conjugate Gradient, or BFGS steppers. GD is the
+  default.
+
+- `hessian`
+  Run a single BFGS-style Hessian step without changing the active stepper.
 
 - `tX`
   Set step size to `X` (e.g. `t1e-3`).
