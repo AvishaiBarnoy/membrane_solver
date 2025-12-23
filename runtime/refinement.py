@@ -107,9 +107,9 @@ def refine_polygonal_facets(mesh):
         # 3. Create centroid
         centroid_pos = np.mean([mesh.vertices[v].position for v in vertex_loop], axis=0)
         centroid_idx = max(new_vertices.keys()) + 1 if new_vertices else 0
-        centroid_options = {}
-        if "constraints" in facet.options:
-            centroid_options["constraints"] = facet.options["constraints"]
+        centroid_options = facet.options.copy()
+        for key in ("energy", "surface_tension", "target_area", "parent_facet"):
+            centroid_options.pop(key, None)
         centroid_vertex = Vertex(
             index=centroid_idx,
             position=np.asarray(centroid_pos, dtype=float),
@@ -256,6 +256,9 @@ def refine_triangle_mesh(mesh):
         if parent_edge:
             edge.fixed = parent_edge.fixed
             edge.options = parent_edge.options.copy()
+            if edge.fixed:
+                new_vertices[v_from].fixed = True
+                new_vertices[v_to].fixed = True
         elif parent_facet:
             # For new edges created within a facet, inherit facet properties
             edge.fixed = parent_facet.fixed

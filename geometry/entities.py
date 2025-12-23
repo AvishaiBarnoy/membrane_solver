@@ -265,10 +265,16 @@ class Facet:
         else:
             v_ids = []
             for signed_ei in self.edge_indices:
-                edge = mesh.get_edge(signed_ei)
-                tail = edge.tail_index
-                if not v_ids or v_ids[-1] != tail:
+                edge = mesh.edges[abs(signed_ei)]
+                if signed_ei > 0:
+                    tail, head = edge.tail_index, edge.head_index
+                else:
+                    tail, head = edge.head_index, edge.tail_index
+                if not v_ids:
                     v_ids.append(tail)
+                v_ids.append(head)
+            if len(v_ids) > 1:
+                v_ids = v_ids[:-1]
 
         grad: Dict[int, np.ndarray] = {i: np.zeros(3) for i in v_ids}
         if len(v_ids) < 3:
@@ -374,9 +380,15 @@ class Body:
                 v_ids = []
                 for signed_ei in facet.edge_indices:
                     edge = mesh.edges[abs(signed_ei)]
-                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                    if not v_ids or v_ids[-1] != tail:
+                    if signed_ei > 0:
+                        tail, head = edge.tail_index, edge.head_index
+                    else:
+                        tail, head = edge.head_index, edge.tail_index
+                    if not v_ids:
                         v_ids.append(tail)
+                    v_ids.append(head)
+                if len(v_ids) > 1:
+                    v_ids = v_ids[:-1]
 
             # ordered vertex positions
             v_pos = np.array([mesh.vertices[i].position for i in v_ids])
@@ -422,9 +434,15 @@ class Body:
                 v_ids = []
                 for signed_ei in facet.edge_indices:
                     edge = mesh.edges[abs(signed_ei)]
-                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                    if not v_ids or v_ids[-1] != tail:
+                    if signed_ei > 0:
+                        tail, head = edge.tail_index, edge.head_index
+                    else:
+                        tail, head = edge.head_index, edge.tail_index
+                    if not v_ids:
                         v_ids.append(tail)
+                    v_ids.append(head)
+                if len(v_ids) > 1:
+                    v_ids = v_ids[:-1]
 
             if len(v_ids) < 3:
                 continue
@@ -459,9 +477,15 @@ class Body:
                 v_ids = []
                 for signed_ei in facet.edge_indices:
                     edge = mesh.edges[abs(signed_ei)]
-                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                    if not v_ids or v_ids[-1] != tail:
+                    if signed_ei > 0:
+                        tail, head = edge.tail_index, edge.head_index
+                    else:
+                        tail, head = edge.head_index, edge.tail_index
+                    if not v_ids:
                         v_ids.append(tail)
+                    v_ids.append(head)
+                if len(v_ids) > 1:
+                    v_ids = v_ids[:-1]
 
             v_pos = np.array([mesh.vertices[i].position for i in v_ids])
             v0 = v_pos[0]
@@ -622,6 +646,13 @@ class Mesh:
     vertex_ids: "np.ndarray | None" = None
     vertex_index_to_row: Dict[int, int] = field(default_factory=dict)
     facet_vertex_loops: Dict[int, "np.ndarray"] = field(default_factory=dict)
+
+    _positions_cache: "np.ndarray | None" = None
+    _positions_cache_version: int = -1
+    _triangle_rows_cache: "np.ndarray | None" = None
+    _triangle_rows_cache_version: int = -1
+    _triangle_row_facets: list[int] = field(default_factory=list)
+    _facet_loops_version: int = 0
 
     _version: int = 0
 
@@ -793,14 +824,22 @@ class Mesh:
         import numpy as np
 
         self.build_position_cache()
-        # Optimization: pre-allocate to avoid creating a large intermediate list
-        n_verts = len(self.vertex_ids)
-        pos = np.empty((n_verts, 3), dtype=float)
+        if (
+            self._positions_cache is None
+            or self._positions_cache_version != self._version
+            or len(self._positions_cache) != len(self.vertex_ids)
+        ):
+            n_verts = len(self.vertex_ids)
+            if self._positions_cache is None or self._positions_cache.shape != (
+                n_verts,
+                3,
+            ):
+                self._positions_cache = np.empty((n_verts, 3), dtype=float)
+            for i, vid in enumerate(self.vertex_ids):
+                self._positions_cache[i] = self.vertices[vid].position
+            self._positions_cache_version = self._version
 
-        for i, vid in enumerate(self.vertex_ids):
-            pos[i] = self.vertices[vid].position
-
-        return pos
+        return self._positions_cache
 
     def build_facet_vertex_loops(self):
         """Precompute ordered vertex loops for all facets.
@@ -820,6 +859,48 @@ class Mesh:
                     v_ids.append(tail)
             if v_ids:
                 self.facet_vertex_loops[fid] = np.array(v_ids, dtype=int)
+        self._facet_loops_version += 1
+
+    def triangle_row_cache(self) -> tuple["np.ndarray | None", list[int]]:
+        """Return cached triangle row indices and facet IDs.
+
+        The cache is rebuilt only when facet loops are rebuilt.
+        """
+        import numpy as np
+
+        if (
+            self._triangle_rows_cache is not None
+            and self._triangle_rows_cache_version == self._facet_loops_version
+        ):
+            return self._triangle_rows_cache, self._triangle_row_facets
+
+        if not getattr(self, "facet_vertex_loops", None):
+            return None, []
+
+        self.build_position_cache()
+
+        tri_facets: list[int] = []
+        for fid, loop in self.facet_vertex_loops.items():
+            if len(loop) == 3:
+                tri_facets.append(fid)
+
+        if not tri_facets:
+            self._triangle_rows_cache = None
+            self._triangle_row_facets = []
+            self._triangle_rows_cache_version = self._facet_loops_version
+            return None, []
+
+        tri_rows = np.empty((len(tri_facets), 3), dtype=int)
+        for idx, fid in enumerate(tri_facets):
+            loop = self.facet_vertex_loops[fid]
+            tri_rows[idx, 0] = self.vertex_index_to_row[int(loop[0])]
+            tri_rows[idx, 1] = self.vertex_index_to_row[int(loop[1])]
+            tri_rows[idx, 2] = self.vertex_index_to_row[int(loop[2])]
+
+        self._triangle_rows_cache = tri_rows
+        self._triangle_row_facets = tri_facets
+        self._triangle_rows_cache_version = self._facet_loops_version
+        return tri_rows, tri_facets
 
     def get_facets_of_vertex(self, v_id: int) -> List["Facet"]:
         return [self.facets[fid] for fid in self.vertex_to_facets.get(v_id, [])]

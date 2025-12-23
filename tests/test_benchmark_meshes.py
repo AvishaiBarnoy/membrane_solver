@@ -36,6 +36,22 @@ def test_fixed_constraint_is_treated_as_flag():
     assert "constraints" not in mesh.vertices[0].options
 
 
+def test_fixed_edge_freezes_endpoints():
+    data = {
+        "vertices": [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+        ],
+        "edges": [
+            [0, 1, {"fixed": True}],
+        ],
+    }
+    mesh = parse_geometry(data)
+    assert mesh.edges[1].fixed is True
+    assert mesh.vertices[0].fixed is True
+    assert mesh.vertices[1].fixed is True
+
+
 def test_benchmark_two_disks_sphere_mesh_parses_and_tags_present():
     mesh = parse_geometry(load_data("meshes/bench_two_disks_sphere.json"))
 

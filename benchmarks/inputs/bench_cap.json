@@ -40,12 +40,11 @@
     "target_volume": [2.0943951]
   },
   "global_parameters": {
-    "surface_tension": 1.0,
-    "volume_constraint_mode": "lagrange"
+    "surface_tension": 1.0
   },
   "instructions": [
-    "r2", "g15", "u", "V2", "g20",
-    "r", "g15", "u", "V2", "g30",
-    "r", "g15", "u", "V2", "g10"
+    "r2", "g15", "u", "V", "g20",
+    "r", "g15", "u", "V", "g30",
+    "r", "g15", "V", "cg", "g30"
   ]
 }

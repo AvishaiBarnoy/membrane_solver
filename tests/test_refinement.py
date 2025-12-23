@@ -202,6 +202,28 @@ def test_middle_edge_inherits_facet_constraint_polygonal_refinement():
             )
 
 
+def test_centroid_vertex_inherits_facet_constraint_options():
+    mesh = create_quad()
+    mesh.facets[0].options["constraints"] = ["pin_to_circle"]
+    mesh.facets[0].options["pin_to_circle_normal"] = [0.0, 1.0, 0.0]
+    mesh.facets[0].options["pin_to_circle_point"] = [0.5, 0.0, 0.5]
+    mesh.facets[0].options["pin_to_circle_radius"] = 0.2
+
+    mesh_tri = refine_polygonal_facets(mesh)
+
+    centroid = None
+    for vertex in mesh_tri.vertices.values():
+        if vertex.index not in mesh.vertices:
+            centroid = vertex
+            break
+
+    assert centroid is not None, "Centroid vertex not found"
+    assert "pin_to_circle" in centroid.options.get("constraints", [])
+    assert centroid.options.get("pin_to_circle_normal") == [0.0, 1.0, 0.0]
+    assert centroid.options.get("pin_to_circle_point") == [0.5, 0.0, 0.5]
+    assert centroid.options.get("pin_to_circle_radius") == 0.2
+
+
 def test_midpoint_fixed_if_edge_fixed_even_if_vertices_not_fixed():
     mesh = create_quad()
     # Only the edge is fixed, not the vertices

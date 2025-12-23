@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict
 
 import numpy as np
 
@@ -19,33 +18,49 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 5, **_kwargs) -
     decreases, to avoid the blow-ups seen when facets are badly distorted.
     """
 
+    positions = None
+    index_map = None
+    if getattr(mesh, "facet_vertex_loops", None):
+        positions = mesh.positions_view()
+        index_map = mesh.vertex_index_to_row
+
     for facet in mesh.facets.values():
         target_area = facet.options.get("target_area")
         if target_area is None:
             continue
 
         # Estimate a local length scale to clamp displacements
-        v_ids = []
-        for signed_ei in facet.edge_indices:
-            edge = mesh.get_edge(signed_ei)
-            tail = edge.tail_index if signed_ei > 0 else edge.head_index
-            if not v_ids or v_ids[-1] != tail:
-                v_ids.append(tail)
+        if (
+            getattr(mesh, "facet_vertex_loops", None)
+            and facet.index in mesh.facet_vertex_loops
+        ):
+            v_ids = mesh.facet_vertex_loops[facet.index].tolist()
+        else:
+            v_ids = []
+            for signed_ei in facet.edge_indices:
+                edge = mesh.get_edge(signed_ei)
+                tail = edge.tail_index if signed_ei > 0 else edge.head_index
+                if not v_ids or v_ids[-1] != tail:
+                    v_ids.append(tail)
         if len(v_ids) < 3:
             continue
-        coords = np.array([mesh.vertices[vid].position for vid in v_ids])
+        if positions is not None and index_map is not None:
+            coords = positions[[index_map[vid] for vid in v_ids]]
+        else:
+            coords = np.array([mesh.vertices[vid].position for vid in v_ids])
         diameter = np.max(
             np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=2)
         )
         max_move = 0.1 * diameter if diameter > 0 else 1e-3
 
         for _ in range(max_iter):
-            current_area = facet.compute_area(mesh)
+            current_area, grad = facet.compute_area_and_gradient(
+                mesh, positions=positions, index_map=index_map
+            )
             delta = current_area - target_area
             if abs(delta) < tol:
                 break
 
-            grad: Dict[int, np.ndarray] = facet.compute_area_gradient(mesh)
             norm_sq = sum(np.dot(vec, vec) for vec in grad.values())
             if norm_sq < 1e-18:
                 logger.debug(
@@ -80,7 +95,13 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 5, **_kwargs) -
                         continue
                     mesh.vertices[vidx].position = base_positions[vidx] - lam * gvec
 
-                new_area = facet.compute_area(mesh)
+                mesh.increment_version()
+                if positions is not None:
+                    positions = mesh.positions_view()
+
+                new_area = facet.compute_area_and_gradient(
+                    mesh, positions=positions, index_map=index_map
+                )[0]
                 if abs(new_area - target_area) < abs(delta):
                     success = True
                     break
@@ -88,25 +109,35 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 5, **_kwargs) -
                 lam *= 0.5
                 for vidx in grad.keys():
                     mesh.vertices[vidx].position = base_positions[vidx].copy()
+                mesh.increment_version()
+                if positions is not None:
+                    positions = mesh.positions_view()
 
             if not success:
                 # Restore best-known positions if backtracking failed
                 for vidx, pos in base_positions.items():
                     mesh.vertices[vidx].position = pos
+                mesh.increment_version()
+                if positions is not None:
+                    positions = mesh.positions_view()
                 break
 
         logger.debug(
             "Facet %s area constraint applied: target=%.6f, final=%.6f",
             facet.index,
             target_area,
-            facet.compute_area(mesh),
+            facet.compute_area_and_gradient(
+                mesh, positions=positions, index_map=index_map
+            )[0],
         )
 
         logger.debug(
             "Facet %s area constraint applied: target=%.6f, final=%.6f",
             facet.index,
             target_area,
-            facet.compute_area(mesh),
+            facet.compute_area_and_gradient(
+                mesh, positions=positions, index_map=index_map
+            )[0],
         )
 
 

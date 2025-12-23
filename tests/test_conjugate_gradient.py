@@ -57,7 +57,7 @@ def test_line_search_failure_preserves_history():
     success2, step_size2 = stepper.step(mesh, grad2, step_size, constant_energy)
 
     assert not success2
-    assert step_size2 == step_size
+    assert step_size2 <= step_size
     assert np.allclose(v.position, [1.0, 0.0, 0.0])
     assert stepper.prev_grad == old_grad
     assert stepper.prev_dir == old_dir

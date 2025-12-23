@@ -38,10 +38,7 @@
       }
     },
     "global_parameters": {
-      "surface_tension": 1.0,
-      "volume_constraint_mode": "penalty",
-      "volume_projection_during_minimization": true,
-      "volume_stiffness": 1000.0
+      "surface_tension": 1.0
     },
     "macros": {
       "gogo": "g 50; r; u; g 50"

@@ -38,6 +38,9 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - **CI**: Added benchmark suite execution to the CI workflow.
 - **Cleanup**: Removed broken `modules/gaussan_curvature.py` and obsolete methods in `energy_manager.py`.
 - Automatic target-area detection on bodies/facets and regression tests (square with area constraint, tetra with volume constraint).
+- Cached triangle row indices and position-array reuse to avoid per-step reallocation during surface energy/gradient evaluation.
+- Benchmark suite profiling: `benchmarks/suite.py --profile` emits per-case `.pstats` files (plus optional text summaries) for easier A/B performance analysis.
+- Fixed edges now freeze their endpoint vertices (including during refinement), matching Evolver-style behavior.
 - Benchmarks now run in read-only sandboxes (no temp files); README/manual updated with benchmark usage.
 - Documentation callouts: README, `manual.md`, and `docs/ROADMAP.md` now highlight testing requirements, shared exceptions, and upcoming placeholder modules for curvature/tilt energies.
 - Integration tests covering the cube penalty scenario (energy decrease, volume preservation, refine+equiangulate validity) and parsing tests for the interactive `rN` command.
@@ -51,6 +54,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Multi-constraint KKT projection now solves a small constraint system when multiple gradients are provided.
 - Constraint projection now relies solely on KKT-style gradients; legacy apply-constraint gradient paths have been removed.
 - Added a BFGS stepper (`bfgs`/`hessian` command) for quasi-Newton-style steps on moderate-sized problems.
+- Added cached triangle-row indices and position-array reuse to reduce repeated mesh-to-array conversions during energy evaluation.
 - Minimization defaults now use Gradient Descent in the CLI; Conjugate Gradient remains available via `cg`.
 - Line search acceptance is strict Armijo (no constraint-only acceptance path), improving stability at the cost of being more conservative.
 - Body-area constraint gradients now project onto the constraint manifold, and hard constraints are enforced once before minimization starts to align with target values.
