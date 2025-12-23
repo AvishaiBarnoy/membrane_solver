@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Benchmark for Pinned Spherical Cap (Laplace Law verification).
 
-This script runs ``main.py`` on ``meshes/good_min_cap.json`` and verifies
+This script runs ``main.py`` on ``benchmarks/inputs/bench_cap.json`` and verifies
 that the final geometry approximates a spherical cap of radius 1.
 
 It also serves as a general analysis tool for checking if a mesh is a spherical cap.
@@ -26,8 +26,15 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry
 
-BASE_JSON = Path(__file__).resolve().parent.parent / "meshes" / "good_min_cap.json"
-OUTPUT_JSON = Path(__file__).resolve().parent.parent / "outputs" / "cap_results.json"
+BASE_JSON = (
+    Path(__file__).resolve().parent.parent / "benchmarks" / "inputs" / "bench_cap.json"
+)
+OUTPUT_JSON = (
+    Path(__file__).resolve().parent.parent
+    / "benchmarks"
+    / "outputs"
+    / "cap_results.json"
+)
 RUNS = 1
 
 

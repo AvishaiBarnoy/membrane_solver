@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Benchmark full minimization for the catenoid_good_min routine.
 
-This script runs ``main.py`` on ``meshes/catenoid_good_min.json`` a few
+This script runs ``main.py`` on ``meshes/bench_catenoid.json`` a few
 times and reports the average wall-clock runtime.
 """
 
@@ -16,7 +16,12 @@ from pathlib import Path
 # Ensure the project root is in sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-BASE_JSON = Path(__file__).resolve().parent.parent / "meshes" / "good_min_catenoid.json"
+BASE_JSON = (
+    Path(__file__).resolve().parent.parent
+    / "benchmarks"
+    / "inputs"
+    / "bench_catenoid.json"
+)
 RUNS = 3
 
 

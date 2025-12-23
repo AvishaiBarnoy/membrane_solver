@@ -1,0 +1,88 @@
+{
+  "definitions": {
+    "dent_ring": {
+      "fixed": true,
+      "constraints": ["pin_to_circle"],
+      "pin_to_circle_normal": [0, 1, 0],
+      "pin_to_circle_point": [0.5, 0.0, 0.5],
+      "pin_to_circle_radius": 0.7071067811865476
+    }
+  },
+  "vertices": [
+    [0, 0, 0],
+    [1, 0, 0],
+    [1, 0, 1],
+    [0, 0, 1],
+    [0, 1, 1],
+    [0, 1, 0],
+    [1, 1, 0],
+    [1, 1, 1]
+  ],
+  "edges": [
+    [0, 1, {"preset": "dent_ring"}],
+    [1, 2, {"preset": "dent_ring"}],
+    [2, 3, {"preset": "dent_ring"}],
+    [3, 0, {"preset": "dent_ring"}],
+    [4, 5],
+    [5, 6],
+    [6, 7],
+    [7, 4],
+    [0, 5],
+    [1, 6],
+    [2, 7],
+    [3, 4]
+  ],
+  "faces": [
+    [0, 1, 2, 3, {"no_refine": true, "dent_region": true}],
+    ["r0", 8, 5, "r9"],
+    [9, 6, -10, -1],
+    [-2, 10, 7, -11],
+    [11, 4, -8, -3],
+    [-5, -4, -7, -6]
+  ],
+  "bodies": {"faces": [[0, 1, 2, 3, 4, 5]], "target_volume": [1.0]},
+  "global_parameters": {
+    "surface_tension": 1.0,
+    "intrinsic_curvature": 0,
+    "bending_modulus": 0,
+    "gaussian_modulus": 0,
+    "volume_stiffness": 1000.0,
+    "volume_constraint_mode": "penalty",
+    "volume_projection_during_minimization": true
+  },
+  "instructions": [
+    "g20",
+    "r",
+    "u",
+    "g20",
+    "set body 0 target_volume 1.2",
+    "g20",
+    "set body 0 target_volume 1.4",
+    "g20",
+    "set body 0 target_volume 1.6",
+    "g20",
+    "r",
+    "u",
+    "g20",
+    "set body 0 target_volume 2.0",
+    "g30",
+    "set body 0 target_volume 2.5",
+    "g30",
+    "r",
+    "u",
+    "g20",
+    "set body 0 target_volume 3.2",
+    "g40",
+    "set body 0 target_volume 4.0",
+    "g50",
+    "r",
+    "u",
+    "g30",
+    "set body 0 target_volume 5.0",
+    "g60",
+    "set body 0 target_volume 6.2",
+    "g80",
+    "set body 0 target_volume 8.0",
+    "g100"
+  ]
+}

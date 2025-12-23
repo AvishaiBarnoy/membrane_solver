@@ -21,7 +21,7 @@ import benchmark_dented_cube
 import benchmark_square_to_circle
 import benchmark_two_disks_sphere
 
-RESULTS_FILE = Path(__file__).parent / "results.json"
+RESULTS_FILE = Path(__file__).parent / "inputs" / "results.json"
 
 BENCHMARKS = {
     "cube_good": benchmark_cube_good.benchmark,
@@ -44,6 +44,7 @@ def load_results():
 
 
 def save_results(results):
+    RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(RESULTS_FILE, "w") as f:
         json.dump(results, f, indent=2)
 

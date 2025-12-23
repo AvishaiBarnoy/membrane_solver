@@ -6,7 +6,7 @@ import numpy as np
 logger = logging.getLogger("membrane_solver")
 
 
-def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 3) -> None:
+def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 3, **_kwargs) -> None:
     """Enforce a global surface-area constraint over the entire mesh."""
 
     target_area = getattr(mesh.global_parameters, "target_surface_area", None)

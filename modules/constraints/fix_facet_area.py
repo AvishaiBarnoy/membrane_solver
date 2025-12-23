@@ -11,7 +11,7 @@ import numpy as np
 logger = logging.getLogger("membrane_solver")
 
 
-def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 5) -> None:
+def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 5, **_kwargs) -> None:
     """Adjust facets with ``target_area`` using a damped Lagrange step.
 
     This is intentionally conservative: we project along the area gradient but

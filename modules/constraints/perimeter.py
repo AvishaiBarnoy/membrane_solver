@@ -24,7 +24,7 @@ def _loop_gradient(mesh, edge_indices: Iterable[int]) -> Dict[int, np.ndarray]:
     return grad
 
 
-def enforce_constraint(mesh, tol: float = 1e-10, max_iter: int = 3) -> None:
+def enforce_constraint(mesh, tol: float = 1e-10, max_iter: int = 3, **_kwargs) -> None:
     """Enforce perimeter constraints defined in ``mesh.global_parameters``.
 
     Global parameter ``perimeter_constraints`` may be a list of dicts with keys:

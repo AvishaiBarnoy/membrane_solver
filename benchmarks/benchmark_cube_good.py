@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Benchmark full minimization for the cube_good_min_routine setup.
 
-This script runs ``main.py`` on ``meshes/cube_good_min_routine.json`` a few
+This script runs ``main.py`` on ``meshes/bench_cube.json`` a few
 times and reports the average wall-clock runtime. It is intended as a simple
 regression benchmark for performance tuning (e.g., geometry kernels,
 steppers, constraint handling).
@@ -17,7 +17,9 @@ from pathlib import Path
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-BASE_JSON = Path(__file__).resolve().parent.parent / "meshes" / "good_min_cube.json"
+BASE_JSON = (
+    Path(__file__).resolve().parent.parent / "benchmarks" / "inputs" / "bench_cube.json"
+)
 RUNS = 3
 
 

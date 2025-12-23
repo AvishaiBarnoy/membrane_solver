@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Benchmark full minimization for the square_to_circle_good_min routine.
 
-This script runs ``main.py`` on ``meshes/square_to_circle_good_min.json`` a few
+This script runs ``main.py`` on ``meshes/bench_square_to_circle.json`` a few
 times and reports the average wall-clock runtime.
 """
 
@@ -17,7 +17,10 @@ from pathlib import Path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 BASE_JSON = (
-    Path(__file__).resolve().parent.parent / "meshes" / "good_min_square_to_circle.json"
+    Path(__file__).resolve().parent.parent
+    / "benchmarks"
+    / "inputs"
+    / "bench_square_to_circle.json"
 )
 RUNS = 3
 

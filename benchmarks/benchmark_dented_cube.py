@@ -17,7 +17,12 @@ from pathlib import Path
 # Ensure the project root is in sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-BASE_JSON = Path(__file__).resolve().parent.parent / "meshes" / "bench_dented_cube.json"
+BASE_JSON = (
+    Path(__file__).resolve().parent.parent
+    / "benchmarks"
+    / "inputs"
+    / "bench_dented_cube.json"
+)
 RUNS = 1
 
 

@@ -22,7 +22,7 @@ def _project_onto_plane(
     return pos - np.dot(pos - point, normal) * normal
 
 
-def enforce_constraint(mesh, tol: float = 0.0, max_iter: int = 1) -> None:
+def enforce_constraint(mesh, tol: float = 0.0, max_iter: int = 1, **_kwargs) -> None:
     """Project all vertices onto a fixed plane.
 
     The plane is given by the global parameters
