@@ -33,7 +33,9 @@ def _constraint_options(options: dict | None, expr: str) -> dict:
     return merged
 
 
-def constraint_gradients(mesh: Mesh, global_params) -> list[Dict[int, np.ndarray]] | None:
+def constraint_gradients(
+    mesh: Mesh, global_params
+) -> list[Dict[int, np.ndarray]] | None:
     positions = None
     index_map = None
     if getattr(mesh, "facet_vertex_loops", None):

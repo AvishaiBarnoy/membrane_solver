@@ -277,8 +277,10 @@ def parse_geometry(data: dict) -> Mesh:
                 logger.error(err_msg)
                 raise err_msg
         # Expression energy auto-enable.
-        if options.get("expression") or options.get("energy_expression") or options.get(
-            "expr"
+        if (
+            options.get("expression")
+            or options.get("energy_expression")
+            or options.get("expr")
         ):
             if "energy" not in options:
                 options["energy"] = ["expression"]
@@ -358,8 +360,10 @@ def parse_geometry(data: dict) -> Mesh:
         # elif "energy" not in options:
         # mesh.edges[i+1].options["energy"] = ["surface"]
 
-        if options.get("expression") or options.get("energy_expression") or options.get(
-            "expr"
+        if (
+            options.get("expression")
+            or options.get("energy_expression")
+            or options.get("expr")
         ):
             if "energy" not in options:
                 options["energy"] = ["expression"]
@@ -437,8 +441,10 @@ def parse_geometry(data: dict) -> Mesh:
             mesh.facets[fid].options["energy"] = ["surface"]
             energy_module_names.add("surface")
 
-        if options.get("expression") or options.get("energy_expression") or options.get(
-            "expr"
+        if (
+            options.get("expression")
+            or options.get("energy_expression")
+            or options.get("expr")
         ):
             if "energy" not in options:
                 options["energy"] = ["expression"]
@@ -555,9 +561,11 @@ def parse_geometry(data: dict) -> Mesh:
                         body.options["constraints"] = body_constraints
                         constraint_module_names.append("expression")
 
-                if body.options.get("expression") or body.options.get(
-                    "energy_expression"
-                ) or body.options.get("expr"):
+                if (
+                    body.options.get("expression")
+                    or body.options.get("energy_expression")
+                    or body.options.get("expr")
+                ):
                     energy_module_names.add("expression")
             # Skip legacy block.
             bodies_section = None
@@ -641,9 +649,11 @@ def parse_geometry(data: dict) -> Mesh:
                     err_msg = "energy modules should be in a list or a single string"
                     logger.error(err_msg)
                     raise err_msg
-            if body.options.get("expression") or body.options.get(
-                "energy_expression"
-            ) or body.options.get("expr"):
+            if (
+                body.options.get("expression")
+                or body.options.get("energy_expression")
+                or body.options.get("expr")
+            ):
                 energy_module_names.add("expression")
 
             # Body constraint modules. If a target volume is specified,

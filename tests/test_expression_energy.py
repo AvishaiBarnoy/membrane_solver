@@ -12,7 +12,9 @@ from parameters.global_parameters import GlobalParameters
 
 def test_expression_energy_vertex():
     mesh = Mesh()
-    mesh.vertices[0] = Vertex(0, np.array([1.0, 2.0, 3.0]), options={"expression": "x + y + z"})
+    mesh.vertices[0] = Vertex(
+        0, np.array([1.0, 2.0, 3.0]), options={"expression": "x + y + z"}
+    )
     mesh.build_position_cache()
 
     gp = GlobalParameters({"expression_eps": 1e-6})
@@ -31,6 +33,8 @@ def test_expression_energy_edge_length():
     mesh.build_position_cache()
 
     gp = GlobalParameters({"expression_eps": 1e-6})
-    E, _ = expr_energy.compute_energy_and_gradient(mesh, gp, None, compute_gradient=False)
+    E, _ = expr_energy.compute_energy_and_gradient(
+        mesh, gp, None, compute_gradient=False
+    )
 
     assert np.isclose(E, 2.0)
