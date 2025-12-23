@@ -5,6 +5,8 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 ## [Unreleased]
 ### Added
 - Evolver-style input `macros`: define named command sequences and invoke them directly by name in interactive mode or from `instructions`.
+- Optional explicit-ID input forms for `vertices`, `edges`, `faces`, and `bodies` (mapping form), improving readability when hand-authoring meshes.
+- Surface radius of gyration reporting in `properties` output, plus the `--radius-of-gyration` CLI flag.
 - Regression tests:
   - `tests/test_volume_energy.py` covers both penalty/laprange code paths in `modules/energy/volume.py`, including gradient accumulation.
   - `tests/test_exceptions.py` asserts that `InvalidEdgeIndexError` is raised when geometry routines see 0-based or missing edge IDs.
@@ -44,6 +46,11 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Command-line line-tension controls: `--line-tension` and `--line-tension-edges` on `main.py` allow tagging edges with `line_tension` energy without editing JSON.
 
 ### Changed
+- Line search now evaluates Armijo acceptance on the post-constraint state to keep step acceptance consistent with enforced constraints.
+- Single-constraint KKT projection is now supported when a constraint module supplies a gradient.
+- Multi-constraint KKT projection now solves a small constraint system when multiple gradients are provided.
+- Constraint projection now relies solely on KKT-style gradients; legacy apply-constraint gradient paths have been removed.
+- Added a BFGS stepper (`bfgs`/`hessian` command) for quasi-Newton-style steps on moderate-sized problems.
 - Minimization defaults now use Gradient Descent in the CLI; Conjugate Gradient remains available via `cg`.
 - Line search acceptance is strict Armijo (no constraint-only acceptance path), improving stability at the cost of being more conservative.
 - Body-area constraint gradients now project onto the constraint manifold, and hard constraints are enforced once before minimization starts to align with target values.

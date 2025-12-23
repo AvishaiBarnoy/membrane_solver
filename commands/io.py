@@ -33,6 +33,8 @@ class PropertiesCommand(Command):
         print()
         print(f"Total surface area: {total_area:.6f}")
         print(f"Total volume      : {total_volume:.6f}")
+        total_rg = mesh.compute_surface_radius_of_gyration()
+        print(f"Surface radius of gyration: {total_rg:.6f}")
 
         if mesh.bodies:
             print()
@@ -40,7 +42,9 @@ class PropertiesCommand(Command):
             for body_idx, body in mesh.bodies.items():
                 body_vol = body.compute_volume(mesh)
                 body_area = body.compute_surface_area(mesh)
+                body_rg = mesh.compute_surface_radius_of_gyration(body.facet_indices)
                 print(
                     f"  Body {body_idx}: volume = {body_vol:.6f}, "
-                    f"surface area = {body_area:.6f}"
+                    f"surface area = {body_area:.6f}, "
+                    f"surface Rg = {body_rg:.6f}"
                 )

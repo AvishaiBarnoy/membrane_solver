@@ -63,8 +63,12 @@ Key command‑line options:
   before interactive mode starts.
 
 - `--properties`
-  Compute and print basic physical properties (total area, volume, per‑body
-  area/volume) and exit without minimization.
+  Compute and print basic physical properties (total area, volume, surface
+  radius of gyration, per‑body area/volume) and exit without minimization.
+
+- `--radius-of-gyration`
+  Compute and print the surface radius of gyration and exit without
+  minimization.
 
 - `--viz` / `--viz-save PATH`
   Visualize the input geometry and exit (no minimization). Use `--viz-save` to
@@ -131,8 +135,12 @@ Interactive commands:
 - `gN`
   Run `N` minimization steps (e.g. `g5`, `g100`). Bare `g` runs one step.
 
-- `gd` / `cg`
-  Switch to Gradient Descent or Conjugate Gradient steppers. GD is the default.
+- `gd` / `cg` / `bfgs`
+  Switch to Gradient Descent, Conjugate Gradient, or BFGS steppers. GD is the
+  default.
+
+- `hessian`
+  Run a single BFGS-style Hessian step without changing the active stepper.
 
 - `tX`
   Set step size to `X` (e.g. `t1e-3`).
@@ -151,7 +159,7 @@ Interactive commands:
   constraint re‑enforcement.
 
 - `properties` / `props` / `p` / `i`
-  Print physical properties (global and per‑body area/volume).
+  Print physical properties (global/per‑body area, volume, surface Rg).
 
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.
@@ -504,6 +512,31 @@ macros:
   gogo: "g 5; r; g 5; r; g 5"
 instructions:
   - gogo
+```
+
+## 7.2 Explicit IDs (Optional)
+
+The input format supports an optional “explicit ID” mapping form for
+`vertices`, `edges`, `faces`, and `bodies`. This is useful when defining bodies
+and facets by hand, since it avoids counting list positions.
+
+Example:
+
+```yaml
+vertices:
+  10: [0, 0, 0]
+  20: [1, 0, 0]
+  30: [0, 1, 0]
+edges:
+  1: [10, 20]
+  2: [20, 30]
+  3: [30, 10]
+faces:
+  100: [1, 2, 3]
+bodies:
+  7:
+    faces: [100]
+    target_volume: 0.0
 ```
 
 ---

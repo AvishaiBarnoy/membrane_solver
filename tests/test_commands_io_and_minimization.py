@@ -7,7 +7,12 @@ import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from commands.io import PropertiesCommand, SaveCommand, VisualizeCommand
-from commands.minimization import GoCommand, LiveVisCommand, SetStepperCommand
+from commands.minimization import (
+    GoCommand,
+    HessianCommand,
+    LiveVisCommand,
+    SetStepperCommand,
+)
 from geometry.entities import Edge, Mesh, Vertex
 from runtime.steppers.conjugate_gradient import ConjugateGradient
 from runtime.steppers.gradient_descent import GradientDescent
@@ -78,6 +83,44 @@ def test_set_stepper_command_updates_context_and_minimizer():
     assert isinstance(ctx.minimizer.stepper, ConjugateGradient)
 
     SetStepperCommand("gd").execute(ctx, [])
+    assert isinstance(ctx.stepper, GradientDescent)
+    assert isinstance(ctx.minimizer.stepper, GradientDescent)
+
+
+def test_hessian_command_runs_without_switching_stepper(monkeypatch):
+    mesh = build_line_mesh()
+
+    class DummyMinimizer:
+        def __init__(self, m):
+            self.mesh = m
+            self.step_size = 1e-2
+            self._has_enforceable_constraints = False
+
+        def compute_energy_and_gradient(self):
+            return 1.0, {0: np.array([1.0, 0.0, 0.0]), 1: np.array([-1.0, 0.0, 0.0])}
+
+        def project_constraints(self, grad):
+            return
+
+        def compute_energy(self):
+            return 1.0
+
+        def _enforce_constraints(self, _mesh=None):
+            return
+
+    ctx = SimpleNamespace(
+        mesh=mesh, minimizer=DummyMinimizer(mesh), stepper=GradientDescent()
+    )
+    ctx.minimizer.stepper = ctx.stepper
+
+    class DummyBFGS:
+        def step(self, mesh, grad, step_size, energy_fn, constraint_enforcer=None):
+            return True, step_size
+
+    monkeypatch.setattr("commands.minimization.BFGS", DummyBFGS)
+
+    HessianCommand().execute(ctx, [])
+
     assert isinstance(ctx.stepper, GradientDescent)
     assert isinstance(ctx.minimizer.stepper, GradientDescent)
 

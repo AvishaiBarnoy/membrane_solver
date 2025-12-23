@@ -13,7 +13,7 @@ Commands:
 - `r` / `rN`: Refine the mesh (N times).
 - `u`: Equiangulate the mesh.
 - `V`: Vertex average.
-- `p` / `i`: Print physical properties.
+- `p` / `i`: Print physical properties (area, volume, surface radius of gyration).
 - `print [entity] [filter]`: Query geometry (e.g., `print vertex 0`, `print edges len > 0.5`).
 - `set [param/entity] [value]`: Set properties (e.g., `set surface_tension 1.5`, `set vertex 0 fixed true`).
 - `lv` / `live_vis`: Toggle live 3D visualization during minimization.
@@ -38,6 +38,28 @@ macros:
   gogo: "g 5; r; g 5; u; g 5"
 instructions:
   - gogo
+```
+
+## Explicit IDs (Optional)
+
+For readability you can provide explicit IDs for `vertices`, `edges`, `faces`,
+and `bodies` using a mapping form instead of lists. This avoids “counting
+lines” when referring to faces/bodies and is closer to Evolver’s explicit IDs.
+
+Example:
+
+```yaml
+vertices:
+  10: [0, 0, 0]
+  20: [1, 0, 0]
+edges:
+  1: [10, 20]
+faces:
+  100: [1, r2, 3]
+bodies:
+  0:
+    faces: [100]
+    target_volume: 1.0
 ```
 
 ## Geometry loading and Input Formats

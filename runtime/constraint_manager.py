@@ -3,12 +3,15 @@
 import importlib
 import logging
 
+import numpy as np
+
 logger = logging.getLogger("ConstraintManager")
 
 
 class ConstraintModuleManager:
     def __init__(self, module_names):
         self.modules = {}
+        self._warned_no_grad = set()
         for name in module_names:
             try:
                 self.modules[name] = importlib.import_module(
@@ -53,10 +56,86 @@ class ConstraintModuleManager:
         This allows constraints to modify the energy gradient directly, for example
         by applying Lagrange multipliers (soft constraints) or projection forces.
         """
+        kkt_candidates: list[tuple[str, list[dict[int, np.ndarray]]]] = []
         for name, module in self.modules.items():
-            if hasattr(module, "apply_constraint_gradient"):
-                # Pass the global_params to the module so it can check configuration
-                module.apply_constraint_gradient(grad, mesh, global_params)
+            g_list = None
+            if hasattr(module, "constraint_gradients"):
+                try:
+                    g_list = module.constraint_gradients(mesh, global_params)
+                except TypeError:
+                    g_list = module.constraint_gradients(mesh)
+                if g_list:
+                    kkt_candidates.append((name, g_list))
+                    continue
+            if hasattr(module, "constraint_gradient"):
+                try:
+                    gC = module.constraint_gradient(mesh, global_params)
+                except TypeError:
+                    gC = module.constraint_gradient(mesh)
+                if gC:
+                    kkt_candidates.append((name, [gC]))
+            if (
+                name not in self._warned_no_grad
+                and not hasattr(module, "constraint_gradients")
+                and not hasattr(module, "constraint_gradient")
+            ):
+                logger.warning(
+                    "Constraint module '%s' lacks constraint gradients; "
+                    "it will not participate in KKT projection.",
+                    name,
+                )
+                self._warned_no_grad.add(name)
+
+        if not kkt_candidates:
+            return
+
+        all_constraints: list[dict[int, np.ndarray]] = []
+        for _, grads in kkt_candidates:
+            all_constraints.extend(grads)
+
+        k = len(all_constraints)
+        if k == 1:
+            gC = all_constraints[0]
+            norm_sq = 0.0
+            dot = 0.0
+            for vidx, gvec in gC.items():
+                if vidx in grad:
+                    dot += float(np.dot(grad[vidx], gvec))
+                norm_sq += float(np.dot(gvec, gvec))
+            if norm_sq > 1e-18:
+                lam = dot / norm_sq
+                for vidx, gvec in gC.items():
+                    if vidx in grad:
+                        grad[vidx] -= lam * gvec
+            return
+
+        A = np.zeros((k, k), dtype=float)
+        b = np.zeros(k, dtype=float)
+        for i, gCi in enumerate(all_constraints):
+            for vidx, gvec in gCi.items():
+                if vidx in grad:
+                    b[i] += float(np.dot(grad[vidx], gvec))
+                for j in range(i, k):
+                    gCj = all_constraints[j].get(vidx)
+                    if gCj is None:
+                        continue
+                    val = float(np.dot(gvec, gCj))
+                    A[i, j] += val
+                    if j != i:
+                        A[j, i] += val
+
+        A[np.diag_indices_from(A)] += 1e-18
+        try:
+            lam = np.linalg.solve(A, b)
+        except np.linalg.LinAlgError:
+            return
+
+        for gCi, lam_i in zip(all_constraints, lam):
+            if lam_i == 0.0:
+                continue
+            for vidx, gvec in gCi.items():
+                if vidx in grad:
+                    grad[vidx] -= lam_i * gvec
 
     def enforce_all(self, mesh, **kwargs):
         """Invoke ``enforce_constraint`` on all loaded constraint modules.

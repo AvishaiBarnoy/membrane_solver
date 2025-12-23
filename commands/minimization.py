@@ -1,6 +1,7 @@
 import logging
 
 from commands.base import Command
+from runtime.steppers.bfgs import BFGS
 from runtime.steppers.conjugate_gradient import ConjugateGradient
 from runtime.steppers.gradient_descent import GradientDescent
 from runtime.topology import detect_vertex_edge_collisions
@@ -63,10 +64,43 @@ class SetStepperCommand(Command):
         if self.stepper_type == "cg":
             logger.info("Switching to Conjugate Gradient stepper.")
             context.stepper = ConjugateGradient()
+        elif self.stepper_type == "bfgs":
+            logger.info("Switching to BFGS stepper.")
+            context.stepper = BFGS()
         elif self.stepper_type == "gd":
             logger.info("Switching to Gradient Descent stepper.")
             context.stepper = GradientDescent()
         context.minimizer.stepper = context.stepper
+
+
+class HessianCommand(Command):
+    """Run a one-off Hessian (BFGS) step without switching the active stepper."""
+
+    def execute(self, context, args):
+        steps = 1
+        if args and args[0].isdigit():
+            steps = max(1, int(args[0]))
+
+        stepper = BFGS()
+        for _ in range(steps):
+            energy, grad = context.minimizer.compute_energy_and_gradient()
+            context.minimizer.project_constraints(grad)
+            step_success, context.minimizer.step_size = stepper.step(
+                context.mesh,
+                grad,
+                context.minimizer.step_size,
+                context.minimizer.compute_energy,
+                constraint_enforcer=context.minimizer._enforce_constraints
+                if context.minimizer._has_enforceable_constraints
+                else None,
+            )
+            if not step_success:
+                break
+        logger.info(
+            "Hessian step complete (%d step%s).",
+            steps,
+            "" if steps == 1 else "s",
+        )
 
 
 class LiveVisCommand(Command):
