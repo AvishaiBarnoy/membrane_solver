@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 
@@ -65,3 +66,14 @@ def test_parse_geometry_parses_reversed_edge_token_r0(tmp_path):
     }
     mesh = parse_geometry(data)
     assert list(mesh.facets.values())[0].edge_indices[0] == -1
+
+
+def test_parse_geometry_evaluates_defines():
+    data = {
+        "global_parameters": {"angle": 60.0},
+        "defines": {"WALLT": "-cos(angle*pi/180)"},
+        "vertices": [[0, 0, 0], [1, 0, 0]],
+        "edges": [[0, 1]],
+    }
+    mesh = parse_geometry(data)
+    assert math.isclose(mesh.global_parameters.get("WALLT"), -0.5, rel_tol=1e-6)

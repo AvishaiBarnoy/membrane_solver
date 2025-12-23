@@ -1,0 +1,45 @@
+global_parameters:
+  angle: 60.0
+  surface_tension: 1.0
+  volume_constraint_mode: "lagrange"
+  volume_projection_during_minimization: false
+
+defines:
+  WALLT: "-cos(angle*pi/180)"
+
+vertices:
+  1: [0.0, 0.0, 0.0, {constraints: ["expression"], constraint_expression: "x", constraint_target: 0.0}]
+  2: [1.0, 0.0, 0.0]
+  3: [1.0, 0.0, 1.0]
+  4: [0.0, 0.0, 1.0, {constraints: ["expression"], constraint_expression: "x", constraint_target: 0.0}]
+  5: [0.0, 1.0, 1.0, {constraints: ["expression"], constraint_expression: "x", constraint_target: 0.0}]
+  6: [0.0, 1.0, 0.0, {constraints: ["expression"], constraint_expression: "x", constraint_target: 0.0}]
+  7: [1.0, 1.0, 0.0]
+  8: [1.0, 1.0, 1.0]
+
+edges:
+  1: [1, 2]
+  2: [2, 3]
+  3: [3, 4]
+  4: [4, 1, {expression: "-(WALLT*y)", expression_measure: "length"}]
+  5: [5, 6, {expression: "-(WALLT*y)", expression_measure: "length"}]
+  6: [6, 7]
+  7: [7, 8]
+  8: [8, 5]
+  9: [1, 6, {expression: "-(WALLT*y)", expression_measure: "length"}]
+  10: [2, 7]
+  11: [3, 8]
+  12: [4, 5, {expression: "-(WALLT*y)", expression_measure: "length"}]
+
+faces:
+  1: [1, 2, 3, 4]
+  2: ["r1", 9, 6, "r10"]
+  3: [10, 7, -11, -2]
+  4: [-3, 11, 8, -12]
+  5: [12, 5, -9, -4]
+  6: [-6, -5, -8, -7]
+
+bodies:
+  1:
+    faces: [1, 2, 3, 4, 5, 6]
+    target_volume: 1.0

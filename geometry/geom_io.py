@@ -6,6 +6,7 @@ import yaml
 
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from parameters.global_parameters import GlobalParameters
+from runtime.expr_eval import eval_expr
 from runtime.logging_config import setup_logging
 from runtime.refinement import refine_polygonal_facets
 
@@ -69,6 +70,67 @@ def parse_geometry(data: dict) -> Mesh:
         "line_tension",
     ):
         _coerce_float_param(_key)
+
+    def _numeric_value(value):
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value.strip())
+            except ValueError:
+                return None
+        return None
+
+    def _build_define_names(extra: dict | None = None) -> dict:
+        names = {}
+        for key, val in mesh.global_parameters.to_dict().items():
+            num = _numeric_value(val)
+            if num is not None:
+                names[key] = num
+        if extra:
+            names.update(extra)
+        return names
+
+    def _evaluate_defines(defines: dict | None) -> None:
+        if not defines:
+            return
+        if not isinstance(defines, dict):
+            raise TypeError("defines must be a mapping of name -> expression")
+        pending = dict(defines)
+        resolved: dict[str, float] = {}
+        for _ in range(len(pending) + 1):
+            progress = False
+            for key, expr in list(pending.items()):
+                num = _numeric_value(expr)
+                if num is not None:
+                    resolved[key] = num
+                    pending.pop(key)
+                    progress = True
+                    continue
+                if not isinstance(expr, str):
+                    raise TypeError(
+                        f"define {key!r} must be a number or expression string"
+                    )
+                try:
+                    val = eval_expr(expr, _build_define_names(resolved))
+                except Exception as exc:  # pragma: no cover - defensive
+                    if isinstance(exc, ValueError) and "Unknown name" in str(exc):
+                        continue
+                    raise ValueError(
+                        f"Invalid define expression for {key!r}: {exc}"
+                    ) from exc
+                resolved[key] = float(val)
+                pending.pop(key)
+                progress = True
+            if not progress:
+                break
+        if pending:
+            missing = ", ".join(sorted(pending))
+            raise ValueError(f"Could not resolve defines: {missing}")
+        for key, val in resolved.items():
+            mesh.global_parameters.set(key, val)
+
+    _evaluate_defines(data.get("defines"))
 
     def _parse_id(value, *, label: str) -> int:
         if isinstance(value, int):
@@ -214,6 +276,20 @@ def parse_geometry(data: dict) -> Mesh:
                 err_msg = "energy modules should be in a list or a single string"
                 logger.error(err_msg)
                 raise err_msg
+        # Expression energy auto-enable.
+        if options.get("expression") or options.get("energy_expression") or options.get(
+            "expr"
+        ):
+            if "energy" not in options:
+                options["energy"] = ["expression"]
+            elif isinstance(options["energy"], list):
+                if "expression" not in options["energy"]:
+                    options["energy"].append("expression")
+            elif isinstance(options["energy"], str):
+                if options["energy"] != "expression":
+                    options["energy"] = [options["energy"], "expression"]
+            energy_module_names.add("expression")
+
         # Uncomment to add a default energy moduel to Vertices
         # elif "energy" not in options:
         # mesh.vertices[i].options["energy"] = ["surface"]
@@ -226,6 +302,14 @@ def parse_geometry(data: dict) -> Mesh:
             ),
         )
         constraint_module_names.extend(constraints)
+        if (
+            mesh.vertices[vid].options.get("constraint_expression") is not None
+            or mesh.vertices[vid].options.get("expression_constraint") is not None
+        ):
+            if "expression" not in constraints:
+                constraints.append("expression")
+                mesh.vertices[vid].options["constraints"] = constraints
+                constraint_module_names.append("expression")
 
     # Edges
     edges = data.get("edges") or data.get("Edges")
@@ -274,12 +358,33 @@ def parse_geometry(data: dict) -> Mesh:
         # elif "energy" not in options:
         # mesh.edges[i+1].options["energy"] = ["surface"]
 
+        if options.get("expression") or options.get("energy_expression") or options.get(
+            "expr"
+        ):
+            if "energy" not in options:
+                options["energy"] = ["expression"]
+            elif isinstance(options["energy"], list):
+                if "expression" not in options["energy"]:
+                    options["energy"].append("expression")
+            elif isinstance(options["energy"], str):
+                if options["energy"] != "expression":
+                    options["energy"] = [options["energy"], "expression"]
+            energy_module_names.add("expression")
+
         # Edges constraint modules
         constraints = normalize_constraints(
             mesh.edges[eid].options,
             fixed_setter=lambda flag, idx=eid: setattr(mesh.edges[idx], "fixed", flag),
         )
         constraint_module_names.extend(constraints)
+        if (
+            mesh.edges[eid].options.get("constraint_expression") is not None
+            or mesh.edges[eid].options.get("expression_constraint") is not None
+        ):
+            if "expression" not in constraints:
+                constraints.append("expression")
+                mesh.edges[eid].options["constraints"] = constraints
+                constraint_module_names.append("expression")
 
         if mesh.edges[eid].fixed:
             mesh.vertices[tail_index].fixed = True
@@ -332,6 +437,19 @@ def parse_geometry(data: dict) -> Mesh:
             mesh.facets[fid].options["energy"] = ["surface"]
             energy_module_names.add("surface")
 
+        if options.get("expression") or options.get("energy_expression") or options.get(
+            "expr"
+        ):
+            if "energy" not in options:
+                options["energy"] = ["expression"]
+            elif isinstance(options["energy"], list):
+                if "expression" not in options["energy"]:
+                    options["energy"].append("expression")
+            elif isinstance(options["energy"], str):
+                if options["energy"] != "expression":
+                    options["energy"] = [options["energy"], "expression"]
+            energy_module_names.add("expression")
+
         # Ensure all facets have surface_tension set
         if "surface_tension" not in options:
             mesh.facets[fid].options["surface_tension"] = mesh.global_parameters.get(
@@ -353,6 +471,14 @@ def parse_geometry(data: dict) -> Mesh:
 
         if facet_constraints:
             constraint_module_names.extend(facet_constraints)
+        if (
+            mesh.facets[fid].options.get("constraint_expression") is not None
+            or mesh.facets[fid].options.get("expression_constraint") is not None
+        ):
+            if "expression" not in facet_constraints:
+                facet_constraints.append("expression")
+                mesh.facets[fid].options["constraints"] = facet_constraints
+                constraint_module_names.append("expression")
 
     vol_mode = mesh.global_parameters.get("volume_constraint_mode", "lagrange")
     if vol_mode == "penalty":
@@ -420,6 +546,19 @@ def parse_geometry(data: dict) -> Mesh:
                 if body_constraints:
                     body.options["constraints"] = body_constraints
                     constraint_module_names.extend(body_constraints)
+                if (
+                    body.options.get("constraint_expression") is not None
+                    or body.options.get("expression_constraint") is not None
+                ):
+                    if "expression" not in body_constraints:
+                        body_constraints.append("expression")
+                        body.options["constraints"] = body_constraints
+                        constraint_module_names.append("expression")
+
+                if body.options.get("expression") or body.options.get(
+                    "energy_expression"
+                ) or body.options.get("expr"):
+                    energy_module_names.add("expression")
             # Skip legacy block.
             bodies_section = None
 
@@ -502,6 +641,10 @@ def parse_geometry(data: dict) -> Mesh:
                     err_msg = "energy modules should be in a list or a single string"
                     logger.error(err_msg)
                     raise err_msg
+            if body.options.get("expression") or body.options.get(
+                "energy_expression"
+            ) or body.options.get("expr"):
+                energy_module_names.add("expression")
 
             # Body constraint modules. If a target volume is specified,
             # automatically enable the volume constraint module so bodies
@@ -531,6 +674,14 @@ def parse_geometry(data: dict) -> Mesh:
             if body_constraints:
                 body.options["constraints"] = body_constraints
                 constraint_module_names.extend(body_constraints)
+            if (
+                body.options.get("constraint_expression") is not None
+                or body.options.get("expression_constraint") is not None
+            ):
+                if "expression" not in body_constraints:
+                    body_constraints.append("expression")
+                    body.options["constraints"] = body_constraints
+                    constraint_module_names.append("expression")
 
     # Instructions
     mesh.instructions = data.get("instructions", [])

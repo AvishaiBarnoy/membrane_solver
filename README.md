@@ -62,6 +62,38 @@ bodies:
     target_volume: 1.0
 ```
 
+## Expression-based energy/constraints
+
+You can attach expression-based energies or hard constraints to entities using
+safe arithmetic expressions over `x`, `y`, `z` and global parameters.
+
+Example:
+
+```yaml
+vertices:
+  0: [1, 2, 3, {expression: "x + y + z"}]
+edges:
+  1: [0, 1, {expression: "x", expression_measure: "length"}]
+```
+
+Hard constraint example:
+
+```yaml
+vertices:
+  0: [0, 0, 0, {constraint_expression: "x", constraint_target: 1.0}]
+```
+
+Define reusable symbols for expressions with a top-level `defines` block:
+
+```yaml
+global_parameters:
+  angle: 60.0
+defines:
+  WALLT: "-cos(angle*pi/180)"
+edges:
+  1: [0, 1, {expression: "-(WALLT*y)", expression_measure: "length"}]
+```
+
 Fixed edges imply fixed endpoints: marking an edge as `fixed` also freezes its
 two vertices and preserves that behavior through refinement.
 
