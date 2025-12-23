@@ -32,8 +32,7 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 5, **_kwargs) -
         # Estimate a local length scale to clamp displacements
         if (
             getattr(mesh, "facet_vertex_loops", None)
-            and facet.index
-            in mesh.facet_vertex_loops
+            and facet.index in mesh.facet_vertex_loops
         ):
             v_ids = mesh.facet_vertex_loops[facet.index].tolist()
         else:

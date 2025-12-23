@@ -76,7 +76,10 @@ class ConjugateGradient(BaseStepper):
                 if self.precondition:
                     g = g / (np.linalg.norm(g) + 1e-8)
 
-                if self.prev_grad_arr is None or self.iter_count % self.restart_interval == 0:
+                if (
+                    self.prev_grad_arr is None
+                    or self.iter_count % self.restart_interval == 0
+                ):
                     d = -g
                 else:
                     prev_g = self.prev_grad_arr[row]

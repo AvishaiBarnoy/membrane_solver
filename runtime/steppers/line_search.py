@@ -200,9 +200,7 @@ def backtracking_line_search_array(
 
     max_dir_norm = 0.0
     if movable_rows:
-        max_dir_norm = float(
-            np.max(np.linalg.norm(direction[movable_rows], axis=1))
-        )
+        max_dir_norm = float(np.max(np.linalg.norm(direction[movable_rows], axis=1)))
 
     g_dot_d = float(np.sum(gradient * direction))
     if g_dot_d >= 0.0:
@@ -223,9 +221,7 @@ def backtracking_line_search_array(
             disp = alpha * direction[row]
             vertex.position[:] = original_positions[vidx] + disp
             if hasattr(vertex, "constraint"):
-                vertex.position[:] = vertex.constraint.project_position(
-                    vertex.position
-                )
+                vertex.position[:] = vertex.constraint.project_position(vertex.position)
         mesh.increment_version()
 
         if not is_safe_small_step:
