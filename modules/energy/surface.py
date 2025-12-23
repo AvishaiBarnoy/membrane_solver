@@ -139,6 +139,84 @@ def compute_energy_and_gradient(
     return E, grad
 
 
+def compute_energy_and_gradient_array(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    grad_arr: np.ndarray,
+) -> float:
+    """Dense-array surface energy/gradient accumulation."""
+    if not mesh.facets:
+        return 0.0
+
+    if _all_facets_are_triangles(mesh):
+        tri_rows_arr, tri_facets = mesh.triangle_row_cache()
+        gammas_arr = np.empty(len(tri_facets), dtype=float)
+
+        for idx, fid in enumerate(tri_facets):
+            facet = mesh.facets[fid]
+            surface_tension = param_resolver.get(facet, "surface_tension")
+            if surface_tension is None:
+                surface_tension = global_params.get("surface_tension")
+            gammas_arr[idx] = surface_tension
+
+        tri_pos = positions[tri_rows_arr]
+        v0 = tri_pos[:, 0, :]
+        v1 = tri_pos[:, 1, :]
+        v2 = tri_pos[:, 2, :]
+
+        e1 = v1 - v0
+        e2 = v2 - v0
+        n = _fast_cross(e1, e2)
+        A = np.linalg.norm(n, axis=1)
+        mask = A >= 1e-12
+        if not np.any(mask):
+            return 0.0
+
+        n_hat = n[mask] / A[mask][:, None]
+        areas = 0.5 * A[mask]
+        gammas_masked = gammas_arr[mask]
+        energy = float(np.dot(gammas_masked, areas))
+
+        v0m = v0[mask]
+        v1m = v1[mask]
+        v2m = v2[mask]
+
+        g0 = 0.5 * _fast_cross(v1m - v0m, n_hat)
+        g1 = 0.5 * _fast_cross(v2m - v1m, n_hat)
+        g2 = 0.5 * _fast_cross(v0m - v2m, n_hat)
+
+        scale = gammas_masked[:, None]
+        g0 *= scale
+        g1 *= scale
+        g2 *= scale
+
+        tri_rows_masked = tri_rows_arr[mask]
+        np.add.at(grad_arr, tri_rows_masked[:, 0], g0)
+        np.add.at(grad_arr, tri_rows_masked[:, 1], g1)
+        np.add.at(grad_arr, tri_rows_masked[:, 2], g2)
+        return energy
+
+    energy = 0.0
+    for facet in mesh.facets.values():
+        surface_tension = param_resolver.get(facet, "surface_tension")
+        if surface_tension is None:
+            surface_tension = global_params.get("surface_tension")
+
+        area, area_gradient = facet.compute_area_and_gradient(
+            mesh, positions=positions, index_map=index_map
+        )
+        energy += surface_tension * area
+        for vertex_index, gradient_vector in area_gradient.items():
+            row = index_map[vertex_index]
+            grad_arr[row] += surface_tension * gradient_vector
+
+    return float(energy)
+
+
 def _batched_surface_energy_and_gradient_triangles(
     mesh: Mesh,
     global_params,

@@ -100,4 +100,44 @@ def compute_energy_and_gradient(
     return float(energy), dict(grad)
 
 
+def compute_energy_and_gradient_array(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    grad_arr: np.ndarray,
+) -> float:
+    """Dense-array line-tension energy/gradient accumulation."""
+    edges = list(_edges_with_line_tension(mesh))
+    if not edges:
+        return 0.0
+
+    default_gamma = float(global_params.get("line_tension", 0.0) or 0.0)
+    energy = 0.0
+
+    for idx in edges:
+        edge = mesh.edges[idx]
+        gamma = edge.options.get("line_tension", default_gamma)
+        if not gamma:
+            continue
+        tail_row = index_map.get(edge.tail_index)
+        head_row = index_map.get(edge.head_index)
+        if tail_row is None or head_row is None:
+            continue
+        tail = positions[tail_row]
+        head = positions[head_row]
+        vec = head - tail
+        length = float(np.linalg.norm(vec))
+        if length < 1e-15:
+            continue
+        direction = vec / length
+        energy += float(gamma) * length
+        grad_arr[tail_row] += -float(gamma) * direction
+        grad_arr[head_row] += float(gamma) * direction
+
+    return float(energy)
+
+
 __all__ = ["compute_energy_and_gradient"]

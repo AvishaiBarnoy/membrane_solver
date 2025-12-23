@@ -21,13 +21,32 @@ def constraint_gradients(mesh, global_params) -> list[dict[int, np.ndarray]] | N
         return None
 
     constrained: list[dict[int, np.ndarray]] = []
+    positions = None
+    index_map = None
+    if getattr(mesh, "facet_vertex_loops", None):
+        positions = mesh.positions_view()
+        index_map = mesh.vertex_index_to_row
+    positions = None
+    index_map = None
+    if getattr(mesh, "facet_vertex_loops", None):
+        positions = mesh.positions_view()
+        index_map = mesh.vertex_index_to_row
+
+    positions = None
+    index_map = None
+    if getattr(mesh, "facet_vertex_loops", None):
+        positions = mesh.positions_view()
+        index_map = mesh.vertex_index_to_row
+
     for body in mesh.bodies.values():
         V_target = body.target_volume
         if V_target is None:
             V_target = body.options.get("target_volume")
         if V_target is None:
             continue
-        _, vol_grad = body.compute_volume_and_gradient(mesh)
+        _, vol_grad = body.compute_volume_and_gradient(
+            mesh, positions=positions, index_map=index_map
+        )
         constrained.append(vol_grad)
 
     return constrained or None
@@ -63,6 +82,12 @@ def enforce_constraint(
     if not project:
         return
 
+    positions = None
+    index_map = None
+    if getattr(mesh, "facet_vertex_loops", None):
+        positions = mesh.positions_view()
+        index_map = mesh.vertex_index_to_row
+
     for body in mesh.bodies.values():
         V_target = body.target_volume
         if V_target is None:
@@ -75,7 +100,9 @@ def enforce_constraint(
             # projection loop. This keeps the caching strategy simple.
             # persistent per‑body caches are owned by the minimizer's gradient
             # pipeline rather than by the constraint module.
-            V_actual, grad = body.compute_volume_and_gradient(mesh)
+            V_actual, grad = body.compute_volume_and_gradient(
+                mesh, positions=positions, index_map=index_map
+            )
 
             delta_v = V_actual - V_target
             if abs(delta_v) < tol:
@@ -97,6 +124,8 @@ def enforce_constraint(
                 vertex.position -= lam * grad[vidx]
 
             mesh.increment_version()
+            if positions is not None:
+                positions = mesh.positions_view()
 
 
 __all__ = ["enforce_constraint", "constraint_gradients"]

@@ -133,6 +133,43 @@ STEP SIZE:\t {self.step_size}
 
         return total_energy, grad
 
+    def compute_energy_and_gradient_array(self):
+        """Return total energy and dense gradient array for the current mesh."""
+        positions = self.mesh.positions_view()
+        vertex_ids = self.mesh.vertex_ids
+        index_map = self.mesh.vertex_index_to_row
+        grad_arr = np.zeros((len(vertex_ids), 3), dtype=float)
+
+        total_energy = 0.0
+        for module in self.energy_modules:
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                E_mod = module.compute_energy_and_gradient_array(
+                    self.mesh,
+                    self.global_params,
+                    self.param_resolver,
+                    positions=positions,
+                    index_map=index_map,
+                    grad_arr=grad_arr,
+                )
+                total_energy += E_mod
+                continue
+
+            E_mod, g_mod = module.compute_energy_and_gradient(
+                self.mesh, self.global_params, self.param_resolver
+            )
+            total_energy += E_mod
+            for vidx, gvec in g_mod.items():
+                row = index_map.get(vidx)
+                if row is not None:
+                    grad_arr[row] += gvec
+
+        if hasattr(self.constraint_manager, "apply_gradient_modifications_array"):
+            self.constraint_manager.apply_gradient_modifications_array(
+                grad_arr, self.mesh, self.global_params
+            )
+
+        return total_energy, grad_arr
+
     def compute_energy(self):
         """Compute the total energy using the loaded modules."""
         total_energy = 0.0
@@ -146,8 +183,20 @@ STEP SIZE:\t {self.step_size}
             total_energy += E_mod
         return total_energy
 
-    def project_constraints(self, grad: Dict[int, np.ndarray]) -> None:
+    def _grad_arr_to_dict(self, grad_arr: np.ndarray) -> Dict[int, np.ndarray]:
+        """Convert a dense gradient array into a sparse dict keyed by vertex id."""
+        return {
+            vid: grad_arr[row]
+            for row, vid in enumerate(self.mesh.vertex_ids)
+            if np.any(grad_arr[row])
+        }
+
+    def project_constraints(self, grad: Dict[int, np.ndarray] | np.ndarray) -> None:
         """Project gradients onto the feasible set defined by constraints."""
+
+        if isinstance(grad, np.ndarray):
+            self.project_constraints_array(grad)
+            return
 
         # zero out fixed vertices and project others
         for vidx, vertex in self.mesh.vertices.items():
@@ -177,6 +226,16 @@ STEP SIZE:\t {self.step_size}
             if hasattr(body, "constraint"):
                 # project the gradient into tangent space of constraint
                 grad[bidx] = body.constraint.project_gradient(grad[bidx])
+
+    def project_constraints_array(self, grad_arr: np.ndarray) -> None:
+        """Array-based variant of ``project_constraints``."""
+        vertex_ids = self.mesh.vertex_ids
+        for row, vidx in enumerate(vertex_ids):
+            vertex = self.mesh.vertices[vidx]
+            if getattr(vertex, "fixed", False):
+                grad_arr[row] = 0.0
+            elif hasattr(vertex, "constraint"):
+                grad_arr[row] = vertex.constraint.project_gradient(grad_arr[row])
 
     def _enforce_constraints(self, mesh: Mesh | None = None):
         """Invoke all constraint modules on the current mesh.
@@ -241,21 +300,27 @@ STEP SIZE:\t {self.step_size}
         if self._has_enforceable_constraints:
             self.enforce_constraints_after_mesh_ops(self.mesh)
 
+        last_grad_arr = None
         for i in range(n_steps):
             if callback:
                 callback(self.mesh, i)
 
-            E, grad = self.compute_energy_and_gradient()
-            self.project_constraints(grad)
+            E, grad_arr = self.compute_energy_and_gradient_array()
+            self.project_constraints_array(grad_arr)
+            last_grad_arr = grad_arr
 
             # check convergence by gradient norm
-            grad_norm = np.sqrt(sum(np.dot(g, g) for g in grad.values()))
+            grad_norm = float(np.linalg.norm(grad_arr))
             if grad_norm < self.tol:
                 logger.debug("Converged: gradient norm below tolerance.")
                 logger.info(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
                 return {
                     "energy": E,
-                    "gradient": grad,
+                    "gradient": {
+                        vid: grad_arr[row]
+                        for row, vid in enumerate(self.mesh.vertex_ids)
+                        if np.any(grad_arr[row])
+                    },
                     "mesh": self.mesh,
                     "step_success": True,
                     "iterations": i + 1,
@@ -274,7 +339,7 @@ STEP SIZE:\t {self.step_size}
 
             step_success, self.step_size = self.stepper.step(
                 self.mesh,
-                grad,
+                grad_arr,
                 self.step_size,
                 self.compute_energy,
                 constraint_enforcer=self._enforce_constraints
@@ -294,7 +359,9 @@ STEP SIZE:\t {self.step_size}
                         )
                         return {
                             "energy": E,
-                            "gradient": grad,
+                            "gradient": self._grad_arr_to_dict(last_grad_arr)
+                            if last_grad_arr is not None
+                            else {},
                             "mesh": self.mesh,
                             "step_success": False,
                             "iterations": i + 1,
@@ -383,7 +450,9 @@ STEP SIZE:\t {self.step_size}
 
         return {
             "energy": E,
-            "gradient": grad,
+            "gradient": self._grad_arr_to_dict(last_grad_arr)
+            if last_grad_arr is not None
+            else {},
             "mesh": self.mesh,
             "step_success": step_success,
             "iterations": n_steps,

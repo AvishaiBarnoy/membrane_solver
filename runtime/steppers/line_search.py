@@ -164,3 +164,124 @@ def backtracking_line_search(
     )
     reduced_step = max(alpha * beta, 0.0)
     return False, max(reduced_step, step_size * beta)
+
+
+def backtracking_line_search_array(
+    mesh: Mesh,
+    direction: np.ndarray,
+    gradient: np.ndarray,
+    step_size: float,
+    energy_fn: Callable[[], float],
+    vertex_ids,
+    max_iter: int = 10,
+    beta: float = 0.7,
+    c: float = 1e-4,
+    gamma: float = 1.5,
+    alpha_max_factor: float = 10.0,
+    constraint_enforcer: Callable[[Mesh], None] | None = None,
+) -> tuple[bool, float]:
+    """Armijo backtracking line search for dense array gradients."""
+    if direction.shape != gradient.shape:
+        raise ValueError("direction and gradient must have matching shapes")
+
+    movable_rows = []
+    original_positions = {}
+    for row, vidx in enumerate(vertex_ids):
+        vertex = mesh.vertices[vidx]
+        if getattr(vertex, "fixed", False):
+            continue
+        movable_rows.append(row)
+        original_positions[vidx] = vertex.position.copy()
+
+    energy0 = energy_fn()
+
+    min_edge_len = get_min_edge_length(mesh)
+    safe_step_limit = 0.3 * min_edge_len if min_edge_len > 0 else float("inf")
+
+    max_dir_norm = 0.0
+    if movable_rows:
+        max_dir_norm = float(
+            np.max(np.linalg.norm(direction[movable_rows], axis=1))
+        )
+
+    g_dot_d = float(np.sum(gradient * direction))
+    if g_dot_d >= 0.0:
+        logger.debug("Non-descent direction provided; skipping step.")
+        return False, step_size
+
+    alpha = step_size
+    alpha_max = alpha_max_factor * step_size
+    backtracks = 0
+
+    for _ in range(max_iter):
+        max_disp = alpha * max_dir_norm
+        is_safe_small_step = max_disp < safe_step_limit
+
+        for row in movable_rows:
+            vidx = vertex_ids[row]
+            vertex = mesh.vertices[vidx]
+            disp = alpha * direction[row]
+            vertex.position[:] = original_positions[vidx] + disp
+            if hasattr(vertex, "constraint"):
+                vertex.position[:] = vertex.constraint.project_position(
+                    vertex.position
+                )
+        mesh.increment_version()
+
+        if not is_safe_small_step:
+            if not check_max_normal_change(mesh, original_positions):
+                for row in movable_rows:
+                    vidx = vertex_ids[row]
+                    mesh.vertices[vidx].position[:] = original_positions[vidx]
+                mesh.increment_version()
+                alpha *= beta
+                backtracks += 1
+                if alpha < 1e-8:
+                    break
+                continue
+
+        if constraint_enforcer is not None:
+            constraint_enforcer(mesh)
+            mesh.increment_version()
+
+        trial_energy = energy_fn()
+        armijo_pass = trial_energy <= energy0 + c * alpha * g_dot_d
+
+        if armijo_pass:
+            logger.debug(
+                "Line search success: alpha=%.3e, backtracks=%d, "
+                "E0=%.6f, Etrial=%.6f, armijo=%s",
+                alpha,
+                backtracks,
+                energy0,
+                trial_energy,
+                armijo_pass,
+            )
+            new_step = min(alpha * gamma, alpha_max)
+            return True, new_step
+
+        for row in movable_rows:
+            vidx = vertex_ids[row]
+            mesh.vertices[vidx].position[:] = original_positions[vidx]
+        mesh.increment_version()
+
+        alpha *= beta
+        backtracks += 1
+        if alpha < 1e-8:
+            break
+
+    logger.debug(
+        "Line search failed after %d backtracks; reverting positions and shrinking step size.",
+        backtracks,
+    )
+    for row in movable_rows:
+        vidx = vertex_ids[row]
+        mesh.vertices[vidx].position[:] = original_positions[vidx]
+    mesh.increment_version()
+
+    logger.debug(
+        "Zero-step detected: no trial step reduced energy (alpha reached %.2e).",
+        alpha,
+    )
+    reduced_step = max(alpha * beta, 0.0)
+    return False, max(reduced_step, step_size * beta)

@@ -145,6 +145,7 @@ Interactive commands:
 - `tX`
   Set step size to `X` (e.g. `t1e-3`).
 
+
 - `r` / `rN`
   Refine the mesh (triangle refinement + polygonal refinement). Provide a
   number (`r3`) to repeat the refinement pass multiple times. After each pass

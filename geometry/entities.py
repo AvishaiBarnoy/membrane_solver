@@ -265,10 +265,16 @@ class Facet:
         else:
             v_ids = []
             for signed_ei in self.edge_indices:
-                edge = mesh.get_edge(signed_ei)
-                tail = edge.tail_index
-                if not v_ids or v_ids[-1] != tail:
+                edge = mesh.edges[abs(signed_ei)]
+                if signed_ei > 0:
+                    tail, head = edge.tail_index, edge.head_index
+                else:
+                    tail, head = edge.head_index, edge.tail_index
+                if not v_ids:
                     v_ids.append(tail)
+                v_ids.append(head)
+            if len(v_ids) > 1:
+                v_ids = v_ids[:-1]
 
         grad: Dict[int, np.ndarray] = {i: np.zeros(3) for i in v_ids}
         if len(v_ids) < 3:
@@ -374,9 +380,15 @@ class Body:
                 v_ids = []
                 for signed_ei in facet.edge_indices:
                     edge = mesh.edges[abs(signed_ei)]
-                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                    if not v_ids or v_ids[-1] != tail:
+                    if signed_ei > 0:
+                        tail, head = edge.tail_index, edge.head_index
+                    else:
+                        tail, head = edge.head_index, edge.tail_index
+                    if not v_ids:
                         v_ids.append(tail)
+                    v_ids.append(head)
+                if len(v_ids) > 1:
+                    v_ids = v_ids[:-1]
 
             # ordered vertex positions
             v_pos = np.array([mesh.vertices[i].position for i in v_ids])
@@ -422,9 +434,15 @@ class Body:
                 v_ids = []
                 for signed_ei in facet.edge_indices:
                     edge = mesh.edges[abs(signed_ei)]
-                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                    if not v_ids or v_ids[-1] != tail:
+                    if signed_ei > 0:
+                        tail, head = edge.tail_index, edge.head_index
+                    else:
+                        tail, head = edge.head_index, edge.tail_index
+                    if not v_ids:
                         v_ids.append(tail)
+                    v_ids.append(head)
+                if len(v_ids) > 1:
+                    v_ids = v_ids[:-1]
 
             if len(v_ids) < 3:
                 continue
@@ -459,9 +477,15 @@ class Body:
                 v_ids = []
                 for signed_ei in facet.edge_indices:
                     edge = mesh.edges[abs(signed_ei)]
-                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                    if not v_ids or v_ids[-1] != tail:
+                    if signed_ei > 0:
+                        tail, head = edge.tail_index, edge.head_index
+                    else:
+                        tail, head = edge.head_index, edge.tail_index
+                    if not v_ids:
                         v_ids.append(tail)
+                    v_ids.append(head)
+                if len(v_ids) > 1:
+                    v_ids = v_ids[:-1]
 
             v_pos = np.array([mesh.vertices[i].position for i in v_ids])
             v0 = v_pos[0]

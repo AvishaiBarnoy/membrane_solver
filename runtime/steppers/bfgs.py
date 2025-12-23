@@ -58,12 +58,21 @@ class BFGS(BaseStepper):
     def step(
         self,
         mesh: Mesh,
-        grad: Dict[int, np.ndarray],
+        grad: Dict[int, np.ndarray] | np.ndarray,
         step_size: float,
         energy_fn: Callable[[], float],
         constraint_enforcer: Callable[[Mesh], None] | None = None,
     ) -> tuple[bool, float]:
         """Take one BFGS step with line search."""
+
+        if isinstance(grad, np.ndarray):
+            mesh.build_position_cache()
+            grad_dict = {
+                vid: grad[row]
+                for row, vid in enumerate(mesh.vertex_ids)
+                if np.any(grad[row])
+            }
+            grad = grad_dict
 
         vids, x, g = self._collect_state(mesh, grad)
 
