@@ -19,20 +19,32 @@ def create_sphere_mesh(subdivisions=4):
 
     # Vertices of a cube
     points = [
-        [-1.0, -1.0, -1.0], [ 1.0, -1.0, -1.0], [ 1.0,  1.0, -1.0], [-1.0,  1.0, -1.0],
-        [-1.0, -1.0,  1.0], [ 1.0, -1.0,  1.0], [ 1.0,  1.0,  1.0], [-1.0,  1.0,  1.0]
+        [-1.0, -1.0, -1.0],
+        [1.0, -1.0, -1.0],
+        [1.0, 1.0, -1.0],
+        [-1.0, 1.0, -1.0],
+        [-1.0, -1.0, 1.0],
+        [1.0, -1.0, 1.0],
+        [1.0, 1.0, 1.0],
+        [-1.0, 1.0, 1.0],
     ]
     for i, p in enumerate(points):
         mesh.vertices[i] = Vertex(i, np.array(p, dtype=float))
 
     # Facets (triangles)
     tri_indices = [
-        [0, 2, 1], [0, 3, 2], # Bottom
-        [4, 5, 6], [4, 6, 7], # Top
-        [0, 1, 5], [0, 5, 4], # Front
-        [1, 2, 6], [1, 6, 5], # Right
-        [2, 3, 7], [2, 7, 6], # Back
-        [3, 0, 4], [3, 4, 7]  # Left
+        [0, 2, 1],
+        [0, 3, 2],  # Bottom
+        [4, 5, 6],
+        [4, 6, 7],  # Top
+        [0, 1, 5],
+        [0, 5, 4],  # Front
+        [1, 2, 6],
+        [1, 6, 5],  # Right
+        [2, 3, 7],
+        [2, 7, 6],  # Back
+        [3, 0, 4],
+        [3, 4, 7],  # Left
     ]
 
     edge_map = {}
@@ -82,6 +94,7 @@ def create_sphere_mesh(subdivisions=4):
 
     return mesh
 
+
 def benchmark():
     print("Preparing mesh...")
     mesh = create_sphere_mesh(subdivisions=5)
@@ -108,25 +121,29 @@ def benchmark():
     for _ in range(iterations):
         grad_arr.fill(0.0)
         volume.compute_energy_and_gradient_array(
-            mesh, gp, resolver, positions=positions, index_map=index_map, grad_arr=grad_arr
+            mesh,
+            gp,
+            resolver,
+            positions=positions,
+            index_map=index_map,
+            grad_arr=grad_arr,
         )
     end_time = time.perf_counter()
     avg_new = (end_time - start_time) / iterations
-    print(f"\nNew Array-based Path: {avg_new*1000:.4f} ms per iteration")
+    print(f"\nNew Array-based Path: {avg_new * 1000:.4f} ms per iteration")
 
     # --- Benchmark Old (Dict) Path ---
     # We call the dictionary-based entry point
     start_time = time.perf_counter()
     for _ in range(iterations):
-        volume.compute_energy_and_gradient(
-            mesh, gp, resolver, compute_gradient=True
-        )
+        volume.compute_energy_and_gradient(mesh, gp, resolver, compute_gradient=True)
     end_time = time.perf_counter()
     avg_old = (end_time - start_time) / iterations
-    print(f"Old Dict-based Path:  {avg_old*1000:.4f} ms per iteration")
+    print(f"Old Dict-based Path:  {avg_old * 1000:.4f} ms per iteration")
 
     speedup = avg_old / avg_new
     print(f"\nSpeedup: {speedup:.2f}x")
+
 
 if __name__ == "__main__":
     benchmark()

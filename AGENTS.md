@@ -10,6 +10,15 @@ organized under `geometry/`, `modules/`, `runtime/` and other directories.
 - Prioritize efficient algorithms and data structures.
 - Debugging should be through logger.
 
+## Performance & Architecture
+- **Hybrid SoA Pattern**: Use the "Scatter-Gather" pattern for numerical optimization. Mesh topology remains object-oriented (AoS) for ease of manipulation, but minimization MUST use dense NumPy arrays (SoA).
+- **Hot-Loop Vectorization**:
+    - Energy and Constraint modules MUST implement `compute_energy_and_gradient_array` for performance.
+    - Avoid Python loops over vertices, edges, or facets inside energy calculations.
+    - Use `Mesh.positions_view()` and `Mesh.triangle_row_cache()` to obtain vectorized data.
+- **Gradient Accumulation**: Use `np.add.at` or direct array modification instead of creating intermediate dictionaries.
+- **Caching**: Always check entity versioning (`mesh._version`) before recalculating expensive geometric properties.
+
 ## Testing
 - Install dependencies with `pip install -r requirements.txt`.
 - Run tests from the repository root using `pytest -q`.
