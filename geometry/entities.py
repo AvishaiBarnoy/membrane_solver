@@ -501,8 +501,8 @@ class Body:
         tri_rows, _ = mesh.triangle_row_cache()
 
         if body_rows is not None and tri_rows is not None:
-             # Vectorized path
-            indices = tri_rows[body_rows] # (N_tri, 3)
+            # Vectorized path
+            indices = tri_rows[body_rows]  # (N_tri, 3)
 
             # GATHER ONCE
             v0 = positions[indices[:, 0]]
