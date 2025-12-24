@@ -1080,6 +1080,10 @@ class Mesh:
     def get_facets_of_vertex(self, v_id: int) -> List["Facet"]:
         return [self.facets[fid] for fid in self.vertex_to_facets.get(v_id, [])]
 
+    def get_facet_indices_of_vertex(self, v_id: int) -> set[int]:
+        """Return the IDs of facets sharing this vertex."""
+        return self.vertex_to_facets.get(v_id, set())
+
     def get_edges_of_vertex(self, v_id: int) -> List["Edge"]:
         return [self.edges[eid] for eid in self.vertex_to_edges.get(v_id, [])]
 
