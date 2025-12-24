@@ -90,3 +90,40 @@ def compute_energy_and_gradient(
         return E, dict(grad)
     else:
         return E, {}
+
+
+def compute_energy_and_gradient_array(
+    mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    grad_arr: np.ndarray,
+) -> float:
+    """Dense-array volume penalty energy/gradient accumulation."""
+    mode = global_params.get("volume_constraint_mode", "lagrange")
+    if mode != "penalty":
+        return 0.0
+
+    energy = 0.0
+    for body in mesh.bodies.values():
+        k = param_resolver.get(body, "volume_stiffness")
+        if k is None:
+            k = global_params.volume_stiffness
+
+        V0 = (
+            body.target_volume
+            if body.target_volume is not None
+            else body.options.get("target_volume", 0)
+        )
+
+        # Combined vectorized operation
+        # Returns (volume, energy) and accumulates gradients internally
+        _, body_energy = body.compute_volume_and_accumulate_gradient(
+            mesh, positions, grad_arr, k, V0
+        )
+
+        energy += body_energy
+
+    return float(energy)
