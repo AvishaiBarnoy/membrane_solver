@@ -51,10 +51,12 @@ class ConstraintModuleManager:
         return loaded
 
     def apply_gradient_modifications(self, grad, mesh, global_params):
-        """Invoke ``apply_constraint_gradient`` on all loaded constraint modules.
+        """Apply KKT-style gradient projection from constraint modules.
 
-        This allows constraints to modify the energy gradient directly, for example
-        by applying Lagrange multipliers (soft constraints) or projection forces.
+        Constraint modules may supply ``constraint_gradients`` (or the legacy
+        singular form) to participate in the KKT projection path. Constraints
+        that do not supply gradients will only be enforced geometrically via
+        ``enforce_constraint``.
         """
         kkt_candidates: list[tuple[str, list[dict[int, np.ndarray]]]] = []
         for name, module in self.modules.items():
@@ -81,7 +83,8 @@ class ConstraintModuleManager:
             ):
                 logger.warning(
                     "Constraint module '%s' lacks constraint gradients; "
-                    "it will not participate in KKT projection.",
+                    "it will not participate in KKT projection and will only be "
+                    "enforced geometrically.",
                     name,
                 )
                 self._warned_no_grad.add(name)

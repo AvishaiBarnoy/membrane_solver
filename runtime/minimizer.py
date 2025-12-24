@@ -77,39 +77,73 @@ STEP SIZE:\t {self.step_size}
 ############"""
         return msg
 
-    def compute_energy_and_gradient(self):
-        """Return total energy and gradient for the current mesh."""
+    def compute_energy_and_gradient_array(self):
+        """Return total energy and dense gradient array for the current mesh."""
+        positions = self.mesh.positions_view()
+        vertex_ids = self.mesh.vertex_ids
+        index_map = self.mesh.vertex_index_to_row
+        grad_arr = np.zeros((len(vertex_ids), 3), dtype=float)
 
         total_energy = 0.0
-        # initialize per-vertex gradient dict
-        grad: Dict[int, np.ndarray] = {idx: np.zeros(3) for idx in self.mesh.vertices}
-
         for module in self.energy_modules:
-            # Each energy module must implement compute_energy_and_gradient
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                # Use fast array path
+                E_mod = module.compute_energy_and_gradient_array(
+                    self.mesh,
+                    self.global_params,
+                    self.param_resolver,
+                    positions=positions,
+                    index_map=index_map,
+                    grad_arr=grad_arr,
+                )
+                total_energy += E_mod
+                continue
+
+            # Legacy path: compute dict and scatter
             E_mod, g_mod = module.compute_energy_and_gradient(
                 self.mesh, self.global_params, self.param_resolver
             )
-
             total_energy += E_mod
             for vidx, gvec in g_mod.items():
-                grad[vidx] += gvec
+                row = index_map.get(vidx)
+                if row is not None:
+                    grad_arr[row] += gvec
 
         # Apply constraint modifications to the gradient (e.g., Lagrange multipliers)
-        self.constraint_manager.apply_gradient_modifications(
-            grad, self.mesh, self.global_params
-        )
+        if hasattr(self.constraint_manager, "apply_gradient_modifications_array"):
+            self.constraint_manager.apply_gradient_modifications_array(
+                grad_arr, self.mesh, self.global_params
+            )
+
+        return total_energy, grad_arr
+
+    def compute_energy_and_gradient(self):
+        """Return total energy and gradient for the current mesh."""
+
+        # Use array backend for performance
+        total_energy, grad_arr = self.compute_energy_and_gradient_array()
+
+        # Convert back to dictionary for legacy components if needed
+        # (Though we prefer staying in array space as long as possible)
+        grad = self._grad_arr_to_dict(grad_arr)
+
+        # Apply constraint modifications to the gradient (dictionary-based path)
+        # Note: compute_energy_and_gradient_array already handled array modifications
+        # but if we are here, we might need the dict modifications if array one was missing.
+        if not hasattr(self.constraint_manager, "apply_gradient_modifications_array"):
+            self.constraint_manager.apply_gradient_modifications(
+                grad, self.mesh, self.global_params
+            )
+            self._zero_fixed_gradients(grad)
 
         # Optional DEBUG‑level diagnostic: in Lagrange mode the projected
         # gradient should be (numerically) tangent to each fixed‑volume
-        # manifold, i.e. ⟨∇E, ∇V_body⟩ ≈ 0.  This reuses the cached volume
-        # gradients from ``_update_volume_gradients`` and is only executed
-        # when verbose debugging is enabled.
+        # manifold, i.e. ⟨∇E, ∇V_body⟩ ≈ 0.
         if logger.isEnabledFor(logging.DEBUG):
             mode = self.global_params.get("volume_constraint_mode", "lagrange")
             if mode == "lagrange" and self.mesh.bodies:
                 max_abs_dot = 0.0
                 for body in self.mesh.bodies.values():
-                    # Check for target volume
                     V_target = body.target_volume
                     if V_target is None:
                         V_target = body.options.get("target_volume")
@@ -117,7 +151,6 @@ STEP SIZE:\t {self.step_size}
                     if V_target is None:
                         continue
 
-                    # Use robust cache via method call
                     _, vol_grad = body.compute_volume_and_gradient(self.mesh)
 
                     dot = 0.0
@@ -132,43 +165,6 @@ STEP SIZE:\t {self.step_size}
                 )
 
         return total_energy, grad
-
-    def compute_energy_and_gradient_array(self):
-        """Return total energy and dense gradient array for the current mesh."""
-        positions = self.mesh.positions_view()
-        vertex_ids = self.mesh.vertex_ids
-        index_map = self.mesh.vertex_index_to_row
-        grad_arr = np.zeros((len(vertex_ids), 3), dtype=float)
-
-        total_energy = 0.0
-        for module in self.energy_modules:
-            if hasattr(module, "compute_energy_and_gradient_array"):
-                E_mod = module.compute_energy_and_gradient_array(
-                    self.mesh,
-                    self.global_params,
-                    self.param_resolver,
-                    positions=positions,
-                    index_map=index_map,
-                    grad_arr=grad_arr,
-                )
-                total_energy += E_mod
-                continue
-
-            E_mod, g_mod = module.compute_energy_and_gradient(
-                self.mesh, self.global_params, self.param_resolver
-            )
-            total_energy += E_mod
-            for vidx, gvec in g_mod.items():
-                row = index_map.get(vidx)
-                if row is not None:
-                    grad_arr[row] += gvec
-
-        if hasattr(self.constraint_manager, "apply_gradient_modifications_array"):
-            self.constraint_manager.apply_gradient_modifications_array(
-                grad_arr, self.mesh, self.global_params
-            )
-
-        return total_energy, grad_arr
 
     def compute_energy(self):
         """Compute the total energy using the loaded modules."""
@@ -186,10 +182,16 @@ STEP SIZE:\t {self.step_size}
     def _grad_arr_to_dict(self, grad_arr: np.ndarray) -> Dict[int, np.ndarray]:
         """Convert a dense gradient array into a sparse dict keyed by vertex id."""
         return {
-            vid: grad_arr[row]
+            vid: grad_arr[row].copy()
             for row, vid in enumerate(self.mesh.vertex_ids)
             if np.any(grad_arr[row])
         }
+
+    def _zero_fixed_gradients(self, grad: Dict[int, np.ndarray]) -> None:
+        """Helper to zero out gradients for fixed vertices in dict format."""
+        for vidx, vertex in self.mesh.vertices.items():
+            if getattr(vertex, "fixed", False):
+                grad[vidx][:] = 0.0
 
     def project_constraints(self, grad: Dict[int, np.ndarray] | np.ndarray) -> None:
         """Project gradients onto the feasible set defined by constraints."""
@@ -198,34 +200,9 @@ STEP SIZE:\t {self.step_size}
             self.project_constraints_array(grad)
             return
 
-        # zero out fixed vertices and project others
-        for vidx, vertex in self.mesh.vertices.items():
-            if getattr(vertex, "fixed", False):
-                grad[vidx][:] = 0.0
-            elif hasattr(vertex, "constraint"):
-                # project the gradient into tangent space of constraint
-                grad[vidx] = vertex.constraint.project_gradient(grad[vidx])
-
-        for eidx, edge in self.mesh.edges.items():
-            # If has fixed attribute uncomment and change hasattr to elif
-            # if geattr(edge, 'fixed', False): grad[eidx][:] = 0.0
-            if hasattr(edge, "constraint"):
-                # project the gradient into tangent space of constraint
-                grad[eidx] = edge.constraint.project_gradient(grad[eidx])
-
-        for fidx, facet in self.mesh.facets.items():
-            # If has fixed attribute uncomment and change hasattr to elif
-            # if geattr(facet, 'fixed', False): grad[fidx][:] = 0.0
-            if hasattr(facet, "constraint"):
-                # project the gradient into tangent space of constraint
-                grad[fidx] = facet.constraint.project_gradient(grad[fidx])
-
-        for bidx, body in self.mesh.bodies.items():
-            # If has fixed attribute uncomment and change hasattr to elif
-            # if geattr(body, 'fixed', False): grad[bidx][:] = 0.0
-            if hasattr(body, "constraint"):
-                # project the gradient into tangent space of constraint
-                grad[bidx] = body.constraint.project_gradient(grad[bidx])
+        # Legacy dict path
+        self._zero_fixed_gradients(grad)
+        # Add projection for non-fixed constraints if needed here
 
     def project_constraints_array(self, grad_arr: np.ndarray) -> None:
         """Array-based variant of ``project_constraints``."""
@@ -234,23 +211,12 @@ STEP SIZE:\t {self.step_size}
             vertex = self.mesh.vertices[vidx]
             if getattr(vertex, "fixed", False):
                 grad_arr[row] = 0.0
-            elif hasattr(vertex, "constraint"):
-                grad_arr[row] = vertex.constraint.project_gradient(grad_arr[row])
+            elif "constraint" in vertex.options:
+                constraint = vertex.options["constraint"]
+                grad_arr[row] = constraint.project_gradient(grad_arr[row])
 
     def _enforce_constraints(self, mesh: Mesh | None = None):
-        """Invoke all constraint modules on the current mesh.
-
-        Accepts an optional ``mesh`` argument so it can be used directly as the
-        ``constraint_enforcer`` callback in line‑search routines that call it
-        as ``constraint_enforcer(mesh)``. When ``mesh`` is omitted, the
-        minimizer's own mesh is used.
-
-        This method is intended for use *during minimization*. Depending on
-        the global parameter ``volume_projection_during_minimization``, the
-        volume constraint may be enforced either purely through gradient
-        projection (Evolver‑like) or by an additional geometric projection
-        step inside the line search (legacy behaviour).
-        """
+        """Invoke all constraint modules on the current mesh."""
         if not self._has_enforceable_constraints:
             return
 
@@ -261,13 +227,8 @@ STEP SIZE:\t {self.step_size}
             context="minimize",
         )
 
-    def enforce_constraints_after_mesh_ops(self, mesh: Mesh | None = None) -> None:
-        """Enforce constraints after discrete mesh operations.
-
-        This is used after refinement, equiangulation, vertex averaging, etc.,
-        where we do want to snap the geometry back to satisfy hard constraints
-        such as fixed volume.
-        """
+    def enforce_constraints_after_mesh_ops(self, mesh: Mesh | None = None):
+        """Enforce constraints after discrete mesh operations."""
         if not self._has_enforceable_constraints:
             return
 
@@ -305,6 +266,7 @@ STEP SIZE:\t {self.step_size}
             if callback:
                 callback(self.mesh, i)
 
+            # Use array-based path for main loop
             E, grad_arr = self.compute_energy_and_gradient_array()
             self.project_constraints_array(grad_arr)
             last_grad_arr = grad_arr
@@ -316,11 +278,7 @@ STEP SIZE:\t {self.step_size}
                 logger.info(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
                 return {
                     "energy": E,
-                    "gradient": {
-                        vid: grad_arr[row]
-                        for row, vid in enumerate(self.mesh.vertex_ids)
-                        if np.any(grad_arr[row])
-                    },
+                    "gradient": self._grad_arr_to_dict(grad_arr),
                     "mesh": self.mesh,
                     "step_success": True,
                     "iterations": i + 1,
@@ -375,10 +333,6 @@ STEP SIZE:\t {self.step_size}
             else:
                 zero_step_counter = 0
 
-                # DEBUG-level diagnostics for accepted steps: report the new
-                # energy and volume error for constrained bodies. These checks
-                # are intentionally guarded so that normal runs pay no extra
-                # cost; they are meant for interactive debugging only.
                 if logger.isEnabledFor(logging.DEBUG):
                     E_after = self.compute_energy()
                     max_rel_violation_dbg = 0.0
@@ -410,12 +364,6 @@ STEP SIZE:\t {self.step_size}
                     if vol_msgs:
                         logger.debug("Volume diagnostics: %s", "; ".join(vol_msgs))
 
-                # In Lagrange mode, when geometric volume projection is
-                # disabled during the line search, occasionally pull the
-                # configuration back exactly onto the target volume manifolds
-                # if we have drifted too far. This keeps hard volume
-                # constraints honest without fighting the line search at every
-                # trial step.
                 mode = self.global_params.get("volume_constraint_mode", "lagrange")
                 proj_flag = self.global_params.get(
                     "volume_projection_during_minimization", True
@@ -443,7 +391,6 @@ STEP SIZE:\t {self.step_size}
                             vol_tol,
                         )
                         self.enforce_constraints_after_mesh_ops(self.mesh)
-                        # After a hard projection, any CG history is stale.
                         reset = getattr(self.stepper, "reset", None)
                         if callable(reset):
                             reset()

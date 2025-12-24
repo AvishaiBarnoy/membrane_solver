@@ -160,6 +160,9 @@ area (body/facet/global) and volume constraints are configured via
 `constraint_modules` plus the relevant `target_*` values on entities or in
 `global_parameters`. Perimeter conservation uses a loop of signed edge indices:
 
+Constraint modules that do not provide gradients are enforced geometrically
+during minimization and emit a warning at runtime.
+
 ```json
 "constraint_modules": ["perimeter"],
 "global_parameters": {

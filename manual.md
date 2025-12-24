@@ -478,25 +478,24 @@ assert improvement and proximity rather than exact equality.
 
 ### 6.4 Geometric constraints: `PinToPlane`
 
-`modules/constraints/pin_to_plane.py` defines a `PinToPlane` helper you can
-attach directly to vertices:
+`modules/constraints/pin_to_plane.py` is a geometric constraint module. Attach
+it via the `constraints` list on vertices or edges:
 
-```python
-from modules.constraints.pin_to_plane import PinToPlane
-
-plane = PinToPlane(plane_normal=[0, 0, 1], plane_point=[0, 0, 0])
-vertex.options["constraint"] = plane
+```yaml
+vertices:
+  0: [0, 0, 1, {constraints: ["pin_to_plane"]}]
 ```
 
-The minimizer will call `project_position` and `project_gradient` on such
-constraints when updating positions/gradients, effectively pinning the vertex
-to a plane and keeping forces tangent.
+The module enforces the projection geometrically during minimization and after
+mesh operations. Because it does not supply constraint gradients, it does not
+participate in KKT projection and will emit a warning when gradients are
+assembled.
 
 ### 6.5 Fixed vertices
 
 Any vertex with `fixed: true` in the JSON is held fixed:
 
-- Its gradient is zeroed in `project_constraints`.
+- Its gradient is zeroed before stepping.
 - Position updates and constraint corrections skip it.
 
 This is the primary way to pin boundary curves or special anchor points.

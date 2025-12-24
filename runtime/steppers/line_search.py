@@ -92,8 +92,6 @@ def backtracking_line_search(
                 continue
             disp = alpha * direction.get(vidx, np.zeros(3))
             vertex.position[:] = original_positions[vidx] + disp
-            if hasattr(vertex, "constraint"):
-                vertex.position[:] = vertex.constraint.project_position(vertex.position)
         mesh.increment_version()
 
         # Stability Check: Only run expensive check if step is large

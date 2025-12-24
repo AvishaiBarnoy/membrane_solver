@@ -387,7 +387,6 @@ class Body:
                 # These are indices into the positions array (rows)
                 # tri_rows is (Total_Tri, 3), body_rows is (N_body_tri,)
                 # So we want tri_rows[body_rows] -> (N_body_tri, 3)
-
                 indices = tri_rows[body_rows]
 
                 v0 = positions[indices[:, 0]]
@@ -395,8 +394,6 @@ class Body:
                 v2 = positions[indices[:, 2]]
 
                 cross = _fast_cross(v1, v2)
-                # Volume contribution is dot(cross(v1, v2), v0) / 6
-                # using einsum for dot product along axis 1
                 vol_contrib = np.einsum("ij,ij->i", cross, v0)
                 volume = float(vol_contrib.sum() / 6.0)
 
@@ -427,11 +424,8 @@ class Body:
                 if len(v_ids) > 1:
                     v_ids = v_ids[:-1]
 
-            # ordered vertex positions
             v_pos = np.array([mesh.vertices[i].position for i in v_ids])
             v0 = v_pos[0]
-
-            # triangulate into (v0, v_i, v_{i+1}) for i=1..len-2 using vectorized operations
             v1 = v_pos[1:-1]
             v2 = v_pos[2:]
             cross_prod = _fast_cross(v1, v2)
@@ -463,7 +457,6 @@ class Body:
             # grad_v0 = (v1 x v2) / 6
             # grad_v1 = (v2 x v0) / 6
             # grad_v2 = (v0 x v1) / 6
-
             g0 = _fast_cross(v1, v2) * (factor / 6.0)
             g1 = _fast_cross(v2, v0) * (factor / 6.0)
             g2 = _fast_cross(v0, v1) * (factor / 6.0)
@@ -579,13 +572,9 @@ class Body:
                 v_ids = []
                 for signed_ei in facet.edge_indices:
                     edge = mesh.edges[abs(signed_ei)]
-                    if signed_ei > 0:
-                        tail, head = edge.tail_index, edge.head_index
-                    else:
-                        tail, head = edge.head_index, edge.tail_index
-                    if not v_ids:
+                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
+                    if not v_ids or v_ids[-1] != tail:
                         v_ids.append(tail)
-                    v_ids.append(head)
                 if len(v_ids) > 1:
                     v_ids = v_ids[:-1]
 
@@ -806,20 +795,6 @@ class Mesh:
     def increment_version(self):
         self._version += 1
 
-    def copy(self):
-        import copy
-
-        new_mesh = Mesh()
-        new_mesh.vertices = {vid: v.copy() for vid, v in self.vertices.items()}
-        new_mesh.edges = {eid: e.copy() for eid, e in self.edges.items()}
-        new_mesh.facets = {fid: f.copy() for fid, f in self.facets.items()}
-        if hasattr(self, "bodies"):
-            new_mesh.bodies = {bid: b.copy() for bid, b in self.bodies.items()}
-        if hasattr(self, "global_parameters"):
-            new_mesh.global_parameters = copy.deepcopy(self.global_parameters)
-        new_mesh.macros = copy.deepcopy(getattr(self, "macros", {}))
-        return new_mesh
-
     @property
     def facet_to_triangle_row(self) -> Dict[int, int]:
         """
@@ -839,6 +814,20 @@ class Mesh:
         }
         self._facet_to_row_version = self._facet_loops_version
         return self._facet_to_row_cache
+
+    def copy(self):
+        import copy
+
+        new_mesh = Mesh()
+        new_mesh.vertices = {vid: v.copy() for vid, v in self.vertices.items()}
+        new_mesh.edges = {eid: e.copy() for eid, e in self.edges.items()}
+        new_mesh.facets = {fid: f.copy() for fid, f in self.facets.items()}
+        if hasattr(self, "bodies"):
+            new_mesh.bodies = {bid: b.copy() for bid, b in self.bodies.items()}
+        if hasattr(self, "global_parameters"):
+            new_mesh.global_parameters = copy.deepcopy(self.global_parameters)
+        new_mesh.macros = copy.deepcopy(getattr(self, "macros", {}))
+        return new_mesh
 
     def get_edge(self, index: int) -> "Edge":
         if index > 0:
@@ -1016,6 +1005,11 @@ class Mesh:
         """
         import numpy as np
 
+        if not hasattr(self, "facet_vertex_loops"):
+            self.facet_vertex_loops = {}
+        if not hasattr(self, "_facet_loops_version"):
+            self._facet_loops_version = 0
+
         self.facet_vertex_loops.clear()
         for fid, facet in self.facets.items():
             v_ids: list[int] = []
@@ -1047,6 +1041,9 @@ class Mesh:
         self.build_position_cache()
 
         tri_facets: list[int] = []
+        # Sort keys to ensure deterministic order (and match iteration order if dicts are ordered)
+        # Using sorted() for safety across Python versions/implementations if needed,
+        # but insertion order is standard now.
         for fid, loop in self.facet_vertex_loops.items():
             if len(loop) == 3:
                 tri_facets.append(fid)
