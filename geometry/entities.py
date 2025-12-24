@@ -829,6 +829,18 @@ class Mesh:
         new_mesh.macros = copy.deepcopy(getattr(self, "macros", {}))
         return new_mesh
 
+    @property
+    def boundary_vertex_ids(self) -> set[int]:
+        """Return the set of vertex IDs that lie on the boundary of an open mesh."""
+        self.build_connectivity_maps()
+        boundary_vids = set()
+        for eid, facet_set in self.edge_to_facets.items():
+            if len(facet_set) < 2:
+                edge = self.edges[eid]
+                boundary_vids.add(edge.tail_index)
+                boundary_vids.add(edge.head_index)
+        return boundary_vids
+
     def get_edge(self, index: int) -> "Edge":
         if index > 0:
             return self.edges[index]
@@ -1011,7 +1023,8 @@ class Mesh:
             self._facet_loops_version = 0
 
         self.facet_vertex_loops.clear()
-        for fid, facet in self.facets.items():
+        for fid in sorted(self.facets):
+            facet = self.facets[fid]
             v_ids: list[int] = []
             for signed_ei in facet.edge_indices:
                 edge = self.edges[abs(signed_ei)]
@@ -1041,10 +1054,8 @@ class Mesh:
         self.build_position_cache()
 
         tri_facets: list[int] = []
-        # Sort keys to ensure deterministic order (and match iteration order if dicts are ordered)
-        # Using sorted() for safety across Python versions/implementations if needed,
-        # but insertion order is standard now.
-        for fid, loop in self.facet_vertex_loops.items():
+        for fid in sorted(self.facet_vertex_loops):
+            loop = self.facet_vertex_loops[fid]
             if len(loop) == 3:
                 tri_facets.append(fid)
 
@@ -1068,6 +1079,10 @@ class Mesh:
 
     def get_facets_of_vertex(self, v_id: int) -> List["Facet"]:
         return [self.facets[fid] for fid in self.vertex_to_facets.get(v_id, [])]
+
+    def get_facet_indices_of_vertex(self, v_id: int) -> set[int]:
+        """Return the IDs of facets sharing this vertex."""
+        return self.vertex_to_facets.get(v_id, set())
 
     def get_edges_of_vertex(self, v_id: int) -> List["Edge"]:
         return [self.edges[eid] for eid in self.vertex_to_edges.get(v_id, [])]

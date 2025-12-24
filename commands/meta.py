@@ -156,6 +156,10 @@ class PrintEntityCommand(Command):
         elif entity_type in ["bodies", "body"]:
             entities = mesh.bodies
             name = "Body"
+        elif entity_type == "energy":
+            E = context.minimizer.compute_energy()
+            print(f"Current Total Energy: {E:.10f}")
+            return
         else:
             print(f"Unknown entity type: {entity_type}")
             return

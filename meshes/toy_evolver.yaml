@@ -1,0 +1,51 @@
+# Toy Evolver Comparison
+# This simulation uses the "toy" modules that replicate Ken Brakke's
+# specific mathematical formulations for area and curvature.
+
+global_parameters:
+  surface_tension: 1.0
+  bending_modulus: 0.1
+  volume_constraint_mode: "lagrange"
+  volume_projection_during_minimization: true
+  step_size: 0.01
+
+vertices:
+  - [0, 0, 0]
+  - [1, 0, 0]
+  - [1, 0, 1]
+  - [0, 0, 1]
+  - [0, 1, 1]
+  - [0, 1, 0]
+  - [1, 1, 0]
+  - [1, 1, 1]
+
+edges:
+  - [0, 1]
+  - [1, 2]
+  - [2, 3]
+  - [3, 0]
+  - [4, 5]
+  - [5, 6]
+  - [6, 7]
+  - [7, 4]
+  - [0, 5]
+  - [1, 6]
+  - [2, 7]
+  - [3, 4]
+
+faces:
+  - [0, 1, 2, 3]
+  - [r0, 8, 5, r9]
+  - [9, 6, -10, -1]
+  - [-2, 10, 7, -11]
+  - [11, 4, -8, -3]
+  - [-5, -4, -7, -6]
+
+bodies:
+  1:
+    faces: [0, 1, 2, 3, 4, 5]
+    target_volume: 1.0
+    energy: ["surface", "bending"]
+
+macros:
+  gogo: "r; g 50; r; g 50; print energy"

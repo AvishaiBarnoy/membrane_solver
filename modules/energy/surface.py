@@ -133,10 +133,11 @@ def compute_energy_and_gradient_array(
         v1m = v1[mask]
         v2m = v2[mask]
 
-        # Gradients per triangle
-        g0 = 0.5 * _fast_cross(v1m - v0m, n_hat)
-        g1 = 0.5 * _fast_cross(v2m - v1m, n_hat)
-        g2 = 0.5 * _fast_cross(v0m - v2m, n_hat)
+        # Correct area gradients: perpendicular to opposite edge
+        # grad(A) wrt v0 = 0.5 * (v1 - v2) x n_hat
+        g0 = 0.5 * _fast_cross(v1m - v2m, n_hat)
+        g1 = 0.5 * _fast_cross(v2m - v0m, n_hat)
+        g2 = 0.5 * _fast_cross(v0m - v1m, n_hat)
 
         scale = gammas_masked[:, None]
         g0 *= scale

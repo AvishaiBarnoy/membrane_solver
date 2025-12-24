@@ -528,6 +528,14 @@ def parse_geometry(data: dict) -> Mesh:
 
                 mesh.bodies[bid] = body
 
+                # Load energy modules defined on the body
+                energy_spec = body.options.get("energy")
+                if energy_spec:
+                    if isinstance(energy_spec, list):
+                        energy_module_names.update(energy_spec)
+                    elif isinstance(energy_spec, str):
+                        energy_module_names.add(energy_spec)
+
                 constraint_spec = body.options.get("constraints", [])
                 if isinstance(constraint_spec, str):
                     body_constraints = [constraint_spec]
