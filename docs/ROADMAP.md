@@ -28,15 +28,10 @@ intended for development and planning; users should consult `README.md` and
 ## 2. Curvature‑driven phenomena
 
 5. Mean curvature (bending / Helfrich) implementation
-   - [ ] Standardize the discrete mean‑curvature definition used by the core mesh
-         objects (sign convention, where it lives: facet/edge/vertex).
-   - [ ] Provide a bending‑energy module API under `modules/energy/mean_curvature.py`
-         (or migrate the existing prototype in `modules/mean_curvature_tilt.py`
-         into the standard energy module layout).
-   - [ ] Add unit‑level validation (e.g., invariance to rigid transforms, finite
-         difference checks for gradients) on small synthetic meshes.
-   - [ ] Add/confirm parameter plumbing (`bending_rigidity`,
-         `spontaneous_curvature`) so end‑to‑end examples can be run via the CLI.
+   - [x] Standardize the discrete mean‑curvature definition: Uses **Cotangent Laplace-Beltrami** with **Mixed Voronoi Areas** (`geometry/curvature.py`).
+   - [x] Provide a bending‑energy module: `modules/energy/bending.py`.
+   - [x] Add unit‑level validation: Verified against analytical sphere energy ($4\pi$) and zero-energy for flat planes. Added strict **Finite Difference** checks in `tests/test_numerical_consistency.py`.
+   - [x] Add parameter plumbing: `bending_modulus` integrated via CLI and input files.
 
 6. Pure Gaussian curvature
    - Check invariance under topology‑preserving deformations: no net change in

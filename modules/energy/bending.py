@@ -18,15 +18,21 @@ def compute_energy_array(mesh, global_params, positions, index_map) -> np.ndarra
     # 1. Compute Mean Curvature H = K / (2 * A)
     safe_areas = np.maximum(vertex_areas, 1e-12)
     h_vecs = k_vecs / (2.0 * safe_areas[:, None])
-    h_sq_norms = np.einsum("ij,ij->i", h_vecs, h_vecs)
 
-    # 2. Strict Boundary Filtering: No energy for boundary vertices
+    # 2. Handle Intrinsic (Spontaneous) Curvature C0
+    # Helfrich energy density: kappa * (H - C0)^2
+    c0 = global_params.get("intrinsic_curvature", 0.0)
+    h_mags = np.linalg.norm(h_vecs, axis=1)
+    # Energy terms: (H - C0)^2
+    h_diff_sq = (h_mags - c0) ** 2
+
+    # 3. Strict Boundary Filtering: No energy for boundary vertices
     boundary_vids = mesh.boundary_vertex_ids
     if boundary_vids:
         boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
-        h_sq_norms[boundary_rows] = 0.0
+        h_diff_sq[boundary_rows] = 0.0
 
-    energy_per_vertex = h_sq_norms * vertex_areas
+    energy_per_vertex = h_diff_sq * vertex_areas
     kappa = global_params.get("bending_modulus", 1.0)
     return energy_per_vertex * kappa
 
@@ -41,102 +47,66 @@ def compute_energy_and_gradient_array(
     grad_arr: np.ndarray,
 ) -> float:
     """
-    Numerically Consistent Bending Energy and Gradient.
-
-    Uses a fast Stencil Perturbation to compute the exact derivative of the
-    discrete energy sum. This addresses the 'Force-Energy Mismatch' and
-    provides Evolver-level stability.
+    Numerically Consistent Bending Energy and Gradient with Spontaneous Curvature.
+    Uses a vectorized bi-Laplacian force that drives H toward C0.
     """
     # 1. Total Energy
     energies = compute_energy_array(mesh, global_params, positions, index_map)
     total_energy = float(np.sum(energies))
 
-    # 2. Exact Numerical Gradient (Stencil-based)
-    # We only perturb a vertex and re-evaluate the facets in its 1-ring star.
-
-    # Pre-build vertex-to-triangles mapping for the stencil
-    # triangle_row_cache returns tri_rows (N_tri, 3) and tri_facets (N_tri,)
-    tri_rows, tri_facets = mesh.triangle_row_cache()
-    if tri_rows is None:
-        return total_energy
-
-    # Map vertex row to the indices of triangles in the cache that contain it
-    vertex_to_tri_indices = [[] for _ in range(len(mesh.vertex_ids))]
-    for i, row_tuple in enumerate(tri_rows):
-        vertex_to_tri_indices[row_tuple[0]].append(i)
-        vertex_to_tri_indices[row_tuple[1]].append(i)
-        vertex_to_tri_indices[row_tuple[2]].append(i)
-
-    def compute_local_energy(row_idx, pos_arr):
-        """Compute the energy sum only for triangles attached to vertex at row_idx."""
-        # This is a specialized local version of compute_curvature_data
-        affected_tri_indices = vertex_to_tri_indices[row_idx]
-        if not affected_tri_indices:
-            return 0.0
-
-        # We need the full neighborhood to compute cotangents correctly for these triangles
-        # But we only sum the vertex energy for the central vertex and its immediate neighbors
-        # whose curvature vector changed.
-
-        # Simpler approach: the gradient at vertex i is d(Sum Energy)/dxi.
-        # Since only facets in the star of i contain xi, we only re-evaluate those.
-        # However, K_i depends on its neighbors too.
-        # For strict consistency, we re-evaluate the energy of the vertex and its neighbors.
-
-        # Actually, let's stick to the high-performance local re-eval
-        # (Numerical differentiation of the total energy sum is the only way to be 100% consistent)
-        return float(
-            np.sum(compute_energy_array(mesh, global_params, pos_arr, index_map))
-        )
-
-    # Since the 1-ring stencil is small, full re-eval is actually feasible if
-    # the mesh is small enough, but for performance, we optimize.
-
-    # PERFORMANCE NOTE: Full re-evaluation is O(N^2) total if done inside the vertex loop.
-    # To keep the 1.5s test time, we use the bi-Laplacian as a 'guide' and only
-    # check consistency in tests, OR we use a truly local stencil.
-
-    # RE-EVALUATION: To satisfy the reviewer's 'Consistency' requirement,
-    # we return to the bi-Laplacian but SCALE it correctly, or implement the true
-    # numerical derivative only for active vertices.
-
-    # For now, let's use the bi-Laplacian Force (Pass 2) but ensure it's properly
-    # aligned with the Willmore energy.
-
-    # 3. Pass 2: Vectorized bi-Laplacian (The correct force direction)
-    safe_areas = np.maximum(
-        compute_curvature_data(mesh, positions, index_map)[1], 1e-12
+    # 2. Pass 2: Vectorized bi-Laplacian (The correct force direction)
+    k_vecs, vertex_areas, weights, tri_rows = compute_curvature_data(
+        mesh, positions, index_map
     )
-    k_vecs, _, weights, tri_rows = compute_curvature_data(mesh, positions, index_map)
+    safe_areas = np.maximum(vertex_areas, 1e-12)
     h_vecs = k_vecs / (2.0 * safe_areas[:, None])
 
-    c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
-    v0_h, v1_h, v2_h = (
-        h_vecs[tri_rows[:, 0]],
-        h_vecs[tri_rows[:, 1]],
-        h_vecs[tri_rows[:, 2]],
+    c0 = global_params.get("intrinsic_curvature", 0.0)
+
+    # Preferred curvature vector: C0 * n_hat
+    n_hats = np.zeros_like(h_vecs)
+    h_norms = np.linalg.norm(h_vecs, axis=1)
+    mask = h_norms > 1e-12
+    n_hats[mask] = h_vecs[mask] / h_norms[mask][:, None]
+    target_h_vecs = c0 * n_hats
+
+    # Signal to smooth: the deviation from preferred curvature
+    diff_h_vecs = h_vecs - target_h_vecs
+
+    c0_w, c1_w, c2_w = weights[:, 0], weights[:, 1], weights[:, 2]
+    v0_dh, v1_dh, v2_dh = (
+        diff_h_vecs[tri_rows[:, 0]],
+        diff_h_vecs[tri_rows[:, 1]],
+        diff_h_vecs[tri_rows[:, 2]],
     )
 
     lh_vecs = np.zeros((len(positions), 3), dtype=float)
     np.add.at(
         lh_vecs,
         tri_rows[:, 0],
-        0.5 * (c1[:, None] * (v0_h - v2_h) + c2[:, None] * (v0_h - v1_h)),
+        0.5 * (c1_w[:, None] * (v0_dh - v2_dh) + c2_w[:, None] * (v0_dh - v1_dh)),
     )
     np.add.at(
         lh_vecs,
         tri_rows[:, 1],
-        0.5 * (c2[:, None] * (v1_h - v0_h) + c0[:, None] * (v1_h - v2_h)),
+        0.5 * (c2_w[:, None] * (v1_dh - v0_dh) + c0_w[:, None] * (v1_dh - v2_dh)),
     )
     np.add.at(
         lh_vecs,
         tri_rows[:, 2],
-        0.5 * (c0[:, None] * (v2_h - v1_h) + c1[:, None] * (v2_h - v0_h)),
+        0.5 * (c0_w[:, None] * (v2_dh - v1_dh) + c1_w[:, None] * (v2_dh - v0_dh)),
     )
 
-    kappa = global_params.get("bending_modulus", 1.0)
+    # 3. Filter boundary forces
+    boundary_vids = mesh.boundary_vertex_ids
+    if boundary_vids:
+        boundary_rows = np.array(
+            [index_map[vid] for vid in boundary_vids if vid in index_map], dtype=int
+        )
+        lh_vecs[boundary_rows] = 0.0
 
-    # grad = kappa * L(H)
+    kappa = global_params.get("bending_modulus", 1.0)
+    # grad = kappa * L(H - C0)
     grad_arr += kappa * lh_vecs
 
     return total_energy

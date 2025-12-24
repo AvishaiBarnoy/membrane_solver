@@ -169,6 +169,9 @@ Interactive commands:
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.
 
+- `print energy`
+  Display the current total energy of the simulation.
+
 - `save`
   Save the current geometry to `interactive.temp`.
 
@@ -383,6 +386,23 @@ Configuration:
 - Set global tension: `global_parameters["line_tension"] = 1.0`.
 - Override per-edge: `edge.options["line_tension"] = 0.5`.
 - Flag edges: Ensure edges have `"energy": ["line_tension"]` in their options.
+
+### 5.4 Bending Energy (`modules/energy/bending.py`)
+
+This module implements the squared mean curvature integral (Willmore energy):
+
+\[
+E_{\text{bending}} = \kappa \sum_{i} \frac{\|\vec{K}_i\|^2}{4 A_i},
+\]
+
+where:
+- `\kappa` is the `bending_modulus` from `global_parameters`.
+- `\vec{K}_i` is the integrated curvature vector at vertex `i`, calculated using **Cotangent Weights**.
+- `A_i` is the dual vertex area, calculated using the **Mixed Voronoi** formulation.
+
+The module ignores boundary vertices, meaning a flat planar patch correctly yields exactly zero bending energy.
+
+This is commonly used for 2D problems (e.g. square relaxing to a circle) or
 
 This is commonly used for 2D problems (e.g. square relaxing to a circle) or
 for boundary tension in open membranes.
