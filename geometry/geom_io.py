@@ -437,9 +437,7 @@ def parse_geometry(data: dict) -> Mesh:
                 err_msg = "energy modules should be in a list or a single string"
                 logger.error(err_msg)
                 raise err_msg
-        elif "energy" not in options:
-            mesh.facets[fid].options["energy"] = ["surface"]
-            energy_module_names.add("surface")
+        # REMOVED hardcoded default "surface" assignment here to allow body-level energy to take precedence.
 
         if (
             options.get("expression")
@@ -527,6 +525,14 @@ def parse_geometry(data: dict) -> Mesh:
                     body.options["target_volume"] = float(target_volume)
 
                 mesh.bodies[bid] = body
+
+                # Load energy modules defined on the body
+                energy_spec = body.options.get("energy")
+                if energy_spec:
+                    if isinstance(energy_spec, list):
+                        energy_module_names.update(energy_spec)
+                    elif isinstance(energy_spec, str):
+                        energy_module_names.add(energy_spec)
 
                 constraint_spec = body.options.get("constraints", [])
                 if isinstance(constraint_spec, str):

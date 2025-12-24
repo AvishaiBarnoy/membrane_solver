@@ -1,4 +1,3 @@
-
 import numpy as np
 import pytest
 
@@ -11,29 +10,48 @@ from parameters.resolver import ParameterResolver
 def create_sphere_mesh(subdivisions=3):
     """Creates a simple sphere by refining a cube."""
     from runtime.refinement import refine_triangle_mesh
+
     mesh = Mesh()
 
     # Unit cube vertices
-    points = np.array([
-        [-1, -1, -1], [ 1, -1, -1], [ 1,  1, -1], [-1,  1, -1],
-        [-1, -1,  1], [ 1, -1,  1], [ 1,  1,  1], [-1,  1,  1]
-    ], dtype=float)
+    points = np.array(
+        [
+            [-1, -1, -1],
+            [1, -1, -1],
+            [1, 1, -1],
+            [-1, 1, -1],
+            [-1, -1, 1],
+            [1, -1, 1],
+            [1, 1, 1],
+            [-1, 1, 1],
+        ],
+        dtype=float,
+    )
 
     for i, p in enumerate(points):
         mesh.vertices[i] = Vertex(i, p)
 
     # Triangulated faces
     tri_indices = [
-        [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
-        [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
-        [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7]
+        [0, 2, 1],
+        [0, 3, 2],
+        [4, 5, 6],
+        [4, 6, 7],
+        [0, 1, 5],
+        [0, 5, 4],
+        [1, 2, 6],
+        [1, 6, 5],
+        [2, 3, 7],
+        [2, 7, 6],
+        [3, 0, 4],
+        [3, 4, 7],
     ]
 
     edge_map = {}
     next_eid = 1
     for i, (a, b, c) in enumerate(tri_indices):
         e_ids = []
-        for pair in [(a,b), (b,c), (c,a)]:
+        for pair in [(a, b), (b, c), (c, a)]:
             key = tuple(sorted(pair))
             if key not in edge_map:
                 edge_map[key] = next_eid
@@ -56,9 +74,10 @@ def create_sphere_mesh(subdivisions=3):
     mesh.build_facet_vertex_loops()
     return mesh
 
+
 def test_sphere_willmore_energy():
     """Verify that the bending energy of a sphere is approx 4*pi."""
-    mesh = create_sphere_mesh(subdivisions=3) # ~1.5k facets
+    mesh = create_sphere_mesh(subdivisions=3)  # ~1.5k facets
     gp = GlobalParameters()
     gp.bending_modulus = 1.0
     resolver = ParameterResolver(gp)
@@ -78,13 +97,14 @@ def test_sphere_willmore_energy():
     # Allow some error due to discretization
     assert energy == pytest.approx(expected, rel=0.05)
 
+
 def test_flat_plane_energy_is_zero():
     """Verify that a flat plane has zero bending energy."""
     mesh = Mesh()
     # Simple grid
     for i in range(3):
         for j in range(3):
-            idx = i*3 + j
+            idx = i * 3 + j
             mesh.vertices[idx] = Vertex(idx, np.array([i, j, 0.0], dtype=float))
 
     # Two triangles
