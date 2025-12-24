@@ -437,7 +437,9 @@ def parse_geometry(data: dict) -> Mesh:
                 err_msg = "energy modules should be in a list or a single string"
                 logger.error(err_msg)
                 raise err_msg
-        # REMOVED hardcoded default "surface" assignment here to allow body-level energy to take precedence.
+        elif "energy" not in options:
+            mesh.facets[fid].options["energy"] = ["surface"]
+            energy_module_names.add("surface")
 
         if (
             options.get("expression")
@@ -736,13 +738,6 @@ def parse_geometry(data: dict) -> Mesh:
     mesh.macros = macros
 
     # Energy modules
-    if not energy_module_names:
-        # Smart Default: If no energy modules specified anywhere, default to "surface" for all facets.
-        energy_module_names.add("surface")
-        for facet in mesh.facets.values():
-            if "energy" not in facet.options:
-                facet.options["energy"] = ["surface"]
-
     mesh.energy_modules = list(energy_module_names)
 
     # Constraint modules

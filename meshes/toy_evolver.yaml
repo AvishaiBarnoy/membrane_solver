@@ -1,5 +1,5 @@
 # Toy Evolver Comparison
-# This simulation uses the "toy" modules that replicate Ken Brakke's 
+# This simulation uses the "toy" modules that replicate Ken Brakke's
 # specific mathematical formulations for area and curvature.
 
 global_parameters:
@@ -45,7 +45,7 @@ bodies:
   1:
     faces: [0, 1, 2, 3, 4, 5]
     target_volume: 1.0
-    energy: ["surface_evolver", "bending_evolver"]
+    energy: ["surface", "bending"]
 
 macros:
   gogo: "r; g 50; r; g 50; print energy"

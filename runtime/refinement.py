@@ -159,8 +159,7 @@ def refine_polygonal_facets(mesh):
             )
             child_options["parent_facet"] = facet.index
             child_options["constraints"] = facet.options.get("constraints", [])
-            # REMOVED: child_options["energy"] = ["surface"]
-            # Energy modules will be inherited from parent via copy() above if present.
+            # Child facets inherit energy modules from parent via facet.options.copy() above.
 
             # build the new facet's edge‐list **in the correct orientation**:
             child_edges = [boundary_edge.index, spoke_b.index, -spoke_a.index]
