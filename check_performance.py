@@ -5,7 +5,6 @@ import sys
 
 BASELINE_FILE = "benchmarks/inputs/results.json"
 
-
 def run_check():
     if not os.path.exists(BASELINE_FILE):
         print(f"No baseline file found at {BASELINE_FILE}. Skipping performance check.")
