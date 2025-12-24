@@ -4,48 +4,11 @@ from typing import Dict
 
 import numpy as np
 
-from geometry.curvature import compute_integrated_curvature_vectors
+from geometry.curvature import compute_curvature_data
 from geometry.entities import Mesh
 from runtime.logging_config import setup_logging
 
 logger = setup_logging("membrane_solver.log")
-
-
-def compute_energy_only(mesh, global_params, positions, index_map) -> float:
-    """Fast path for energy-only calculation (used for perturbations)."""
-
-    k_vecs, vertex_areas = compute_integrated_curvature_vectors(
-        mesh, positions, index_map
-    )
-
-    # Filter out boundary vertices to avoid artifacts on open meshes
-
-    boundary_vids = mesh.boundary_vertex_ids
-
-    # Convert vids to row indices
-
-    boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
-
-    k_sq_norms = np.einsum("ij,ij->i", k_vecs, k_vecs)
-
-    # Zero out curvature for boundary vertices
-
-    if boundary_rows:
-        k_sq_norms[boundary_rows] = 0.0
-
-    area_mask = vertex_areas > 1e-12
-
-    energy_per_vertex = np.zeros_like(vertex_areas)
-
-    energy_per_vertex[area_mask] = k_sq_norms[area_mask] / (
-        4.0 * vertex_areas[area_mask]
-    )
-
-    total_energy = float(np.sum(energy_per_vertex))
-
-    kappa = global_params.get("bending_modulus", 1.0)
-
-    return total_energy * kappa
 
 
 def compute_energy_and_gradient_array(
@@ -58,42 +21,84 @@ def compute_energy_and_gradient_array(
     grad_arr: np.ndarray,
 ) -> float:
     """
-    Consistent Bending Energy and Gradient.
-    Uses numerical differentiation to ensure the gradient is the exact derivative
-    of the discrete cotangent-based energy. This guarantees line-search stability.
+    Fast Analytical Bending Energy and Gradient.
+    Uses a two-pass vectorized Cotangent Laplacian to compute the bi-Laplacian force.
     """
-    # 1. Base Energy
-    E0 = compute_energy_only(mesh, global_params, positions, index_map)
+    # 1. Pass 1: Compute integrated curvature vectors K and dual areas A
+    k_vecs, vertex_areas, weights, tri_rows = compute_curvature_data(
+        mesh, positions, index_map
+    )
 
-    # 2. Numerical Gradient (Perturbation)
-    # We only need to perturb vertices that contribute to the bending energy.
-    # For performance, we can skip vertices with no facets.
-    eps = 1e-6
+    if tri_rows.size == 0:
+        return 0.0
 
-    # Vectorized perturbation is hard here because each vertex affects a local neighborhood.
-    # However, we can use the fact that the bending gradient is very localized.
-    # To keep this 'toy' but 'consistent', we implement the numerical derivative.
+    n_verts = len(mesh.vertex_ids)
 
-    # Optimization: Only perturb active vertices
-    for vid, row in index_map.items():
-        # Get neighbors to potentially limit calculation, but for now we do full re-eval
-        # (This is the 'Correctness-First' path)
-        for d in range(3):
-            orig_val = positions[row, d]
+    # Filter out boundary vertices to avoid artifacts
+    boundary_vids = mesh.boundary_vertex_ids
+    boundary_rows = np.array(
+        [index_map[vid] for vid in boundary_vids if vid in index_map], dtype=int
+    )
 
-            positions[row, d] = orig_val + eps
-            E_plus = compute_energy_only(mesh, global_params, positions, index_map)
+    # 2. Compute Mean Curvature H = K / (2 * A)
+    # Avoid division by zero
+    safe_areas = np.maximum(vertex_areas, 1e-12)
+    h_vecs = k_vecs / (2.0 * safe_areas[:, None])
 
-            positions[row, d] = orig_val - eps
-            E_minus = compute_energy_only(mesh, global_params, positions, index_map)
+    # Energy E = sum ||K||^2 / 4A = sum H^2 * A
+    h_sq_norms = np.einsum("ij,ij->i", h_vecs, h_vecs)
 
-            # Reset
-            positions[row, d] = orig_val
+    # Ignore boundary contributions
+    if boundary_rows.size > 0:
+        h_sq_norms[boundary_rows] = 0.0
 
-            # Central Difference
-            grad_arr[row, d] += (E_plus - E_minus) / (2 * eps)
+    total_energy = float(np.sum(h_sq_norms * vertex_areas))
+    kappa = global_params.get("bending_modulus", 1.0)
+    total_energy *= kappa
 
-    return E0
+    # 3. Pass 2: Compute Laplacian of Curvature Signal (bi-Laplacian approximation)
+    # L(H)_i = sum_j w_ij (H_i - H_j)
+    # This represents the 'bending force' that smoothes curvature variation.
+
+    # We use the cotangent weights from pass 1
+    c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
+
+    v0_h = h_vecs[tri_rows[:, 0]]
+    v1_h = h_vecs[tri_rows[:, 1]]
+    v2_h = h_vecs[tri_rows[:, 2]]
+
+    # Laplacian components for each triangle
+    # For edge v1-v2 (weight c0), contrib to L0 is c0 * (H0 - H1) + c0 * (H0 - H2) ... no.
+    # Standard: L_i = 0.5 * sum_j (cot alpha + cot beta) * (H_i - H_j)
+
+    lh_vecs = np.zeros((n_verts, 3), dtype=float)
+
+    # Contributions to L_i from triangle (0,1,2)
+    # L0 contrib: 0.5 * [ c1 * (H0 - H2) + c2 * (H0 - H1) ]
+    np.add.at(
+        lh_vecs,
+        tri_rows[:, 0],
+        0.5 * (c1[:, None] * (v0_h - v2_h) + c2[:, None] * (v0_h - v1_h)),
+    )
+    np.add.at(
+        lh_vecs,
+        tri_rows[:, 1],
+        0.5 * (c2[:, None] * (v1_h - v0_h) + c0[:, None] * (v1_h - v2_h)),
+    )
+    np.add.at(
+        lh_vecs,
+        tri_rows[:, 2],
+        0.5 * (c0[:, None] * (v2_h - v1_h) + c1[:, None] * (v2_h - v0_h)),
+    )
+
+    # 4. Final Force: F = -kappa * Laplacian(H)
+    # The gradient grad_arr is dE/dx = -F = kappa * Laplacian(H)
+    if boundary_rows.size > 0:
+        lh_vecs[boundary_rows] = 0.0
+
+    grad_arr += kappa * lh_vecs
+
+    return total_energy
 
 
 def compute_energy_and_gradient(
@@ -107,9 +112,6 @@ def compute_energy_and_gradient(
     positions = mesh.positions_view()
     idx_map = mesh.vertex_index_to_row
 
-    if not compute_gradient:
-        return compute_energy_only(mesh, global_params, positions, idx_map), {}
-
     grad_arr = np.zeros_like(positions)
     energy = compute_energy_and_gradient_array(
         mesh,
@@ -120,9 +122,5 @@ def compute_energy_and_gradient(
         grad_arr=grad_arr,
     )
 
-    grad = {
-        vid: grad_arr[row].copy()
-        for vid, row in idx_map.items()
-        if np.any(grad_arr[row])
-    }
+    grad = {vid: grad_arr[row] for vid, row in idx_map.items() if np.any(grad_arr[row])}
     return energy, grad
