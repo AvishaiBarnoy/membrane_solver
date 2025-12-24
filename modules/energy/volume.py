@@ -118,17 +118,12 @@ def compute_energy_and_gradient_array(
             else body.options.get("target_volume", 0)
         )
 
-        V, volume_gradient = body.compute_volume_and_gradient(
-            mesh, positions=positions, index_map=index_map
+        # Combined vectorized operation
+        # Returns (volume, energy) and accumulates gradients internally
+        _, body_energy = body.compute_volume_and_accumulate_gradient(
+            mesh, positions, grad_arr, k, V0
         )
 
-        delta = V - V0
-        energy += 0.5 * k * delta**2
-
-        factor = k * delta
-        for vertex_index, gradient_vector in volume_gradient.items():
-            row = index_map.get(vertex_index)
-            if row is not None:
-                grad_arr[row] += factor * gradient_vector
+        energy += body_energy
 
     return float(energy)
