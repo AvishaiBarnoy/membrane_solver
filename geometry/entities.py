@@ -829,6 +829,18 @@ class Mesh:
         new_mesh.macros = copy.deepcopy(getattr(self, "macros", {}))
         return new_mesh
 
+    @property
+    def boundary_vertex_ids(self) -> set[int]:
+        """Return the set of vertex IDs that lie on the boundary of an open mesh."""
+        self.build_connectivity_maps()
+        boundary_vids = set()
+        for eid, facet_set in self.edge_to_facets.items():
+            if len(facet_set) < 2:
+                edge = self.edges[eid]
+                boundary_vids.add(edge.tail_index)
+                boundary_vids.add(edge.head_index)
+        return boundary_vids
+
     def get_edge(self, index: int) -> "Edge":
         if index > 0:
             return self.edges[index]

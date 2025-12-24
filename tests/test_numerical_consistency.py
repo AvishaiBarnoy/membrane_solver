@@ -208,7 +208,52 @@ def test_line_tension_gradient_consistency():
     from modules.energy import line_tension
 
     mesh = create_random_mesh()
+
     # Add line tension energy to edges
+
     for edge in mesh.edges.values():
         edge.options["energy"] = ["line_tension"]
+
     check_gradient_consistency(line_tension, mesh)
+
+
+def test_bending_gradient_consistency():
+    """Strict verification of bending energy gradient."""
+
+    mesh = create_random_mesh()
+
+    check_gradient_consistency(bending, mesh, eps=1e-5, tol=1e-3)
+
+
+def test_single_triangle_bending_is_zero():
+    """Verify that a single triangle (all vertices on boundary) has zero bending energy."""
+
+    mesh = Mesh()
+
+    mesh.vertices[0] = Vertex(0, np.array([0, 0, 0], dtype=float))
+
+    mesh.vertices[1] = Vertex(1, np.array([1, 0, 0], dtype=float))
+
+    mesh.vertices[2] = Vertex(2, np.array([0, 1, 0], dtype=float))
+
+    mesh.edges[1] = Edge(1, 0, 1)
+
+    mesh.edges[2] = Edge(2, 1, 2)
+
+    mesh.edges[3] = Edge(3, 2, 0)
+
+    mesh.facets[0] = Facet(0, [1, 2, 3])
+
+    mesh.build_connectivity_maps()
+
+    mesh.build_facet_vertex_loops()
+
+    gp = GlobalParameters()
+
+    gp.bending_modulus = 1.0
+
+    resolver = ParameterResolver(gp)
+
+    energy, _ = bending.compute_energy_and_gradient(mesh, gp, resolver)
+
+    assert energy == pytest.approx(0.0, abs=1e-10)
