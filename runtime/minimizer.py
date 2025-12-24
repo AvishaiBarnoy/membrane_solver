@@ -82,7 +82,7 @@ STEP SIZE:\t {self.step_size}
         positions = self.mesh.positions_view()
         vertex_ids = self.mesh.vertex_ids
         index_map = self.mesh.vertex_index_to_row
-        grad_arr = np.zeros((len(vertex_ids), 3), dtype=float)
+        grad_arr = np.zeros_like(positions)
 
         total_energy = 0.0
         for module in self.energy_modules:
@@ -114,6 +114,11 @@ STEP SIZE:\t {self.step_size}
             self.constraint_manager.apply_gradient_modifications_array(
                 grad_arr, self.mesh, self.global_params
             )
+
+        # Always zero gradients for fixed vertices in the array pipeline.
+        for row, vidx in enumerate(vertex_ids):
+            if getattr(self.mesh.vertices[int(vidx)], "fixed", False):
+                grad_arr[row] = 0.0
 
         return total_energy, grad_arr
 
@@ -168,16 +173,32 @@ STEP SIZE:\t {self.step_size}
 
     def compute_energy(self):
         """Compute the total energy using the loaded modules."""
+        positions = self.mesh.positions_view()
+        index_map = self.mesh.vertex_index_to_row
+        grad_dummy = np.zeros_like(positions)
+
         total_energy = 0.0
         for module in self.energy_modules:
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                E_mod = module.compute_energy_and_gradient_array(
+                    self.mesh,
+                    self.global_params,
+                    self.param_resolver,
+                    positions=positions,
+                    index_map=index_map,
+                    grad_arr=grad_dummy,
+                )
+                total_energy += float(E_mod)
+                continue
+
             E_mod, _ = module.compute_energy_and_gradient(
                 self.mesh,
                 self.global_params,
                 self.param_resolver,
                 compute_gradient=False,
             )
-            total_energy += E_mod
-        return total_energy
+            total_energy += float(E_mod)
+        return float(total_energy)
 
     def _grad_arr_to_dict(self, grad_arr: np.ndarray) -> Dict[int, np.ndarray]:
         """Convert a dense gradient array into a sparse dict keyed by vertex id."""
@@ -205,15 +226,15 @@ STEP SIZE:\t {self.step_size}
         # Add projection for non-fixed constraints if needed here
 
     def project_constraints_array(self, grad_arr: np.ndarray) -> None:
-        """Array-based variant of ``project_constraints``."""
+        """Array-based variant of ``project_constraints``.
+
+        The array pipeline uses KKT projection for hard constraints. This hook
+        only enforces fixed vertices for compatibility with legacy call sites.
+        """
         vertex_ids = self.mesh.vertex_ids
         for row, vidx in enumerate(vertex_ids):
-            vertex = self.mesh.vertices[vidx]
-            if getattr(vertex, "fixed", False):
+            if getattr(self.mesh.vertices[int(vidx)], "fixed", False):
                 grad_arr[row] = 0.0
-            elif "constraint" in vertex.options:
-                constraint = vertex.options["constraint"]
-                grad_arr[row] = constraint.project_gradient(grad_arr[row])
 
     def _enforce_constraints(self, mesh: Mesh | None = None):
         """Invoke all constraint modules on the current mesh."""

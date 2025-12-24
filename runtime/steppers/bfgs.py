@@ -7,7 +7,10 @@ from typing import Callable, Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh
-from runtime.steppers.line_search import backtracking_line_search
+from runtime.steppers.line_search import (
+    backtracking_line_search,
+    backtracking_line_search_array,
+)
 
 from .base import BaseStepper
 
@@ -67,14 +70,17 @@ class BFGS(BaseStepper):
 
         if isinstance(grad, np.ndarray):
             mesh.build_position_cache()
-            grad_dict = {
-                vid: grad[row]
-                for row, vid in enumerate(mesh.vertex_ids)
-                if np.any(grad[row])
-            }
-            grad = grad_dict
-
-        vids, x, g = self._collect_state(mesh, grad)
+            vertex_ids = tuple(mesh.vertex_ids.tolist())
+            vids = tuple(vid for vid in vertex_ids if not mesh.vertices[vid].fixed)
+            x = np.zeros(3 * len(vids), dtype=float)
+            g = np.zeros_like(x)
+            for i, vid in enumerate(vids):
+                row = mesh.vertex_index_to_row[vid]
+                pos = mesh.vertices[vid].position
+                x[3 * i : 3 * i + 3] = pos
+                g[3 * i : 3 * i + 3] = grad[row]
+        else:
+            vids, x, g = self._collect_state(mesh, grad)
 
         if self._prev_vids is not None and self._prev_vids != vids:
             self.reset()
@@ -96,23 +102,43 @@ class BFGS(BaseStepper):
                 self._H_inv = np.eye(len(x), dtype=float)
 
         direction_vec = -self._H_inv.dot(g)
-        direction: Dict[int, np.ndarray] = {}
-        for i, vid in enumerate(vids):
-            direction[vid] = direction_vec[3 * i : 3 * i + 3]
+        if isinstance(grad, np.ndarray):
+            direction_arr = np.zeros_like(grad)
+            for i, vid in enumerate(vids):
+                row = mesh.vertex_index_to_row[vid]
+                direction_arr[row] = direction_vec[3 * i : 3 * i + 3]
+            success, new_step = backtracking_line_search_array(
+                mesh,
+                direction_arr,
+                grad,
+                step_size,
+                energy_fn,
+                mesh.vertex_ids,
+                max_iter=self.max_iter,
+                beta=self.beta,
+                c=self.c,
+                gamma=self.gamma,
+                alpha_max_factor=self.alpha_max_factor,
+                constraint_enforcer=constraint_enforcer,
+            )
+        else:
+            direction: Dict[int, np.ndarray] = {}
+            for i, vid in enumerate(vids):
+                direction[vid] = direction_vec[3 * i : 3 * i + 3]
 
-        success, new_step = backtracking_line_search(
-            mesh,
-            direction,
-            grad,
-            step_size,
-            energy_fn,
-            max_iter=self.max_iter,
-            beta=self.beta,
-            c=self.c,
-            gamma=self.gamma,
-            alpha_max_factor=self.alpha_max_factor,
-            constraint_enforcer=constraint_enforcer,
-        )
+            success, new_step = backtracking_line_search(
+                mesh,
+                direction,
+                grad,
+                step_size,
+                energy_fn,
+                max_iter=self.max_iter,
+                beta=self.beta,
+                c=self.c,
+                gamma=self.gamma,
+                alpha_max_factor=self.alpha_max_factor,
+                constraint_enforcer=constraint_enforcer,
+            )
 
         if success:
             self._prev_x = x

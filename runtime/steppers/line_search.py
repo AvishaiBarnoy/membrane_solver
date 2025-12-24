@@ -218,8 +218,6 @@ def backtracking_line_search_array(
             vertex = mesh.vertices[vidx]
             disp = alpha * direction[row]
             vertex.position[:] = original_positions[vidx] + disp
-            if hasattr(vertex, "constraint"):
-                vertex.position[:] = vertex.constraint.project_position(vertex.position)
         mesh.increment_version()
 
         if not is_safe_small_step:

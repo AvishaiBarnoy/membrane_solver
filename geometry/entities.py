@@ -1011,7 +1011,8 @@ class Mesh:
             self._facet_loops_version = 0
 
         self.facet_vertex_loops.clear()
-        for fid, facet in self.facets.items():
+        for fid in sorted(self.facets):
+            facet = self.facets[fid]
             v_ids: list[int] = []
             for signed_ei in facet.edge_indices:
                 edge = self.edges[abs(signed_ei)]
@@ -1041,10 +1042,8 @@ class Mesh:
         self.build_position_cache()
 
         tri_facets: list[int] = []
-        # Sort keys to ensure deterministic order (and match iteration order if dicts are ordered)
-        # Using sorted() for safety across Python versions/implementations if needed,
-        # but insertion order is standard now.
-        for fid, loop in self.facet_vertex_loops.items():
+        for fid in sorted(self.facet_vertex_loops):
+            loop = self.facet_vertex_loops[fid]
             if len(loop) == 3:
                 tri_facets.append(fid)
 
