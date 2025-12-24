@@ -20,6 +20,14 @@ class RefineCommand(Command):
             context.mesh = refine_triangle_mesh(context.mesh)
             context.minimizer.mesh = context.mesh
             context.minimizer.enforce_constraints_after_mesh_ops(context.mesh)
+            if getattr(context.minimizer, "live_vis", False):
+                from visualization.plotting import update_live_vis
+
+                state = getattr(context.minimizer, "live_vis_state", None)
+                state = update_live_vis(
+                    context.mesh, state=state, title=f"Refine {i + 1}/{count}"
+                )
+                context.minimizer.live_vis_state = state
         logger.info("Mesh refinement complete after %d pass(es).", count)
 
 
@@ -33,6 +41,12 @@ class VertexAverageCommand(Command):
             vertex_average(context.mesh)
         logger.info("Vertex averaging done.")
         context.minimizer.enforce_constraints_after_mesh_ops(context.mesh)
+        if getattr(context.minimizer, "live_vis", False):
+            from visualization.plotting import update_live_vis
+
+            state = getattr(context.minimizer, "live_vis_state", None)
+            state = update_live_vis(context.mesh, state=state, title="Vertex average")
+            context.minimizer.live_vis_state = state
 
 
 class EquiangulateCommand(Command):
@@ -42,3 +56,9 @@ class EquiangulateCommand(Command):
         context.minimizer.mesh = context.mesh
         context.minimizer.enforce_constraints_after_mesh_ops(context.mesh)
         logger.info("Equiangulation complete.")
+        if getattr(context.minimizer, "live_vis", False):
+            from visualization.plotting import update_live_vis
+
+            state = getattr(context.minimizer, "live_vis_state", None)
+            state = update_live_vis(context.mesh, state=state, title="Equiangulate")
+            context.minimizer.live_vis_state = state

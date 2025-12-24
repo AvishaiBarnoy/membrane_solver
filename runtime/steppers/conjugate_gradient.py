@@ -6,7 +6,10 @@ from typing import Callable, Dict
 import numpy as np
 
 from geometry.entities import Mesh
-from runtime.steppers.line_search import backtracking_line_search
+from runtime.steppers.line_search import (
+    backtracking_line_search,
+    backtracking_line_search_array,
+)
 
 from .base import BaseStepper
 
@@ -26,6 +29,9 @@ class ConjugateGradient(BaseStepper):
     ) -> None:
         self.prev_grad: Dict[int, np.ndarray] = {}
         self.prev_dir: Dict[int, np.ndarray] = {}
+        self.prev_grad_arr: np.ndarray | None = None
+        self.prev_dir_arr: np.ndarray | None = None
+        self.prev_vertex_ids: tuple[int, ...] | None = None
         self.restart_interval = restart_interval
         self.iter_count = 0
         self.precondition = precondition
@@ -38,6 +44,9 @@ class ConjugateGradient(BaseStepper):
     def reset(self):
         self.prev_grad.clear()
         self.prev_dir.clear()
+        self.prev_grad_arr = None
+        self.prev_dir_arr = None
+        self.prev_vertex_ids = None
         self.iter_count = 0
 
     def step(
@@ -49,6 +58,61 @@ class ConjugateGradient(BaseStepper):
         constraint_enforcer: Callable[[Mesh], None] | None = None,
     ) -> tuple[bool, float]:
         """Take one conjugate gradient step with line search."""
+
+        if isinstance(grad, np.ndarray):
+            mesh.build_position_cache()
+            vertex_ids = tuple(mesh.vertex_ids.tolist())
+            if self.prev_vertex_ids is None or self.prev_vertex_ids != vertex_ids:
+                self.prev_grad_arr = None
+                self.prev_dir_arr = None
+                self.prev_vertex_ids = vertex_ids
+                self.iter_count = 0
+
+            direction_arr = np.zeros_like(grad)
+            for row, vidx in enumerate(vertex_ids):
+                if getattr(mesh.vertices[vidx], "fixed", False):
+                    continue
+                g = grad[row]
+                if self.precondition:
+                    g = g / (np.linalg.norm(g) + 1e-8)
+
+                if (
+                    self.prev_grad_arr is None
+                    or self.iter_count % self.restart_interval == 0
+                ):
+                    d = -g
+                else:
+                    prev_g = self.prev_grad_arr[row]
+                    prev_d = self.prev_dir_arr[row]
+                    beta_pr = np.dot(g, g - prev_g) / (np.dot(prev_g, prev_g) + 1e-20)
+                    if beta_pr < 0:
+                        d = -g
+                    else:
+                        d = -g + beta_pr * prev_d
+
+                direction_arr[row] = d
+
+            success, new_step = backtracking_line_search_array(
+                mesh,
+                direction_arr,
+                grad,
+                step_size,
+                energy_fn,
+                vertex_ids,
+                max_iter=self.max_iter,
+                beta=self.beta,
+                c=self.c,
+                gamma=self.gamma,
+                alpha_max_factor=self.alpha_max_factor,
+                constraint_enforcer=constraint_enforcer,
+            )
+
+            if success:
+                self.prev_grad_arr = grad.copy()
+                self.prev_dir_arr = direction_arr.copy()
+                self.iter_count += 1
+
+            return success, new_step
 
         direction: Dict[int, np.ndarray] = {}
 
@@ -97,9 +161,6 @@ class ConjugateGradient(BaseStepper):
                 self.prev_dir[vidx] = d.copy()
             self.iter_count += 1
 
-        # On failure we deliberately return the original ``step_size`` so that
-        # callers controlling the outer loop can decide how (and whether) to
-        # adapt the step size. This also preserves the previous iteration
-        # history, which is important for tests that expect CG state to remain
-        # unchanged after an unsuccessful line search.
-        return success, new_step if success else step_size
+        # Return the step size suggested by the line search, even on failure,
+        # so callers can shrink toward a zero-step cutoff if needed.
+        return success, new_step

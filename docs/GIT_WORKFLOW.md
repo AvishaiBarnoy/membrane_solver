@@ -42,6 +42,11 @@
 
   You can repeat steps 3–4 as often as you like (“save points” on this branch).
 
+  In case where you want to add more staged file without chagning the last
+  comit mesage you can run:
+
+  git commit --amend --no-edit
+
   5. Push and share (optional)
   If you’re using GitHub or another remote, push the branch:
 

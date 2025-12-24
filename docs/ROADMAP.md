@@ -105,7 +105,7 @@ intended for development and planning; users should consult `README.md` and
     - [ ] Add `history` command to replay interactive session.
 
 16. Performance & Architecture
-    - [ ] **Hybrid SoA Architecture**: Implement "Scatter-Gather" pattern where optimization runs on dense arrays (Structure of Arrays) while topology remains object-oriented.
+    - [x] **Hybrid SoA Architecture**: Implement "Scatter-Gather" pattern where optimization runs on dense arrays (Structure of Arrays) while topology remains object-oriented.
     - [ ] **Compiled Extensions**: Port the hot-loop `compute_energy_and_gradient` to Fortran (f2py) or Rust (PyO3) for ~100x speedup.
     - [ ] **Parallelism**: Explore OpenMP for energy summation.
     - [ ] Re-evaluate Conjugate Gradient defaults once stability wins are locked in; keep GD as the conservative baseline.
@@ -113,6 +113,8 @@ intended for development and planning; users should consult `README.md` and
 17. Code Quality
     - [ ] Refactor `fixed` constraints to be core entity properties (removing them from the constraint module list).
     - [x] Consolidate constraint gradient handling into the KKT projection path.
+    - [x] Expression-based energies/constraints.
+        - [x] Add expression `defines` to share symbolic constants across input files.
     - [ ] Add regression testing for performance (CI integration with thresholds).
     - [x] Add targeted unit tests for core helpers (volume penalties, edge-index exceptions).
     - [ ] Continue raising coverage around energy/constraint managers, CLI commands, and visualization glue.

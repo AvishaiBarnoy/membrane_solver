@@ -7,7 +7,10 @@ from typing import Callable, Dict
 import numpy as np
 
 from geometry.entities import Mesh
-from runtime.steppers.line_search import backtracking_line_search
+from runtime.steppers.line_search import (
+    backtracking_line_search,
+    backtracking_line_search_array,
+)
 
 from .base import BaseStepper
 
@@ -38,6 +41,24 @@ class GradientDescent(BaseStepper):
         constraint_enforcer: Callable[[Mesh], None] | None = None,
     ) -> tuple[bool, float]:
         """Apply one gradient descent step with backtracking line search."""
+
+        if isinstance(grad, np.ndarray):
+            direction = -grad
+            mesh.build_position_cache()
+            return backtracking_line_search_array(
+                mesh,
+                direction,
+                grad,
+                step_size,
+                energy_fn,
+                mesh.vertex_ids,
+                max_iter=self.max_iter,
+                beta=self.beta,
+                c=self.c,
+                gamma=self.gamma,
+                alpha_max_factor=self.alpha_max_factor,
+                constraint_enforcer=constraint_enforcer,
+            )
 
         direction = {vidx: -g for vidx, g in grad.items()}
         return backtracking_line_search(

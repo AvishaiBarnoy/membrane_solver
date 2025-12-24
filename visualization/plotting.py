@@ -171,3 +171,29 @@ def plot_geometry(
 
     if show:
         plt.show()
+
+
+def update_live_vis(
+    mesh: Mesh,
+    *,
+    state: Optional[Dict[str, Any]] = None,
+    title: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Update or create a live visualization window for a mesh."""
+    import matplotlib.pyplot as plt
+
+    if state is None:
+        plt.ion()
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection="3d")
+    else:
+        fig = state["fig"]
+        ax = state["ax"]
+        ax.cla()
+
+    plot_geometry(mesh, ax=ax, show=False)
+    if title:
+        ax.set_title(title)
+    fig.canvas.draw_idle()
+    plt.pause(0.001)
+    return {"fig": fig, "ax": ax}

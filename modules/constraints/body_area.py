@@ -10,13 +10,20 @@ logger = logging.getLogger("membrane_solver")
 def constraint_gradients(mesh, _global_params) -> list[Dict[int, np.ndarray]] | None:
     """Return constraint gradients for body target areas."""
     gradients: list[Dict[int, np.ndarray]] = []
+    positions = None
+    index_map = None
+    if getattr(mesh, "facet_vertex_loops", None):
+        positions = mesh.positions_view()
+        index_map = mesh.vertex_index_to_row
     for body in mesh.bodies.values():
         if body.options.get("target_area") is None:
             continue
         gA = {}
         for facet_idx in body.facet_indices:
             facet = mesh.facets[facet_idx]
-            _, g_f = facet.compute_area_and_gradient(mesh)
+            _, g_f = facet.compute_area_and_gradient(
+                mesh, positions=positions, index_map=index_map
+            )
             for vidx, vec in g_f.items():
                 if vidx not in gA:
                     gA[vidx] = vec.copy()
@@ -27,7 +34,7 @@ def constraint_gradients(mesh, _global_params) -> list[Dict[int, np.ndarray]] | 
     return gradients or None
 
 
-def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 20) -> None:
+def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 20, **_kwargs) -> None:
     """Enforce hard surface-area constraints on bodies using Lagrange multipliers.
 
     Each body may define ``target_area`` in ``body.options``. After each call,
@@ -35,23 +42,32 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 20) -> None:
     ``tol``) by displacing vertices along the aggregated area gradient.
     """
 
+    positions = None
+    index_map = None
+    if getattr(mesh, "facet_vertex_loops", None):
+        positions = mesh.positions_view()
+        index_map = mesh.vertex_index_to_row
+
     for body in mesh.bodies.values():
         target_area = body.options.get("target_area")
         if target_area is None:
             continue
 
         for _ in range(max_iter):
-            current_area = body.compute_surface_area(mesh)
-            delta = current_area - target_area
-            if abs(delta) < tol:
-                break
-
+            current_area = 0.0
             grad: Dict[int, np.ndarray] = defaultdict(lambda: np.zeros(3))
             for facet_idx in body.facet_indices:
                 facet = mesh.facets[facet_idx]
-                facet_grad = facet.compute_area_gradient(mesh)
+                area, facet_grad = facet.compute_area_and_gradient(
+                    mesh, positions=positions, index_map=index_map
+                )
+                current_area += area
                 for vidx, vec in facet_grad.items():
                     grad[vidx] += vec
+
+            delta = current_area - target_area
+            if abs(delta) < tol:
+                break
 
             norm_sq = sum(np.dot(vec, vec) for vec in grad.values())
             if norm_sq < 1e-18:
@@ -76,6 +92,8 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 20) -> None:
                 vertex.position -= lam * gvec
 
             mesh.increment_version()
+            if positions is not None:
+                positions = mesh.positions_view()
 
 
 __all__ = ["enforce_constraint", "constraint_gradients"]

@@ -140,6 +140,85 @@ class ConstraintModuleManager:
                 if vidx in grad:
                     grad[vidx] -= lam_i * gvec
 
+    def apply_gradient_modifications_array(self, grad_arr, mesh, global_params):
+        """Array-based variant of ``apply_gradient_modifications``."""
+        kkt_candidates: list[tuple[str, list[dict[int, np.ndarray]]]] = []
+        for name, module in self.modules.items():
+            g_list = None
+            if hasattr(module, "constraint_gradients"):
+                try:
+                    g_list = module.constraint_gradients(mesh, global_params)
+                except TypeError:
+                    g_list = module.constraint_gradients(mesh)
+                if g_list:
+                    kkt_candidates.append((name, g_list))
+                    continue
+            if hasattr(module, "constraint_gradient"):
+                try:
+                    gC = module.constraint_gradient(mesh, global_params)
+                except TypeError:
+                    gC = module.constraint_gradient(mesh)
+                if gC:
+                    kkt_candidates.append((name, [gC]))
+            if (
+                name not in self._warned_no_grad
+                and not hasattr(module, "constraint_gradients")
+                and not hasattr(module, "constraint_gradient")
+            ):
+                logger.warning(
+                    "Constraint module '%s' lacks constraint gradients; "
+                    "it will not participate in KKT projection.",
+                    name,
+                )
+                self._warned_no_grad.add(name)
+
+        if not kkt_candidates:
+            return
+
+        mesh.build_position_cache()
+        index_map = mesh.vertex_index_to_row
+
+        all_constraints: list[np.ndarray] = []
+        for _, grads in kkt_candidates:
+            for gC in grads:
+                gC_arr = np.zeros_like(grad_arr)
+                for vidx, gvec in gC.items():
+                    row = index_map.get(vidx)
+                    if row is None:
+                        continue
+                    gC_arr[row] += gvec
+                all_constraints.append(gC_arr)
+
+        k = len(all_constraints)
+        if k == 1:
+            gC_arr = all_constraints[0]
+            norm_sq = float(np.sum(gC_arr * gC_arr))
+            if norm_sq > 1e-18:
+                lam = float(np.sum(grad_arr * gC_arr)) / norm_sq
+                grad_arr -= lam * gC_arr
+            return
+
+        A = np.zeros((k, k), dtype=float)
+        b = np.zeros(k, dtype=float)
+        for i, gCi in enumerate(all_constraints):
+            b[i] = float(np.sum(grad_arr * gCi))
+            for j in range(i, k):
+                gCj = all_constraints[j]
+                A[i, j] = float(np.sum(gCi * gCj))
+                if j != i:
+                    A[j, i] = A[i, j]
+
+        A[np.diag_indices_from(A)] += 1e-18
+        try:
+            lam = np.linalg.solve(A, b)
+        except np.linalg.LinAlgError:
+            return
+
+        for gCi, lam_i in zip(all_constraints, lam):
+            if lam_i == 0.0:
+                continue
+            grad_arr -= lam_i * gCi
+
     def enforce_all(self, mesh, **kwargs):
         """Invoke ``enforce_constraint`` on all loaded constraint modules.
 

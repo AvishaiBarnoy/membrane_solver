@@ -137,6 +137,22 @@ def test_stepper_increments_version():
     assert mesh._version > initial_version
 
 
+def test_triangle_row_cache_reused_across_position_updates():
+    data = cube_soft_volume_input("lagrange")
+    mesh = parse_geometry(data)
+    mesh.build_facet_vertex_loops()
+
+    tri_rows_1, facets_1 = mesh.triangle_row_cache()
+    assert tri_rows_1 is not None
+
+    mesh.vertices[0].position += np.array([0.1, 0.0, 0.0])
+    mesh.increment_version()
+
+    tri_rows_2, facets_2 = mesh.triangle_row_cache()
+    assert tri_rows_2 is tri_rows_1
+    assert facets_2 == facets_1
+
+
 def test_vertex_average_increments_version():
     from runtime.vertex_average import vertex_average
 

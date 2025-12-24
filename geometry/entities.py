@@ -265,10 +265,16 @@ class Facet:
         else:
             v_ids = []
             for signed_ei in self.edge_indices:
-                edge = mesh.get_edge(signed_ei)
-                tail = edge.tail_index
-                if not v_ids or v_ids[-1] != tail:
+                edge = mesh.edges[abs(signed_ei)]
+                if signed_ei > 0:
+                    tail, head = edge.tail_index, edge.head_index
+                else:
+                    tail, head = edge.head_index, edge.tail_index
+                if not v_ids:
                     v_ids.append(tail)
+                v_ids.append(head)
+            if len(v_ids) > 1:
+                v_ids = v_ids[:-1]
 
         grad: Dict[int, np.ndarray] = {i: np.zeros(3) for i in v_ids}
         if len(v_ids) < 3:
@@ -377,6 +383,10 @@ class Body:
             tri_rows, _ = mesh.triangle_row_cache()
 
             if body_rows is not None and tri_rows is not None:
+                # Get triangle vertex indices: (N_tri, 3)
+                # These are indices into the positions array (rows)
+                # tri_rows is (Total_Tri, 3), body_rows is (N_body_tri,)
+                # So we want tri_rows[body_rows] -> (N_body_tri, 3)
                 indices = tri_rows[body_rows]
 
                 v0 = positions[indices[:, 0]]
@@ -404,9 +414,15 @@ class Body:
                 v_ids = []
                 for signed_ei in facet.edge_indices:
                     edge = mesh.edges[abs(signed_ei)]
-                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                    if not v_ids or v_ids[-1] != tail:
+                    if signed_ei > 0:
+                        tail, head = edge.tail_index, edge.head_index
+                    else:
+                        tail, head = edge.head_index, edge.tail_index
+                    if not v_ids:
                         v_ids.append(tail)
+                    v_ids.append(head)
+                if len(v_ids) > 1:
+                    v_ids = v_ids[:-1]
 
             v_pos = np.array([mesh.vertices[i].position for i in v_ids])
             v0 = v_pos[0]
@@ -437,10 +453,15 @@ class Body:
             v1 = positions[indices[:, 1]]
             v2 = positions[indices[:, 2]]
 
+            # Gradients for each vertex of the triangle
+            # grad_v0 = (v1 x v2) / 6
+            # grad_v1 = (v2 x v0) / 6
+            # grad_v2 = (v0 x v1) / 6
             g0 = _fast_cross(v1, v2) * (factor / 6.0)
             g1 = _fast_cross(v2, v0) * (factor / 6.0)
             g2 = _fast_cross(v0, v1) * (factor / 6.0)
 
+            # Scatter add
             np.add.at(grad_arr, indices[:, 0], g0)
             np.add.at(grad_arr, indices[:, 1], g1)
             np.add.at(grad_arr, indices[:, 2], g2)
@@ -448,6 +469,8 @@ class Body:
             # Fallback path: Compute dictionary and scatter
             _, grad_dict = self.compute_volume_and_gradient(mesh)
 
+            # We need to map vertex IDs to rows in grad_arr
+            # mesh.vertex_index_to_row should be valid if positions is valid
             idx_map = mesh.vertex_index_to_row
             for vid, g in grad_dict.items():
                 row = idx_map.get(vid)
@@ -552,6 +575,8 @@ class Body:
                     tail = edge.tail_index if signed_ei > 0 else edge.head_index
                     if not v_ids or v_ids[-1] != tail:
                         v_ids.append(tail)
+                if len(v_ids) > 1:
+                    v_ids = v_ids[:-1]
 
             if len(v_ids) < 3:
                 continue
@@ -586,9 +611,15 @@ class Body:
                 v_ids = []
                 for signed_ei in facet.edge_indices:
                     edge = mesh.edges[abs(signed_ei)]
-                    tail = edge.tail_index if signed_ei > 0 else edge.head_index
-                    if not v_ids or v_ids[-1] != tail:
+                    if signed_ei > 0:
+                        tail, head = edge.tail_index, edge.head_index
+                    else:
+                        tail, head = edge.head_index, edge.tail_index
+                    if not v_ids:
                         v_ids.append(tail)
+                    v_ids.append(head)
+                if len(v_ids) > 1:
+                    v_ids = v_ids[:-1]
 
             v_pos = np.array([mesh.vertices[i].position for i in v_ids])
             v0 = v_pos[0]
@@ -949,14 +980,22 @@ class Mesh:
         import numpy as np
 
         self.build_position_cache()
-        # Optimization: pre-allocate to avoid creating a large intermediate list
-        n_verts = len(self.vertex_ids)
-        pos = np.empty((n_verts, 3), dtype=float)
+        if (
+            self._positions_cache is None
+            or self._positions_cache_version != self._version
+            or len(self._positions_cache) != len(self.vertex_ids)
+        ):
+            n_verts = len(self.vertex_ids)
+            if self._positions_cache is None or self._positions_cache.shape != (
+                n_verts,
+                3,
+            ):
+                self._positions_cache = np.empty((n_verts, 3), dtype=float)
+            for i, vid in enumerate(self.vertex_ids):
+                self._positions_cache[i] = self.vertices[vid].position
+            self._positions_cache_version = self._version
 
-        for i, vid in enumerate(self.vertex_ids):
-            pos[i] = self.vertices[vid].position
-
-        return pos
+        return self._positions_cache
 
     def build_facet_vertex_loops(self):
         """Precompute ordered vertex loops for all facets.

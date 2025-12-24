@@ -145,6 +145,7 @@ Interactive commands:
 - `tX`
   Set step size to `X` (e.g. `t1e-3`).
 
+
 - `r` / `rN`
   Refine the mesh (triangle refinement + polygonal refinement). Provide a
   number (`r3`) to repeat the refinement pass multiple times. After each pass
@@ -159,7 +160,11 @@ Interactive commands:
   constraint re‑enforcement.
 
 - `properties` / `props` / `p` / `i`
-  Print physical properties (global/per‑body area, volume, surface Rg).
+  Print physical properties (global/per‑body area, volume, surface Rg, target volume).
+
+- `benchmarks/suite.py --profile`
+  Profile each benchmark case and save per-case `.pstats` files (plus optional
+  text summaries via `--profile-top`) under `benchmarks/outputs/profiles` by default.
 
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.
@@ -176,6 +181,21 @@ Interactive commands:
 - `MACRO_NAME`
   If the input defines `macros`, typing a macro name runs its command sequence.
 
+## Expression-based energy/constraints
+
+Entities may specify `expression` (energy) or `constraint_expression` with a
+`constraint_target` (hard constraint). Expressions can reference `x`, `y`, `z`,
+`x1/x2/x3`, global parameters, and safe math functions (`sin`, `cos`, `sqrt`,
+etc.).
+
+Default measures:
+- vertices: point
+- edges: length
+- facets: area
+- bodies: volume
+
+Override with `expression_measure` or `constraint_measure`.
+
 > **Tip: Avoiding mesh tangling**
 > When running large deformations (e.g. relaxing a square to a circle), avoid
 > running many minimization steps (`g50`) in a single block immediately after
@@ -189,6 +209,7 @@ Interactive commands:
 ## 4. Error handling & diagnostics
 
 - Edge and facet connectivity strictly use **1-based** IDs. If a command or mesh attempts to access edge `0` (or a missing index), the solver raises `InvalidEdgeIndexError` from `exceptions.py`, making failures easier to trace in logs and in tests (`tests/test_exceptions.py`).
+- A fixed edge implies fixed endpoints: when an edge is marked `fixed`, both of its vertices are treated as fixed for minimization and are copied as fixed during refinement.
 - Volume penalty calculations are covered by `tests/test_volume_energy.py`, which exercises both energy and gradient paths so future modules can safely rely on the helpers in `modules/energy/volume.py`.
 - When `parse_geometry` detects NaN/inf vertex coordinates or edges that reference unknown vertices, it aborts immediately and writes a detailed message to the configured log file (`--log`), helping diagnose malformed inputs.
 
@@ -289,6 +310,20 @@ Example (`catenoid_good_min.json` style):
 ```
 
 Any options provided in the entity's dictionary will merge with and override the preset values.
+
+**Defines (Expression Symbols):**
+For expression-based energies/constraints, you can define reusable symbols in a top-level `defines` block. These are evaluated as expressions using existing global parameters and other defines.
+
+Example:
+
+```yaml
+global_parameters:
+  angle: 60.0
+defines:
+  WALLT: "-cos(angle*pi/180)"
+edges:
+  1: [0, 1, {expression: "-(WALLT*y)", expression_measure: "length"}]
+```
 
 ---
 

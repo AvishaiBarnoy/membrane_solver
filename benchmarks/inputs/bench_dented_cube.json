@@ -5,24 +5,24 @@
       "constraints": ["pin_to_circle"],
       "pin_to_circle_normal": [0, 1, 0],
       "pin_to_circle_point": [0.5, 0.0, 0.5],
-      "pin_to_circle_radius": 0.2
+      "pin_to_circle_radius": 0.02
     }
   },
   "vertices": [
-    [0, 0, 0] ,
-    [1, 0, 0],
-    [1, 0, 1],
-    [0, 0, 1],
+    [0, 0, 0, {"fixed": true}],
+    [1, 0, 0, {"fixed": true}],
+    [1, 0, 1, {"fixed": true}],
+    [0, 0, 1, {"fixed": true}],
     [0, 1, 1],
     [0, 1, 0],
     [1, 1, 0],
     [1, 1, 1]
   ],
   "edges": [
-    [0, 1, {"fixed": true, "preset": "dent_ring"}],
-    [1, 2, {"fixed": true, "preset": "dent_ring"}],
-    [2, 3, {"fixed": true, "preset": "dent_ring"}],
-    [3, 0, {"fixed": true, "preset": "dent_ring"}],
+    [0, 1, {"preset": "dent_ring"}],
+    [1, 2, {"preset": "dent_ring"}],
+    [2, 3, {"preset": "dent_ring"}],
+    [3, 0, {"preset": "dent_ring"}],
     [4, 5],
     [5, 6],
     [6, 7],
@@ -47,19 +47,14 @@
     "bending_modulus": 0,
     "gaussian_modulus": 0
   },
-  "macros": {"gogo":[
+  "instructions": [
     "g20", "r", "u", "g20",
     "set body 0 target_volume 1.2",
     "g20",
-    "set body 0 target_volume 1.4",
+    "cg",
     "g20",
-    "set body 0 target_volume 1.6",
     "g20", "r", "u", "g20",
-    "set body 0 target_volume 1.8",
     "g30",
-    "set body 0 target_volume 2.2",
-    "g50", "V2",
-    "set body 0 target_volume 2.6",
-    "g50"]
-  }
+    "g50", "V2"
+  ]
 }

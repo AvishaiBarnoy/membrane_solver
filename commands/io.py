@@ -43,8 +43,12 @@ class PropertiesCommand(Command):
                 body_vol = body.compute_volume(mesh)
                 body_area = body.compute_surface_area(mesh)
                 body_rg = mesh.compute_surface_radius_of_gyration(body.facet_indices)
+                target_volume = body.target_volume
+                if target_volume is None:
+                    target_volume = body.options.get("target_volume")
                 print(
                     f"  Body {body_idx}: volume = {body_vol:.6f}, "
                     f"surface area = {body_area:.6f}, "
-                    f"surface Rg = {body_rg:.6f}"
+                    f"surface Rg = {body_rg:.6f}, "
+                    f"target volume = {target_volume}"
                 )
