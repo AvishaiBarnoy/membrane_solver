@@ -317,10 +317,44 @@ class Body:
     )
     _cached_version: int = field(init=False, default=-1)
 
+    # Cache for vectorized operations
+    _cached_body_rows: Optional[np.ndarray] = field(init=False, default=None)
+    _cached_body_rows_version: int = field(init=False, default=-1)
+
     def copy(self):
         return Body(
             self.index, self.facet_indices[:], self.target_volume, self.options.copy()
         )
+
+    def _get_triangle_rows(self, mesh: "Mesh") -> Optional[np.ndarray]:
+        """
+        Get the indices of rows in mesh.triangle_row_cache that belong to this body.
+        Returns None if not all facets are triangles or if cache is invalid.
+        """
+        if (
+            self._cached_body_rows is not None
+            and self._cached_body_rows_version == mesh._facet_loops_version
+        ):
+            return self._cached_body_rows
+
+        # Ensure mesh cache is built
+        tri_rows, _ = mesh.triangle_row_cache()
+        if tri_rows is None:
+            return None
+
+        # Map our facets to rows
+        facet_map = mesh.facet_to_triangle_row
+        rows = []
+        for fid in self.facet_indices:
+            row_idx = facet_map.get(fid)
+            if row_idx is None:
+                # This facet is not a triangle or not in cache
+                return None
+            rows.append(row_idx)
+
+        self._cached_body_rows = np.array(rows, dtype=int)
+        self._cached_body_rows_version = mesh._facet_loops_version
+        return self._cached_body_rows
 
     def compute_volume(
         self,
@@ -333,33 +367,29 @@ class Body:
 
         volume = 0.0
 
-        # Batched path: requires positions array and all facets to be triangles
-        if positions is not None and index_map is not None:
-            n_facets = len(self.facet_indices)
-            tri_indices = np.empty((n_facets, 3), dtype=int)
-            valid_count = 0
-            all_triangles = True
+        # Try fully vectorized path first (fastest)
+        # We need positions array and valid triangle rows for this body
+        if positions is None and getattr(mesh, "facet_vertex_loops", None):
+            positions = mesh.positions_view()
 
-            for facet_idx in self.facet_indices:
-                loop = mesh.facet_vertex_loops.get(facet_idx)
-                if loop is None or len(loop) != 3:
-                    all_triangles = False
-                    break
-                tri_indices[valid_count, 0] = index_map[int(loop[0])]
-                tri_indices[valid_count, 1] = index_map[int(loop[1])]
-                tri_indices[valid_count, 2] = index_map[int(loop[2])]
-                valid_count += 1
+        if positions is not None:
+            body_rows = self._get_triangle_rows(mesh)
+            tri_rows, _ = mesh.triangle_row_cache()
 
-            if all_triangles:
-                v0 = positions[tri_indices[:valid_count, 0]]
-                v1 = positions[tri_indices[:valid_count, 1]]
-                v2 = positions[tri_indices[:valid_count, 2]]
+            if body_rows is not None and tri_rows is not None:
+                indices = tri_rows[body_rows]
+
+                v0 = positions[indices[:, 0]]
+                v1 = positions[indices[:, 1]]
+                v2 = positions[indices[:, 2]]
 
                 cross = _fast_cross(v1, v2)
-                # Volume contribution is dot(cross(v1, v2), v0) / 6
-                # using einsum for dot product along axis 1
                 vol_contrib = np.einsum("ij,ij->i", cross, v0)
-                return float(vol_contrib.sum() / 6.0)
+                volume = float(vol_contrib.sum() / 6.0)
+
+                self._cached_volume = volume
+                self._cached_version = mesh._version
+                return volume
 
         # Fallback path (polygonal or no batched inputs)
         for facet_idx in self.facet_indices:
@@ -378,16 +408,113 @@ class Body:
                     if not v_ids or v_ids[-1] != tail:
                         v_ids.append(tail)
 
-            # ordered vertex positions
             v_pos = np.array([mesh.vertices[i].position for i in v_ids])
             v0 = v_pos[0]
-
-            # triangulate into (v0, v_i, v_{i+1}) for i=1..len-2 using vectorized operations
             v1 = v_pos[1:-1]
             v2 = v_pos[2:]
             cross_prod = _fast_cross(v1, v2)
             volume += np.dot(cross_prod, v0).sum() / 6.0
+
+        self._cached_volume = volume
+        self._cached_version = mesh._version
         return volume
+
+    def accumulate_volume_gradient(
+        self, mesh: "Mesh", positions: np.ndarray, grad_arr: np.ndarray, factor: float
+    ):
+        """
+        Compute volume gradient and add (factor * grad) directly to grad_arr.
+        Assumes positions and grad_arr are aligned with mesh.vertex_ids.
+        """
+        body_rows = self._get_triangle_rows(mesh)
+        tri_rows, _ = mesh.triangle_row_cache()
+
+        if body_rows is not None and tri_rows is not None:
+            # Vectorized path
+            indices = tri_rows[body_rows]  # (N_tri, 3)
+
+            v0 = positions[indices[:, 0]]
+            v1 = positions[indices[:, 1]]
+            v2 = positions[indices[:, 2]]
+
+            g0 = _fast_cross(v1, v2) * (factor / 6.0)
+            g1 = _fast_cross(v2, v0) * (factor / 6.0)
+            g2 = _fast_cross(v0, v1) * (factor / 6.0)
+
+            np.add.at(grad_arr, indices[:, 0], g0)
+            np.add.at(grad_arr, indices[:, 1], g1)
+            np.add.at(grad_arr, indices[:, 2], g2)
+        else:
+            # Fallback path: Compute dictionary and scatter
+            _, grad_dict = self.compute_volume_and_gradient(mesh)
+
+            idx_map = mesh.vertex_index_to_row
+            for vid, g in grad_dict.items():
+                row = idx_map.get(vid)
+                if row is not None:
+                    grad_arr[row] += factor * g
+
+    def compute_volume_and_accumulate_gradient(
+        self,
+        mesh: "Mesh",
+        positions: np.ndarray,
+        grad_arr: np.ndarray,
+        stiffness_k: float,
+        target_volume: float,
+    ) -> tuple[float, float]:
+        """
+        Combined operation to compute volume, energy, and accumulate gradients.
+        Avoids redundant memory gathers by doing everything in one pass.
+        Returns (volume, energy).
+        """
+        body_rows = self._get_triangle_rows(mesh)
+        tri_rows, _ = mesh.triangle_row_cache()
+
+        if body_rows is not None and tri_rows is not None:
+            # Vectorized path
+            indices = tri_rows[body_rows]  # (N_tri, 3)
+
+            # GATHER ONCE
+            v0 = positions[indices[:, 0]]
+            v1 = positions[indices[:, 1]]
+            v2 = positions[indices[:, 2]]
+
+            cross_v1_v2 = _fast_cross(v1, v2)
+
+            # Volume
+            vol_contrib = np.einsum("ij,ij->i", cross_v1_v2, v0)
+            volume = float(vol_contrib.sum() / 6.0)
+
+            # Energy
+            delta = volume - target_volume
+            energy = 0.5 * stiffness_k * delta**2
+
+            # Gradient
+            factor = stiffness_k * delta
+
+            # Reuse cross_v1_v2 for g0
+            g0 = cross_v1_v2 * (factor / 6.0)
+            g1 = _fast_cross(v2, v0) * (factor / 6.0)
+            g2 = _fast_cross(v0, v1) * (factor / 6.0)
+
+            # Scatter add
+            np.add.at(grad_arr, indices[:, 0], g0)
+            np.add.at(grad_arr, indices[:, 1], g1)
+            np.add.at(grad_arr, indices[:, 2], g2)
+
+            # Cache the volume result
+            self._cached_volume = volume
+            self._cached_version = mesh._version
+
+            return volume, energy
+        else:
+            # Fallback
+            vol = self.compute_volume(mesh, positions)
+            delta = vol - target_volume
+            energy = 0.5 * stiffness_k * delta**2
+            factor = stiffness_k * delta
+            self.accumulate_volume_gradient(mesh, positions, grad_arr, factor)
+            return vol, energy
 
     def compute_volume_gradient(self, mesh: "Mesh") -> Dict[int, np.ndarray]:
         """
@@ -623,10 +750,39 @@ class Mesh:
     vertex_index_to_row: Dict[int, int] = field(default_factory=dict)
     facet_vertex_loops: Dict[int, "np.ndarray"] = field(default_factory=dict)
 
+    _positions_cache: "np.ndarray | None" = None
+    _positions_cache_version: int = -1
+    _triangle_rows_cache: "np.ndarray | None" = None
+    _triangle_rows_cache_version: int = -1
+    _triangle_row_facets: list[int] = field(default_factory=list)
+    _facet_loops_version: int = 0
+    _facet_to_row_cache: Dict[int, int] = field(default_factory=dict)
+    _facet_to_row_version: int = -1
+
     _version: int = 0
 
     def increment_version(self):
         self._version += 1
+
+    @property
+    def facet_to_triangle_row(self) -> Dict[int, int]:
+        """
+        Return a map from facet_index to row index in the triangle_rows_cache.
+        """
+        if (
+            self._facet_to_row_version == self._facet_loops_version
+            and self._facet_to_row_cache
+        ):
+            return self._facet_to_row_cache
+
+        # Ensure cache is built
+        self.triangle_row_cache()
+
+        self._facet_to_row_cache = {
+            fid: i for i, fid in enumerate(self._triangle_row_facets)
+        }
+        self._facet_to_row_version = self._facet_loops_version
+        return self._facet_to_row_cache
 
     def copy(self):
         import copy
@@ -810,6 +966,11 @@ class Mesh:
         """
         import numpy as np
 
+        if not hasattr(self, "facet_vertex_loops"):
+            self.facet_vertex_loops = {}
+        if not hasattr(self, "_facet_loops_version"):
+            self._facet_loops_version = 0
+
         self.facet_vertex_loops.clear()
         for fid, facet in self.facets.items():
             v_ids: list[int] = []
@@ -820,6 +981,51 @@ class Mesh:
                     v_ids.append(tail)
             if v_ids:
                 self.facet_vertex_loops[fid] = np.array(v_ids, dtype=int)
+        self._facet_loops_version += 1
+
+    def triangle_row_cache(self) -> tuple["np.ndarray | None", list[int]]:
+        """Return cached triangle row indices and facet IDs.
+
+        The cache is rebuilt only when facet loops are rebuilt.
+        """
+        import numpy as np
+
+        if (
+            self._triangle_rows_cache is not None
+            and self._triangle_rows_cache_version == self._facet_loops_version
+        ):
+            return self._triangle_rows_cache, self._triangle_row_facets
+
+        if not getattr(self, "facet_vertex_loops", None):
+            return None, []
+
+        self.build_position_cache()
+
+        tri_facets: list[int] = []
+        # Sort keys to ensure deterministic order (and match iteration order if dicts are ordered)
+        # Using sorted() for safety across Python versions/implementations if needed,
+        # but insertion order is standard now.
+        for fid, loop in self.facet_vertex_loops.items():
+            if len(loop) == 3:
+                tri_facets.append(fid)
+
+        if not tri_facets:
+            self._triangle_rows_cache = None
+            self._triangle_row_facets = []
+            self._triangle_rows_cache_version = self._facet_loops_version
+            return None, []
+
+        tri_rows = np.empty((len(tri_facets), 3), dtype=int)
+        for idx, fid in enumerate(tri_facets):
+            loop = self.facet_vertex_loops[fid]
+            tri_rows[idx, 0] = self.vertex_index_to_row[int(loop[0])]
+            tri_rows[idx, 1] = self.vertex_index_to_row[int(loop[1])]
+            tri_rows[idx, 2] = self.vertex_index_to_row[int(loop[2])]
+
+        self._triangle_rows_cache = tri_rows
+        self._triangle_row_facets = tri_facets
+        self._triangle_rows_cache_version = self._facet_loops_version
+        return tri_rows, tri_facets
 
     def get_facets_of_vertex(self, v_id: int) -> List["Facet"]:
         return [self.facets[fid] for fid in self.vertex_to_facets.get(v_id, [])]

@@ -112,6 +112,7 @@ intended for development and planning; users should consult `README.md` and
 
 17. Code Quality
     - [ ] Refactor `fixed` constraints to be core entity properties (removing them from the constraint module list).
+    - [x] Consolidate constraint gradient handling into the KKT projection path.
     - [ ] Add regression testing for performance (CI integration with thresholds).
     - [x] Add targeted unit tests for core helpers (volume penalties, edge-index exceptions).
     - [ ] Continue raising coverage around energy/constraint managers, CLI commands, and visualization glue.

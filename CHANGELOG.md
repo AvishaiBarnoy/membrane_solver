@@ -49,6 +49,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Line search now evaluates Armijo acceptance on the post-constraint state to keep step acceptance consistent with enforced constraints.
 - Single-constraint KKT projection is now supported when a constraint module supplies a gradient.
 - Multi-constraint KKT projection now solves a small constraint system when multiple gradients are provided.
+- Gradient projection now uses the KKT path exclusively; fixed vertices are zeroed separately and legacy per-entity constraint projection is removed.
 - Constraint projection now relies solely on KKT-style gradients; legacy apply-constraint gradient paths have been removed.
 - Added a BFGS stepper (`bfgs`/`hessian` command) for quasi-Newton-style steps on moderate-sized problems.
 - Minimization defaults now use Gradient Descent in the CLI; Conjugate Gradient remains available via `cg`.

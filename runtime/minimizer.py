@@ -77,27 +77,60 @@ STEP SIZE:\t {self.step_size}
 ############"""
         return msg
 
+    def _compute_energy_and_gradient_array(self):
+        """Array-based backend for energy and gradient computation."""
+        positions = self.mesh.positions_view()
+        index_map = self.mesh.vertex_index_to_row
+        n_vertices = len(self.mesh.vertex_ids)
+        grad_arr = np.zeros((n_vertices, 3), dtype=float)
+
+        total_energy = 0.0
+
+        for module in self.energy_modules:
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                # Use fast array path
+                E_mod = module.compute_energy_and_gradient_array(
+                    self.mesh,
+                    self.global_params,
+                    self.param_resolver,
+                    positions=positions,
+                    index_map=index_map,
+                    grad_arr=grad_arr,
+                )
+                total_energy += E_mod
+            else:
+                # Legacy path: compute dict and scatter
+                E_mod, g_mod = module.compute_energy_and_gradient(
+                    self.mesh, self.global_params, self.param_resolver
+                )
+                total_energy += E_mod
+
+                # Scatter dict gradients into array
+                for vidx, gvec in g_mod.items():
+                    row = index_map.get(vidx)
+                    if row is not None:
+                        grad_arr[row] += gvec
+
+        return total_energy, grad_arr
+
     def compute_energy_and_gradient(self):
         """Return total energy and gradient for the current mesh."""
 
-        total_energy = 0.0
-        # initialize per-vertex gradient dict
-        grad: Dict[int, np.ndarray] = {idx: np.zeros(3) for idx in self.mesh.vertices}
+        # Use array backend
+        total_energy, grad_arr = self._compute_energy_and_gradient_array()
 
-        for module in self.energy_modules:
-            # Each energy module must implement compute_energy_and_gradient
-            E_mod, g_mod = module.compute_energy_and_gradient(
-                self.mesh, self.global_params, self.param_resolver
-            )
-
-            total_energy += E_mod
-            for vidx, gvec in g_mod.items():
-                grad[vidx] += gvec
+        # Convert back to dictionary for legacy steppers
+        # Use vertex_ids to map row index back to vertex ID
+        vertex_ids = self.mesh.vertex_ids
+        grad: Dict[int, np.ndarray] = {}
+        for row, vid in enumerate(vertex_ids):
+            grad[vid] = grad_arr[row]
 
         # Apply constraint modifications to the gradient (e.g., Lagrange multipliers)
         self.constraint_manager.apply_gradient_modifications(
             grad, self.mesh, self.global_params
         )
+        self._zero_fixed_gradients(grad)
 
         # Optional DEBUG‑level diagnostic: in Lagrange mode the projected
         # gradient should be (numerically) tangent to each fixed‑volume
@@ -146,37 +179,14 @@ STEP SIZE:\t {self.step_size}
             total_energy += E_mod
         return total_energy
 
-    def project_constraints(self, grad: Dict[int, np.ndarray]) -> None:
-        """Project gradients onto the feasible set defined by constraints."""
-
-        # zero out fixed vertices and project others
+    def _zero_fixed_gradients(self, grad: Dict[int, np.ndarray]) -> None:
         for vidx, vertex in self.mesh.vertices.items():
             if getattr(vertex, "fixed", False):
                 grad[vidx][:] = 0.0
-            elif hasattr(vertex, "constraint"):
-                # project the gradient into tangent space of constraint
-                grad[vidx] = vertex.constraint.project_gradient(grad[vidx])
 
-        for eidx, edge in self.mesh.edges.items():
-            # If has fixed attribute uncomment and change hasattr to elif
-            # if geattr(edge, 'fixed', False): grad[eidx][:] = 0.0
-            if hasattr(edge, "constraint"):
-                # project the gradient into tangent space of constraint
-                grad[eidx] = edge.constraint.project_gradient(grad[eidx])
-
-        for fidx, facet in self.mesh.facets.items():
-            # If has fixed attribute uncomment and change hasattr to elif
-            # if geattr(facet, 'fixed', False): grad[fidx][:] = 0.0
-            if hasattr(facet, "constraint"):
-                # project the gradient into tangent space of constraint
-                grad[fidx] = facet.constraint.project_gradient(grad[fidx])
-
-        for bidx, body in self.mesh.bodies.items():
-            # If has fixed attribute uncomment and change hasattr to elif
-            # if geattr(body, 'fixed', False): grad[bidx][:] = 0.0
-            if hasattr(body, "constraint"):
-                # project the gradient into tangent space of constraint
-                grad[bidx] = body.constraint.project_gradient(grad[bidx])
+    def project_constraints(self, grad: Dict[int, np.ndarray]) -> None:
+        """Backwards-compatible helper to enforce fixed vertices in gradients."""
+        self._zero_fixed_gradients(grad)
 
     def _enforce_constraints(self, mesh: Mesh | None = None):
         """Invoke all constraint modules on the current mesh.
@@ -246,7 +256,6 @@ STEP SIZE:\t {self.step_size}
                 callback(self.mesh, i)
 
             E, grad = self.compute_energy_and_gradient()
-            self.project_constraints(grad)
 
             # check convergence by gradient norm
             grad_norm = np.sqrt(sum(np.dot(g, g) for g in grad.values()))
