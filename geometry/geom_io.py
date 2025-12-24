@@ -736,6 +736,13 @@ def parse_geometry(data: dict) -> Mesh:
     mesh.macros = macros
 
     # Energy modules
+    if not energy_module_names:
+        # Smart Default: If no energy modules specified anywhere, default to "surface" for all facets.
+        energy_module_names.add("surface")
+        for facet in mesh.facets.values():
+            if "energy" not in facet.options:
+                facet.options["energy"] = ["surface"]
+
     mesh.energy_modules = list(energy_module_names)
 
     # Constraint modules

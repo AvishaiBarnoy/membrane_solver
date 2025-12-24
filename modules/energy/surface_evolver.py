@@ -53,7 +53,7 @@ def compute_energy_and_gradient_array(
 
         total_energy += float(np.dot(gammas, areas))
 
-        # Gradients
+        # Gradients per triangle: 0.5 * gamma * (v_next - v_prev) x n_hat
         g0 = 0.5 * gammas[:, None] * _fast_cross(v1[mask] - v2[mask], n_hat)
         g1 = 0.5 * gammas[:, None] * _fast_cross(v2[mask] - v0[mask], n_hat)
         g2 = 0.5 * gammas[:, None] * _fast_cross(v0[mask] - v1[mask], n_hat)
@@ -92,7 +92,8 @@ def compute_energy_and_gradient_array(
         n_hat = cross_sum / area_doubled
 
         v_prev = np.roll(v_pos, 1, axis=0)
-        grads = 0.5 * gamma * _fast_cross(v_prev - v_next, n_hat)
+        # Gradient: 0.5 * gamma * (v_next - v_prev) x n_hat
+        grads = 0.5 * gamma * _fast_cross(v_next - v_prev, n_hat)
 
         for i, row in enumerate(rows):
             grad_arr[row] += grads[i]
