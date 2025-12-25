@@ -10,6 +10,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Implemented **Mixed Voronoi Areas** (Meyer et al. 2003) for dual-area stability on distorted meshes.
   - Robust **bi-Laplacian force** implementation for energy-consistent minimization.
   - **Boundary Filtering**: Curvature is ignored for boundary vertices, ensuring flat planar patches correctly evaluate to zero bending energy.
+- **Analytic bending gradient**: Added an analytic backpropagation gradient for the discrete Willmore/Helfrich bending energy and validated it against finite differences (`tests/test_bending_finite_difference.py`).
 - **Numerical Consistency Suite**: Added `tests/test_numerical_consistency.py` with automated **Finite Difference** checks for all energy modules (`surface`, `volume`, `line_tension`, `bending`), ensuring that analytical gradients perfectly match energy slopes.
 - `print energy`: New CLI command to display the current total energy of the mesh.
 - Reusable curvature helper: `geometry/curvature.py` provides vectorized curvature and area data for use by any module.
@@ -87,6 +88,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - `save_geometry` now reindexes sparse IDs so save→load roundtrips remain valid after refinement/equiangulation.
 - `detect_vertex_edge_collisions` now builds the vertex cache when missing.
 - Parsing treats `"fixed"` inside an entity `constraints` list as a fixed flag (not a constraint module name).
+- Fixed a sign-convention mismatch in the analytic bending gradient (discrete curvature uses `K = -L X`), which caused large deviations from finite differences.
 
 ### Maintenance
 - **Consolidated Analysis**: Merged `analyze_hemisphere.py` logic into `benchmarks/benchmark_cap.py`.

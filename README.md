@@ -180,6 +180,15 @@ square loop (see `tests/sample_meshes.square_perimeter_input`) to verify that
 energy drops while the loop returns to the requested perimeter, even after mesh
 refinement and equiangulation.
 
+## Bending energy (Willmore/Helfrich)
+
+Enable curvature/bending energy with `bending_modulus` and the `bending` energy
+module. Use:
+- `bending_energy_model`: `willmore` (default) or `helfrich`
+- `spontaneous_curvature` (alias: `intrinsic_curvature`) for Helfrich
+- `bending_gradient_mode`: `approx` (fast), `analytic` (validated), or
+  `finite_difference` (slow, for verification)
+
 
 ## Development notes
 

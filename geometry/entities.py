@@ -368,7 +368,11 @@ class Body:
         positions: "np.ndarray | None" = None,
         index_map: Dict[int, int] | None = None,
     ) -> float:
-        if self._cached_version == mesh._version and self._cached_volume is not None:
+        if (
+            positions is None
+            and self._cached_version == mesh._version
+            and self._cached_volume is not None
+        ):
             return self._cached_volume
 
         volume = 0.0
@@ -642,7 +646,8 @@ class Body:
         so callers that need both can avoid redundant geometric computation.
         """
         if (
-            self._cached_version == mesh._version
+            positions is None
+            and self._cached_version == mesh._version
             and self._cached_volume is not None
             and self._cached_volume_grad is not None
         ):
