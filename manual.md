@@ -402,10 +402,25 @@ where:
 
 The module ignores boundary vertices, meaning a flat planar patch correctly yields exactly zero bending energy.
 
-This is commonly used for 2D problems (e.g. square relaxing to a circle) or
+#### 5.4.1 Helfrich model (spontaneous curvature)
 
-This is commonly used for 2D problems (e.g. square relaxing to a circle) or
-for boundary tension in open membranes.
+Set `global_parameters.bending_energy_model="helfrich"` to use a spontaneous
+curvature model. The preferred curvature is taken from
+`global_parameters.spontaneous_curvature` (alias: `intrinsic_curvature`).
+
+#### 5.4.2 Gradient modes
+
+Select the gradient implementation via `global_parameters.bending_gradient_mode`:
+
+- `approx` (default): fast Laplacian-based approximation (stable for large runs).
+- `analytic`: backpropagates through the discrete cotan-Laplacian + mixed-area
+  discretization and is validated against finite differences.
+- `finite_difference`: central-difference gradient of `compute_total_energy`
+  (slow; intended for tests and debugging).
+
+This energy is commonly used for curvature regularization or bending-dominated
+relaxations (e.g. cube-to-sphere with surface tension disabled and area/volume
+constraints enabled).
 
 You can also assign line tension from the CLI without editing JSON:
 

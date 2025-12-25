@@ -31,6 +31,7 @@ intended for development and planning; users should consult `README.md` and
    - [x] Standardize the discrete mean‑curvature definition: Uses **Cotangent Laplace-Beltrami** with **Mixed Voronoi Areas** (`geometry/curvature.py`).
    - [x] Provide a bending‑energy module: `modules/energy/bending.py`.
    - [x] Add unit‑level validation: Verified against analytical sphere energy ($4\pi$) and zero-energy for flat planes. Added strict **Finite Difference** checks in `tests/test_numerical_consistency.py`.
+   - [x] Add an analytic bending gradient and validate it against finite differences (`tests/test_bending_finite_difference.py`).
    - [x] Add parameter plumbing: `bending_modulus` integrated via CLI and input files.
 
 6. Pure Gaussian curvature
