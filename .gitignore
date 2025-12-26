@@ -29,6 +29,7 @@ venv.bak/
 *.sage.py
 
 evolver_test/
+evolver/
 *.docx
 *.pdf
 *.log  # logfiles
