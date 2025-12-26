@@ -143,6 +143,7 @@ def benchmark():
 
     speedup = avg_old / avg_new
     print(f"\nSpeedup: {speedup:.2f}x")
+    return avg_new
 
 
 if __name__ == "__main__":

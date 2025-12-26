@@ -16,14 +16,13 @@ area gradients for all facets in the body.
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from typing import Dict
 
 import numpy as np
 
-from runtime.logging_config import setup_logging
-
-logger = setup_logging("membrane_solver.log")
+logger = logging.getLogger("membrane_solver")
 
 
 def compute_energy_and_gradient(

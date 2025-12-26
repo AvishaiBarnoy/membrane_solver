@@ -61,6 +61,13 @@ def create_parser() -> argparse.ArgumentParser:
         help="Save the rendered figure to PATH instead of only showing it.",
     )
 
+    parser.add_argument(
+        "--log",
+        nargs="?",
+        const="auto",
+        default=None,
+        help="Write logs to a file. If PATH is omitted, writes a log file next to the input mesh.",
+    )
     parser.add_argument("--no-axes", action="store_true", help="Removes axes from plot")
     return parser
 
@@ -78,13 +85,22 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     parser = create_parser()
     args = parser.parse_args(argv)
 
-    setup_logging("membrane_solver.log")
-
     input_path = args.input
     if not input_path.endswith(".json"):
         raise ValueError("Input file must be a JSON file (.json).")
     if not os.path.isfile(input_path):
         raise FileNotFoundError(f"Input file '{input_path}' not found!")
+
+    log_path = None
+    if args.log is not None:
+        if args.log == "auto":
+            from pathlib import Path
+
+            inp = Path(input_path)
+            log_path = str(inp.with_suffix(".log"))
+        else:
+            log_path = str(args.log)
+    setup_logging(log_path)
 
     data = load_data(input_path)
     mesh = parse_geometry(data=data)

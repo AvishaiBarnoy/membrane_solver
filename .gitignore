@@ -41,6 +41,19 @@ outputs/*.json
 data/
 results/
 
+# Agent instruction files (local tooling)
+GEMINI.md
+AGENT.md
+
 codex_ids.txt
 profile.out
 .ruff_cache/
+
+# Debug images/plots (keep documentation images under docs/ if needed)
+/*.png
+outputs/*.png
+
+# Local experiments (not part of the library/benchmarks)
+analyze_folding.py
+meshes/spontaneous_folding.json
+tests/test_spontaneous_folding.py

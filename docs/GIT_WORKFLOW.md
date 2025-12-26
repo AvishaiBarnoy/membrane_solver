@@ -12,11 +12,11 @@
   Pick a descriptive name, e.g. feature/mean-curvature or perf/minimizer-cache.
 
   # Make sure main is up to date
-  git checkout main
+  git switch main
   git pull origin main        # if you have a remote
 
   # Create and switch to feature branch
-  git checkout -b feature/mean-curvature
+  git switch -c feature/mean-curvature
 
   You’re now on the new branch; any commits stay isolated here.
 
@@ -54,6 +54,14 @@
 
   This gives you a remote backup and lets you open a PR later. If you’re working locally only, you can skip this.
 
+  If you need to pause work and temporarily put local changes aside:
+
+  git stash push -u -m "wip: explain what you're doing"
+
+  Later, re-apply the stash:
+
+  git stash pop
+
   6. Create a Pull Request
   Once your branch is pushed, you can create a PR via the browser or the command line.
 
@@ -74,7 +82,7 @@
   Once your PR has been approved and all checks pass:
 
   - Ensure your local main branch is up to date:
-    git checkout main
+    git switch main
     git pull origin main
 
   - Merge the PR through the GitHub interface (preferred for better tracking and automation).

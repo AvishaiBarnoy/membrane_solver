@@ -27,15 +27,15 @@ only, and is zeroed for interior vertices. This module assumes that:
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from typing import Dict, List, Tuple
 
 import numpy as np
 
 from geometry.entities import Mesh
-from runtime.logging_config import setup_logging
 
-logger = setup_logging("membrane_solver.log")
+logger = logging.getLogger("membrane_solver")
 
 
 def _boundary_edges(mesh: Mesh) -> List[int]:

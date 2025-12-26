@@ -90,8 +90,9 @@ Key command‑line options:
   - `penalty` – add a quadratic volume energy term (soft constraint). Works
     best with `global_parameters.volume_projection_during_minimization=true`.
 
-- `--log PATH`
-  Log file path (default: `membrane_solver.log`, overwritten each run).
+- `--log [PATH]`
+  Write logs to a file. If `PATH` is omitted, a log file is written next to the
+  input mesh (same basename, `.log` suffix). By default, no log file is written.
 
 - `-q, --quiet`
   Suppress per‑step console output.
@@ -145,6 +146,22 @@ Interactive commands:
 - `tX`
   Set step size to `X` (e.g. `t1e-3`).
 
+- `set ...`
+  Update global parameters or entity properties interactively.
+  Examples:
+  - `set surface_tension 1.5`
+  - `set global step_size 1e-3`
+  - `set vertex 0 fixed true`
+  - `set edge 12 fixed true`
+  - `set body 0 target_volume 1.0`
+
+- `print ...`
+  Inspect entities and derived properties.
+  Examples:
+  - `print vertex 0`
+  - `print edges len > 0.5`
+  - `print facets area > 0.1`
+
 
 - `r` / `rN`
   Refine the mesh (triangle refinement + polygonal refinement). Provide a
@@ -158,6 +175,16 @@ Interactive commands:
 - `u`
   Equiangulate the mesh (edge flips to improve triangle quality), followed by
   constraint re‑enforcement.
+
+- `perturb SCALE` / `kick SCALE`
+  Add small random noise to non-fixed vertex positions. Useful for breaking
+  symmetry in flat geometries. Default scale is `0.01`.
+
+- `fix [edges|facets|all] [where key=value]`
+  Record current geometric properties (length for edges, area for facets) as
+  `target_length` or `target_area`. Also automatically enables the
+  `edge_length_penalty` energy and `fix_facet_area` constraint for the affected
+  entities. Use the `where` clause to filter by options (e.g. `where preset=paper`).
 
 - `properties` / `props` / `p` / `i`
   Print physical properties (global/per‑body area, volume, surface Rg, target volume).
@@ -387,7 +414,24 @@ Configuration:
 - Override per-edge: `edge.options["line_tension"] = 0.5`.
 - Flag edges: Ensure edges have `"energy": ["line_tension"]` in their options.
 
-### 5.4 Bending Energy (`modules/energy/bending.py`)
+### 5.4 Edge Length Penalty (`modules/energy/edge_length_penalty.py`)
+
+This module penalizes deviations from a target length, acting as an elastic
+constraint. It computes:
+
+\[
+E_{\text{elastic}} = \sum_{\text{edges } e} \tfrac{1}{2} k \, (L_e - L_{e,0})^2,
+\]
+
+where:
+- `L_e` is the current length.
+- `L_{e,0}` is the `target_length` from edge options.
+- `k` is the `edge_stiffness` from `global_parameters` (default `100.0`).
+
+This is primarily used via the `fix edges` command to simulate inextensible
+objects like paper.
+
+### 5.5 Bending Energy (`modules/energy/bending.py`)
 
 This module implements the squared mean curvature integral (Willmore energy):
 
@@ -662,6 +706,29 @@ python -m visualization.cli meshes/simple_line.json --no-facets --scatter
 Internally, this uses the shared helper
 `visualization.plotting.plot_geometry(mesh, ...)`, which is also exercised by
 `tests/test_visualize_geometry.py`.
+
+### 8.2 Paper Folding (Spontaneous Curvature)
+
+To simulate a piece of paper rolling into a cylinder, we use spontaneous
+curvature combined with inextensibility constraints (fixed local area and fixed
+edge lengths).
+
+Benchmark: `benchmarks/inputs/bench_spontaneous_folding.json`
+
+Sequence of operations:
+1.  **Refine**: Create a dense enough mesh to resolve the curvature.
+2.  **Snapshot**: Run `snapshot all` (alias: `fix all`) to lock the current (flat) area and lengths as the target state.
+3.  **Perturb**: Run `perturb 0.05` to break the flat symmetry.
+4.  **Bending**: Ensure `bending_energy_model` is `"helfrich"` and `spontaneous_curvature` is non-zero.
+5.  **Minimize**: Use `bfgs` for efficient minimization of the stiff bending energy.
+
+```text
+r2
+snapshot all
+perturb 0.05
+bfgs
+g500
+```
 
 ---
 

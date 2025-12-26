@@ -68,6 +68,24 @@ class Minimizer:
 
         self.param_resolver = ParameterResolver(global_params)
 
+    def refresh_modules(self):
+        """Re-load energy and constraint modules from the current mesh state."""
+        # Refresh energy modules
+        self.energy_modules = [
+            self.energy_manager.get_module(mod) for mod in self.mesh.energy_modules
+        ]
+        # Refresh constraint modules
+        self.constraint_modules = [
+            self.constraint_manager.get_constraint(constraint)
+            for constraint in self.mesh.constraint_modules
+        ]
+        self._has_enforceable_constraints = any(
+            hasattr(mod, "enforce_constraint") for mod in self.constraint_modules
+        )
+        logger.info(
+            f"Minimizer modules refreshed: {len(self.energy_modules)} energy, {len(self.constraint_modules)} constraint."
+        )
+
     def __repr__(self):
         msg = f"""### MINIMIZER ###
 MESH:\t {self.mesh}

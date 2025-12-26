@@ -72,14 +72,28 @@ class HessianCommand(Command):
     """Run a one-off Hessian (BFGS) step without switching the active stepper."""
 
     def execute(self, context, args):
+        import numpy as np
+
         steps = 1
         if args and args[0].isdigit():
             steps = max(1, int(args[0]))
 
         stepper = BFGS()
         for i in range(steps):
-            energy, grad = context.minimizer.compute_energy_and_gradient()
-            context.minimizer.project_constraints(grad)
+            if hasattr(context.minimizer, "compute_energy_and_gradient_array"):
+                energy, grad_arr = context.minimizer.compute_energy_and_gradient_array()
+                context.minimizer.project_constraints_array(grad_arr)
+            else:
+                energy, grad_dict = context.minimizer.compute_energy_and_gradient()
+                if hasattr(context.minimizer, "project_constraints"):
+                    context.minimizer.project_constraints(grad_dict)
+                positions = context.mesh.positions_view()
+                grad_arr = np.zeros_like(positions)
+                idx_map = context.mesh.vertex_index_to_row
+                for vid, g in grad_dict.items():
+                    row = idx_map.get(int(vid))
+                    if row is not None:
+                        grad_arr[row] = g
             if not getattr(context.minimizer, "quiet", False):
                 total_area = sum(
                     facet.compute_area(context.mesh)
@@ -92,7 +106,7 @@ class HessianCommand(Command):
                 )
             step_success, context.minimizer.step_size = stepper.step(
                 context.mesh,
-                grad,
+                grad_arr,
                 context.minimizer.step_size,
                 context.minimizer.compute_energy,
                 constraint_enforcer=context.minimizer._enforce_constraints

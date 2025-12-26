@@ -1,14 +1,14 @@
 # modules/surface.py
 # Here goes energy functions relevant for area of facets
 
+import logging
 from typing import Dict
 
 import numpy as np
 
 from geometry.entities import Mesh, _fast_cross
-from runtime.logging_config import setup_logging
 
-logger = setup_logging("membrane_solver.log")
+logger = logging.getLogger("membrane_solver")
 
 
 def _all_facets_are_triangles(mesh: Mesh) -> bool:

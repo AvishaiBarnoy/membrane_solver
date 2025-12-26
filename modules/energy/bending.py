@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Dict, Literal
 
 import numpy as np
@@ -12,9 +13,8 @@ from geometry.bending_derivatives import (
 )
 from geometry.curvature import compute_curvature_data
 from geometry.entities import Mesh
-from runtime.logging_config import setup_logging
 
-logger = setup_logging("membrane_solver.log")
+logger = logging.getLogger("membrane_solver")
 
 
 BendingEnergyModel = Literal["willmore", "helfrich"]
@@ -42,6 +42,53 @@ def _spontaneous_curvature(global_params) -> float:
     if val is None:
         val = global_params.get("intrinsic_curvature", 0.0)
     return float(val or 0.0)
+
+
+def _per_vertex_params(
+    mesh: Mesh,
+    global_params,
+    *,
+    model: BendingEnergyModel,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return per-vertex (kappa, c0) arrays in vertex-row order.
+
+    Allows local overrides via `vertex.options`:
+    - `bending_modulus`
+    - `spontaneous_curvature` (alias: `intrinsic_curvature`)
+    """
+    n = len(mesh.vertex_ids)
+    kappa_default = float(global_params.get("bending_modulus", 0.0) or 0.0)
+    kappa = np.full(n, kappa_default, dtype=float)
+
+    if model == "helfrich":
+        c0_default = _spontaneous_curvature(global_params)
+        c0 = np.full(n, c0_default, dtype=float)
+    else:
+        c0 = np.zeros(n, dtype=float)
+
+    for row, vid in enumerate(mesh.vertex_ids):
+        v = mesh.vertices.get(int(vid))
+        if v is None:
+            continue
+        opts = getattr(v, "options", None) or {}
+        if "bending_modulus" in opts:
+            try:
+                kappa[row] = float(opts["bending_modulus"])
+            except (TypeError, ValueError):
+                pass
+        if model == "helfrich":
+            if "spontaneous_curvature" in opts:
+                try:
+                    c0[row] = float(opts["spontaneous_curvature"])
+                except (TypeError, ValueError):
+                    pass
+            elif "intrinsic_curvature" in opts:
+                try:
+                    c0[row] = float(opts["intrinsic_curvature"])
+                except (TypeError, ValueError):
+                    pass
+
+    return kappa, c0
 
 
 def _vertex_normals(
@@ -94,8 +141,8 @@ def compute_total_energy(
     mesh: Mesh, global_params, positions: np.ndarray, index_map: Dict[int, int]
 ) -> float:
     model = _energy_model(global_params)
-    kappa = float(global_params.get("bending_modulus", 0.0) or 0.0)
-    if kappa == 0.0:
+    kappa_arr, c0_arr = _per_vertex_params(mesh, global_params, model=model)
+    if float(np.max(kappa_arr)) == 0.0:
         return 0.0
 
     _, H, A, _, tri_rows = _mean_curvature_vectors(mesh, positions, index_map)
@@ -103,8 +150,7 @@ def compute_total_energy(
         return 0.0
 
     if model == "helfrich":
-        c0 = _spontaneous_curvature(global_params)
-        density = 0.5 * (2.0 * H - c0) ** 2
+        density = 0.5 * (2.0 * H - c0_arr) ** 2
     else:
         density = H**2
 
@@ -113,14 +159,14 @@ def compute_total_energy(
         boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
         density[boundary_rows] = 0.0
 
-    return float(kappa * np.sum(density * A))
+    return float(np.sum(kappa_arr * density * A))
 
 
 def compute_energy_array(mesh, global_params, positions, index_map) -> np.ndarray:
     """Compute energy contribution per vertex. Returns (N_verts,) array."""
     model = _energy_model(global_params)
-    kappa = float(global_params.get("bending_modulus", 0.0) or 0.0)
-    if kappa == 0.0:
+    kappa_arr, c0_arr = _per_vertex_params(mesh, global_params, model=model)
+    if float(np.max(kappa_arr)) == 0.0:
         return np.zeros(len(mesh.vertex_ids), dtype=float)
 
     _, H, A, _, tri_rows = _mean_curvature_vectors(mesh, positions, index_map)
@@ -128,8 +174,7 @@ def compute_energy_array(mesh, global_params, positions, index_map) -> np.ndarra
         return np.zeros(len(mesh.vertex_ids), dtype=float)
 
     if model == "helfrich":
-        c0 = _spontaneous_curvature(global_params)
-        density = 0.5 * (2.0 * H - c0) ** 2
+        density = 0.5 * (2.0 * H - c0_arr) ** 2
     else:
         density = H**2
 
@@ -138,7 +183,7 @@ def compute_energy_array(mesh, global_params, positions, index_map) -> np.ndarra
         boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
         density[boundary_rows] = 0.0
 
-    return kappa * density * A
+    return kappa_arr * density * A
 
 
 def _apply_beltrami_laplacian(
@@ -226,9 +271,8 @@ def compute_energy_and_gradient_array(
     # For Helfrich: E = kappa/2 * sum( (2H - c0)^2 * A )
     #                 = kappa/2 * sum( ( |K|/A - c0 )^2 * A )
 
-    kappa = float(global_params.get("bending_modulus", 0.0) or 0.0)
     model = _energy_model(global_params)
-    c0 = _spontaneous_curvature(global_params) if model == "helfrich" else 0.0
+    kappa_arr, c0_arr = _per_vertex_params(mesh, global_params, model=model)
 
     # Precompute per-vertex energy and terms for gradient
     # We need gradients of K_i and A_i w.r.t positions.
@@ -238,8 +282,8 @@ def compute_energy_and_gradient_array(
 
     if model == "helfrich":
         # E = sum E_i, E_i = 0.5 * kappa * ( k_mag/A - c0 )^2 * A
-        term = (k_mag / safe_areas) - c0
-        total_energy = 0.5 * kappa * np.sum(term**2 * safe_areas)
+        term = (k_mag / safe_areas) - c0_arr
+        total_energy = float(0.5 * np.sum(kappa_arr * term**2 * safe_areas))
 
         # dE/dx = sum_i dE_i/dx
         # dE_i = 0.5 * kappa * [ 2 * (k/A - c0) * d(k/A - c0) * A + (k/A - c0)^2 * dA ]
@@ -254,19 +298,28 @@ def compute_energy_and_gradient_array(
         # Let factor_K = kappa * term * (K / |K|)
         # Let factor_A = 0.5 * kappa * term^2 - kappa * term * (k_mag / safe_areas)
 
-        # Handle k=0 case
-        K_unit = np.zeros_like(k_vecs)
-        mask = k_mag > 1e-15
-        K_unit[mask] = k_vecs[mask] / k_mag[mask][:, None]
+        # Use vertex normals instead of K_unit to be robust for flat regions
+        # K points inwards, so we want normals aligned with K.
+        normals = _vertex_normals(mesh, positions, tri_rows)
+        # Ensure normals point in the same hemisphere as k_vecs
+        # (or just use normals and accept the sign convention of the mesh)
+        # H_scalar in compute_total_energy uses |K|, so it's always positive.
+        # We should match that by using the projection of K onto n.
 
-        factor_K_vec = kappa * term[:, None] * K_unit  # Vector (N, 3)
-        factor_A = 0.5 * kappa * term**2 - kappa * term * (
-            k_mag / safe_areas
-        )  # Scalar (N,)
+        # However, for a flat sheet, which way is "inwards"?
+        # The perturbation breaks symmetry. We should use the normal.
+
+        K_dir = np.zeros_like(k_vecs)
+        mask = k_mag > 1e-15
+        K_dir[mask] = k_vecs[mask] / k_mag[mask][:, None]
+        K_dir[~mask] = normals[~mask]  # Fallback to vertex normal
+
+        factor_K_vec = kappa_arr[:, None] * term[:, None] * K_dir  # (N, 3)
+        factor_A = 0.5 * kappa_arr * term**2 - kappa_arr * term * (k_mag / safe_areas)
 
     else:
         # Willmore: E_i = kappa * (H^2) * A = kappa * (|K|/2A)^2 * A = kappa * |K|^2 / (4A)
-        total_energy = kappa * np.sum(k_mag**2 / (4.0 * safe_areas))
+        total_energy = float(np.sum(kappa_arr * (k_mag**2 / (4.0 * safe_areas))))
 
         # dE_i = (kappa/4) * [ (2 |K| d|K|) / A - (|K|^2 / A^2) dA ]
         #      = (kappa/2A) * (K . dK) - (kappa |K|^2 / 4A^2) dA
@@ -274,8 +327,8 @@ def compute_energy_and_gradient_array(
         # factor_K_vec = (kappa / 2A) * K
         # factor_A = - kappa * |K|^2 / (4A^2)
 
-        factor_K_vec = (kappa / (2.0 * safe_areas))[:, None] * k_vecs
-        factor_A = -kappa * k_mag**2 / (4.0 * safe_areas**2)
+        factor_K_vec = (kappa_arr / (2.0 * safe_areas))[:, None] * k_vecs
+        factor_A = -kappa_arr * k_mag**2 / (4.0 * safe_areas**2)
 
     boundary_vids = mesh.boundary_vertex_ids
     if boundary_vids:
@@ -287,11 +340,13 @@ def compute_energy_and_gradient_array(
             # Also remove their energy contribution so callers see E=0 on open planar patches.
             if model == "helfrich":
                 term[boundary_rows] = 0.0
-                total_energy = 0.5 * kappa * float(np.sum(term**2 * safe_areas))
+                total_energy = float(0.5 * np.sum(kappa_arr * term**2 * safe_areas))
             else:
                 k_mag_b = k_mag.copy()
                 k_mag_b[boundary_rows] = 0.0
-                total_energy = float(kappa * np.sum(k_mag_b**2 / (4.0 * safe_areas)))
+                total_energy = float(
+                    np.sum(kappa_arr * (k_mag_b**2 / (4.0 * safe_areas)))
+                )
 
     # Now verify if user wants FD/approx/analytic
     mode = _gradient_mode(global_params)
@@ -312,13 +367,15 @@ def compute_energy_and_gradient_array(
             n_hats = np.zeros_like(h_vecs)
             mask_n = h_norms > 1e-12
             n_hats[mask_n] = h_vecs[mask_n] / h_norms[mask_n][:, None]
-            target_h_vecs = c0 * n_hats
+            target_h_vecs = (c0_arr / 2.0)[:, None] * n_hats
             diff_h_vecs = h_vecs - target_h_vecs
-            grad_arr[:] += kappa * _apply_beltrami_laplacian(
-                weights, tri_rows, diff_h_vecs
+            grad_arr[:] += _apply_beltrami_laplacian(
+                weights, tri_rows, kappa_arr[:, None] * diff_h_vecs
             )
         else:
-            grad_arr[:] += kappa * _apply_beltrami_laplacian(weights, tri_rows, h_vecs)
+            grad_arr[:] += _apply_beltrami_laplacian(
+                weights, tri_rows, kappa_arr[:, None] * h_vecs
+            )
         return total_energy
 
     # --- Analytic gradient backpropagation ---

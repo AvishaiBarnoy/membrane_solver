@@ -17,13 +17,16 @@ from pathlib import Path
 # Add local directory to path to import benchmark modules
 sys.path.append(os.path.dirname(__file__))
 
+import benchmark_bending
 import benchmark_cap
 import benchmark_catenoid
 import benchmark_cube_good
 import benchmark_dented_cube
 import benchmark_square_to_circle
+import benchmark_two_disks_sphere
+import benchmark_volume_optimization
 
-RESULTS_FILE = Path(__file__).parent / "inputs" / "results.json"
+RESULTS_FILE = Path(__file__).parent / "results.json"
 DEFAULT_PROFILE_DIR = Path(__file__).parent / "outputs" / "profiles"
 
 BENCHMARKS = {
@@ -32,6 +35,9 @@ BENCHMARKS = {
     "square_to_circle": benchmark_square_to_circle.benchmark,
     "catenoid": benchmark_catenoid.benchmark,
     "spherical_cap": benchmark_cap.benchmark,
+    "two_disks_sphere": benchmark_two_disks_sphere.benchmark,
+    "bending_analytic": benchmark_bending.benchmark,
+    "volume_optimization": benchmark_volume_optimization.benchmark,
 }
 
 
