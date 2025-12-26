@@ -27,9 +27,15 @@ class ConstraintModuleManager:
         """
         Retrieve a loaded constraint module by name.
         """
-        if mod in self.modules.keys():
+        if mod in self.modules:
             return self.modules[mod]
-        raise KeyError(f"Constraint module '{mod}' not found.")
+        try:
+            module = importlib.import_module(f"modules.constraints.{mod}")
+        except ImportError as exc:
+            raise KeyError(f"Constraint module '{mod}' not found.") from exc
+        self.modules[mod] = module
+        logger.info("Loaded constraint module (lazy): %s", mod)
+        return module
 
     def get_constraint(self, mod):
         """Backward-compatible alias for ``get_module``."""

@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import sys
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 
@@ -86,7 +87,13 @@ def main():
         action="store_true",
         help="Remove axes from the plot in --viz mode.",
     )
-    parser.add_argument("--log", default=None, help="Optional log file")
+    parser.add_argument(
+        "--log",
+        nargs="?",
+        const="auto",
+        default=None,
+        help="Write logs to a file. If PATH is omitted, writes a log file next to the input mesh.",
+    )
     parser.add_argument(
         "-q", "--quiet", action="store_true", help="Suppress console output"
     )
@@ -162,11 +169,14 @@ def main():
         sys.exit(1)
 
     global logger
-    logger = setup_logging(
-        args.log if args.log else "membrane_solver.log",
-        quiet=args.quiet,
-        debug=args.debug,
-    )
+    log_path = None
+    if args.log is not None:
+        if args.log == "auto":
+            inp = Path(args.input)
+            log_path = str(inp.with_suffix(".log"))
+        else:
+            log_path = str(args.log)
+    logger = setup_logging(log_path, quiet=args.quiet, debug=args.debug)
 
     # Load mesh and parameters
     data = load_data(args.input)

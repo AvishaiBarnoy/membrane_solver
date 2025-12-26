@@ -1,13 +1,12 @@
 # modules/volume.py
 
+import logging
 from collections import defaultdict
 from typing import Dict
 
 import numpy as np
 
-from runtime.logging_config import setup_logging
-
-logger = setup_logging("membrane_solver.log")
+logger = logging.getLogger("membrane_solver")
 
 
 def calculate_volume_energy(mesh, global_params):

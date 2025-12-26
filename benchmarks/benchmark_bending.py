@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
@@ -80,8 +82,7 @@ def create_dented_sphere(subdivisions=3):
     return mesh
 
 
-def benchmark_bending():
-    print("Initializing dented sphere...")
+def benchmark():
     mesh = create_dented_sphere(subdivisions=3)
 
     gp = GlobalParameters()
@@ -89,6 +90,7 @@ def benchmark_bending():
     gp.set("surface_tension", 0.0)  # ONLY Bending
     gp.set("volume_constraint_mode", "lagrange")  # Keep volume fixed
     gp.set("volume_projection_during_minimization", True)
+    gp.set("bending_gradient_mode", "analytic")
 
     # Target volume is the current (dented) volume
     mesh.bodies[0].target_volume = mesh.bodies[0].compute_volume(mesh)
@@ -99,12 +101,15 @@ def benchmark_bending():
 
     minimizer = Minimizer(mesh, gp, stepper, em, cm)
 
-    print(f"Initial Bending Energy: {minimizer.compute_energy():.4f}")
+    n_steps = 20
+    start_time = time.perf_counter()
+    minimizer.minimize(n_steps=n_steps)
+    end_time = time.perf_counter()
 
-    # In a real benchmark, we would minimize here.
-    # For now, we just verify the infrastructure works.
-    print("Infrastructure check passed.")
+    avg_time = (end_time - start_time) / n_steps
+    return avg_time
 
 
 if __name__ == "__main__":
-    benchmark_bending()
+    t = benchmark()
+    print(f"Average step time (Bending): {t:.4f}s")

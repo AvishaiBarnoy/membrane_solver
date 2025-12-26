@@ -203,6 +203,12 @@ module. Use:
 - Lint via `ruff check .` (or `pre-commit run -a`) to match CI.
 - Coverage hotspots are tracked via `pytest --cov=. --cov-report=term-missing`; focus on geometry entities, module managers, and CLI commands.
 
+## Logging
+
+By default, runs do not write a log file. Use `--log [PATH]` to write logs to a
+file; if `PATH` is omitted, the log is written next to the input mesh (same
+basename, `.log` suffix).
+
 ## Architecture overview
 
 - A living dependency diagram is stored at `docs/mermaid_diagram.txt` (render with any Mermaid-compatible viewer). It ties CLI entry points, geometry entities, runtime managers, and modules together.

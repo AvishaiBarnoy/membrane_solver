@@ -1,5 +1,11 @@
 from commands.io import PropertiesCommand, SaveCommand, VisualizeCommand
-from commands.mesh_ops import EquiangulateCommand, RefineCommand, VertexAverageCommand
+from commands.mesh_ops import (
+    EquiangulateCommand,
+    PerturbCommand,
+    RefineCommand,
+    SnapshotCommand,
+    VertexAverageCommand,
+)
 from commands.meta import HelpCommand, PrintEntityCommand, QuitCommand, SetCommand
 from commands.minimization import (
     GoCommand,
@@ -20,6 +26,10 @@ COMMAND_REGISTRY = {
     "v": VertexAverageCommand(),
     "vertex_average": VertexAverageCommand(),
     "u": EquiangulateCommand(),
+    "perturb": PerturbCommand(),
+    "kick": PerturbCommand(),
+    "snapshot": SnapshotCommand(),
+    "fix": SnapshotCommand(),
     "save": SaveCommand(),
     "s": VisualizeCommand(),
     "visualize": VisualizeCommand(),

@@ -1,5 +1,6 @@
 # geometry_io.py
 import json
+import logging
 
 import numpy as np
 import yaml
@@ -7,10 +8,9 @@ import yaml
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from parameters.global_parameters import GlobalParameters
 from runtime.expr_eval import eval_expr
-from runtime.logging_config import setup_logging
 from runtime.refinement import refine_polygonal_facets
 
-logger = setup_logging("membrane_solver.log")
+logger = logging.getLogger("membrane_solver")
 
 
 def load_data(filename):
@@ -179,7 +179,15 @@ def parse_geometry(data: dict) -> Mesh:
         )
 
     # Initialize module_name list
-    energy_module_names = set()
+    energy_module_names = set(data.get("energy_modules", []))
+    # If the input doesn't specify any modules but has surface tension,
+    # default to 'surface' for backward compatibility.
+    if (
+        not energy_module_names
+        and mesh.global_parameters.get("surface_tension", 0.0) > 0
+    ):
+        energy_module_names.add("surface")
+
     # Allow explicit constraint modules at the top level (e.g. "global_area")
     # in addition to those inferred from per‑entity "constraints" options.
     constraint_module_names = list(data.get("constraint_modules", []))
@@ -201,8 +209,9 @@ def parse_geometry(data: dict) -> Mesh:
             # Merge: preset first, then raw_options overrides
             merged = definitions[preset_name].copy()
             merged.update(raw_options)
-            # Remove the 'preset' key from the final dict to avoid confusion
-            merged.pop("preset", None)
+            # We keep the 'preset' key so we can filter entities by preset later.
+            if "preset" not in merged:
+                merged["preset"] = preset_name
             return merged
         return raw_options
 

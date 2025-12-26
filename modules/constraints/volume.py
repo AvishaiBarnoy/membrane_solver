@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
 
-from runtime.logging_config import setup_logging
-
-logger = setup_logging("membrane_solver.log")
+logger = logging.getLogger("membrane_solver")
 
 
 def constraint_gradients(mesh, global_params) -> list[dict[int, np.ndarray]] | None:

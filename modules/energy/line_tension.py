@@ -10,15 +10,15 @@ where ``gamma`` is either specified explicitly on the edge via the
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from typing import Dict, Iterable
 
 import numpy as np
 
 from geometry.entities import Mesh
-from runtime.logging_config import setup_logging
 
-logger = setup_logging("membrane_solver.log")
+logger = logging.getLogger("membrane_solver")
 
 
 def _edges_with_line_tension(mesh: Mesh) -> Iterable[int]:
