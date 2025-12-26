@@ -1,0 +1,69 @@
+definitions:
+  top_ring:
+    fixed: true
+    constraints: [pin_to_circle]
+    pin_to_circle_normal: [0, 0, 1]
+    pin_to_circle_point: [0, 0, 1]
+    pin_to_circle_radius: 1.5088795
+  bottom_ring:
+    fixed: true
+    constraints: [pin_to_circle]
+    pin_to_circle_normal: [0, 0, 1]
+    pin_to_circle_point: [0, 0, -1]
+    pin_to_circle_radius: 1.5088795
+vertices:
+  - [1.5088795, 0.0, 1, {fixed: true}]
+  - [0.75443975, 1.30672798, 1, {fixed: true}]
+  - [-0.75443975, 1.30672798, 1, {fixed: true}]
+  - [-1.5088795, 0.0, 1, {fixed: true}]
+  - [-0.75443975, -1.30672798, 1, {fixed: true}]
+  - [0.75443975, -1.30672798, 1, {fixed: true}]
+  - [1.5088795, 0.0, -1, {fixed: true}]
+  - [0.75443975, 1.30672798, -1, {fixed: true}]
+  - [-0.75443975, 1.30672798, -1, {fixed: true}]
+  - [-1.5088795, 0.0, -1, {fixed: true}]
+  - [-0.75443975, -1.30672798, -1, {fixed: true}]
+  - [0.75443975, -1.30672798, -1, {fixed: true}]
+edges:
+  - [0, 1, {preset: top_ring}]
+  - [1, 2, {preset: top_ring}]
+  - [2, 3, {preset: top_ring}]
+  - [3, 4, {preset: top_ring}]
+  - [4, 5, {preset: top_ring}]
+  - [5, 0, {preset: top_ring}]
+  - [6, 7, {preset: bottom_ring}]
+  - [7, 8, {preset: bottom_ring}]
+  - [8, 9, {preset: bottom_ring}]
+  - [9, 10, {preset: bottom_ring}]
+  - [10, 11, {preset: bottom_ring}]
+  - [11, 6, {preset: bottom_ring}]
+  - [0, 6]
+  - [1, 7]
+  - [2, 8]
+  - [3, 9]
+  - [4, 10]
+  - [5, 11]
+faces:
+  - [0, 13, -6, -12]
+  - [1, 14, -7, -13]
+  - [2, 15, -8, -14]
+  - [3, 16, -9, -15]
+  - [4, 17, -10, -16]
+  - [5, 12, -11, -17]
+global_parameters:
+  surface_tension: 2.0
+macros:
+  gogo:
+    - r2
+    - V3
+    - g50
+    - V5
+    - g50
+    - V5
+    - gd
+    - g50
+    - V3
+    - g50
+    - r
+    - V5
+    - g50
