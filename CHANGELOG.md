@@ -10,6 +10,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Implemented **Mixed Voronoi Areas** (Meyer et al. 2003) for dual-area stability on distorted meshes.
   - Robust **bi-Laplacian force** implementation for energy-consistent minimization.
   - **Boundary Filtering**: Curvature is ignored for boundary vertices, ensuring flat planar patches correctly evaluate to zero bending energy.
+- **Gaussian curvature (Helfrich \bar{kappa} term)**: Added `modules/energy/gaussian_curvature.py` for closed vesicles with constant `gaussian_modulus` (energy is Gauss–Bonnet topological constant; zero shape gradient).
 - **Analytic bending gradient**: Added an analytic backpropagation gradient for the discrete Willmore/Helfrich bending energy and validated it against finite differences (`tests/test_bending_finite_difference.py`).
 - **Numerical Consistency Suite**: Added `tests/test_numerical_consistency.py` with automated **Finite Difference** checks for all energy modules (`surface`, `volume`, `line_tension`, `bending`), ensuring that analytical gradients perfectly match energy slopes.
 - `print energy`: New CLI command to display the current total energy of the mesh.

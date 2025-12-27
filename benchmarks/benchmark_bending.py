@@ -1,6 +1,13 @@
+from __future__ import annotations
+
+import os
+import sys
 import time
 
 import numpy as np
+
+# Ensure the project root is in sys.path when running via benchmarks/suite.py.
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from parameters.global_parameters import GlobalParameters
