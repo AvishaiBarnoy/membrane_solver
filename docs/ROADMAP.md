@@ -37,8 +37,8 @@ intended for development and planning; users should consult `README.md` and
 6. Pure Gaussian curvature
    - Check invariance under topology‑preserving deformations: no net change in
      energy for a closed surface with fixed topology.
-   - [ ] Document and scaffold a Gaussian curvature module (`modules/energy/gaussian_curvature.py`)
-         with baseline tests asserting `NotImplementedError`.
+   - [x] Implement a Gaussian curvature energy module (`modules/energy/gaussian_curvature.py`)
+         for closed surfaces with constant `gaussian_modulus` (Gauss–Bonnet topological constant).
 
 7. Inclusion disk (geometry scaffold)
    - A tagged/fixed inclusion patch on an approximately spherical surface.

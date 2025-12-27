@@ -15,6 +15,7 @@ from modules.energy import (
     bending,
     body_area_penalty,
     expression,
+    gaussian_curvature,
     jordan_area,
     line_tension,
     surface,
@@ -66,6 +67,7 @@ def check_gradient_consistency(module, mesh, eps=1e-6, tol=1e-5, is_constraint=F
     gp.surface_tension = 1.0
     gp.volume_stiffness = 10.0
     gp.bending_modulus = 1.0
+    gp.gaussian_modulus = 1.0
     gp.area_stiffness = 5.0
     gp.set("volume_constraint_mode", "penalty" if not is_constraint else "lagrange")
     resolver = ParameterResolver(gp)
@@ -440,3 +442,9 @@ def test_body_area_constraint_gradient_consistency():
     # Constraint module checks use constraint_gradients list
     mesh.bodies[0].options["target_area"] = 0.5
     check_gradient_consistency(body_area_constraint, mesh, is_constraint=True)
+
+
+def test_gaussian_curvature_gradient_consistency():
+    mesh = create_random_mesh()
+    # Closed mesh + constant modulus: energy is topological and gradient is zero.
+    check_gradient_consistency(gaussian_curvature, mesh, tol=1e-12)

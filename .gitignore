@@ -42,6 +42,10 @@ outputs/*.json
 data/
 results/
 
+# Benchmarks (generated outputs)
+benchmarks/results.json
+benchmarks/outputs/*.json
+
 # Agent instruction files (local tooling)
 GEMINI.md
 AGENT.md
