@@ -40,6 +40,7 @@ vertices:
   - [-0.7071, -0.7071, 0.0, {preset: "rim"}]
   - [ 0.0, -1.0, 0.0, {preset: "rim"}]
   - [ 0.7071, -0.7071, 0.0, {preset: "rim"}]
+  - [ 0.0,  0.0, 0.0]
 
 edges:
   # For N=8 and R=1, the regular polygon chord length is 2*sin(pi/8) ≈ 0.765367.
@@ -51,9 +52,24 @@ edges:
   - [5, 6, {energy: ["edge_length_penalty"], target_length: 0.7653668647}]
   - [6, 7, {energy: ["edge_length_penalty"], target_length: 0.7653668647}]
   - [7, 0, {energy: ["edge_length_penalty"], target_length: 0.7653668647}]
+  - [8, 0, {energy: ["edge_length_penalty"], target_length: 1.0}]
+  - [8, 1, {energy: ["edge_length_penalty"], target_length: 1.0}]
+  - [8, 2, {energy: ["edge_length_penalty"], target_length: 1.0}]
+  - [8, 3, {energy: ["edge_length_penalty"], target_length: 1.0}]
+  - [8, 4, {energy: ["edge_length_penalty"], target_length: 1.0}]
+  - [8, 5, {energy: ["edge_length_penalty"], target_length: 1.0}]
+  - [8, 6, {energy: ["edge_length_penalty"], target_length: 1.0}]
+  - [8, 7, {energy: ["edge_length_penalty"], target_length: 1.0}]
 
 faces:
-  - [0, 1, 2, 3, 4, 5, 6, 7]
+  - [0, 9, r8]
+  - [1, 10, r9]
+  - [2, 11, r10]
+  - [3, 12, r11]
+  - [4, 13, r12]
+  - [5, 14, r13]
+  - [6, 15, r14]
+  - [7, 8, r15]
 
 macros:
   gogo: "perturb 0.15; g 200; g 200"
