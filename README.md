@@ -175,6 +175,10 @@ during minimization and emit a warning at runtime.
 }
 ```
 
+`pin_to_circle` supports a `fit` mode for moving circular rims. Set
+`pin_to_circle_mode: "fit"` (plus `pin_to_circle_group` on the tagged entities)
+to keep the rim circular while letting the circle translate/rotate with the mesh.
+
 The new regression tests in `tests/test_perimeter_minimization.py` load the same
 square loop (see `tests/sample_meshes.square_perimeter_input`) to verify that
 energy drops while the loop returns to the requested perimeter, even after mesh

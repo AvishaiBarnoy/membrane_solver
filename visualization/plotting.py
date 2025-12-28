@@ -49,9 +49,10 @@ def plot_geometry(
     draw_facets : bool, optional
         If ``True`` (default), draw polygonal facets as filled surfaces.
     draw_edges : bool, optional
-        If ``True`` (default), draw all edges as line segments. This
-        includes edges that are not part of any facet, so wire‑frame
-        or line‑only meshes can be visualized.
+        If ``True``, draw all edges as line segments. This includes
+        edges that are not part of any facet, so wire‑frame or line‑only
+        meshes can be visualized. When the mesh has no facets, edges are
+        automatically drawn even if ``draw_edges`` is ``False``.
     facet_color :
         Default color to use for facets when no per‑facet color is
         provided. If ``None``, a light blue color is used.
@@ -75,6 +76,9 @@ def plot_geometry(
     if not mesh.vertices:
         logger.warning("Mesh has no vertices to visualize.")
         return
+
+    # For line-only meshes, automatically draw edges so the plot isn't empty.
+    draw_edges = bool(draw_edges or (not mesh.facets and mesh.edges))
 
     if ax is None:
         fig = plt.figure()

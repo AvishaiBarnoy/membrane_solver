@@ -60,6 +60,8 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Perimeter constraint coverage: `tests/test_perimeter_minimization.py` now drives a constrained square loop through minimization, refinement, and equiangulation, checking that perimeter returns to its target while area stays near 1 even in the presence of small discretisation errors.
 - A dedicated `visualization` package with a reusable `plot_geometry` helper and a CLI (`visualize_geometry.py` was removed in favor of `visualization/cli.py` or direct use).
 - Command-line line-tension controls: `--line-tension` and `--line-tension-edges` on `main.py` allow tagging edges with `line_tension` energy without editing JSON.
+- `pin_to_circle` fit mode: `pin_to_circle_mode: "fit"` keeps a tagged rim circular while allowing the circle to translate/rotate with the mesh; supports `pin_to_circle_group` for multiple rims.
+- Added a movable circular-rim demo mesh: `meshes/bench_moving_circle_fit.yaml` (now a real facet with stabilized rim spacing).
 
 ### Changed
 - Line search now evaluates Armijo acceptance on the post-constraint state to keep step acceptance consistent with enforced constraints.

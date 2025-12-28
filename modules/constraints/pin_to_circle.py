@@ -8,6 +8,20 @@ The circle is defined by:
 
 Attach ``"constraints": ["pin_to_circle"]`` to a vertex or an edge options dict
 to have its vertices projected onto the specified circle.
+
+Fit mode
+--------
+For cases where you want a circular rim but do not want to pin the circle to a
+fixed location in space, set ``pin_to_circle_mode`` to ``"fit"`` on the tagged
+entities (or in global parameters). In this mode, the constraint computes a
+best-fit circle from the currently tagged vertices and projects them back onto
+that circle. This allows the circle to translate/rotate with the mesh while
+remaining circular.
+
+You can optionally specify:
+- ``pin_to_circle_group``: separate multiple fitted circles within one mesh.
+- ``pin_to_circle_normal``: keep the plane normal fixed (otherwise it is fitted).
+- ``pin_to_circle_radius``: keep radius fixed (otherwise it is fitted).
 """
 
 from __future__ import annotations
@@ -38,6 +52,24 @@ def _default_tangent(normal: np.ndarray) -> np.ndarray:
     return tangent
 
 
+def _mode_from_options(mesh, options: dict | None) -> str:
+    gp = getattr(mesh, "global_parameters", None)
+    raw = None
+    if options and options.get("pin_to_circle_mode") is not None:
+        raw = options.get("pin_to_circle_mode")
+    elif gp is not None and gp.get("pin_to_circle_mode") is not None:
+        raw = gp.get("pin_to_circle_mode")
+    mode = str(raw or "fixed").lower()
+    return "fit" if mode == "fit" else "fixed"
+
+
+def _group_from_options(options: dict | None):
+    if not options:
+        return "default"
+    group = options.get("pin_to_circle_group")
+    return "default" if group is None else group
+
+
 def _resolve_circle(mesh, options: dict | None):
     gp = getattr(mesh, "global_parameters", None)
 
@@ -65,6 +97,106 @@ def _resolve_circle(mesh, options: dict | None):
         return None
 
     return normal, center, radius
+
+
+def _resolve_fit_params(mesh, option_sources: list[dict]) -> tuple[np.ndarray | None, float | None]:
+    gp = getattr(mesh, "global_parameters", None)
+
+    def pick(key: str):
+        for opts in option_sources:
+            if opts and opts.get(key) is not None:
+                return opts.get(key)
+        if gp is not None and gp.get(key) is not None:
+            return gp.get(key)
+        return None
+
+    normal_raw = pick("pin_to_circle_normal")
+    radius_raw = pick("pin_to_circle_radius")
+
+    normal = None
+    if normal_raw is not None:
+        normal = _normalize(np.asarray(normal_raw, dtype=float))
+        if normal is None:
+            logger.warning(
+                "pin_to_circle (fit): normal is near zero; falling back to fitted normal."
+            )
+            normal = None
+
+    radius = None
+    if radius_raw is not None:
+        try:
+            radius = float(radius_raw)
+        except (TypeError, ValueError):
+            radius = None
+        if radius is not None and radius <= 0.0:
+            logger.warning(
+                "pin_to_circle (fit): radius must be positive; falling back to fitted radius."
+            )
+            radius = None
+
+    return normal, radius
+
+
+def _orthonormal_basis_from_normal(normal: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    u = _default_tangent(normal)
+    v = np.cross(normal, u)
+    v = _normalize(v)
+    if v is None:
+        # Extremely degenerate; pick something arbitrary orthogonal.
+        v = np.array([0.0, 0.0, 1.0], dtype=float)
+        v = v - np.dot(v, normal) * normal
+        v = _normalize(v) or np.array([0.0, 1.0, 0.0], dtype=float)
+    return u, v
+
+
+def _fit_plane_normal(points: np.ndarray) -> np.ndarray | None:
+    if points.shape[0] < 3:
+        return None
+    centroid = np.mean(points, axis=0)
+    X = points - centroid
+    # PCA normal is the smallest singular vector.
+    try:
+        _, _, vh = np.linalg.svd(X, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return None
+    normal = vh[-1, :]
+    return _normalize(normal)
+
+
+def _fit_circle_in_plane(
+    points_3d: np.ndarray, normal: np.ndarray, radius_fixed: float | None
+) -> tuple[np.ndarray, float] | None:
+    """Fit a circle to 3D points constrained to a plane with given normal."""
+    if points_3d.shape[0] < 3:
+        return None
+
+    centroid = np.mean(points_3d, axis=0)
+    # Project points onto plane through centroid.
+    p = points_3d - np.dot(points_3d - centroid, normal)[:, None] * normal[None, :]
+
+    u, v = _orthonormal_basis_from_normal(normal)
+    rel = p - centroid
+    x = rel @ u
+    y = rel @ v
+
+    A = np.stack([2.0 * x, 2.0 * y, np.ones_like(x)], axis=1)
+    b = x * x + y * y
+    try:
+        sol, *_ = np.linalg.lstsq(A, b, rcond=None)
+    except np.linalg.LinAlgError:
+        return None
+    a, b0, d = (float(sol[0]), float(sol[1]), float(sol[2]))
+    r_sq = d + a * a + b0 * b0
+    if not np.isfinite(r_sq) or r_sq <= 1e-18:
+        return None
+    radius_fit = float(np.sqrt(r_sq))
+
+    radius = radius_fit if radius_fixed is None else float(radius_fixed)
+    if not np.isfinite(radius) or radius <= 0.0:
+        return None
+
+    center = centroid + a * u + b0 * v
+    return center, radius
 
 
 def _project_point_to_circle(
@@ -104,8 +236,55 @@ def enforce_constraint(mesh, **_kwargs):
         if _entity_has_constraint(getattr(e, "options", None))
     ]
 
+    # Fast path: pure fixed mode (legacy behavior).
+    vertices_are_fixed = all(
+        _mode_from_options(mesh, getattr(v, "options", None)) == "fixed"
+        for v in tagged_vertices
+    )
+    edges_are_fixed = all(
+        _mode_from_options(mesh, getattr(e, "options", None)) == "fixed"
+        for e in tagged_edges
+    )
+    if vertices_are_fixed and edges_are_fixed:
+        for vertex in tagged_vertices:
+            params = _resolve_circle(mesh, getattr(vertex, "options", None))
+            if params is None:
+                continue
+            normal, center, radius = params
+            vertex.position[:] = _project_point_to_circle(
+                vertex.position, normal, center, radius
+            )
+
+        for edge in tagged_edges:
+            params = _resolve_circle(mesh, getattr(edge, "options", None))
+            if params is None:
+                continue
+            normal, center, radius = params
+            for vidx in (int(edge.tail_index), int(edge.head_index)):
+                vertex = mesh.vertices.get(vidx)
+                if vertex is None:
+                    continue
+                vertex.position[:] = _project_point_to_circle(
+                    vertex.position, normal, center, radius
+                )
+        return
+
+    # Mixed mode: apply fixed-mode entities directly, and group fit-mode entities.
+    fit_groups: dict[object, dict[str, object]] = {}
+
+    def add_fit_vertex(vidx: int, options: dict | None):
+        group = _group_from_options(options)
+        entry = fit_groups.setdefault(group, {"vertex_ids": set(), "options": []})
+        entry["vertex_ids"].add(vidx)
+        if options:
+            entry["options"].append(options)
+
     for vertex in tagged_vertices:
-        params = _resolve_circle(mesh, getattr(vertex, "options", None))
+        options = getattr(vertex, "options", None)
+        if _mode_from_options(mesh, options) == "fit":
+            add_fit_vertex(int(vertex.index), options)
+            continue
+        params = _resolve_circle(mesh, options)
         if params is None:
             continue
         normal, center, radius = params
@@ -114,7 +293,12 @@ def enforce_constraint(mesh, **_kwargs):
         )
 
     for edge in tagged_edges:
-        params = _resolve_circle(mesh, getattr(edge, "options", None))
+        options = getattr(edge, "options", None)
+        if _mode_from_options(mesh, options) == "fit":
+            add_fit_vertex(int(edge.tail_index), options)
+            add_fit_vertex(int(edge.head_index), options)
+            continue
+        params = _resolve_circle(mesh, options)
         if params is None:
             continue
         normal, center, radius = params
@@ -125,6 +309,41 @@ def enforce_constraint(mesh, **_kwargs):
             vertex.position[:] = _project_point_to_circle(
                 vertex.position, normal, center, radius
             )
+
+    for group, spec in fit_groups.items():
+        vertex_ids = sorted(spec["vertex_ids"])
+        if len(vertex_ids) < 3:
+            logger.warning(
+                "pin_to_circle (fit): group %r has <3 vertices; skipping.", group
+            )
+            continue
+
+        points = np.array([mesh.vertices[i].position for i in vertex_ids], dtype=float)
+        option_sources = list(spec["options"])
+        normal_fixed, radius_fixed = _resolve_fit_params(mesh, option_sources)
+        normal = normal_fixed if normal_fixed is not None else _fit_plane_normal(points)
+        if normal is None:
+            logger.warning("pin_to_circle (fit): could not fit a plane; skipping.")
+            continue
+
+        fitted = _fit_circle_in_plane(points, normal, radius_fixed)
+        if fitted is None:
+            logger.warning("pin_to_circle (fit): could not fit a circle; skipping.")
+            continue
+        center, radius = fitted
+
+        u, _ = _orthonormal_basis_from_normal(normal)
+        for vidx in vertex_ids:
+            vertex = mesh.vertices.get(int(vidx))
+            if vertex is None:
+                continue
+            pos = vertex.position
+            pos_plane = pos - np.dot(pos - center, normal) * normal
+            offset = pos_plane - center
+            tangent = _normalize(offset)
+            if tangent is None:
+                tangent = u
+            vertex.position[:] = center + radius * tangent
 
 
 __all__ = ["enforce_constraint"]

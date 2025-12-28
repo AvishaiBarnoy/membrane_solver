@@ -570,7 +570,23 @@ mesh operations. Because it does not supply constraint gradients, it does not
 participate in KKT projection and will emit a warning when gradients are
 assembled.
 
-### 6.5 Fixed vertices
+### 6.5 Geometric constraints: `PinToCircle`
+
+`modules/constraints/pin_to_circle.py` pins tagged vertices/edges to a circle.
+By default it uses a fixed plane, center, and radius. Set
+`pin_to_circle_mode: "fit"` to keep the rim circular while letting the circle
+translate/rotate with the mesh (use `pin_to_circle_group` to separate multiple
+fitted rims).
+
+```yaml
+global_parameters:
+  pin_to_circle_mode: fit
+  pin_to_circle_radius: 1.0
+vertices:
+  - [1, 0, 0, {constraints: ["pin_to_circle"], pin_to_circle_group: "rim"}]
+```
+
+### 6.6 Fixed vertices
 
 Any vertex with `fixed: true` in the JSON is held fixed:
 

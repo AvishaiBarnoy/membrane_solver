@@ -1,0 +1,96 @@
+# Roadmap (8): Dented sphere with a flat patch.
+#
+# Goal:
+# - One "patch" face stays planar (but can slide within the plane),
+# - Its boundary relaxes toward a circle via line tension,
+# - The rest of the closed surface relaxes toward a near-sphere under surface tension,
+# - With a hard volume constraint (Lagrange mode) to prevent collapse.
+#
+# Notes:
+# - The patch face (face 0) has a fixed target area; this auto-enables the
+#   `fix_facet_area` constraint on that face.
+# - The patch plane is y = 0, enforced via `pin_to_plane` on the patch vertices
+#   and rim edges so refinement inherits the constraint.
+
+global_parameters:
+  surface_tension: 1.0
+  line_tension: 0.25
+  bending_modulus: 0.0
+  gaussian_modulus: 0.0
+
+  # Hard volume constraint via gradient projection (avoid geometric projection
+  # during minimization for stability; projection is still applied after mesh ops).
+  volume_constraint_mode: lagrange
+  volume_projection_during_minimization: false
+
+  # Plane for pin_to_plane constraints: y = 0.
+  pin_to_plane_normal: [0.0, 1.0, 0.0]
+  pin_to_plane_point: [0.0, 0.0, 0.0]
+
+  step_size: 0.01
+
+definitions:
+  patch_vertex:
+    constraints: ["pin_to_plane"]
+  patch_rim:
+    constraints: ["pin_to_plane"]
+    energy: ["line_tension"]
+
+vertices:
+  # Patch face vertices (y = 0 plane)
+  - [0.0, 0.0, 0.0, {preset: "patch_vertex"}]
+  - [1.0, 0.0, 0.0, {preset: "patch_vertex"}]
+  - [1.0, 0.0, 1.0, {preset: "patch_vertex"}]
+  - [0.0, 0.0, 1.0, {preset: "patch_vertex"}]
+
+  # Opposite face (free to relax)
+  - [0.0, 1.0, 1.0]
+  - [0.0, 1.0, 0.0]
+  - [1.0, 1.0, 0.0]
+  - [1.0, 1.0, 1.0]
+
+edges:
+  # Patch rim (shared with side faces): line tension + planar constraint.
+  - [0, 1, {preset: "patch_rim"}]
+  - [1, 2, {preset: "patch_rim"}]
+  - [2, 3, {preset: "patch_rim"}]
+  - [3, 0, {preset: "patch_rim"}]
+
+  # Top face
+  - [4, 5]
+  - [5, 6]
+  - [6, 7]
+  - [7, 4]
+
+  # Vertical edges
+  - [0, 5]
+  - [1, 6]
+  - [2, 7]
+  - [3, 4]
+
+faces:
+  # Patch face: planar, fixed area (auto-enables fix_facet_area).
+  - [0, 1, 2, 3, {constraints: ["pin_to_plane"], target_area: 1.0}]
+
+  # Side faces and top face (standard cube).
+  - [r0, 8, 5, r9]
+  - [9, 6, -10, -1]
+  - [-2, 10, 7, -11]
+  - [11, 4, -8, -3]
+  - [-5, -4, -7, -6]
+
+bodies:
+  0:
+    faces: [0, 1, 2, 3, 4, 5]
+    target_volume: 1.0
+
+macros:
+  # Includes the roadmap stretch goal: change target volume mid-run.
+  gogo: >
+    g 20; r; u; g 20;
+    set body 0 target_volume 1.2; g 20;
+    set body 0 target_volume 1.4; g 20;
+    set body 0 target_volume 1.6; g 20;
+    r; u; g 20;
+    set body 0 target_volume 1.8; g 30;
+    V 2; g 50

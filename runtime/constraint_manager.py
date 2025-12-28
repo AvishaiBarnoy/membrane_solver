@@ -282,8 +282,11 @@ class ConstraintModuleManager:
                 else:
                     module.enforce_constraint(mesh, **kwargs)
             except TypeError as e:
-                print(f"DEBUG: Caught TypeError: {e}")
-                # Older modules may not accept extra keyword arguments.
+                logger.debug(
+                    "Constraint module '%s' rejected kwargs (%s); retrying without kwargs.",
+                    name,
+                    e,
+                )
                 module.enforce_constraint(mesh)
 
     def __contains__(self, name):

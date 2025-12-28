@@ -45,17 +45,15 @@ intended for development and planning; users should consult `README.md` and
      This is a geometry + infrastructure benchmark (explicitly not caveolin physics yet).
    - [x] Benchmark scaffold: `benchmarks/benchmark_two_disks_sphere.py` using
      `meshes/bench_two_disks_sphere.json` (currently modeled as two small disks).
+   - [x] `pin_to_circle` supports a fit mode for movable circular rims when needed.
    - Reference (future): `docs/caveolin_generate_curvature.pdf`.
 
 8. Dented sphere with flat circular patch (from cube)
-   - Goal: one face stays planar and its boundary relaxes toward a circle,
-     while the rest of the surface relaxes toward a (nearly) spherical shape.
-   - Start with one planar face, then repeat with two planar faces.
-   - Stretch goal: change target volume mid‑simulation and verify the shape
-     inflates/deflates correctly under volume constraints.
-   - [x] Benchmark scaffold: `benchmarks/benchmark_dented_cube.py` using
-     `meshes/bench_dented_cube.json` (currently a coarse placeholder; the
-     “planar + circular rim” behavior needs a per‑vertex/region plane constraint).
+   - [x] Removed: We assume rigid circular inclusion footprints (caveolin disks),
+     so boundary circularity is enforced directly (e.g. `pin_to_circle`) rather
+     than emerging from line tension + area constraints.
+   - The existing scaffold (`benchmarks/benchmark_dented_cube.py` +
+     `meshes/bench_dented_cube.json`) remains useful as a geometry harness.
 
 9. Tilt source decay
    - Introduce localized tilt sources that decay away from the source region;
@@ -69,8 +67,6 @@ intended for development and planning; users should consult `README.md` and
 ## 3. Mean curvature examples
 
 11. After implementing mean‑curvature energy (end‑to‑end benchmarks)
-   - [ ] Sheet relaxes under bending toward a minimal‑mean‑curvature surface
-         (with appropriate area/volume constraints to avoid trivial collapse).
    - [ ] Cube relaxes toward a sphere primarily under bending (with fixed area
          and/or volume constraint; no surface tension term).
    - [ ] Membrane between two fixed parallel circles: catenoid has mean curvature

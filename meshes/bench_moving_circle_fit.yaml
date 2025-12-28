@@ -1,0 +1,59 @@
+# Demonstration: a circular rim that can translate and rotate
+#
+# Uses `pin_to_circle_mode: fit` so the solver keeps the tagged vertices on a
+# best-fit circle, while allowing the circle's center and plane orientation to
+# move with the mesh.
+#
+# Run:
+#   python main.py -i meshes/bench_moving_circle_fit.yaml
+#   gogo
+#
+# Tip: toggle live visualization with `lv` before running `gogo`.
+
+global_parameters:
+  step_size: 0.02
+  surface_tension: 0.0
+
+  # Best-fit circle constraint (not pinned in world space).
+  pin_to_circle_mode: fit
+  pin_to_circle_radius: 1.0
+
+  # Keep the rim discretization well-behaved so it continues to look like a
+  # circle (prevents vertices from bunching/re-ordering around the fitted
+  # circle under asymmetric forces).
+  edge_stiffness: 200.0
+
+definitions:
+  rim:
+    constraints: ["pin_to_circle"]
+    pin_to_circle_group: "rim"
+
+vertices:
+  # Unit circle in the x-y plane (z=0) to start.
+  # Two opposite vertices have "anchors" that create a net translation + torque,
+  # demonstrating that the fitted circle is allowed to move and change orientation.
+  - [ 1.0,  0.0, 0.0, {preset: "rim", expression: "k*((x-tx)**2+(y-ty)**2+(z-tz)**2)", expr_params: {k: 5.0, tx: 2.0, ty: 0.0, tz: 0.6}}]
+  - [ 0.7071,  0.7071, 0.0, {preset: "rim"}]
+  - [ 0.0,  1.0, 0.0, {preset: "rim"}]
+  - [-0.7071,  0.7071, 0.0, {preset: "rim"}]
+  - [-1.0,  0.0, 0.0, {preset: "rim", expression: "k*((x-tx)**2+(y-ty)**2+(z-tz)**2)", expr_params: {k: 5.0, tx: 2.0, ty: 0.0, tz: -0.6}}]
+  - [-0.7071, -0.7071, 0.0, {preset: "rim"}]
+  - [ 0.0, -1.0, 0.0, {preset: "rim"}]
+  - [ 0.7071, -0.7071, 0.0, {preset: "rim"}]
+
+edges:
+  # For N=8 and R=1, the regular polygon chord length is 2*sin(pi/8) ≈ 0.765367.
+  - [0, 1, {energy: ["edge_length_penalty"], target_length: 0.7653668647}]
+  - [1, 2, {energy: ["edge_length_penalty"], target_length: 0.7653668647}]
+  - [2, 3, {energy: ["edge_length_penalty"], target_length: 0.7653668647}]
+  - [3, 4, {energy: ["edge_length_penalty"], target_length: 0.7653668647}]
+  - [4, 5, {energy: ["edge_length_penalty"], target_length: 0.7653668647}]
+  - [5, 6, {energy: ["edge_length_penalty"], target_length: 0.7653668647}]
+  - [6, 7, {energy: ["edge_length_penalty"], target_length: 0.7653668647}]
+  - [7, 0, {energy: ["edge_length_penalty"], target_length: 0.7653668647}]
+
+faces:
+  - [0, 1, 2, 3, 4, 5, 6, 7]
+
+macros:
+  gogo: "perturb 0.15; g 200; g 200"
