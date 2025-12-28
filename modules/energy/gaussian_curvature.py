@@ -126,6 +126,7 @@ def compute_energy_and_gradient_array(
 
     def facet_filter(facet):
         return not bool(facet.options.get("gauss_bonnet_exclude", False))
+
     boundary_edges = find_boundary_edges(mesh, facet_filter=facet_filter)
     boundary_loops = extract_boundary_loops(mesh, boundary_edges)
 
