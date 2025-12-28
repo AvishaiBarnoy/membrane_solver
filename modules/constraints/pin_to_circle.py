@@ -70,6 +70,7 @@ def _resolve_circle(mesh, options: dict | None):
 def _project_point_to_circle(
     pos: np.ndarray, normal: np.ndarray, center: np.ndarray, radius: float
 ) -> np.ndarray:
+    """Project a 3D point onto the circle defined by normal, center, and radius."""
     # Project onto plane.
     pos_plane = pos - np.dot(pos - center, normal) * normal
     offset = pos_plane - center
