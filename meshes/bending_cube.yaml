@@ -1,6 +1,6 @@
-# Bending Energy Check: Cube Rounding
+#" Bending Energy Check: Cube Rounding
 # This simulation tests the bending energy (squared mean curvature integral).
-# Unlike surface tension which minimizes area, bending energy minimizes 
+# Unlike surface tension which minimizes area, bending energy minimizes
 # curvature variation.
 
 global_parameters:
@@ -48,3 +48,4 @@ bodies:
 
 macros:
   gogo: "r; u; g 50; r; u; g 100; V"
+instructions: []

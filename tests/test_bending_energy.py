@@ -80,6 +80,7 @@ def test_sphere_willmore_energy():
     mesh = create_sphere_mesh(subdivisions=3)  # ~1.5k facets
     gp = GlobalParameters()
     gp.bending_modulus = 1.0
+    gp.bending_energy_model = "willmore"
     resolver = ParameterResolver(gp)
 
     positions = mesh.positions_view()

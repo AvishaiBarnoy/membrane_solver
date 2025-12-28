@@ -116,3 +116,46 @@ def test_gaussian_term_offsets_energy_but_not_gradient():
 
     assert np.allclose(g0, g1, atol=0.0)
     assert np.isclose(float(e1 - e0), 4.0 * np.pi * 3.0, atol=1e-12)
+
+
+def test_gaussian_energy_open_surface_uses_boundary_terms():
+    mesh = Mesh()
+    mesh.vertices = {
+        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
+        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
+        2: Vertex(2, np.array([1.0, 1.0, 0.0])),
+        3: Vertex(3, np.array([0.0, 1.0, 0.0])),
+    }
+    mesh.edges = {
+        1: Edge(1, 0, 1),
+        2: Edge(2, 1, 2),
+        3: Edge(3, 2, 3),
+        4: Edge(4, 3, 0),
+        5: Edge(5, 0, 2),
+    }
+    mesh.facets = {
+        0: Facet(0, [1, 2, -5]),
+        1: Facet(1, [5, 3, 4]),
+    }
+    mesh.build_connectivity_maps()
+    mesh.build_facet_vertex_loops()
+
+    gp = GlobalParameters()
+    gp.gaussian_modulus = 1.0
+    resolver = ParameterResolver(gp)
+
+    positions = mesh.positions_view()
+    idx_map = mesh.vertex_index_to_row
+    grad_arr = np.zeros_like(positions)
+
+    energy = gaussian_curvature.compute_energy_and_gradient_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=idx_map,
+        grad_arr=grad_arr,
+    )
+
+    assert np.isclose(float(energy), 2.0 * np.pi, atol=1e-6)
+    assert float(np.max(np.abs(grad_arr))) == 0.0

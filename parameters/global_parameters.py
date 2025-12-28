@@ -31,6 +31,7 @@ class GlobalParameters:
             "step_size": 1e-3,
             "intrinsic_curvature": 0.0,
             "bending_modulus": 0.0,
+            "bending_energy_model": "helfrich",
             "gaussian_modulus": 0.0,
         }
         # Load initial parameters if provided

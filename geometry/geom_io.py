@@ -533,7 +533,13 @@ def parse_geometry(data: dict) -> Mesh:
                     options=body_options,
                 )
                 if target_volume is not None:
-                    body.options["target_volume"] = float(target_volume)
+                    if (
+                        isinstance(target_volume, str)
+                        and target_volume.lower() == "initial"
+                    ):
+                        body.options["target_volume"] = body.compute_volume(mesh)
+                    else:
+                        body.options["target_volume"] = float(target_volume)
 
                 mesh.bodies[bid] = body
 
@@ -648,7 +654,10 @@ def parse_geometry(data: dict) -> Mesh:
                 options=body_options,
             )
             if volume is not None:
-                body.options["target_volume"] = float(volume)
+                if isinstance(volume, str) and volume.lower() == "initial":
+                    body.options["target_volume"] = body.compute_volume(mesh)
+                else:
+                    body.options["target_volume"] = float(volume)
 
             mesh.bodies[i] = body
 
