@@ -15,6 +15,8 @@ Commands:
 - `V`: Vertex average.
 - `p` / `i`: Print physical properties (area, volume, surface radius of gyration, target volume).
 - `print [entity] [filter]`: Query geometry (e.g., `print vertex 0`, `print edges len > 0.5`).
+- `print energy breakdown`: Show per-module energy contributions.
+- `print macros`: List available macros.
 - `set [param/entity] [value]`: Set properties (e.g., `set surface_tension 1.5`, `set vertex 0 fixed true`).
 - `lv` / `live_vis`: Toggle live 3D visualization during minimization.
 - `quit` / `exit`: Stop the loop and save the final mesh.
@@ -39,6 +41,8 @@ macros:
 instructions:
   - gogo
 ```
+
+On load, the CLI prints any available macros for quick discovery.
 
 ## Explicit IDs (Optional)
 
@@ -107,6 +111,23 @@ To profile each benchmark case and generate per-case `.pstats` outputs:
 
 This runs `benchmarks/suite.py --profile` and writes results under
 `benchmarks/outputs/profiles` by default.
+
+## Gauss-Bonnet diagnostics
+
+For meshes with boundary loops (e.g., disk rims modeled as holes), enable
+Gauss-Bonnet drift checks by setting `gauss_bonnet_monitor=true` in
+`global_parameters`. Debug logs report the total invariant, the interior
+angle-defect sum, and per-loop boundary geodesic sums so drift can be
+localized after refinement or remeshing. To exclude facets from the
+diagnostic (treating them as “inactive”), set
+`gauss_bonnet_exclude: true` in the facet options.
+
+For `gaussian_curvature` energy, boundary loops are supported by default:
+the module evaluates the Gauss–Bonnet sum (interior defects + boundary
+turning) and multiplies by `gaussian_modulus`. To exclude facets from this
+sum, set `gauss_bonnet_exclude: true` in facet options. Enable
+`gaussian_curvature_strict_topology=true` to raise on non-manifold edges or
+invalid boundary loops (tolerance via `gaussian_curvature_defect_tol`).
 
 ## Geometry loading and Input Formats
 
@@ -184,7 +205,7 @@ refinement and equiangulation.
 
 Enable curvature/bending energy with `bending_modulus` and the `bending` energy
 module. Use:
-- `bending_energy_model`: `willmore` (default) or `helfrich`
+- `bending_energy_model`: `helfrich` (default) or `willmore`
 - `spontaneous_curvature` (alias: `intrinsic_curvature`) for Helfrich
 - `bending_gradient_mode`: `approx` (fast), `analytic` (validated), or
   `finite_difference` (slow, for verification)

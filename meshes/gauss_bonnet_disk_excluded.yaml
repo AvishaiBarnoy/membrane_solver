@@ -1,0 +1,17 @@
+global_parameters:
+  surface_tension: 1.0
+vertices:
+  - [0.0, 0.0, 0.0]
+  - [1.0, 0.0, 0.0]
+  - [1.0, 1.0, 0.0]
+  - [0.0, 1.0, 0.0]
+edges:
+  - [0, 1]
+  - [1, 2]
+  - [2, 3]
+  - [3, 0]
+  - [0, 2]
+faces:
+  - [0, 1, r4, {target_area: 0.5}]
+  - [4, 2, 3, {target_area: 0.5, gauss_bonnet_exclude: true}]
+instructions: null

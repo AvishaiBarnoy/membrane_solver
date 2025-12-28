@@ -9,6 +9,7 @@ from geometry.entities import Mesh
 from parameters.global_parameters import GlobalParameters
 from parameters.resolver import ParameterResolver
 from runtime.constraint_manager import ConstraintModuleManager
+from runtime.diagnostics.gauss_bonnet import GaussBonnetMonitor
 from runtime.energy_manager import EnergyModuleManager
 from runtime.steppers.base import BaseStepper
 
@@ -46,6 +47,7 @@ class Minimizer:
         module_list = (
             energy_modules if energy_modules is not None else mesh.energy_modules
         )
+        self.energy_module_names = list(module_list)
         self.energy_modules = [
             self.energy_manager.get_module(mod) for mod in module_list
         ]
@@ -67,6 +69,28 @@ class Minimizer:
         logger.debug(f"Mesh energy_modules: {self.mesh.energy_modules}")
 
         self.param_resolver = ParameterResolver(global_params)
+        self._gauss_bonnet_monitor: GaussBonnetMonitor | None = None
+
+    def _check_gauss_bonnet(self) -> None:
+        """Emit Gauss-Bonnet diagnostics if enabled."""
+        if not bool(self.global_params.get("gauss_bonnet_monitor", False)):
+            return
+
+        if self._gauss_bonnet_monitor is None:
+            eps_angle = float(self.global_params.get("gauss_bonnet_eps_angle", 1e-4))
+            c1 = float(self.global_params.get("gauss_bonnet_c1", 1.0))
+            c2 = float(self.global_params.get("gauss_bonnet_c2", 1.0))
+            self._gauss_bonnet_monitor = GaussBonnetMonitor.from_mesh(
+                self.mesh, eps_angle=eps_angle, c1=c1, c2=c2
+            )
+
+        report = self._gauss_bonnet_monitor.evaluate(self.mesh)
+        if not report["ok"]:
+            logger.warning(
+                "Gauss-Bonnet drift exceeded tolerance: |ΔG|=%.3e (tol %.3e).",
+                report["drift_G"],
+                report["tol_G"],
+            )
 
     def refresh_modules(self):
         """Re-load energy and constraint modules from the current mesh state."""
@@ -218,6 +242,33 @@ STEP SIZE:\t {self.step_size}
             total_energy += float(E_mod)
         return float(total_energy)
 
+    def compute_energy_breakdown(self) -> Dict[str, float]:
+        """Return per-module energy contributions for the current mesh."""
+        positions = self.mesh.positions_view()
+        index_map = self.mesh.vertex_index_to_row
+        breakdown: Dict[str, float] = {}
+
+        for name, module in zip(self.energy_module_names, self.energy_modules):
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                grad_dummy = np.zeros_like(positions)
+                E_mod = module.compute_energy_and_gradient_array(
+                    self.mesh,
+                    self.global_params,
+                    self.param_resolver,
+                    positions=positions,
+                    index_map=index_map,
+                    grad_arr=grad_dummy,
+                )
+            else:
+                E_mod, _ = module.compute_energy_and_gradient(
+                    self.mesh,
+                    self.global_params,
+                    self.param_resolver,
+                    compute_gradient=False,
+                )
+            breakdown[name] = float(E_mod)
+        return breakdown
+
     def _grad_arr_to_dict(self, grad_arr: np.ndarray) -> Dict[int, np.ndarray]:
         """Convert a dense gradient array into a sparse dict keyed by vertex id."""
         return {
@@ -300,6 +351,7 @@ STEP SIZE:\t {self.step_size}
         if self._has_enforceable_constraints:
             self.enforce_constraints_after_mesh_ops(self.mesh)
 
+        self._check_gauss_bonnet()
         last_grad_arr = None
         for i in range(n_steps):
             if callback:
@@ -344,6 +396,7 @@ STEP SIZE:\t {self.step_size}
                 else None,
             )
 
+            self._check_gauss_bonnet()
             if not step_success:
                 if self.step_size <= self.step_size_floor:
                     zero_step_counter += 1

@@ -25,6 +25,11 @@ import numpy as np
 
 from geometry.curvature import compute_angle_defects
 from geometry.entities import Mesh
+from runtime.diagnostics.gauss_bonnet import (
+    extract_boundary_loops,
+    find_boundary_edges,
+    gauss_bonnet_invariant,
+)
 
 logger = logging.getLogger("membrane_solver")
 
@@ -36,6 +41,66 @@ def _gaussian_modulus(global_params) -> float:
 def _euler_characteristic(mesh: Mesh) -> int:
     """Euler characteristic of the current mesh complex (V - E + F)."""
     return int(len(mesh.vertices) - len(mesh.edges) + len(mesh.facets))
+
+
+def _strict_topology_check(
+    mesh: Mesh,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    *,
+    tol: float,
+    boundary_edges: list | None = None,
+    boundary_loops: list | None = None,
+) -> None:
+    """Raise if the mesh is non-manifold or Gauss-Bonnet mismatch is large."""
+    mesh.build_connectivity_maps()
+    non_manifold = [
+        eid for eid, facets in mesh.edge_to_facets.items() if len(facets) > 2
+    ]
+    if non_manifold:
+        raise ValueError(
+            "gaussian_curvature strict check: non-manifold edges detected "
+            f"(count={len(non_manifold)})."
+        )
+
+    if boundary_edges is None:
+        boundary_edges = []
+    if boundary_loops is None:
+        boundary_loops = []
+
+    if boundary_edges:
+        deg = {}
+        for edge in boundary_edges:
+            deg[edge.tail_index] = deg.get(edge.tail_index, 0) + 1
+            deg[edge.head_index] = deg.get(edge.head_index, 0) + 1
+        bad = {vid: cnt for vid, cnt in deg.items() if cnt != 2}
+        if bad:
+            raise ValueError(
+                "gaussian_curvature strict check: boundary vertex degree != 2 "
+                f"(count={len(bad)})."
+            )
+        if not boundary_loops:
+            raise ValueError(
+                "gaussian_curvature strict check: boundary edges present but no loops found."
+            )
+        short = [loop for loop in boundary_loops if len(loop) < 3]
+        if short:
+            raise ValueError(
+                "gaussian_curvature strict check: boundary loop too short "
+                f"(count={len(short)})."
+            )
+        return
+
+    defects = compute_angle_defects(mesh, positions, index_map)
+    defect_sum = float(np.sum(defects))
+    chi = _euler_characteristic(mesh)
+    target = float(2.0 * np.pi * chi)
+    err = abs(defect_sum - target)
+    if err > tol:
+        raise ValueError(
+            "gaussian_curvature strict check: defect sum mismatch "
+            f"(sum(defect)={defect_sum:.6e}, 2πχ={target:.6e}, |Δ|={err:.3e})."
+        )
 
 
 def compute_energy_and_gradient_array(
@@ -59,17 +124,30 @@ def compute_energy_and_gradient_array(
     if kappa_bar == 0.0:
         return 0.0
 
-    boundary_vids = getattr(mesh, "boundary_vertex_ids", None) or []
-    if boundary_vids:
-        raise NotImplementedError(
-            "gaussian_curvature energy currently supports only closed surfaces "
-            "(no boundary vertices)."
-        )
+    def facet_filter(facet):
+        return not bool(facet.options.get("gauss_bonnet_exclude", False))
+    boundary_edges = find_boundary_edges(mesh, facet_filter=facet_filter)
+    boundary_loops = extract_boundary_loops(mesh, boundary_edges)
 
-    chi = _euler_characteristic(mesh)
-    energy = float(2.0 * np.pi * kappa_bar * chi)
+    if boundary_edges:
+        if not boundary_loops:
+            logger.warning(
+                "gaussian_curvature: boundary edges detected but no loops extracted."
+            )
+        for loop in boundary_loops:
+            if len(loop) < 3:
+                logger.warning(
+                    "gaussian_curvature: boundary loop has <3 vertices; results may be unreliable."
+                )
+        g_total, _, _, _ = gauss_bonnet_invariant(mesh, facet_filter=facet_filter)
+        energy = float(kappa_bar * g_total)
+    else:
+        chi = _euler_characteristic(mesh)
+        energy = float(2.0 * np.pi * kappa_bar * chi)
 
-    if bool(global_params.get("gaussian_curvature_check_defects", False)):
+    if (not boundary_edges) and bool(
+        global_params.get("gaussian_curvature_check_defects", False)
+    ):
         defects = compute_angle_defects(mesh, positions, index_map)
         defect_sum = float(np.sum(defects))
         target = float(2.0 * np.pi * chi)
@@ -82,6 +160,16 @@ def compute_energy_and_gradient_array(
                 target,
                 err,
             )
+    if bool(global_params.get("gaussian_curvature_strict_topology", False)):
+        tol = float(global_params.get("gaussian_curvature_defect_tol", 1e-6))
+        _strict_topology_check(
+            mesh,
+            positions,
+            index_map,
+            tol=tol,
+            boundary_edges=boundary_edges,
+            boundary_loops=boundary_loops,
+        )
 
     return energy
 

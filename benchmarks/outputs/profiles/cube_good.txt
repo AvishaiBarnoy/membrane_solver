@@ -34,5 +34,3 @@
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:454(_create_cb_wrapper)
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:460(__init__)
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1954(_handle_exitstatus)
-
-

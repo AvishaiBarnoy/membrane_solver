@@ -34,5 +34,3 @@
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:287(helper)
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:460(__init__)
        51    0.000    0.000    0.000    0.000 {built-in method posix.fspath}
-
-
