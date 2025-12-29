@@ -4,6 +4,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ## [Unreleased]
 ### Added
+- Optional Fortran (f2py) surface-energy kernel (`fortran_kernels/surface_energy.f90`) with automatic runtime fallback to NumPy when not built/available.
 - **Hybrid SoA Architecture**: Refactored the minimization pipeline to use a Structure-of-Arrays pattern. Optimization now runs on dense NumPy arrays, eliminating O(N) Python dictionary overhead and resulting in a **3.5x speedup** for large meshes.
 - **Gauss-Bonnet diagnostics**: Added `runtime/diagnostics/gauss_bonnet.py` to monitor Gaussian curvature invariants on open surfaces with boundary loops, including per-loop boundary geodesic sums and drift checks during minimization.
   - Supports excluding facets from the diagnostic via `gauss_bonnet_exclude` in facet options to model effective holes.

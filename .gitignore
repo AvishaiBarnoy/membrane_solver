@@ -62,3 +62,5 @@ outputs/*.png
 analyze_folding.py
 meshes/spontaneous_folding.json
 tests/test_spontaneous_folding.py
+
+coverage.xml
