@@ -33,12 +33,15 @@ intended for development and planning; users should consult `README.md` and
    - [x] Add unit‑level validation: Verified against analytical sphere energy ($4\pi$) and zero-energy for flat planes. Added strict **Finite Difference** checks in `tests/test_numerical_consistency.py`.
    - [x] Add an analytic bending gradient and validate it against finite differences (`tests/test_bending_finite_difference.py`).
    - [x] Add parameter plumbing: `bending_modulus` integrated via CLI and input files.
+   - [x] Default bending model switched to Helfrich (`bending_energy_model="helfrich"`) with zero spontaneous curvature unless overridden.
 
 6. Pure Gaussian curvature
    - Check invariance under topology‑preserving deformations: no net change in
      energy for a closed surface with fixed topology.
    - [x] Implement a Gaussian curvature energy module (`modules/energy/gaussian_curvature.py`)
          for closed surfaces with constant `gaussian_modulus` (Gauss–Bonnet topological constant).
+   - [x] Add Gauss-Bonnet drift diagnostics for open surfaces with boundary loops
+         (`runtime/diagnostics/gauss_bonnet.py`) and regression tests.
 
 7. Inclusion disk (geometry scaffold)
    - A tagged/fixed inclusion patch on an approximately spherical surface.
@@ -75,7 +78,8 @@ intended for development and planning; users should consult `README.md` and
          fixed surface area of the soap film.
 
 12. Flat sheet that folds to its spontaneous curvature
-   - Benchmark for bending energy and spontaneous curvature terms.
+   - Deferred: requires tightly coupled inextensibility constraints (edge
+     lengths, facet areas, and corner-angle preservation) to stay stable.
 
 ## 4. Caveolin and complex inclusions
 
@@ -83,26 +87,32 @@ intended for development and planning; users should consult `README.md` and
     - Full 3D generalization of the caveolin model with a local curvature /
       tilt source and far‑field membrane.
 
-14. Automatic minimization workflow
+14. Multi-disk positional constraints
+    - Add positional constraints between circular rims (specified by chord
+      length or angular separation).
+    - Initial test: two disks with a fixed chord length/angle.
+    - Extend to multiple disks on a sphere, controlling pairwise angles.
+
+15. Automatic minimization workflow
     - User defines target refinement or mesh quality criteria; the program
       iterates between minimization, refinement, equiangulation and averaging
       to reach a prescribed resolution and energy tolerance.
 
 ## 5. Engineering & Infrastructure
 
-15. CLI & Usability
+16. CLI & Usability
     - [x] Query/Adjustment commands (`print`, `set`).
     - [x] Live Visualization (`lv`) via Matplotlib interactive mode.
     - [x] Surface radius of gyration reporting in CLI properties output.
-    - [ ] Add `history` command to replay interactive session.
+    - [x] Add `history` command to replay interactive session.
 
-16. Performance & Architecture
+17. Performance & Architecture
     - [x] **Hybrid SoA Architecture**: Implement "Scatter-Gather" pattern where optimization runs on dense arrays (Structure of Arrays) while topology remains object-oriented.
     - [ ] **Compiled Extensions**: Port the hot-loop `compute_energy_and_gradient` to Fortran (f2py) or Rust (PyO3) for ~100x speedup.
     - [ ] **Parallelism**: Explore OpenMP for energy summation.
     - [ ] Re-evaluate Conjugate Gradient defaults once stability wins are locked in; keep GD as the conservative baseline.
 
-17. Code Quality
+18. Code Quality
     - [ ] Refactor `fixed` constraints to be core entity properties (removing them from the constraint module list).
     - [x] Consolidate constraint gradient handling into the KKT projection path.
     - [x] Expression-based energies/constraints.
@@ -111,6 +121,6 @@ intended for development and planning; users should consult `README.md` and
     - [x] Add targeted unit tests for core helpers (volume penalties, edge-index exceptions).
     - [ ] Continue raising coverage around energy/constraint managers, CLI commands, and visualization glue.
 
-18. Documentation
+19. Documentation
     - [x] README + manual now describe testing/diagnostics, and reference the Mermaid architecture diagram.
     - [ ] Expand API docs for future curvature/tilt modules once the placeholders evolve into full features.

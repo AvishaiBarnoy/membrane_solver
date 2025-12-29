@@ -6,7 +6,13 @@ from commands.mesh_ops import (
     SnapshotCommand,
     VertexAverageCommand,
 )
-from commands.meta import HelpCommand, PrintEntityCommand, QuitCommand, SetCommand
+from commands.meta import (
+    HelpCommand,
+    HistoryCommand,
+    PrintEntityCommand,
+    QuitCommand,
+    SetCommand,
+)
 from commands.minimization import (
     GoCommand,
     HessianCommand,
@@ -44,6 +50,7 @@ COMMAND_REGISTRY = {
     "h": HelpCommand(),
     "set": SetCommand(),
     "print": PrintEntityCommand(),
+    "history": HistoryCommand(),
 }
 
 

@@ -6,7 +6,13 @@ import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from commands.meta import HelpCommand, PrintEntityCommand, QuitCommand, SetCommand
+from commands.meta import (
+    HelpCommand,
+    HistoryCommand,
+    PrintEntityCommand,
+    QuitCommand,
+    SetCommand,
+)
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from parameters.global_parameters import GlobalParameters
 
@@ -81,3 +87,12 @@ def test_set_command_updates_body_target_volume(capsys):
     assert mesh.bodies[0].target_volume == 1.2
     assert mesh.bodies[0].options["target_volume"] == 1.2
     assert "target_volume=1.2" in capsys.readouterr().out
+
+
+def test_history_command_prints_lines(capsys):
+    ctx = SimpleNamespace(history=["g5", "r", "V2"])
+    HistoryCommand().execute(ctx, [])
+    out = capsys.readouterr().out
+    assert "Command history:" in out
+    assert "1: g5" in out
+    assert "3: V2" in out

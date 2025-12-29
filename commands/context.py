@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from geometry.entities import Mesh
 from runtime.minimizer import Minimizer
@@ -13,3 +13,4 @@ class CommandContext:
     minimizer: Minimizer
     stepper: BaseStepper
     should_exit: bool = False
+    history: list[str] = field(default_factory=list)

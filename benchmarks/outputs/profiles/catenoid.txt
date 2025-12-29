@@ -34,5 +34,3 @@
        39    0.000    0.000    0.000    0.000 {built-in method sys.intern}
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:454(_create_cb_wrapper)
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:460(__init__)
-
-

@@ -30,6 +30,7 @@ class HelpCommand(Command):
         )
         print("  live_vis / lv Turn on/off live visualization during minimization")
         print("  save          Save geometry to 'interactive.temp'")
+        print("  history       Show commands entered in this session")
         print("  quit / exit / q  Leave interactive mode")
 
 
@@ -157,8 +158,28 @@ class PrintEntityCommand(Command):
             entities = mesh.bodies
             name = "Body"
         elif entity_type == "energy":
-            E = context.minimizer.compute_energy()
-            print(f"Current Total Energy: {E:.10f}")
+            if len(args) > 1 and args[1].lower() in {"breakdown", "details"}:
+                breakdown = context.minimizer.compute_energy_breakdown()
+                total = sum(breakdown.values())
+                print(f"Current Total Energy: {total:.10f}")
+                for name, value in breakdown.items():
+                    print(f"  {name}: {value:.10f}")
+            else:
+                E = context.minimizer.compute_energy()
+                print(f"Current Total Energy: {E:.10f}")
+            return
+        elif entity_type in ["macros", "macro"]:
+            macros = getattr(mesh, "macros", {}) or {}
+            if not macros:
+                print("No macros defined.")
+                return
+            print("Macros:")
+            for name, steps in macros.items():
+                if isinstance(steps, list):
+                    body = "; ".join(str(step) for step in steps)
+                else:
+                    body = str(steps)
+                print(f"  {name}: {body}")
             return
         else:
             print(f"Unknown entity type: {entity_type}")
@@ -237,3 +258,16 @@ class PrintEntityCommand(Command):
             print(f"  [{k}]: {info} {obj.options if hasattr(obj, 'options') else ''}")
         if len(targets) > 20:
             print("  ... (showing first 20)")
+
+
+class HistoryCommand(Command):
+    """Prints command history."""
+
+    def execute(self, context, args):
+        history = getattr(context, "history", None)
+        if not history:
+            print("No command history recorded.")
+            return
+        print("Command history:")
+        for idx, line in enumerate(history, start=1):
+            print(f"  {idx}: {line}")
