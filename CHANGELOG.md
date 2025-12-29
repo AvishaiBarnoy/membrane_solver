@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 ## [Unreleased]
 ### Added
 - **Hybrid SoA Architecture**: Refactored the minimization pipeline to use a Structure-of-Arrays pattern. Optimization now runs on dense NumPy arrays, eliminating O(N) Python dictionary overhead and resulting in a **3.5x speedup** for large meshes.
+- **Gauss-Bonnet diagnostics**: Added `runtime/diagnostics/gauss_bonnet.py` to monitor Gaussian curvature invariants on open surfaces with boundary loops, including per-loop boundary geodesic sums and drift checks during minimization.
+  - Supports excluding facets from the diagnostic via `gauss_bonnet_exclude` in facet options to model effective holes.
+- Added `print energy breakdown` to show per-module energy contributions (including Gaussian curvature when enabled).
+- CLI now prints defined macros on load and supports `print macros`.
+- Added Gauss-Bonnet sample meshes: `meshes/gauss_bonnet_disk.json`, `meshes/gauss_bonnet_disk_excluded.yaml`, `meshes/gauss_bonnet_torus.yaml`, `meshes/boxy_torus_start.yaml`.
+- Added `meshes/hemisphere_start.yaml` (sphere-with-hole starter mesh) for Gauss–Bonnet boundary checks.
 - **Bending Energy Module**: Implemented the squared mean curvature integral (Willmore energy) via the discrete Laplace-Beltrami operator.
   - Uses **Cotangent Weights** for geometric accuracy.
   - Implemented **Mixed Voronoi Areas** (Meyer et al. 2003) for dual-area stability on distorted meshes.
@@ -64,6 +70,9 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Added a movable circular-rim demo mesh: `meshes/bench_moving_circle_fit.yaml` (now a real facet with stabilized rim spacing).
 
 ### Changed
+- Bending energy now defaults to the Helfrich model (`bending_energy_model="helfrich"`) with zero spontaneous curvature unless overridden.
+- `gaussian_curvature` can now enforce strict topology validation via `gaussian_curvature_strict_topology`.
+- `gaussian_curvature` now supports boundary loops by default, using Gauss–Bonnet interior+boundary terms (with optional `gauss_bonnet_exclude` facet filtering).
 - Line search now evaluates Armijo acceptance on the post-constraint state to keep step acceptance consistent with enforced constraints.
 - Single-constraint KKT projection is now supported when a constraint module supplies a gradient.
 - Multi-constraint KKT projection now solves a small constraint system when multiple gradients are provided.

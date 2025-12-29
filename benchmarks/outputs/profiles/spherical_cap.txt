@@ -34,5 +34,3 @@
         7    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:536(__str__)
         1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:546(__exit__)
         4    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:546(__fspath__)
-
-

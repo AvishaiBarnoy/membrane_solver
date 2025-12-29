@@ -242,6 +242,26 @@ Override with `expression_measure` or `constraint_measure`.
 - A fixed edge implies fixed endpoints: when an edge is marked `fixed`, both of its vertices are treated as fixed for minimization and are copied as fixed during refinement.
 - Volume penalty calculations are covered by `tests/test_volume_energy.py`, which exercises both energy and gradient paths so future modules can safely rely on the helpers in `modules/energy/volume.py`.
 - When `parse_geometry` detects NaN/inf vertex coordinates or edges that reference unknown vertices, it aborts immediately and writes a detailed message to the configured log file (`--log`), helping diagnose malformed inputs.
+- Gauss-Bonnet drift monitoring is available for open surfaces with boundary loops. Enable it with `gauss_bonnet_monitor=true` and adjust tolerance scaling via:
+  - `gauss_bonnet_eps_angle` (default `1e-4` radians),
+  - `gauss_bonnet_c1` for the total invariant tolerance, and
+  - `gauss_bonnet_c2` for per-loop tolerances.
+  Debug logs report `G`, `K_int_total`, `B_total`, and each loop's `B_j` so drift can be localized after refinement or remeshing.
+  Facets can be excluded from the diagnostic by setting
+  `gauss_bonnet_exclude: true` in facet options (useful when rigid disks are
+  treated as effective holes).
+  For `gaussian_curvature`, boundary loops are supported by default: the
+  module uses the Gauss–Bonnet sum (interior defects + boundary turning)
+  and multiplies by `gaussian_modulus`. To exclude facets from this sum,
+  set `gauss_bonnet_exclude: true` in facet options. Enable
+  `gaussian_curvature_strict_topology=true` to raise on non-manifold edges,
+  invalid boundary loops, or defect mismatches (tune with
+  `gaussian_curvature_defect_tol`).
+
+## 4.1 Interactive command highlights
+
+- `print energy breakdown` prints per-module energy contributions.
+- `print macros` lists defined macros (macros are also printed on load).
 
 ---
 
@@ -448,8 +468,10 @@ The module ignores boundary vertices, meaning a flat planar patch correctly yiel
 
 #### 5.4.1 Helfrich model (spontaneous curvature)
 
-Set `global_parameters.bending_energy_model="helfrich"` to use a spontaneous
-curvature model. The preferred curvature is taken from
+The default bending model is `helfrich` with `spontaneous_curvature=0`, so it
+reduces to the Willmore form when no spontaneous curvature is set. Use
+`global_parameters.bending_energy_model="willmore"` to force the pure Willmore
+form. The preferred curvature (for Helfrich) is taken from
 `global_parameters.spontaneous_curvature` (alias: `intrinsic_curvature`).
 
 #### 5.4.2 Gradient modes

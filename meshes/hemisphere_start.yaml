@@ -1,0 +1,46 @@
+# Hemisphere (sphere with a hole) starter mesh for Gauss-Bonnet checks
+global_parameters:
+  surface_tension: 1.0
+  volume_constraint_mode: lagrange
+  gaussian_modulus: 1.0
+energy_modules:
+  - surface
+  - gaussian_curvature
+definitions:
+  fixed_node:
+    fixed: true
+vertices:
+  - [0.0, 0.0, 0.5]
+  - [1.0, 0.0, 0.0, {preset: fixed_node}]
+  - [0.5, 0.86602540378, 0.0, {preset: fixed_node}]
+  - [-0.5, 0.86602540378, 0.0, {preset: fixed_node}]
+  - [-1.0, 0.0, 0.0, {preset: fixed_node}]
+  - [-0.5, -0.86602540378, 0.0, {preset: fixed_node}]
+  - [0.5, -0.86602540378, 0.0, {preset: fixed_node}]
+edges:
+  - [0, 1]
+  - [0, 2]
+  - [0, 3]
+  - [0, 4]
+  - [0, 5]
+  - [0, 6]
+  - [1, 2, {preset: fixed_node}]
+  - [2, 3, {preset: fixed_node}]
+  - [3, 4, {preset: fixed_node}]
+  - [4, 5, {preset: fixed_node}]
+  - [5, 6, {preset: fixed_node}]
+  - [6, 1, {preset: fixed_node}]
+faces:
+  - [0, 6, r1]
+  - [1, 7, r2]
+  - [2, 8, r3]
+  - [3, 9, r4]
+  - [4, 10, r5]
+  - [5, 11, r0]
+bodies:
+  faces:
+    - [0, 1, 2, 3, 4, 5]
+  target_volume:
+    - 2.0943951
+macros:
+  gogo: ["r; g20; u; V; g50; r; g20; u; V; g50; r; g20; u; V; g30"]

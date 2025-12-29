@@ -22,7 +22,7 @@ BendingGradientMode = Literal["approx", "finite_difference", "analytic"]
 
 
 def _energy_model(global_params) -> BendingEnergyModel:
-    model = str(global_params.get("bending_energy_model", "willmore") or "willmore")
+    model = str(global_params.get("bending_energy_model", "helfrich") or "helfrich")
     model = model.lower().strip()
     return "helfrich" if model == "helfrich" else "willmore"
 

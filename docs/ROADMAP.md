@@ -33,12 +33,15 @@ intended for development and planning; users should consult `README.md` and
    - [x] Add unit‑level validation: Verified against analytical sphere energy ($4\pi$) and zero-energy for flat planes. Added strict **Finite Difference** checks in `tests/test_numerical_consistency.py`.
    - [x] Add an analytic bending gradient and validate it against finite differences (`tests/test_bending_finite_difference.py`).
    - [x] Add parameter plumbing: `bending_modulus` integrated via CLI and input files.
+   - [x] Default bending model switched to Helfrich (`bending_energy_model="helfrich"`) with zero spontaneous curvature unless overridden.
 
 6. Pure Gaussian curvature
    - Check invariance under topology‑preserving deformations: no net change in
      energy for a closed surface with fixed topology.
    - [x] Implement a Gaussian curvature energy module (`modules/energy/gaussian_curvature.py`)
          for closed surfaces with constant `gaussian_modulus` (Gauss–Bonnet topological constant).
+   - [x] Add Gauss-Bonnet drift diagnostics for open surfaces with boundary loops
+         (`runtime/diagnostics/gauss_bonnet.py`) and regression tests.
 
 7. Inclusion disk (geometry scaffold)
    - A tagged/fixed inclusion patch on an approximately spherical surface.

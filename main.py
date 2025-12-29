@@ -182,6 +182,16 @@ def main():
     data = load_data(args.input)
     mesh = parse_geometry(data)
 
+    macros = getattr(mesh, "macros", {}) or {}
+    if macros:
+        print("Macros:")
+        for name, steps in macros.items():
+            if isinstance(steps, list):
+                body = "; ".join(str(step) for step in steps)
+            else:
+                body = str(steps)
+            print(f"  {name}: {body}")
+
     if args.viz or args.viz_save:
         from visualization.plotting import plot_geometry
 
