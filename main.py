@@ -280,11 +280,6 @@ def main():
     # Initialize Command Context
     context = CommandContext(mesh, minimizer, stepper)
 
-    def _record_history(line: str) -> None:
-        entry = (line or "").strip()
-        if entry:
-            context.history.append(entry)
-
     if args.properties:
         cmd, _ = get_command("properties")
         cmd.execute(context, [])
@@ -311,7 +306,6 @@ def main():
     logger.debug(f"Executing {len(lines)} initial instructions.")
     for line in lines:
         execute_command_line(context, line, get_command_fn=get_command)
-        _record_history(line)
 
     if not args.non_interactive:
         while not context.should_exit:
@@ -323,7 +317,6 @@ def main():
                 continue
             try:
                 execute_command_line(context, line, get_command_fn=get_command)
-                _record_history(line)
             except Exception as e:
                 logger.error(f"Error executing command '{line}': {e}")
 

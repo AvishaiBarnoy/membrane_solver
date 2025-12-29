@@ -76,6 +76,32 @@ def test_unknown_macro_logs_warning(caplog):
     assert "Unknown instruction" in caplog.text
 
 
+def test_history_skips_unknown_instruction():
+    data = {
+        "vertices": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        "edges": [[0, 1], [1, 2], [2, 0]],
+        "faces": [[0, 1, 2]],
+        "macros": {},
+        "instructions": [],
+    }
+    ctx = _build_context(data)
+    execute_command_line(ctx, "nope")
+    assert ctx.history == []
+
+
+def test_history_records_macro_lines():
+    data = {
+        "vertices": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        "edges": [[0, 1], [1, 2], [2, 0]],
+        "faces": [[0, 1, 2]],
+        "macros": {"gogo": "g 1; g 2; g3"},
+        "instructions": [],
+    }
+    ctx = _build_context(data)
+    execute_command_line(ctx, "gogo")
+    assert ctx.history == ["g 1", "g 2", "g3"]
+
+
 def test_macros_survive_polygon_triangulation():
     data = {
         "vertices": [

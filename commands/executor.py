@@ -34,6 +34,9 @@ def execute_command_line(
     command, extra_args = get_command_fn(cmd_name)
     if command is not None:
         command.execute(context, extra_args + cmd_args)
+        history = getattr(context, "history", None)
+        if history is not None:
+            history.append(line)
         return
 
     macros = getattr(context.mesh, "macros", {}) or {}
