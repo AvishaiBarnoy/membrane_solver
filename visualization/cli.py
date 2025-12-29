@@ -22,13 +22,13 @@ def create_parser() -> argparse.ArgumentParser:
     Create an argument parser for the visualization command‑line interface.
     """
     parser = argparse.ArgumentParser(
-        description="Visualize membrane geometries from JSON files."
+        description="Visualize membrane geometries from JSON/YAML files."
     )
     parser.add_argument(
         "input",
         nargs="?",
         default="meshes/cube.json",
-        help="Path to a geometry JSON file (default: meshes/cube.json).",
+        help="Path to a geometry JSON/YAML file (default: meshes/cube.json).",
     )
     parser.add_argument(
         "--no-facets",
@@ -86,8 +86,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     args = parser.parse_args(argv)
 
     input_path = args.input
-    if not input_path.endswith(".json"):
-        raise ValueError("Input file must be a JSON file (.json).")
+    ext = os.path.splitext(input_path)[1].lower()
+    if ext not in {".json", ".yaml", ".yml"}:
+        raise ValueError("Input file must be a JSON or YAML file (.json/.yaml/.yml).")
     if not os.path.isfile(input_path):
         raise FileNotFoundError(f"Input file '{input_path}' not found!")
 
