@@ -1,46 +1,46 @@
-         1720434 function calls (1720394 primitive calls) in 0.555 seconds
+         191157 function calls (191117 primitive calls) in 0.262 seconds
 
    Ordered by: cumulative time
    List reduced from 352 to 40 due to restriction <40>
 
    ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-        1    0.000    0.000    0.570    0.570 /Users/User/github/membrane_solver/benchmarks/benchmark_bending.py:20(benchmark)
-        1    0.000    0.000    0.549    0.549 /Users/User/github/membrane_solver/runtime/minimizer.py:332(minimize)
-       83    0.043    0.001    0.501    0.006 /Users/User/github/membrane_solver/modules/energy/bending.py:279(compute_energy_and_gradient_array)
-       20    0.000    0.000    0.424    0.021 /Users/User/github/membrane_solver/runtime/steppers/gradient_descent.py:35(step)
-       20    0.025    0.001    0.423    0.021 /Users/User/github/membrane_solver/runtime/steppers/line_search.py:167(backtracking_line_search_array)
-       63    0.000    0.000    0.385    0.006 /Users/User/github/membrane_solver/runtime/minimizer.py:216(compute_energy)
-       83    0.008    0.000    0.324    0.004 /Users/User/github/membrane_solver/geometry/entities.py:838(boundary_vertex_ids)
-       84    0.192    0.002    0.317    0.004 /Users/User/github/membrane_solver/geometry/entities.py:950(build_connectivity_maps)
-       20    0.001    0.000    0.123    0.006 /Users/User/github/membrane_solver/runtime/minimizer.py:122(compute_energy_and_gradient_array)
-   193536    0.027    0.000    0.076    0.000 /Users/User/github/membrane_solver/geometry/entities.py:850(get_edge)
-     4233    0.061    0.000    0.061    0.000 {method 'at' of 'numpy.ufunc' objects}
-    96768    0.035    0.000    0.049    0.000 /Users/User/github/membrane_solver/geometry/entities.py:92(reversed)
-   967680    0.035    0.000    0.035    0.000 {method 'add' of 'set' objects}
-      249    0.023    0.000    0.034    0.000 /Users/User/github/membrane_solver/geometry/bending_derivatives.py:48(grad_cotan)
-       83    0.008    0.000    0.019    0.000 /Users/User/github/membrane_solver/geometry/curvature.py:40(compute_curvature_data)
-        1    0.005    0.005    0.017    0.017 /Users/User/github/membrane_solver/geometry/geom_io.py:40(parse_geometry)
-       83    0.003    0.000    0.011    0.000 /Users/User/github/membrane_solver/modules/energy/bending.py:126(_vertex_normals)
-       83    0.005    0.000    0.010    0.000 /Users/User/github/membrane_solver/modules/energy/bending.py:221(_apply_beltrami_laplacian)
-       20    0.006    0.000    0.010    0.000 /Users/User/github/membrane_solver/runtime/topology.py:199(get_min_edge_length)
-     1081    0.009    0.000    0.009    0.000 /Users/User/github/membrane_solver/geometry/entities.py:15(_fast_cross)
-       83    0.005    0.000    0.009    0.000 /Users/User/github/membrane_solver/geometry/bending_derivatives.py:82(grad_triangle_area)
-   200448    0.008    0.000    0.008    0.000 {built-in method builtins.abs}
-      253    0.006    0.000    0.006    0.000 {method 'clear' of 'dict' objects}
-      643    0.002    0.000    0.005    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/linalg/linalg.py:2383(norm)
-      165    0.005    0.000    0.005    0.000 /Users/User/github/membrane_solver/geometry/entities.py:993(positions_view)
+        1    0.000    0.000    0.262    0.262 /Users/User/github/membrane_solver/benchmarks/benchmark_bending.py:20(benchmark)
+        1    0.000    0.000    0.239    0.239 /Users/User/github/membrane_solver/runtime/minimizer.py:332(minimize)
+       20    0.000    0.000    0.187    0.009 /Users/User/github/membrane_solver/runtime/steppers/gradient_descent.py:35(step)
+       20    0.027    0.001    0.187    0.009 /Users/User/github/membrane_solver/runtime/steppers/line_search.py:167(backtracking_line_search_array)
+       83    0.046    0.001    0.187    0.002 /Users/User/github/membrane_solver/modules/energy/bending.py:279(compute_energy_and_gradient_array)
+       63    0.000    0.000    0.146    0.002 /Users/User/github/membrane_solver/runtime/minimizer.py:216(compute_energy)
+     4233    0.065    0.000    0.065    0.000 {method 'at' of 'numpy.ufunc' objects}
+       20    0.002    0.000    0.049    0.002 /Users/User/github/membrane_solver/runtime/minimizer.py:122(compute_energy_and_gradient_array)
+      249    0.024    0.000    0.036    0.000 /Users/User/github/membrane_solver/geometry/bending_derivatives.py:48(grad_cotan)
+       83    0.008    0.000    0.020    0.000 /Users/User/github/membrane_solver/geometry/curvature.py:40(compute_curvature_data)
+        1    0.006    0.006    0.019    0.019 /Users/User/github/membrane_solver/geometry/geom_io.py:40(parse_geometry)
+       83    0.003    0.000    0.012    0.000 /Users/User/github/membrane_solver/modules/energy/bending.py:126(_vertex_normals)
+       83    0.005    0.000    0.011    0.000 /Users/User/github/membrane_solver/modules/energy/bending.py:221(_apply_beltrami_laplacian)
+       20    0.006    0.000    0.010    0.001 /Users/User/github/membrane_solver/runtime/topology.py:199(get_min_edge_length)
+     1081    0.009    0.000    0.010    0.000 /Users/User/github/membrane_solver/geometry/entities.py:15(_fast_cross)
+       83    0.006    0.000    0.009    0.000 /Users/User/github/membrane_solver/geometry/bending_derivatives.py:82(grad_triangle_area)
+      643    0.002    0.000    0.006    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/linalg/linalg.py:2383(norm)
+     1907    0.001    0.000    0.005    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2322(any)
+      165    0.005    0.000    0.005    0.000 /Users/User/github/membrane_solver/geometry/entities.py:1027(positions_view)
      1245    0.000    0.000    0.005    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/einsumfunc.py:1009(einsum)
      2675    0.005    0.000    0.005    0.000 {method 'reduce' of 'numpy.ufunc' objects}
-     1245    0.004    0.000    0.004    0.000 {built-in method numpy.core._multiarray_umath.c_einsum}
-     1907    0.001    0.000    0.004    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2322(any)
-     2052    0.001    0.000    0.004    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/fromnumeric.py:71(_wrapreduction)
-   102175    0.003    0.000    0.003    0.000 {built-in method builtins.len}
+     2052    0.001    0.000    0.005    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/fromnumeric.py:71(_wrapreduction)
+     1245    0.005    0.000    0.005    0.000 {built-in method numpy.core._multiarray_umath.c_einsum}
+        2    0.003    0.001    0.004    0.002 /Users/User/github/membrane_solver/geometry/entities.py:974(build_connectivity_maps)
      1121    0.003    0.000    0.003    0.000 {built-in method numpy.array}
        83    0.001    0.000    0.003    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/numeric.py:1468(cross)
-        2    0.000    0.000    0.002    0.001 /Users/User/anaconda3/lib/python3.11/importlib/__init__.py:108(import_module)
-      3/2    0.000    0.000    0.002    0.001 <frozen importlib._bootstrap>:1192(_gcd_import)
-      5/2    0.000    0.000    0.002    0.001 <frozen importlib._bootstrap>:1165(_find_and_load)
-      5/2    0.000    0.000    0.002    0.001 <frozen importlib._bootstrap>:1120(_find_and_load_unlocked)
+        2    0.000    0.000    0.003    0.001 /Users/User/anaconda3/lib/python3.11/importlib/__init__.py:108(import_module)
+      3/2    0.000    0.000    0.003    0.001 <frozen importlib._bootstrap>:1192(_gcd_import)
+      5/2    0.000    0.000    0.003    0.001 <frozen importlib._bootstrap>:1165(_find_and_load)
+      5/2    0.000    0.000    0.003    0.001 <frozen importlib._bootstrap>:1120(_find_and_load_unlocked)
         1    0.000    0.000    0.002    0.002 /Users/User/github/membrane_solver/runtime/energy_manager.py:11(__init__)
-     1245    0.002    0.000    0.002    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/numeric.py:67(zeros_like)
       5/3    0.000    0.000    0.002    0.001 <frozen importlib._bootstrap>:666(_load_unlocked)
+     1245    0.002    0.000    0.002    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/numeric.py:67(zeros_like)
+      4/2    0.000    0.000    0.002    0.001 <frozen importlib._bootstrap_external>:934(exec_module)
+     2052    0.002    0.000    0.002    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/fromnumeric.py:72(<dictcomp>)
+       20    0.001    0.000    0.002    0.000 /Users/User/github/membrane_solver/runtime/minimizer.py:297(project_constraints_array)
+     8107    0.002    0.000    0.002    0.000 {method 'copy' of 'numpy.ndarray' objects}
+     10/5    0.000    0.000    0.002    0.000 <frozen importlib._bootstrap>:233(_call_with_frames_removed)
+     10/2    0.000    0.000    0.002    0.001 {built-in method builtins.exec}
+        1    0.000    0.000    0.001    0.001 /Users/User/github/membrane_solver/modules/energy/bending.py:1(<module>)

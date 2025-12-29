@@ -63,6 +63,7 @@ def refine_polygonal_facets(mesh):
         (updated_vertices, updated_facets)
     """
     new_mesh = Mesh()
+    new_mesh._topology_version = getattr(mesh, "_topology_version", 0) + 1
     new_vertices = mesh.vertices.copy()
     new_edges = mesh.edges.copy()
     new_mesh.vertices = new_vertices.copy()
@@ -235,6 +236,7 @@ def refine_polygonal_facets(mesh):
 
 def refine_triangle_mesh(mesh):
     new_mesh = Mesh()
+    new_mesh._topology_version = getattr(mesh, "_topology_version", 0) + 1
     new_vertices = mesh.vertices.copy()
     new_edges = {}
     new_facets = {}
