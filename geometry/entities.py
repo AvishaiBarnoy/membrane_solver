@@ -796,6 +796,7 @@ class Mesh:
     _facet_to_row_version: int = -1
 
     _version: int = 0
+    _vertex_ids_version: int = 0
 
     def increment_version(self):
         self._version += 1
@@ -987,6 +988,7 @@ class Mesh:
             ids = np.array(sorted(self.vertices.keys()), dtype=int)
             self.vertex_ids = ids
             self.vertex_index_to_row = {vid: i for i, vid in enumerate(ids)}
+            self._vertex_ids_version += 1
 
     def positions_view(self) -> "np.ndarray":
         """Return a dense ``(N_vertices, 3)`` array of vertex positions.
@@ -1070,7 +1072,7 @@ class Mesh:
             self._triangle_rows_cache_version = self._facet_loops_version
             return None, []
 
-        tri_rows = np.empty((len(tri_facets), 3), dtype=int, order="F")
+        tri_rows = np.empty((len(tri_facets), 3), dtype=np.int32, order="F")
         for idx, fid in enumerate(tri_facets):
             loop = self.facet_vertex_loops[fid]
             tri_rows[idx, 0] = self.vertex_index_to_row[int(loop[0])]

@@ -56,38 +56,70 @@ def _per_vertex_params(
     - `bending_modulus`
     - `spontaneous_curvature` (alias: `intrinsic_curvature`)
     """
+    mesh.build_position_cache()
+
     n = len(mesh.vertex_ids)
     kappa_default = float(global_params.get("bending_modulus", 0.0) or 0.0)
-    kappa = np.full(n, kappa_default, dtype=float)
-
     if model == "helfrich":
         c0_default = _spontaneous_curvature(global_params)
-        c0 = np.full(n, c0_default, dtype=float)
     else:
-        c0 = np.zeros(n, dtype=float)
+        c0_default = 0.0
 
-    for row, vid in enumerate(mesh.vertex_ids):
-        v = mesh.vertices.get(int(vid))
-        if v is None:
+    cache_key = (
+        mesh._vertex_ids_version,
+        model,
+        float(kappa_default),
+        float(c0_default),
+    )
+    cached = getattr(mesh, "_bending_vertex_param_cache", None)
+    if cached is not None and cached.get("key") == cache_key:
+        return cached["kappa"], cached["c0"]
+
+    kappa = np.full(n, kappa_default, dtype=float)
+    c0 = np.full(n, c0_default, dtype=float)
+
+    override_rows_k: list[int] = []
+    override_vals_k: list[float] = []
+    override_rows_c0: list[int] = []
+    override_vals_c0: list[float] = []
+
+    # One-time scan over vertices to find overrides; results are cached and
+    # reused across minimization iterations (no per-step Python loops).
+    for vid, vertex in mesh.vertices.items():
+        row = mesh.vertex_index_to_row.get(int(vid))
+        if row is None:
             continue
-        opts = getattr(v, "options", None) or {}
+        opts = getattr(vertex, "options", None) or {}
         if "bending_modulus" in opts:
             try:
-                kappa[row] = float(opts["bending_modulus"])
+                override_rows_k.append(row)
+                override_vals_k.append(float(opts["bending_modulus"]))
             except (TypeError, ValueError):
                 pass
         if model == "helfrich":
             if "spontaneous_curvature" in opts:
                 try:
-                    c0[row] = float(opts["spontaneous_curvature"])
+                    override_rows_c0.append(row)
+                    override_vals_c0.append(float(opts["spontaneous_curvature"]))
                 except (TypeError, ValueError):
                     pass
             elif "intrinsic_curvature" in opts:
                 try:
-                    c0[row] = float(opts["intrinsic_curvature"])
+                    override_rows_c0.append(row)
+                    override_vals_c0.append(float(opts["intrinsic_curvature"]))
                 except (TypeError, ValueError):
                     pass
 
+    if override_rows_k:
+        kappa[np.asarray(override_rows_k, dtype=int)] = np.asarray(
+            override_vals_k, dtype=float
+        )
+    if model == "helfrich" and override_rows_c0:
+        c0[np.asarray(override_rows_c0, dtype=int)] = np.asarray(
+            override_vals_c0, dtype=float
+        )
+
+    mesh._bending_vertex_param_cache = {"key": cache_key, "kappa": kappa, "c0": c0}
     return kappa, c0
 
 

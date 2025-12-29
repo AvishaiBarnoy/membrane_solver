@@ -2,70 +2,14 @@
 # Here goes energy functions relevant for area of facets
 
 import logging
-import os
 from typing import Dict
 
 import numpy as np
 
+from fortran_kernels.loader import get_surface_energy_kernel
 from geometry.entities import Mesh, _fast_cross
 
 logger = logging.getLogger("membrane_solver")
-
-_FORTRAN_SURFACE_KERNEL = None
-
-
-def _get_fortran_surface_kernel():
-    """Return the f2py-wrapped Fortran surface kernel if available.
-
-    The expected build is something like:
-      `python -m numpy.f2py -c -m surface_energy fortran_kernels/surface_energy.f90`
-
-    Depending on f2py/version, the callable may be exposed at either
-    `surface_energy.surface_energy_mod.surface_energy_and_gradient` or as a
-    top-level function.
-    """
-    global _FORTRAN_SURFACE_KERNEL
-    if _FORTRAN_SURFACE_KERNEL is not None:
-        return _FORTRAN_SURFACE_KERNEL
-
-    if os.environ.get("MEMBRANE_DISABLE_FORTRAN_SURFACE") in {"1", "true", "TRUE"}:
-        _FORTRAN_SURFACE_KERNEL = False
-        return _FORTRAN_SURFACE_KERNEL
-
-    candidates = []
-    try:
-        import fortran_kernels.surface_energy as fe  # type: ignore
-
-        candidates.append(fe)
-    except Exception:
-        pass
-
-    try:
-        import surface_energy as fe  # type: ignore
-
-        candidates.append(fe)
-    except Exception:
-        pass
-
-    for mod in candidates:
-        fn = getattr(mod, "surface_energy_and_gradient", None)
-        if not callable(fn):
-            submod = getattr(mod, "surface_energy_mod", None)
-            fn = (
-                getattr(submod, "surface_energy_and_gradient", None) if submod else None
-            )
-
-        if not callable(fn):
-            continue
-
-        doc = getattr(fn, "__doc__", "") or ""
-        # f2py wrapper doc includes bounds like "(nv,3)" or "(3,nv)".
-        expects_transpose = "bounds (3,nv)" in doc or "bounds (3, nv)" in doc
-        _FORTRAN_SURFACE_KERNEL = (fn, expects_transpose)
-        return _FORTRAN_SURFACE_KERNEL
-
-    _FORTRAN_SURFACE_KERNEL = False
-    return _FORTRAN_SURFACE_KERNEL
 
 
 def _call_fortran_surface_kernel(
@@ -206,9 +150,10 @@ def compute_energy_and_gradient_array(
                 surface_tension = global_params.get("surface_tension")
             gammas_arr[idx] = surface_tension
 
-        kernel_info = _get_fortran_surface_kernel()
-        if kernel_info:
-            kernel, expects_transpose = kernel_info
+        kernel_spec = get_surface_energy_kernel()
+        if kernel_spec is not None:
+            kernel = kernel_spec.func
+            expects_transpose = kernel_spec.expects_transpose
             nv = positions.shape[0]
             nf = tri_rows_arr.shape[0]
             gamma = np.ascontiguousarray(gammas_arr, dtype=np.float64)
@@ -236,9 +181,6 @@ def compute_energy_and_gradient_array(
                     grad_arr += grad_f.T
                 return energy
             except Exception as exc:
-                global _FORTRAN_SURFACE_KERNEL
-
-                _FORTRAN_SURFACE_KERNEL = False
                 logger.warning(
                     "Fortran surface kernel failed; falling back to NumPy (rebuild may be required): %s",
                     exc,
