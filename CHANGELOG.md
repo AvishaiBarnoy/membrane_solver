@@ -4,6 +4,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ## [Unreleased]
 ### Added
+- Optional Fortran (f2py) surface-energy kernel (`fortran_kernels/surface_energy.f90`) with automatic runtime fallback to NumPy when not built/available.
 - **Hybrid SoA Architecture**: Refactored the minimization pipeline to use a Structure-of-Arrays pattern. Optimization now runs on dense NumPy arrays, eliminating O(N) Python dictionary overhead and resulting in a **3.5x speedup** for large meshes.
 - **Gauss-Bonnet diagnostics**: Added `runtime/diagnostics/gauss_bonnet.py` to monitor Gaussian curvature invariants on open surfaces with boundary loops, including per-loop boundary geodesic sums and drift checks during minimization.
   - Supports excluding facets from the diagnostic via `gauss_bonnet_exclude` in facet options to model effective holes.
@@ -72,6 +73,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ### Changed
 - `history` command now records expanded macro commands and skips unknown instructions.
+- Compiled Fortran kernels are now opt-in via `MEMBRANE_ENABLE_FORTRAN=1`.
 - Bending energy now defaults to the Helfrich model (`bending_energy_model="helfrich"`) with zero spontaneous curvature unless overridden.
 - `gaussian_curvature` can now enforce strict topology validation via `gaussian_curvature_strict_topology`.
 - `gaussian_curvature` now supports boundary loops by default, using Gauss–Bonnet interior+boundary terms (with optional `gauss_bonnet_exclude` facet filtering).

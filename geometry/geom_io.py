@@ -447,8 +447,20 @@ def parse_geometry(data: dict) -> Mesh:
                 logger.error(err_msg)
                 raise err_msg
         elif "energy" not in options:
-            mesh.facets[fid].options["energy"] = ["surface"]
-            energy_module_names.add("surface")
+            surface_tension = options.get(
+                "surface_tension", mesh.global_parameters.get("surface_tension", 0.0)
+            )
+            try:
+                surface_tension_value = float(surface_tension)
+            except (TypeError, ValueError):
+                surface_tension_value = 0.0
+
+            # Only enable surface energy by default when it would contribute.
+            if surface_tension_value != 0.0:
+                mesh.facets[fid].options["energy"] = ["surface"]
+                energy_module_names.add("surface")
+            else:
+                mesh.facets[fid].options["energy"] = []
 
         if (
             options.get("expression")

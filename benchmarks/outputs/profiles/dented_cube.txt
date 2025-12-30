@@ -1,36 +1,36 @@
-         260 function calls in 0.949 seconds
+         260 function calls in 0.962 seconds
 
    Ordered by: cumulative time
    List reduced from 104 to 30 due to restriction <30>
 
    ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-        1    0.000    0.000    0.949    0.949 /Users/User/github/membrane_solver/benchmarks/benchmark_dented_cube.py:51(benchmark)
-        1    0.000    0.000    0.949    0.949 /Users/User/github/membrane_solver/benchmarks/benchmark_dented_cube.py:53(<listcomp>)
-        1    0.000    0.000    0.948    0.948 /Users/User/github/membrane_solver/benchmarks/benchmark_dented_cube.py:29(_run_simulation)
-        1    0.000    0.000    0.948    0.948 /Users/User/anaconda3/lib/python3.11/subprocess.py:506(run)
-        2    0.000    0.000    0.947    0.473 /Users/User/anaconda3/lib/python3.11/subprocess.py:1259(wait)
-        1    0.000    0.000    0.947    0.947 /Users/User/anaconda3/lib/python3.11/subprocess.py:1165(communicate)
-        2    0.000    0.000    0.947    0.473 /Users/User/anaconda3/lib/python3.11/subprocess.py:2014(_wait)
-        1    0.000    0.000    0.947    0.947 /Users/User/anaconda3/lib/python3.11/subprocess.py:2001(_try_wait)
-        1    0.947    0.947    0.947    0.947 {built-in method posix.waitpid}
+        1    0.000    0.000    0.962    0.962 /Users/User/github/membrane_solver/benchmarks/benchmark_dented_cube.py:51(benchmark)
+        1    0.000    0.000    0.962    0.962 /Users/User/github/membrane_solver/benchmarks/benchmark_dented_cube.py:53(<listcomp>)
+        1    0.000    0.000    0.962    0.962 /Users/User/github/membrane_solver/benchmarks/benchmark_dented_cube.py:29(_run_simulation)
+        1    0.000    0.000    0.962    0.962 /Users/User/anaconda3/lib/python3.11/subprocess.py:506(run)
+        1    0.000    0.000    0.960    0.960 /Users/User/anaconda3/lib/python3.11/subprocess.py:1165(communicate)
+        2    0.000    0.000    0.960    0.480 /Users/User/anaconda3/lib/python3.11/subprocess.py:1259(wait)
+        2    0.000    0.000    0.960    0.480 /Users/User/anaconda3/lib/python3.11/subprocess.py:2014(_wait)
+        1    0.000    0.000    0.960    0.960 /Users/User/anaconda3/lib/python3.11/subprocess.py:2001(_try_wait)
+        1    0.960    0.960    0.960    0.960 {built-in method posix.waitpid}
         1    0.000    0.000    0.001    0.001 /Users/User/anaconda3/lib/python3.11/subprocess.py:807(__init__)
         1    0.000    0.000    0.001    0.001 /Users/User/anaconda3/lib/python3.11/subprocess.py:1789(_execute_child)
         1    0.001    0.001    0.001    0.001 {built-in method posix.read}
         1    0.000    0.000    0.000    0.000 {built-in method _posixsubprocess.fork_exec}
         1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1282(_close_pipe_fds)
         1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:981(resolve)
-        1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1686(_get_handles)
         1    0.000    0.000    0.000    0.000 <frozen posixpath>:412(realpath)
-        1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:509(callback)
         1    0.000    0.000    0.000    0.000 <frozen posixpath>:421(_joinrealpath)
-        2    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:504(_from_parts)
-        3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:484(_parse_args)
+        1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:509(callback)
+        1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1686(_get_handles)
         2    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1135(_get_devnull)
+        6    0.000    0.000    0.000    0.000 {built-in method posix.lstat}
         1    0.000    0.000    0.000    0.000 {built-in method posix.open}
+        3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:484(_parse_args)
+        2    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:504(_from_parts)
         1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:868(__new__)
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:56(parse_parts)
         1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:546(__exit__)
-        6    0.000    0.000    0.000    0.000 {built-in method posix.lstat}
-       13    0.000    0.000    0.000    0.000 {built-in method sys.intern}
-        1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1954(_handle_exitstatus)
+        1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:454(_create_cb_wrapper)
         1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:527(_push_exit_callback)
+        1    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1954(_handle_exitstatus)

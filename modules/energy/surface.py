@@ -6,9 +6,50 @@ from typing import Dict
 
 import numpy as np
 
+from fortran_kernels.loader import get_surface_energy_kernel
 from geometry.entities import Mesh, _fast_cross
 
 logger = logging.getLogger("membrane_solver")
+
+
+def _call_fortran_surface_kernel(
+    kernel,
+    *,
+    nv: int,
+    nf: int,
+    pos_f: np.ndarray,
+    tri_f: np.ndarray,
+    gamma: np.ndarray,
+    grad_f: np.ndarray,
+    zero_based: int,
+) -> float:
+    """Call the Fortran kernel across f2py signature variants."""
+    try:
+        # Canonical f2py wrapper signature:
+        #   e = surface_energy_and_gradient(pos, tri, gamma, grad, zero_based, [nv, nf])
+        energy = kernel(pos_f, tri_f, gamma, grad_f, zero_based)
+        return float(energy)
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        # Some f2py builds preserve the Fortran argument order.
+        energy = kernel(nv, nf, pos_f, tri_f, gamma, grad_f, zero_based)
+        return float(energy)
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        # Others infer nv/nf from array shapes and accept keywords.
+        energy = kernel(
+            pos_f, tri_f, gamma, grad_f, nv=nv, nf=nf, zero_based=zero_based
+        )
+        return float(energy)
+    except (TypeError, ValueError):
+        pass
+
+    energy = kernel(pos_f, tri_f, gamma, grad_f, zero_based=zero_based)
+    return float(energy)
 
 
 def _all_facets_are_triangles(mesh: Mesh) -> bool:
@@ -108,6 +149,42 @@ def compute_energy_and_gradient_array(
             if surface_tension is None:
                 surface_tension = global_params.get("surface_tension")
             gammas_arr[idx] = surface_tension
+
+        kernel_spec = get_surface_energy_kernel()
+        if kernel_spec is not None:
+            kernel = kernel_spec.func
+            expects_transpose = kernel_spec.expects_transpose
+            nv = positions.shape[0]
+            nf = tri_rows_arr.shape[0]
+            gamma = np.ascontiguousarray(gammas_arr, dtype=np.float64)
+            if expects_transpose:
+                pos_f = np.asfortranarray(positions.T, dtype=np.float64)
+                tri_f = np.asfortranarray(tri_rows_arr.T, dtype=np.int32)
+                grad_f = np.zeros((3, nv), dtype=np.float64, order="F")
+            else:
+                pos_f = np.asfortranarray(positions, dtype=np.float64)
+                tri_f = np.asfortranarray(tri_rows_arr, dtype=np.int32)
+                grad_f = grad_arr
+
+            try:
+                energy = _call_fortran_surface_kernel(
+                    kernel,
+                    nv=nv,
+                    nf=nf,
+                    pos_f=pos_f,
+                    tri_f=tri_f,
+                    gamma=gamma,
+                    grad_f=grad_f,
+                    zero_based=1,
+                )
+                if expects_transpose:
+                    grad_arr += grad_f.T
+                return energy
+            except Exception as exc:
+                logger.warning(
+                    "Fortran surface kernel failed; falling back to NumPy (rebuild may be required): %s",
+                    exc,
+                )
 
         tri_pos = positions[tri_rows_arr]
         v0 = tri_pos[:, 0, :]

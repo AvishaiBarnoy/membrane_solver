@@ -83,6 +83,7 @@ def equiangulate_iteration(mesh: Mesh) -> tuple[Mesh, bool]:
     """
     # Create new mesh by copying the current one
     new_mesh = Mesh()
+    new_mesh._topology_version = getattr(mesh, "_topology_version", 0)
     new_mesh.vertices = {idx: v.copy() for idx, v in mesh.vertices.items()}
     new_mesh.edges = {idx: e.copy() for idx, e in mesh.edges.items()}
     new_mesh.facets = {idx: f.copy() for idx, f in mesh.facets.items()}
@@ -134,6 +135,7 @@ def equiangulate_iteration(mesh: Mesh) -> tuple[Mesh, bool]:
                 changes_made = True
                 next_edge_idx += 1
                 logger.debug(f"Flipped edge {edge_idx}")
+                new_mesh.increment_topology_version()
                 # Rebuild connectivity after each flip to ensure consistency
                 new_mesh.build_connectivity_maps()
                 if hasattr(new_mesh, "build_facet_vertex_loops"):

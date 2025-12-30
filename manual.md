@@ -845,3 +845,17 @@ degeneracy (tangling, overlapping triangles) during energy minimization.
    - Use `geometry.entities._fast_cross` for small-array cross products instead of `numpy.cross`.
    - Prefer pre-allocating numpy arrays with `np.empty` over list comprehensions in hot loops.
    - See `benchmarks/suite.py` for regression testing.
+
+8. Optional compiled kernels (Fortran / f2py):
+   - Some hot-loop kernels can be accelerated with Fortran, compiled into Python
+     extension modules via NumPy f2py.
+   - Kernels are **opt-in** by default. To enable loading compiled kernels, set:
+     - `MEMBRANE_ENABLE_FORTRAN=1`
+   - Example build (surface energy kernel):
+     - From the repo root:
+       - `python -m numpy.f2py -c -m surface_energy fortran_kernels/surface_energy.f90`
+     - This should produce `fortran_kernels/surface_energy.*.so` (platform-specific name).
+   - Runtime behaviour:
+     - If `fortran_kernels.surface_energy` is importable, the `surface` energy module
+       will use it automatically for pure-triangle meshes; otherwise it falls back to NumPy.
+     - Set `MEMBRANE_DISABLE_FORTRAN_SURFACE=1` to force the NumPy fallback.

@@ -113,6 +113,12 @@ To profile each benchmark case and generate per-case `.pstats` outputs:
 This runs `benchmarks/suite.py --profile` and writes results under
 `benchmarks/outputs/profiles` by default.
 
+## Optional Fortran kernels (f2py)
+
+Compiled Fortran kernels are opt-in. To enable loading compiled kernels, set
+`MEMBRANE_ENABLE_FORTRAN=1` in your environment. Without this, the solver uses
+the pure Python/NumPy implementation.
+
 ## Gauss-Bonnet diagnostics
 
 For meshes with boundary loops (e.g., disk rims modeled as holes), enable

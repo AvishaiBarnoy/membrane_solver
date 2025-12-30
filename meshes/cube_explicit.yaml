@@ -41,4 +41,4 @@ global_parameters:
 
 macros:
     gogo: "g 50; r; u; g 50"
-energy_modules: ["surface", "gaussian_curvature", "bending"]
+energy_modules: ["surface", "bending"]

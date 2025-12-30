@@ -1,0 +1,46 @@
+         70321216 function calls in 12.810 seconds
+
+   Ordered by: cumulative time
+   List reduced from 107 to 40 due to restriction <40>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.024    0.024   12.838   12.838 /Users/User/github/membrane_solver/benchmarks/benchmark_volume_optimization.py:98(benchmark)
+        1    0.011    0.011    9.419    9.419 /Users/User/github/membrane_solver/benchmarks/benchmark_volume_optimization.py:16(create_sphere_mesh)
+        5    2.964    0.593    9.366    1.873 /Users/User/github/membrane_solver/runtime/refinement.py:237(refine_triangle_mesh)
+ 14717280    3.207    0.000    4.542    0.000 /Users/User/github/membrane_solver/runtime/refinement.py:293(<listcomp>)
+      100    0.534    0.005    3.222    0.032 /Users/User/github/membrane_solver/modules/energy/volume.py:41(compute_energy_and_gradient)
+      100    1.312    0.013    2.573    0.026 /Users/User/github/membrane_solver/geometry/entities.py:636(compute_volume_and_gradient)
+ 44391554    1.346    0.000    1.346    0.000 {built-in method builtins.abs}
+   614600    0.179    0.000    0.994    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2322(any)
+    16368    0.850    0.000    0.850    0.000 {method 'update' of 'dict' objects}
+   614600    0.265    0.000    0.815    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/fromnumeric.py:71(_wrapreduction)
+    20460    0.027    0.000    0.607    0.000 /Users/User/github/membrane_solver/geometry/entities.py:155(normal)
+    20460    0.064    0.000    0.534    0.000 /Users/User/github/membrane_solver/geometry/entities.py:133(compute_normal)
+    20460    0.155    0.000    0.442    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/numeric.py:1468(cross)
+   614800    0.406    0.000    0.406    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+    61380    0.085    0.000    0.256    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/numeric.py:1393(moveaxis)
+      600    0.202    0.000    0.202    0.000 {method 'at' of 'numpy.ufunc' objects}
+      100    0.001    0.000    0.171    0.002 /Users/User/github/membrane_solver/modules/energy/volume.py:94(compute_energy_and_gradient_array)
+      100    0.037    0.000    0.170    0.002 /Users/User/github/membrane_solver/geometry/entities.py:484(compute_volume_and_accumulate_gradient)
+   122760    0.093    0.000    0.139    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/numeric.py:1330(normalize_axis_tuple)
+    73661    0.124    0.000    0.124    0.000 {built-in method builtins.max}
+   614600    0.121    0.000    0.121    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/fromnumeric.py:72(<dictcomp>)
+   614600    0.055    0.000    0.116    0.000 /Users/User/github/membrane_solver/modules/energy/volume.py:52(<lambda>)
+        7    0.057    0.008    0.093    0.013 /Users/User/github/membrane_solver/geometry/entities.py:974(build_connectivity_maps)
+  2330997    0.082    0.000    0.082    0.000 {built-in method builtins.len}
+    49104    0.037    0.000    0.069    0.000 /Users/User/github/membrane_solver/runtime/refinement.py:248(get_or_create_edge)
+    20460    0.048    0.000    0.068    0.000 /Users/User/github/membrane_solver/runtime/refinement.py:10(orient_edges_cycle)
+   614701    0.061    0.000    0.061    0.000 {built-in method numpy.zeros}
+    28662    0.035    0.000    0.058    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/linalg/linalg.py:2383(norm)
+      600    0.051    0.000    0.052    0.000 /Users/User/github/membrane_solver/geometry/entities.py:15(_fast_cross)
+   217136    0.026    0.000    0.048    0.000 /Users/User/github/membrane_solver/geometry/entities.py:874(get_edge)
+  1286501    0.043    0.000    0.043    0.000 {method 'get' of 'dict' objects}
+        7    0.027    0.004    0.041    0.006 /Users/User/github/membrane_solver/geometry/entities.py:1053(build_facet_vertex_loops)
+   614600    0.031    0.000    0.031    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2317(_any_dispatcher)
+   122760    0.021    0.000    0.030    0.000 /Users/User/anaconda3/lib/python3.11/site-packages/numpy/core/numeric.py:1380(<listcomp>)
+   614805    0.024    0.000    0.024    0.000 {method 'items' of 'dict' objects}
+    31624    0.016    0.000    0.022    0.000 /Users/User/github/membrane_solver/geometry/entities.py:92(reversed)
+   184140    0.014    0.000    0.014    0.000 {built-in method numpy.core._multiarray_umath.normalize_axis_index}
+    49138    0.012    0.000    0.012    0.000 {built-in method numpy.array}
+    28662    0.011    0.000    0.011    0.000 {method 'dot' of 'numpy.ndarray' objects}
+      103    0.009    0.000    0.011    0.000 /Users/User/github/membrane_solver/geometry/entities.py:1079(triangle_row_cache)

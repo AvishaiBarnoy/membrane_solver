@@ -795,10 +795,26 @@ class Mesh:
     _facet_to_row_cache: Dict[int, int] = field(default_factory=dict)
     _facet_to_row_version: int = -1
 
+    # Topology-only versioning for caches that depend on edges/facets adjacency.
+    # This should only be incremented when discrete mesh operations change
+    # connectivity (refinement, equiangulation, edge flips), not when positions move.
+    _topology_version: int = 0
+    _connectivity_cache_version: int = -1
+    _connectivity_cache_counts: tuple[int, int, int] = (0, 0, 0)
+    _boundary_vertex_cache_version: int = -1
+    _boundary_vertex_cache: set[int] = field(default_factory=set)
+
     _version: int = 0
+    _vertex_ids_version: int = 0
 
     def increment_version(self):
         self._version += 1
+
+    def increment_topology_version(self) -> None:
+        """Invalidate caches that depend on mesh connectivity."""
+        self._topology_version += 1
+        self._connectivity_cache_version = -1
+        self._boundary_vertex_cache_version = -1
 
     @property
     def facet_to_triangle_row(self) -> Dict[int, int]:
@@ -832,19 +848,28 @@ class Mesh:
         if hasattr(self, "global_parameters"):
             new_mesh.global_parameters = copy.deepcopy(self.global_parameters)
         new_mesh.macros = copy.deepcopy(getattr(self, "macros", {}))
+        new_mesh.energy_modules = list(getattr(self, "energy_modules", []))
+        new_mesh.constraint_modules = list(getattr(self, "constraint_modules", []))
+        new_mesh.instructions = list(getattr(self, "instructions", []))
+        new_mesh._topology_version = self._topology_version
         return new_mesh
 
     @property
     def boundary_vertex_ids(self) -> set[int]:
         """Return the set of vertex IDs that lie on the boundary of an open mesh."""
+        if self._boundary_vertex_cache_version == self._topology_version:
+            return set(self._boundary_vertex_cache)
+
         self.build_connectivity_maps()
-        boundary_vids = set()
+        boundary_vids: set[int] = set()
         for eid, facet_set in self.edge_to_facets.items():
             if len(facet_set) < 2:
                 edge = self.edges[eid]
                 boundary_vids.add(edge.tail_index)
                 boundary_vids.add(edge.head_index)
-        return boundary_vids
+        self._boundary_vertex_cache = boundary_vids
+        self._boundary_vertex_cache_version = self._topology_version
+        return set(boundary_vids)
 
     def get_edge(self, index: int) -> "Edge":
         if index > 0:
@@ -947,6 +972,13 @@ class Mesh:
         return True
 
     def build_connectivity_maps(self):
+        counts = (len(self.vertices), len(self.edges), len(self.facets))
+        if (
+            self._connectivity_cache_version == self._topology_version
+            and self._connectivity_cache_counts == counts
+        ):
+            return
+
         self.vertex_to_facets.clear()
         self.vertex_to_edges.clear()
         self.edge_to_facets.clear()
@@ -975,6 +1007,9 @@ class Mesh:
                     self.vertex_to_facets[v] = set()
                 self.vertex_to_facets[v].add(facet.index)
 
+        self._connectivity_cache_version = self._topology_version
+        self._connectivity_cache_counts = counts
+
     def build_position_cache(self):
         """Build or refresh the cached vertex ID order and index map.
 
@@ -987,6 +1022,7 @@ class Mesh:
             ids = np.array(sorted(self.vertices.keys()), dtype=int)
             self.vertex_ids = ids
             self.vertex_index_to_row = {vid: i for i, vid in enumerate(ids)}
+            self._vertex_ids_version += 1
 
     def positions_view(self) -> "np.ndarray":
         """Return a dense ``(N_vertices, 3)`` array of vertex positions.
@@ -1007,7 +1043,7 @@ class Mesh:
                 n_verts,
                 3,
             ):
-                self._positions_cache = np.empty((n_verts, 3), dtype=float)
+                self._positions_cache = np.empty((n_verts, 3), dtype=float, order="F")
             for i, vid in enumerate(self.vertex_ids):
                 self._positions_cache[i] = self.vertices[vid].position
             self._positions_cache_version = self._version
@@ -1070,7 +1106,7 @@ class Mesh:
             self._triangle_rows_cache_version = self._facet_loops_version
             return None, []
 
-        tri_rows = np.empty((len(tri_facets), 3), dtype=int)
+        tri_rows = np.empty((len(tri_facets), 3), dtype=np.int32, order="F")
         for idx, fid in enumerate(tri_facets):
             loop = self.facet_vertex_loops[fid]
             tri_rows[idx, 0] = self.vertex_index_to_row[int(loop[0])]
