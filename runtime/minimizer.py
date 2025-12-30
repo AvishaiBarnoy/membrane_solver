@@ -487,6 +487,16 @@ STEP SIZE:\t {self.step_size}
                         if callable(reset):
                             reset()
 
+        if self._has_enforceable_constraints:
+            # One final projection improves cross-platform determinism for hard
+            # constraints (e.g. fixed volume) without impacting the line search
+            # acceptance logic.
+            self.constraint_manager.enforce_all(
+                self.mesh,
+                global_params=self.global_params,
+                context="finalize",
+            )
+
         return {
             "energy": E,
             "gradient": self._grad_arr_to_dict(last_grad_arr)

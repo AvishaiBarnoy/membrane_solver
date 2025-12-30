@@ -272,7 +272,7 @@ def _apply_beltrami_laplacian(
             out = np.empty_like(field, order="F")
             kernel_spec.func(weights, tri_rows, field, out, 1)
             return out
-        except TypeError:
+        except Exception:
             out = kernel_spec.func(weights, tri_rows, field, 1)
             return np.asarray(out)
 

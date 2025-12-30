@@ -25,17 +25,6 @@ def constraint_gradients(mesh, global_params) -> list[dict[int, np.ndarray]] | N
     if getattr(mesh, "facet_vertex_loops", None):
         positions = mesh.positions_view()
         index_map = mesh.vertex_index_to_row
-    positions = None
-    index_map = None
-    if getattr(mesh, "facet_vertex_loops", None):
-        positions = mesh.positions_view()
-        index_map = mesh.vertex_index_to_row
-
-    positions = None
-    index_map = None
-    if getattr(mesh, "facet_vertex_loops", None):
-        positions = mesh.positions_view()
-        index_map = mesh.vertex_index_to_row
 
     for body in mesh.bodies.values():
         V_target = body.target_volume
@@ -80,6 +69,13 @@ def enforce_constraint(
     project = force_projection or (mode in {"lagrange", "projection"})
     if not project:
         return
+
+    context = kwargs.get("context", "minimize")
+    if context in {"finalize", "mesh_operation"}:
+        # Be more aggressive when callers want a hard constraint satisfaction.
+        # The per-iteration update uses a linearized volume correction, so a
+        # few extra iterations improve robustness across platforms.
+        max_iter = max(int(max_iter), 12)
 
     positions = None
     index_map = None
