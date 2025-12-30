@@ -25,15 +25,14 @@ contains
 
   ! ----------------------------
   ! grad_cotan for batched inputs
-  ! u, v: (n, 3)  (native engine layout)
-  ! grad_u, grad_v: (n, 3)
+  ! u, v: (3, n)  (expected transposed input)
+  ! grad_u, grad_v: (3, n)
   ! ----------------------------
 
   subroutine grad_cotan_batch(n, u, v, grad_u, grad_v)
     integer(c_int), intent(in) :: n
-    real(c_double), intent(in) :: u(n, 3), v(n, 3)
-    ! f2py: require caller to supply output buffers to avoid per-call allocations.
-    real(c_double), intent(inout) :: grad_u(n, 3), grad_v(n, 3)
+    real(c_double), intent(in) :: u(3, n), v(3, n)
+    real(c_double), intent(inout) :: grad_u(3, n), grad_v(3, n)
 
   integer :: i
   real(c_double) :: ui(3), vi(3), w(3)
@@ -45,12 +44,12 @@ contains
   grad_v = 0.0d0
 
   do i=1, n
-    ui(1) = u(i, 1)
-    ui(2) = u(i, 2)
-    ui(3) = u(i, 3)
-    vi(1) = v(i, 1)
-    vi(2) = v(i, 2)
-    vi(3) = v(i, 3)
+    ui(1) = u(1, i)
+    ui(2) = u(2, i)
+    ui(3) = u(3, i)
+    vi(1) = v(1, i)
+    vi(2) = v(2, i)
+    vi(3) = v(3, i)
 
     C = dot3(ui, vi)
     w = cross3(ui, vi)
@@ -64,36 +63,33 @@ contains
     v_cross_w = cross3(vi, w) ! v x (u x v)
     w_cross_u = cross3(w, ui) ! (u x v) x u
 
-    grad_u(i, 1) = vi(1) * invS - (C * invS3) * v_cross_w(1)
-    grad_u(i, 2) = vi(2) * invS - (C * invS3) * v_cross_w(2)
-    grad_u(i, 3) = vi(3) * invS - (C * invS3) * v_cross_w(3)
+    grad_u(1, i) = vi(1) * invS - (C * invS3) * v_cross_w(1)
+    grad_u(2, i) = vi(2) * invS - (C * invS3) * v_cross_w(2)
+    grad_u(3, i) = vi(3) * invS - (C * invS3) * v_cross_w(3)
 
-    grad_v(i, 1) = ui(1) * invS - (C * invS3) * w_cross_u(1)
-    grad_v(i, 2) = ui(2) * invS - (C * invS3) * w_cross_u(2)
-    grad_v(i, 3) = ui(3) * invS - (C * invS3) * w_cross_u(3)
+    grad_v(1, i) = ui(1) * invS - (C * invS3) * w_cross_u(1)
+    grad_v(2, i) = ui(2) * invS - (C * invS3) * w_cross_u(2)
+    grad_v(3, i) = ui(3) * invS - (C * invS3) * w_cross_u(3)
   end do
 end subroutine grad_cotan_batch
 
 ! -------------------------------------------------------
 ! Apply discrete Laplace-Beltrami with cotan weight
 !
-! weights:  (nf, 3) -> [c0, c1, c2] per face
-! tri:      (nf, 3) -> [v0, v1, v2] per face
-! field:    (nv, dim)
-! out:      (nv, dim) (output)
+! weights:  (3, nf) -> [c0, c1, c2] per face (transposed)
+! tri:      (3, nf) -> [v0, v1, v2] per face (transposed)
+! field:    (dim, nv) (transposed)
+! out:      (dim, nv) (output, transposed)
 !
 ! zero_based=1 if tri indices are 0-based (Python); else 0.
 ! -------------------------------------------------------
 
 subroutine apply_beltrami_laplacian(dim, nv, nf, weights, tri, field, out, zero_based)
-    ! f2py-friendly signature (no bind(C)); keep arguments explicit.
-    ! dim is usually 3 for vector fields.
   integer(c_int), intent(in) :: dim, nv, nf
-  real(c_double), intent(in) :: weights(nf, 3)
-  integer(c_int), intent(in) :: tri(nf, 3)
-  real(c_double), intent(in) :: field(nv, dim)
-  ! f2py: require caller to supply output buffer to avoid per-call allocations.
-  real(c_double), intent(inout) :: out(nv, dim)
+  real(c_double), intent(in) :: weights(3, nf)
+  integer(c_int), intent(in) :: tri(3, nf)
+  real(c_double), intent(in) :: field(dim, nv)
+  real(c_double), intent(inout) :: out(dim, nv)
   integer(c_int), intent(in) :: zero_based
 
   integer :: f, d
@@ -110,26 +106,26 @@ subroutine apply_beltrami_laplacian(dim, nv, nf, weights, tri, field, out, zero_
   end if
 
   do f = 1, nf
-    c0 = weights(f, 1)
-    c1 = weights(f, 2)
-    c2 = weights(f, 3)
+    c0 = weights(1, f)
+    c1 = weights(2, f)
+    c2 = weights(3, f)
 
-    v0 = tri(f, 1) + shift
-    v1 = tri(f, 2) + shift
-    v2 = tri(f, 3) + shift
+    v0 = tri(1, f) + shift
+    v1 = tri(2, f) + shift
+    v2 = tri(3, f) + shift
 
     if (v0 < 1 .or. v0 > nv) cycle
     if (v1 < 1 .or. v1 > nv) cycle
     if (v2 < 1 .or. v2 > nv) cycle
 
     do d = 1, dim
-      f0 = field(v0, d)
-      f1 = field(v1, d)
-      f2 = field(v2, d)
+      f0 = field(d, v0)
+      f1 = field(d, v1)
+      f2 = field(d, v2)
 
-      out(v0, d) = out(v0, d) + 0.5d0 * (c1*(f0 - f2) + c2*(f0 - f1))
-      out(v1, d) = out(v1, d) + 0.5d0 * (c2*(f1 - f0) + c0*(f1 - f2))
-      out(v2, d) = out(v2, d) + 0.5d0 * (c0*(f2 - f1) + c1*(f2 - f0))
+      out(d, v0) = out(d, v0) + 0.5d0 * (c1*(f0 - f2) + c2*(f0 - f1))
+      out(d, v1) = out(d, v1) + 0.5d0 * (c2*(f1 - f0) + c0*(f1 - f2))
+      out(d, v2) = out(d, v2) + 0.5d0 * (c0*(f2 - f1) + c1*(f2 - f0))
     end do
   end do
 end subroutine apply_beltrami_laplacian

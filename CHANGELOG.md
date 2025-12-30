@@ -58,6 +58,9 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - **Cleanup**: Removed broken `modules/gaussan_curvature.py` and obsolete methods in `energy_manager.py`.
 - Automatic target-area detection on bodies/facets and regression tests (square with area constraint, tetra with volume constraint).
 - Cached triangle row indices and position-array reuse to avoid per-step reallocation during surface energy/gradient evaluation.
+
+### Changed
+- Default `bending_gradient_mode` is now `"analytic"` (more accurate and typically easier to minimize than `"approx"`).
 - Benchmark suite profiling: `benchmarks/suite.py --profile` emits per-case `.pstats` files (plus optional text summaries) for easier A/B performance analysis.
 - Fixed edges now freeze their endpoint vertices (including during refinement), matching Evolver-style behavior.
 - Expression-based energy and constraints with safe evaluation and numeric gradients.

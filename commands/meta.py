@@ -30,8 +30,33 @@ class HelpCommand(Command):
         )
         print("  live_vis / lv Turn on/off live visualization during minimization")
         print("  save          Save geometry to 'interactive.temp'")
+        print("  energy        Shortcut for 'print energy breakdown'")
         print("  history       Show commands entered in this session")
         print("  quit / exit / q  Leave interactive mode")
+
+
+class EnergyCommand(Command):
+    """Print total energy and per-module breakdown."""
+
+    def execute(self, context, args):
+        mode = "breakdown"
+        if args:
+            mode = str(args[0]).lower().strip()
+
+        if mode in {"breakdown", "details", "detail"}:
+            breakdown = context.minimizer.compute_energy_breakdown()
+            total = sum(breakdown.values())
+            print(f"Current Total Energy: {total:.10f}")
+            for name, value in breakdown.items():
+                print(f"  {name}: {value:.10f}")
+            return
+
+        if mode in {"total", "sum"}:
+            E = context.minimizer.compute_energy()
+            print(f"Current Total Energy: {E:.10f}")
+            return
+
+        print("Usage: energy [breakdown|total]")
 
 
 class SetCommand(Command):
@@ -130,6 +155,10 @@ class SetCommand(Command):
 
             mesh.global_parameters.set(param, val)
             print(f"Global parameter '{param}' set to {val}")
+
+        bump = getattr(mesh, "increment_version", None)
+        if callable(bump):
+            bump()
 
 
 class PrintEntityCommand(Command):

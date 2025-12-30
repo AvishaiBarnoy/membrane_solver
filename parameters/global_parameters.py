@@ -32,6 +32,11 @@ class GlobalParameters:
             "intrinsic_curvature": 0.0,
             "bending_modulus": 0.0,
             "bending_energy_model": "helfrich",
+            # Bending gradient implementation:
+            #   "analytic" – accurate (validated vs finite differences).
+            #   "approx"   – cheaper Laplacian approximation (may stall on stiff cases).
+            #   "finite_difference" – debugging only (slow).
+            "bending_gradient_mode": "analytic",
             "gaussian_modulus": 0.0,
         }
         # Load initial parameters if provided
