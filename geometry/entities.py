@@ -804,6 +804,12 @@ class Mesh:
     _boundary_vertex_cache_version: int = -1
     _boundary_vertex_cache: set[int] = field(default_factory=set)
 
+    _fixed_mask_cache: "np.ndarray | None" = None
+    _fixed_mask_version: int = -1
+
+    _parameter_array_cache: Dict[str, "np.ndarray"] = field(default_factory=dict)
+    _parameter_cache_version: int = -1
+
     _version: int = 0
     _vertex_ids_version: int = 0
 
@@ -815,6 +821,75 @@ class Mesh:
         self._topology_version += 1
         self._connectivity_cache_version = -1
         self._boundary_vertex_cache_version = -1
+
+    @property
+    def fixed_mask(self) -> "np.ndarray":
+        """Return a boolean array of fixed status for vertices."""
+        import numpy as np
+
+        if (
+            self._fixed_mask_cache is not None
+            and self._fixed_mask_version == self._version
+            and len(self._fixed_mask_cache) == len(self.vertices)
+        ):
+            return self._fixed_mask_cache
+
+        self.build_position_cache()
+        n_verts = len(self.vertex_ids)
+        mask = np.zeros(n_verts, dtype=bool)
+
+        # Iterate over vertices in order or use mapping?
+        # vertex_ids is sorted.
+        for i, vid in enumerate(self.vertex_ids):
+            if self.vertices[vid].fixed:
+                mask[i] = True
+
+        self._fixed_mask_cache = mask
+        self._fixed_mask_version = self._version
+        return mask
+
+    def get_facet_parameter_array(
+        self, param_name: str, default_val: float | None = None
+    ) -> "np.ndarray":
+        """Return a cached array of parameter values for all cached triangle rows."""
+        import numpy as np
+
+        # Ensure we have the triangle rows built, as this array corresponds to THAT ordering
+        rows, facets = self.triangle_row_cache()
+        if rows is None:
+            # Fallback/Empty
+            return np.array([])
+
+        cache_key = f"facet_{param_name}"
+        if (
+            self._parameter_cache_version == self._version
+            and cache_key in self._parameter_array_cache
+        ):
+            return self._parameter_array_cache[cache_key]
+
+        # Invalidate cache if version changed
+        if self._parameter_cache_version != self._version:
+            self._parameter_array_cache.clear()
+            self._parameter_cache_version = self._version
+
+        # Build array
+        n_facets = len(facets)
+        if default_val is None:
+            default_val = self.global_parameters.get(param_name) or 0.0
+
+        arr = np.full(n_facets, default_val, dtype=float)
+
+        # We need to scan only facets that have an override
+        # Optimization: Most facets won't have overrides.
+        # But we don't know which ones.
+        # We iterate over the cached facets (which are ids)
+        for i, fid in enumerate(facets):
+            facet = self.facets[fid]
+            if param_name in facet.options:
+                arr[i] = float(facet.options[param_name])
+
+        self._parameter_array_cache[cache_key] = arr
+        return arr
 
     @property
     def facet_to_triangle_row(self) -> Dict[int, int]:

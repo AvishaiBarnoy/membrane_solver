@@ -78,13 +78,7 @@ def calculate_surface_energy(mesh: Mesh, global_params) -> float:
 
         if cached_rows is not None and len(cached_rows) == len(mesh.facets):
             tri_rows = cached_rows
-            n_facets = len(cached_rows)
-            gammas = np.empty(n_facets, dtype=float)
-            st_default = global_params.get("surface_tension")
-
-            for i, fid in enumerate(cached_facets):
-                facet = mesh.facets[fid]
-                gammas[i] = facet.options.get("surface_tension", st_default)
+            gammas = mesh.get_facet_parameter_array("surface_tension")
         else:
             # Fallback if cache mismatch
             n_facets = len(mesh.facets)
@@ -141,14 +135,7 @@ def compute_energy_and_gradient_array(
     # Fast path: pure triangle mesh with cached loops
     if _all_facets_are_triangles(mesh):
         tri_rows_arr, tri_facets = mesh.triangle_row_cache()
-        gammas_arr = np.empty(len(tri_facets), dtype=float)
-
-        for idx, fid in enumerate(tri_facets):
-            facet = mesh.facets[fid]
-            surface_tension = param_resolver.get(facet, "surface_tension")
-            if surface_tension is None:
-                surface_tension = global_params.get("surface_tension")
-            gammas_arr[idx] = surface_tension
+        gammas_arr = mesh.get_facet_parameter_array("surface_tension")
 
         kernel_spec = get_surface_energy_kernel()
         if kernel_spec is not None:

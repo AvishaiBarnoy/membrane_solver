@@ -50,8 +50,11 @@ faces:
   - [3, 16, -9, -15]
   - [4, 17, -10, -16]
   - [5, 12, -11, -17]
+energy_modules:
+  - bending
 global_parameters:
-  surface_tension: 2.0
+  surface_tension: 1.0
+  bending_modulus: 0.01
 macros:
   gogo:
     - r2

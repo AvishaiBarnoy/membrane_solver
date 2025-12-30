@@ -310,7 +310,7 @@ def _grad_cotan(u: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
             gv_t = np.zeros_like(v.T, order="F")
             kernel_spec.func(u.T, v.T, gu_t, gv_t)
             return gu_t.T, gv_t.T
-        except TypeError:
+        except Exception:
             gu_t, gv_t = kernel_spec.func(u.T, v.T)
             return np.asarray(gu_t).T, np.asarray(gv_t).T
 
@@ -319,7 +319,7 @@ def _grad_cotan(u: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         gv = np.zeros_like(v, order="F")
         kernel_spec.func(u, v, gu, gv)
         return gu, gv
-    except TypeError:
+    except Exception:
         gu, gv = kernel_spec.func(u, v)
         return np.asarray(gu), np.asarray(gv)
 

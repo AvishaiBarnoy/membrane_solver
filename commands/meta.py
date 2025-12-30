@@ -131,6 +131,8 @@ class SetCommand(Command):
             mesh.global_parameters.set(param, val)
             print(f"Global parameter '{param}' set to {val}")
 
+        mesh.increment_version()
+
 
 class PrintEntityCommand(Command):
     """Refactored logic for 'print'."""
