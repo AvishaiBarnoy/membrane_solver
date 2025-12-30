@@ -147,6 +147,114 @@ def _vertex_normals(
     return normals
 
 
+def _compute_effective_areas(
+    mesh: Mesh,
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+    weights: np.ndarray,
+    index_map: Dict[int, int],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Compute effective vertex areas by redistributing boundary vertex contributions.
+
+    Returns (vertex_areas_eff, va0, va1, va2).
+    """
+    n_verts = len(mesh.vertex_ids)
+    if tri_rows.size == 0:
+        return (
+            np.zeros(n_verts),
+            np.zeros(0),
+            np.zeros(0),
+            np.zeros(0),
+        )
+
+    v0 = positions[tri_rows[:, 0]]
+    v1 = positions[tri_rows[:, 1]]
+    v2 = positions[tri_rows[:, 2]]
+
+    e0 = v2 - v1
+    e1 = v0 - v2
+    e2 = v1 - v0
+
+    l0_sq = np.einsum("ij,ij->i", e0, e0)
+    l1_sq = np.einsum("ij,ij->i", e1, e1)
+    l2_sq = np.einsum("ij,ij->i", e2, e2)
+
+    c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
+
+    # Triangle area (doubled)
+    cross = np.cross(e1, e2)
+    area_doubled = np.linalg.norm(cross, axis=1)
+    area_doubled = np.maximum(area_doubled, 1e-12)
+    tri_areas = 0.5 * area_doubled
+
+    # Check for obtuse angles
+    is_obtuse_v0 = c0 < 0
+    is_obtuse_v1 = c1 < 0
+    is_obtuse_v2 = c2 < 0
+    any_obtuse = is_obtuse_v0 | is_obtuse_v1 | is_obtuse_v2
+
+    # Standard Voronoi contributions
+    va0 = np.where(~any_obtuse, (l1_sq * c1 + l2_sq * c2) / 8.0, 0.0)
+    va1 = np.where(~any_obtuse, (l2_sq * c2 + l0_sq * c0) / 8.0, 0.0)
+    va2 = np.where(~any_obtuse, (l0_sq * c0 + l1_sq * c1) / 8.0, 0.0)
+
+    # Obtuse contributions
+    va0 = np.where(is_obtuse_v0, tri_areas / 2.0, va0)
+    va0 = np.where(is_obtuse_v1 | is_obtuse_v2, tri_areas / 4.0, va0)
+    va1 = np.where(is_obtuse_v1, tri_areas / 2.0, va1)
+    va1 = np.where(is_obtuse_v0 | is_obtuse_v2, tri_areas / 4.0, va1)
+    va2 = np.where(is_obtuse_v2, tri_areas / 2.0, va2)
+    va2 = np.where(is_obtuse_v0 | is_obtuse_v1, tri_areas / 4.0, va2)
+
+    # Redistribution logic
+    boundary_rows = np.array(
+        [
+            index_map[vid]
+            for vid in (mesh.boundary_vertex_ids or [])
+            if vid in index_map
+        ],
+        dtype=int,
+    )
+    is_boundary = np.zeros(n_verts, dtype=bool)
+    if boundary_rows.size:
+        is_boundary[boundary_rows] = True
+
+    tri_is_b = is_boundary[tri_rows]  # (nf, 3)
+    interior_mask = ~tri_is_b
+    interior_counts = np.sum(interior_mask, axis=1)
+
+    va_eff = np.stack([va0, va1, va2], axis=1)
+
+    # Find triangles with 1 or 2 interior vertices
+    mask_has_interior = interior_counts > 0
+    mask_some_boundary = np.any(tri_is_b, axis=1)
+    to_redistribute = mask_has_interior & mask_some_boundary
+
+    if np.any(to_redistribute):
+        # Area from boundary vertices in these triangles
+        b_area_sums = np.sum(va_eff * tri_is_b, axis=1)
+        # Distribute equally to interior vertices (per triangle)
+        extra_per_int = np.zeros_like(b_area_sums)
+        extra_per_int[to_redistribute] = (
+            b_area_sums[to_redistribute] / interior_counts[to_redistribute]
+        )
+
+        # For redistributed triangles:
+        # - boundary vertex area contributions are removed (set to 0)
+        # - each interior vertex receives its share of the boundary area
+        va_eff[to_redistribute] = (
+            va_eff[to_redistribute] * interior_mask[to_redistribute]
+            + interior_mask[to_redistribute] * extra_per_int[to_redistribute, None]
+        )
+
+    vertex_areas_eff = np.zeros(n_verts, dtype=float)
+    np.add.at(vertex_areas_eff, tri_rows[:, 0], va_eff[:, 0])
+    np.add.at(vertex_areas_eff, tri_rows[:, 1], va_eff[:, 1])
+    np.add.at(vertex_areas_eff, tri_rows[:, 2], va_eff[:, 2])
+
+    return vertex_areas_eff, va_eff[:, 0], va_eff[:, 1], va_eff[:, 2]
+
+
 def _mean_curvature_vectors(
     mesh: Mesh, positions: np.ndarray, index_map: Dict[int, int]
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -184,9 +292,14 @@ def compute_total_energy(
     if float(np.max(kappa_arr)) == 0.0:
         return 0.0
 
-    _, H, A, _, tri_rows = _mean_curvature_vectors(mesh, positions, index_map)
+    _, H, A_vor, weights, tri_rows = _mean_curvature_vectors(mesh, positions, index_map)
     if tri_rows.size == 0:
         return 0.0
+
+    # Use effective area for integration weight to handle boundaries
+    vertex_areas_eff, _, _, _ = _compute_effective_areas(
+        mesh, positions, tri_rows, weights, index_map
+    )
 
     if model == "helfrich":
         density = 0.5 * (2.0 * H - c0_arr) ** 2
@@ -198,7 +311,7 @@ def compute_total_energy(
         boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
         density[boundary_rows] = 0.0
 
-    return float(np.sum(kappa_arr * density * A))
+    return float(np.sum(kappa_arr * density * vertex_areas_eff))
 
 
 def compute_energy_array(mesh, global_params, positions, index_map) -> np.ndarray:
@@ -208,9 +321,14 @@ def compute_energy_array(mesh, global_params, positions, index_map) -> np.ndarra
     if float(np.max(kappa_arr)) == 0.0:
         return np.zeros(len(mesh.vertex_ids), dtype=float)
 
-    _, H, A, _, tri_rows = _mean_curvature_vectors(mesh, positions, index_map)
+    _, H, A_vor, weights, tri_rows = _mean_curvature_vectors(mesh, positions, index_map)
     if tri_rows.size == 0:
         return np.zeros(len(mesh.vertex_ids), dtype=float)
+
+    # Use effective area for integration weight
+    vertex_areas_eff, _, _, _ = _compute_effective_areas(
+        mesh, positions, tri_rows, weights, index_map
+    )
 
     if model == "helfrich":
         density = 0.5 * (2.0 * H - c0_arr) ** 2
@@ -222,7 +340,7 @@ def compute_energy_array(mesh, global_params, positions, index_map) -> np.ndarra
         boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
         density[boundary_rows] = 0.0
 
-    return kappa_arr * density * A
+    return kappa_arr * density * vertex_areas_eff
 
 
 def _apply_beltrami_laplacian(
@@ -365,115 +483,6 @@ def _laplacian_on_vertex_field(
     np.add.at(out, v0, 0.5 * (c1[:, None] * (f0 - f2) + c2[:, None] * (f0 - f1)))
     np.add.at(out, v1, 0.5 * (c2[:, None] * (f1 - f0) + c0[:, None] * (f1 - f2)))
     np.add.at(out, v2, 0.5 * (c0[:, None] * (f2 - f1) + c1[:, None] * (f2 - f0)))
-    return out
-
-
-def _compute_effective_areas(
-    mesh: Mesh,
-    positions: np.ndarray,
-    tri_rows: np.ndarray,
-    weights: np.ndarray,
-    index_map: Dict[int, int],
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Compute effective vertex areas by redistributing boundary vertex contributions.
-
-    Returns (vertex_areas_eff, va0, va1, va2).
-    """
-    n_verts = len(mesh.vertex_ids)
-    if tri_rows.size == 0:
-        return (
-            np.zeros(n_verts),
-            np.zeros(0),
-            np.zeros(0),
-            np.zeros(0),
-        )
-
-    v0 = positions[tri_rows[:, 0]]
-    v1 = positions[tri_rows[:, 1]]
-    v2 = positions[tri_rows[:, 2]]
-
-    e0 = v2 - v1
-    e1 = v0 - v2
-    e2 = v1 - v0
-
-    l0_sq = np.einsum("ij,ij->i", e0, e0)
-    l1_sq = np.einsum("ij,ij->i", e1, e1)
-    l2_sq = np.einsum("ij,ij->i", e2, e2)
-
-    c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
-
-    # Triangle area (doubled)
-    cross = np.cross(e1, e2)
-    area_doubled = np.linalg.norm(cross, axis=1)
-    area_doubled = np.maximum(area_doubled, 1e-12)
-    tri_areas = 0.5 * area_doubled
-
-    # Check for obtuse angles
-    is_obtuse_v0 = c0 < 0
-    is_obtuse_v1 = c1 < 0
-    is_obtuse_v2 = c2 < 0
-    any_obtuse = is_obtuse_v0 | is_obtuse_v1 | is_obtuse_v2
-
-    # Standard Voronoi contributions
-    va0 = np.where(~any_obtuse, (l1_sq * c1 + l2_sq * c2) / 8.0, 0.0)
-    va1 = np.where(~any_obtuse, (l2_sq * c2 + l0_sq * c0) / 8.0, 0.0)
-    va2 = np.where(~any_obtuse, (l0_sq * c0 + l1_sq * c1) / 8.0, 0.0)
-
-    # Obtuse contributions
-    va0 = np.where(is_obtuse_v0, tri_areas / 2.0, va0)
-    va0 = np.where(is_obtuse_v1 | is_obtuse_v2, tri_areas / 4.0, va0)
-    va1 = np.where(is_obtuse_v1, tri_areas / 2.0, va1)
-    va1 = np.where(is_obtuse_v0 | is_obtuse_v2, tri_areas / 4.0, va1)
-    va2 = np.where(is_obtuse_v2, tri_areas / 2.0, va2)
-    va2 = np.where(is_obtuse_v0 | is_obtuse_v1, tri_areas / 4.0, va2)
-
-    # Redistribution logic
-    boundary_rows = np.array(
-        [
-            index_map[vid]
-            for vid in (mesh.boundary_vertex_ids or [])
-            if vid in index_map
-        ],
-        dtype=int,
-    )
-    is_boundary = np.zeros(n_verts, dtype=bool)
-    if boundary_rows.size:
-        is_boundary[boundary_rows] = True
-
-    tri_is_b = is_boundary[tri_rows]  # (nf, 3)
-    interior_mask = ~tri_is_b
-    interior_counts = np.sum(interior_mask, axis=1)
-
-    va_eff = np.stack([va0, va1, va2], axis=1)
-
-    # Find triangles with 1 or 2 interior vertices
-    mask_has_interior = interior_counts > 0
-    mask_some_boundary = np.any(tri_is_b, axis=1)
-    to_redistribute = mask_has_interior & mask_some_boundary
-
-    if np.any(to_redistribute):
-        # Area from boundary vertices in these triangles
-        b_area_sums = np.sum(va_eff * tri_is_b, axis=1)
-        # Distribute equally to interior vertices (per triangle)
-        extra_per_int = np.zeros_like(b_area_sums)
-        extra_per_int[to_redistribute] = (
-            b_area_sums[to_redistribute] / interior_counts[to_redistribute]
-        )
-
-        # For redistributed triangles:
-        # - boundary vertex area contributions are removed (set to 0)
-        # - each interior vertex receives its share of the boundary area
-        va_eff[to_redistribute] = (
-            va_eff[to_redistribute] * interior_mask[to_redistribute]
-            + interior_mask[to_redistribute] * extra_per_int[to_redistribute, None]
-        )
-
-    vertex_areas_eff = np.zeros(n_verts, dtype=float)
-    np.add.at(vertex_areas_eff, tri_rows[:, 0], va_eff[:, 0])
-    np.add.at(vertex_areas_eff, tri_rows[:, 1], va_eff[:, 1])
-    np.add.at(vertex_areas_eff, tri_rows[:, 2], va_eff[:, 2])
-
-    return vertex_areas_eff, va_eff[:, 0], va_eff[:, 1], va_eff[:, 2]
 
 
 def compute_energy_and_gradient_array(
@@ -487,7 +496,9 @@ def compute_energy_and_gradient_array(
 ) -> float:
     """Compute bending energy and accumulate analytic or FD gradient."""
     mesh.build_position_cache()
-    k_vecs, _, weights, tri_rows = compute_curvature_data(mesh, positions, index_map)
+    k_vecs, vertex_areas_vor, weights, tri_rows = compute_curvature_data(
+        mesh, positions, index_map
+    )
 
     if tri_rows.size == 0:
         return 0.0
@@ -496,12 +507,18 @@ def compute_energy_and_gradient_array(
     vertex_areas_eff, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
         mesh, positions, tri_rows, weights, index_map
     )
-    safe_areas = np.maximum(vertex_areas_eff, 1e-12)
+    # Areas for curvature calculation (Voronoi)
+    safe_areas_vor = np.maximum(vertex_areas_vor, 1e-12)
+    # Areas for integration weight (Effective)
+    # safe_areas_eff = np.maximum(vertex_areas_eff, 1e-12)
 
     model = _energy_model(global_params)
     kappa_arr, c0_arr = _per_vertex_params(mesh, global_params, model=model)
 
     k_mag = np.linalg.norm(k_vecs, axis=1)
+
+    # H = |K| / (2 * A_vor)
+    H_vor = k_mag / (2.0 * safe_areas_vor)
 
     # Only interior vertices contribute to energy
     boundary_vids = mesh.boundary_vertex_ids
@@ -510,43 +527,62 @@ def compute_energy_and_gradient_array(
         boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
         is_interior[boundary_rows] = False
 
+    # Ratio A_eff / A_vor used in gradient chain rule
+    ratio = np.zeros_like(vertex_areas_eff)
+    mask_vor = safe_areas_vor > 1e-15
+    ratio[mask_vor] = vertex_areas_eff[mask_vor] / safe_areas_vor[mask_vor]
+
     if model == "helfrich":
-        # E_i = 0.5 * kappa * ( |K|/A - c0 )^2 * A
-        term = (k_mag / safe_areas) - c0_arr
+        # E_i = 0.5 * kappa * ( 2 H_vor - c0 )^2 * A_eff
+        term = (2.0 * H_vor) - c0_arr
         # Zero out boundary curvature terms
         term[~is_interior] = 0.0
-        total_energy = float(0.5 * np.sum(kappa_arr * term**2 * safe_areas))
 
-        # factor_K = kappa * term * (K / |K|)
-        # factor_A = 0.5 * kappa * term^2 - kappa * term * (k_mag / safe_areas)
+        total_energy = float(0.5 * np.sum(kappa_arr * term**2 * vertex_areas_eff))
+
         normals = _vertex_normals(mesh, positions, tri_rows)
         K_dir = np.zeros_like(k_vecs)
         mask = k_mag > 1e-15
         K_dir[mask] = k_vecs[mask] / k_mag[mask][:, None]
         K_dir[~mask] = normals[~mask]
 
-        scale_K = (kappa_arr * term).astype(float, copy=False)
+        # dE/dK = kappa * term * (A_eff / (2 A_vor)) * n * 2  (from dE/dH * dH/dK)
+        #       = kappa * term * ratio * n
+        scale_K = (kappa_arr * term * ratio).astype(float, copy=False)
         factor_K_vec = np.empty_like(K_dir, order="F")
         np.multiply(K_dir, scale_K[:, None], out=factor_K_vec)
-        factor_A = 0.5 * kappa_arr * term**2 - kappa_arr * term * (k_mag / safe_areas)
+
+        # dE/dA_eff = 0.5 * kappa * term^2
+        fA_eff = 0.5 * kappa_arr * term**2
+
+        # dE/dA_vor = - kappa * term * ratio * H_vor * 2
+        fA_vor = -2.0 * kappa_arr * term * ratio * H_vor
 
     else:
-        # Willmore: E_i = kappa * |K|^2 / (4A)
-        # Zero out boundary curvature terms
-        k_mag_eff = k_mag.copy()
-        k_mag_eff[~is_interior] = 0.0
-        total_energy = float(np.sum(kappa_arr * (k_mag_eff**2 / (4.0 * safe_areas))))
+        # Willmore: E_i = kappa * H_vor^2 * A_eff
+        H_vor_eff = H_vor.copy()
+        H_vor_eff[~is_interior] = 0.0
+        total_energy = float(np.sum(kappa_arr * H_vor_eff**2 * vertex_areas_eff))
 
-        scale_K = (kappa_arr / (2.0 * safe_areas)).astype(float, copy=False)
+        # dE/dK = 2 kappa H (A_eff / 2 A_vor) n = kappa H ratio n
+        scale_K = (kappa_arr * H_vor_eff * ratio).astype(float, copy=False)
         factor_K_vec = np.empty_like(k_vecs, order="F")
         # Ensure k_vec contribution from boundaries is zero
         k_vecs_eff = k_vecs.copy()
         k_vecs_eff[~is_interior] = 0.0
-        np.multiply(k_vecs_eff, scale_K[:, None], out=factor_K_vec)
-        factor_A = -kappa_arr * k_mag_eff**2 / (4.0 * safe_areas**2)
+        mask_k = k_mag > 1e-15
+        K_dir = np.zeros_like(k_vecs)
+        K_dir[mask_k] = k_vecs[mask_k] / k_mag[mask_k][:, None]
+        np.multiply(K_dir, scale_K[:, None], out=factor_K_vec)
+
+        # dE/dA_eff = kappa H^2
+        fA_eff = kappa_arr * H_vor_eff**2
+
+        # dE/dA_vor = -2 kappa H^2 ratio
+        fA_vor = -2.0 * kappa_arr * H_vor_eff**2 * ratio
 
     # Step 1: Force on boundary vertices is zeroed.
-    # Note: factor_K_vec and factor_A already have 0 for boundary vertices via term/k_mag_eff.
+    # Note: factor_K_vec and fA terms already have 0 for boundary vertices via term/H_vor_eff.
 
     # Now verify if user wants FD/approx/analytic
     mode = _gradient_mode(global_params)
@@ -558,26 +594,11 @@ def compute_energy_and_gradient_array(
         return total_energy
 
     if mode == "approx":
-        h_vecs = k_vecs / (2.0 * safe_areas[:, None])
-        # Mask boundary h_vecs
-        h_vecs[~is_interior] = 0.0
-
-        if model == "helfrich":
-            h_norms = np.linalg.norm(h_vecs, axis=1)
-            n_hats = np.zeros_like(h_vecs)
-            mask_n = h_norms > 1e-12
-            n_hats[mask_n] = h_vecs[mask_n] / h_norms[mask_n][:, None]
-            target_h_vecs = (c0_arr / 2.0)[:, None] * n_hats
-            diff_h_vecs = h_vecs - target_h_vecs
-            # Again, ensure boundary diff is 0
-            diff_h_vecs[~is_interior] = 0.0
-            field = np.empty_like(diff_h_vecs, order="F")
-            np.multiply(diff_h_vecs, kappa_arr[:, None], out=field)
-            grad_arr[:] -= _apply_beltrami_laplacian(weights, tri_rows, field)
-        else:
-            field = np.empty_like(h_vecs, order="F")
-            np.multiply(h_vecs, kappa_arr[:, None], out=field)
-            grad_arr[:] -= _apply_beltrami_laplacian(weights, tri_rows, field)
+        # Note: Approx mode usually ignores A_eff / A_vor complications and just computes L(kappa * H * n)
+        # We can try to adapt it, or leave it as "Approx".
+        # Let's use the simplest approx: L( dE/dK ) ?
+        # dE/dK = factor_K_vec
+        grad_arr[:] -= _apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
 
         # Zero out boundary forces
         if boundary_vids:
@@ -623,30 +644,33 @@ def compute_energy_and_gradient_array(
     np.add.at(grad_cot, v2_idxs, val2 * -(g_c2_u + g_c2_v))
 
     # --- Area Gradients (Step 2: Propagate area reassignment) ---
-    fA = factor_A
 
-    # We define per-triangle-vertex coefficients C.
-    # The energy contribution from area variation is sum(C * grad(A_voronoi)).
-    # - For interior vertices: C = fA (standard)
-    # - For boundary vertices: A_voronoi is redistributed to interior neighbors.
-    #   Effectively, A_b contributes to energy with weight average(fA_interior).
-
+    # Redistribution logic applies to fA_eff
     tri_is_int = is_interior[tri_rows]
     interior_counts = np.sum(tri_is_int, axis=1)
 
-    tri_fA = fA[tri_rows]
-    sum_fA_int = np.sum(tri_fA * tri_is_int, axis=1)
+    tri_fA_eff = fA_eff[tri_rows]
+    sum_fA_eff_int = np.sum(tri_fA_eff * tri_is_int, axis=1)
 
-    avg_fA = np.zeros(len(tri_rows), dtype=float)
+    avg_fA_eff = np.zeros(len(tri_rows), dtype=float)
     mask_has_int = interior_counts > 0
-    avg_fA[mask_has_int] = sum_fA_int[mask_has_int] / interior_counts[mask_has_int]
+    avg_fA_eff[mask_has_int] = (
+        sum_fA_eff_int[mask_has_int] / interior_counts[mask_has_int]
+    )
 
-    # C[t, k] = tri_fA[t, k] if vertex k is interior, else avg_fA[t]
-    C = np.where(tri_is_int, tri_fA, avg_fA[:, None])
+    # C_eff[t, k] = tri_fA_eff[t, k] if vertex k is interior, else avg_fA_eff[t]
+    C_eff = np.where(tri_is_int, tri_fA_eff, avg_fA_eff[:, None])
+
+    # Add contribution from A_vor direct dependency (only for interior vertices)
+    # C_final = C_eff + fA_vor (where fA_vor is 0 for boundary)
+    tri_fA_vor = fA_vor[tri_rows]
+    # fA_vor is 0 at boundaries, so we can just add tri_fA_vor to C_eff.
+    # Note: For boundary vertices in C_eff, we have avg_fA_eff. We add fA_vor[bdy] which is 0. Correct.
+    C = C_eff + tri_fA_vor
 
     grad_area = np.zeros_like(positions)
 
-    # Now run standard Voronoi gradient logic using C instead of fA
+    # Now run standard Voronoi gradient logic using C
     # This applies to ALL triangles (pure interior and boundary adjacent)
 
     # Check for obtuse triangles
