@@ -144,7 +144,8 @@ Interactive commands:
   Run a single BFGS-style Hessian step without changing the active stepper.
 
 - `tX`
-  Set step size to `X` (e.g. `t1e-3`).
+  Fix step size to `X` (e.g. `t1e-3`). Use `tf` / `t free` to re-enable adaptive
+  step sizing.
 
 - `set ...`
   Update global parameters or entity properties interactively.

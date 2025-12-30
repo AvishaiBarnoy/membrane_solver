@@ -1,3 +1,5 @@
+import numpy as np
+
 from commands.base import Command
 
 
@@ -12,7 +14,8 @@ class HelpCommand(Command):
         print("Interactive commands:")
         print("  gN            Run N minimization steps (e.g. g5, g10)")
         print("  gd / cg       Switch to Gradient Descent / Conjugate Gradient stepper")
-        print("  tX            Set step size to X (e.g. t1e-3)")
+        print("  tX            Fix step size to X (e.g. t1e-3)")
+        print("  tf / t free   Re-enable adaptive step sizing")
         print("  r             Refine mesh (triangle refinement + polygonal)")
         print("  V / Vn        Vertex averaging once or n times (e.g. V5)")
         print("  vertex_average Same as V")
@@ -35,6 +38,39 @@ class HelpCommand(Command):
         print("  quit / exit / q  Leave interactive mode")
 
 
+class StepSizeCommand(Command):
+    """Set minimizer step size (shortcut: tX)."""
+
+    def execute(self, context, args):
+        if not args:
+            print("Usage: tX (e.g. t1e-3)")
+            return
+
+        token = str(args[0]).strip().lower()
+        if token in {"f", "free"}:
+            context.mesh.global_parameters.set("step_size_mode", "adaptive")
+            print("Step size mode set to adaptive.")
+            return
+
+        try:
+            step_size = float(token)
+        except (TypeError, ValueError):
+            print(f"Invalid step size: {args[0]!r} (use tX or tf)")
+            return
+
+        if step_size <= 0.0:
+            print("Step size must be positive.")
+            return
+
+        mesh = context.mesh
+        mesh.global_parameters.set("step_size", step_size)
+        mesh.global_parameters.set("step_size_mode", "fixed")
+        if getattr(context, "minimizer", None) is not None:
+            context.minimizer.step_size = step_size
+
+        print(f"Step size fixed to {step_size:g}")
+
+
 class EnergyCommand(Command):
     """Print total energy and per-module breakdown."""
 
@@ -49,6 +85,44 @@ class EnergyCommand(Command):
             print(f"Current Total Energy: {total:.10f}")
             for name, value in breakdown.items():
                 print(f"  {name}: {value:.10f}")
+            return
+
+        if mode in {"stats", "curvature"}:
+            from geometry.curvature import compute_curvature_fields
+
+            mesh = context.mesh
+            mesh.build_position_cache()
+            positions = mesh.positions_view()
+            index_map = mesh.vertex_index_to_row
+            fields = compute_curvature_fields(mesh, positions, index_map)
+
+            H = fields.mean_curvature
+            boundary_vids = getattr(mesh, "boundary_vertex_ids", None) or []
+            boundary_rows = np.array(
+                [index_map[vid] for vid in boundary_vids if vid in index_map],
+                dtype=int,
+            )
+
+            mask_interior = np.ones(len(H), dtype=bool)
+            if boundary_rows.size:
+                mask_interior[boundary_rows] = False
+
+            def _stats(name: str, values):
+                if values.size == 0:
+                    print(f"{name}: (no vertices)")
+                    return
+                vals = np.asarray(values, dtype=float)
+                q = np.quantile(vals, [0.0, 0.5, 0.9, 0.99, 1.0])
+                print(
+                    f"{name}: min={q[0]:.4e} med={q[1]:.4e} "
+                    f"p90={q[2]:.4e} p99={q[3]:.4e} max={q[4]:.4e}"
+                )
+
+            print("Curvature diagnostics (|H|):")
+            print(f"  vertices: {len(H)} (boundary {int(boundary_rows.size)})")
+            _stats("  all", H)
+            if np.any(mask_interior):
+                _stats("  interior", H[mask_interior])
             return
 
         if mode in {"total", "sum"}:

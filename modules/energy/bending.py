@@ -368,6 +368,114 @@ def _laplacian_on_vertex_field(
     return out
 
 
+def _compute_effective_areas(
+    mesh: Mesh,
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+    weights: np.ndarray,
+    index_map: Dict[int, int],
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Compute effective vertex areas by redistributing boundary vertex contributions.
+
+    Returns (vertex_areas_eff, va0, va1, va2).
+    """
+    n_verts = len(mesh.vertex_ids)
+    if tri_rows.size == 0:
+        return (
+            np.zeros(n_verts),
+            np.zeros(0),
+            np.zeros(0),
+            np.zeros(0),
+        )
+
+    v0 = positions[tri_rows[:, 0]]
+    v1 = positions[tri_rows[:, 1]]
+    v2 = positions[tri_rows[:, 2]]
+
+    e0 = v2 - v1
+    e1 = v0 - v2
+    e2 = v1 - v0
+
+    l0_sq = np.einsum("ij,ij->i", e0, e0)
+    l1_sq = np.einsum("ij,ij->i", e1, e1)
+    l2_sq = np.einsum("ij,ij->i", e2, e2)
+
+    c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
+
+    # Triangle area (doubled)
+    cross = np.cross(e1, e2)
+    area_doubled = np.linalg.norm(cross, axis=1)
+    area_doubled = np.maximum(area_doubled, 1e-12)
+    tri_areas = 0.5 * area_doubled
+
+    # Check for obtuse angles
+    is_obtuse_v0 = c0 < 0
+    is_obtuse_v1 = c1 < 0
+    is_obtuse_v2 = c2 < 0
+    any_obtuse = is_obtuse_v0 | is_obtuse_v1 | is_obtuse_v2
+
+    # Standard Voronoi contributions
+    va0 = np.where(~any_obtuse, (l1_sq * c1 + l2_sq * c2) / 8.0, 0.0)
+    va1 = np.where(~any_obtuse, (l2_sq * c2 + l0_sq * c0) / 8.0, 0.0)
+    va2 = np.where(~any_obtuse, (l0_sq * c0 + l1_sq * c1) / 8.0, 0.0)
+
+    # Obtuse contributions
+    va0 = np.where(is_obtuse_v0, tri_areas / 2.0, va0)
+    va0 = np.where(is_obtuse_v1 | is_obtuse_v2, tri_areas / 4.0, va0)
+    va1 = np.where(is_obtuse_v1, tri_areas / 2.0, va1)
+    va1 = np.where(is_obtuse_v0 | is_obtuse_v2, tri_areas / 4.0, va1)
+    va2 = np.where(is_obtuse_v2, tri_areas / 2.0, va2)
+    va2 = np.where(is_obtuse_v0 | is_obtuse_v1, tri_areas / 4.0, va2)
+
+    # Redistribution logic
+    boundary_rows = np.array(
+        [
+            index_map[vid]
+            for vid in (mesh.boundary_vertex_ids or [])
+            if vid in index_map
+        ],
+        dtype=int,
+    )
+    is_boundary = np.zeros(n_verts, dtype=bool)
+    if boundary_rows.size:
+        is_boundary[boundary_rows] = True
+
+    tri_is_b = is_boundary[tri_rows]  # (nf, 3)
+    interior_mask = ~tri_is_b
+    interior_counts = np.sum(interior_mask, axis=1)
+
+    va_eff = np.stack([va0, va1, va2], axis=1)
+
+    # Find triangles with 1 or 2 interior vertices
+    mask_has_interior = interior_counts > 0
+    mask_some_boundary = np.any(tri_is_b, axis=1)
+    to_redistribute = mask_has_interior & mask_some_boundary
+
+    if np.any(to_redistribute):
+        # Area from boundary vertices in these triangles
+        b_area_sums = np.sum(va_eff * tri_is_b, axis=1)
+        # Distribute equally to interior vertices (per triangle)
+        extra_per_int = np.zeros_like(b_area_sums)
+        extra_per_int[to_redistribute] = (
+            b_area_sums[to_redistribute] / interior_counts[to_redistribute]
+        )
+
+        # For redistributed triangles:
+        # - boundary vertex area contributions are removed (set to 0)
+        # - each interior vertex receives its share of the boundary area
+        va_eff[to_redistribute] = (
+            va_eff[to_redistribute] * interior_mask[to_redistribute]
+            + interior_mask[to_redistribute] * extra_per_int[to_redistribute, None]
+        )
+
+    vertex_areas_eff = np.zeros(n_verts, dtype=float)
+    np.add.at(vertex_areas_eff, tri_rows[:, 0], va_eff[:, 0])
+    np.add.at(vertex_areas_eff, tri_rows[:, 1], va_eff[:, 1])
+    np.add.at(vertex_areas_eff, tri_rows[:, 2], va_eff[:, 2])
+
+    return vertex_areas_eff, va_eff[:, 0], va_eff[:, 1], va_eff[:, 2]
+
+
 def compute_energy_and_gradient_array(
     mesh: Mesh,
     global_params,
@@ -378,65 +486,44 @@ def compute_energy_and_gradient_array(
     grad_arr: np.ndarray,
 ) -> float:
     """Compute bending energy and accumulate analytic or FD gradient."""
-    # Compute basic curvature data
-    # Note: We need to cache/retrieve this efficiently.
-    # compute_curvature_data returns (K_vecs, A_mixed, weights, tri_rows)
-    # K_vecs is integrated mean curvature (0.5 * sum (cot a + cot b)(xi - xj))
-
     mesh.build_position_cache()
-    k_vecs, vertex_areas, weights, tri_rows = compute_curvature_data(
-        mesh, positions, index_map
-    )
+    k_vecs, _, weights, tri_rows = compute_curvature_data(mesh, positions, index_map)
 
-    # Calculate Energy
-    safe_areas = np.maximum(vertex_areas, 1e-12)
-    # H_scalar = |K| / (2A)
-    # E = kappa * sum( (H_scalar)^2 * A ) = kappa * sum( |K|^2 / (4A) )
-    # For Helfrich: E = kappa/2 * sum( (2H - c0)^2 * A )
-    #                 = kappa/2 * sum( ( |K|/A - c0 )^2 * A )
+    if tri_rows.size == 0:
+        return 0.0
+
+    # Step 1: Boundary area reassignment
+    vertex_areas_eff, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
+        mesh, positions, tri_rows, weights, index_map
+    )
+    safe_areas = np.maximum(vertex_areas_eff, 1e-12)
 
     model = _energy_model(global_params)
     kappa_arr, c0_arr = _per_vertex_params(mesh, global_params, model=model)
 
-    # Precompute per-vertex energy and terms for gradient
-    # We need gradients of K_i and A_i w.r.t positions.
-
-    # E_i = energy density at vertex i
     k_mag = np.linalg.norm(k_vecs, axis=1)
 
+    # Only interior vertices contribute to energy
+    boundary_vids = mesh.boundary_vertex_ids
+    is_interior = np.ones(len(mesh.vertex_ids), dtype=bool)
+    if boundary_vids:
+        boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
+        is_interior[boundary_rows] = False
+
     if model == "helfrich":
-        # E = sum E_i, E_i = 0.5 * kappa * ( k_mag/A - c0 )^2 * A
+        # E_i = 0.5 * kappa * ( |K|/A - c0 )^2 * A
         term = (k_mag / safe_areas) - c0_arr
+        # Zero out boundary curvature terms
+        term[~is_interior] = 0.0
         total_energy = float(0.5 * np.sum(kappa_arr * term**2 * safe_areas))
 
-        # dE/dx = sum_i dE_i/dx
-        # dE_i = 0.5 * kappa * [ 2 * (k/A - c0) * d(k/A - c0) * A + (k/A - c0)^2 * dA ]
-        #      = 0.5 * kappa * [ 2 * term * ( (dk * A - k * dA)/A^2 ) * A + term^2 * dA ]
-        #      = 0.5 * kappa * [ 2 * term * (dk/A - k/A^2 dA) * A + term^2 * dA ]
-        #      = kappa * term * dk - kappa * term * (k/A) * dA + 0.5 * kappa * term^2 * dA
-        #      = kappa * term * dk + (0.5 * kappa * term^2 - kappa * term * k/A) * dA
-
-        # d(|K|) = K/|K| . dK
-        # dk = (K / |K|) . dK
-
-        # Let factor_K = kappa * term * (K / |K|)
-        # Let factor_A = 0.5 * kappa * term^2 - kappa * term * (k_mag / safe_areas)
-
-        # Use vertex normals instead of K_unit to be robust for flat regions
-        # K points inwards, so we want normals aligned with K.
+        # factor_K = kappa * term * (K / |K|)
+        # factor_A = 0.5 * kappa * term^2 - kappa * term * (k_mag / safe_areas)
         normals = _vertex_normals(mesh, positions, tri_rows)
-        # Ensure normals point in the same hemisphere as k_vecs
-        # (or just use normals and accept the sign convention of the mesh)
-        # H_scalar in compute_total_energy uses |K|, so it's always positive.
-        # We should match that by using the projection of K onto n.
-
-        # However, for a flat sheet, which way is "inwards"?
-        # The perturbation breaks symmetry. We should use the normal.
-
         K_dir = np.zeros_like(k_vecs)
         mask = k_mag > 1e-15
         K_dir[mask] = k_vecs[mask] / k_mag[mask][:, None]
-        K_dir[~mask] = normals[~mask]  # Fallback to vertex normal
+        K_dir[~mask] = normals[~mask]
 
         scale_K = (kappa_arr * term).astype(float, copy=False)
         factor_K_vec = np.empty_like(K_dir, order="F")
@@ -444,37 +531,22 @@ def compute_energy_and_gradient_array(
         factor_A = 0.5 * kappa_arr * term**2 - kappa_arr * term * (k_mag / safe_areas)
 
     else:
-        # Willmore: E_i = kappa * (H^2) * A = kappa * (|K|/2A)^2 * A = kappa * |K|^2 / (4A)
-        total_energy = float(np.sum(kappa_arr * (k_mag**2 / (4.0 * safe_areas))))
-
-        # dE_i = (kappa/4) * [ (2 |K| d|K|) / A - (|K|^2 / A^2) dA ]
-        #      = (kappa/2A) * (K . dK) - (kappa |K|^2 / 4A^2) dA
-
-        # factor_K_vec = (kappa / 2A) * K
-        # factor_A = - kappa * |K|^2 / (4A^2)
+        # Willmore: E_i = kappa * |K|^2 / (4A)
+        # Zero out boundary curvature terms
+        k_mag_eff = k_mag.copy()
+        k_mag_eff[~is_interior] = 0.0
+        total_energy = float(np.sum(kappa_arr * (k_mag_eff**2 / (4.0 * safe_areas))))
 
         scale_K = (kappa_arr / (2.0 * safe_areas)).astype(float, copy=False)
         factor_K_vec = np.empty_like(k_vecs, order="F")
-        np.multiply(k_vecs, scale_K[:, None], out=factor_K_vec)
-        factor_A = -kappa_arr * k_mag**2 / (4.0 * safe_areas**2)
+        # Ensure k_vec contribution from boundaries is zero
+        k_vecs_eff = k_vecs.copy()
+        k_vecs_eff[~is_interior] = 0.0
+        np.multiply(k_vecs_eff, scale_K[:, None], out=factor_K_vec)
+        factor_A = -kappa_arr * k_mag_eff**2 / (4.0 * safe_areas**2)
 
-    boundary_vids = mesh.boundary_vertex_ids
-    if boundary_vids:
-        boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
-        # Match the energy convention used elsewhere: ignore boundary vertices.
-        if boundary_rows:
-            factor_K_vec[boundary_rows] = 0.0
-            factor_A[boundary_rows] = 0.0
-            # Also remove their energy contribution so callers see E=0 on open planar patches.
-            if model == "helfrich":
-                term[boundary_rows] = 0.0
-                total_energy = float(0.5 * np.sum(kappa_arr * term**2 * safe_areas))
-            else:
-                k_mag_b = k_mag.copy()
-                k_mag_b[boundary_rows] = 0.0
-                total_energy = float(
-                    np.sum(kappa_arr * (k_mag_b**2 / (4.0 * safe_areas)))
-                )
+    # Step 1: Force on boundary vertices is zeroed.
+    # Note: factor_K_vec and factor_A already have 0 for boundary vertices via term/k_mag_eff.
 
     # Now verify if user wants FD/approx/analytic
     mode = _gradient_mode(global_params)
@@ -486,17 +558,19 @@ def compute_energy_and_gradient_array(
         return total_energy
 
     if mode == "approx":
-        # Fast, stable approximation: apply cotan Laplacian to the mean-curvature
-        # normal field (or to the deviation from target curvature in Helfrich).
-        h_vecs = k_vecs / (2.0 * safe_areas[:, None])  # Hn
+        h_vecs = k_vecs / (2.0 * safe_areas[:, None])
+        # Mask boundary h_vecs
+        h_vecs[~is_interior] = 0.0
+
         if model == "helfrich":
-            # Use deviation from preferred curvature magnitude along local direction.
             h_norms = np.linalg.norm(h_vecs, axis=1)
             n_hats = np.zeros_like(h_vecs)
             mask_n = h_norms > 1e-12
             n_hats[mask_n] = h_vecs[mask_n] / h_norms[mask_n][:, None]
             target_h_vecs = (c0_arr / 2.0)[:, None] * n_hats
             diff_h_vecs = h_vecs - target_h_vecs
+            # Again, ensure boundary diff is 0
+            diff_h_vecs[~is_interior] = 0.0
             field = np.empty_like(diff_h_vecs, order="F")
             np.multiply(diff_h_vecs, kappa_arr[:, None], out=field)
             grad_arr[:] -= _apply_beltrami_laplacian(weights, tri_rows, field)
@@ -504,333 +578,157 @@ def compute_energy_and_gradient_array(
             field = np.empty_like(h_vecs, order="F")
             np.multiply(h_vecs, kappa_arr[:, None], out=field)
             grad_arr[:] -= _apply_beltrami_laplacian(weights, tri_rows, field)
+
+        # Zero out boundary forces
+        if boundary_vids:
+            boundary_rows = [
+                index_map[vid] for vid in boundary_vids if vid in index_map
+            ]
+            grad_arr[boundary_rows] = 0.0
         return total_energy
 
     # --- Analytic gradient backpropagation ---
-    # K_i = 0.5 * sum_{j in N(i)} (cot a_ij + cot b_ij) (x_i - x_j)
-    # This term depends on positions x_i, x_j, and the vertices defining angles a_ij, b_ij.
-
-    # Strategy: Iterate over all triangles to accumulate gradients.
-    # Each triangle contributes to cotans of its edges and edge vectors.
-
-    v0_idxs = tri_rows[:, 0]
-    v1_idxs = tri_rows[:, 1]
-    v2_idxs = tri_rows[:, 2]
-
-    v0 = positions[v0_idxs]
-    v1 = positions[v1_idxs]
-    v2 = positions[v2_idxs]
-
-    # Edges
-    e0 = v2 - v1  # Opp v0
-    e1 = v0 - v2  # Opp v1
-    e2 = v1 - v0  # Opp v2
-
-    # Cotangents c0, c1, c2 (at vertices 0, 1, 2)
-    # We need gradients of these cotangents w.r.t v0, v1, v2
-
-    # Re-compute cotans to get gradients
-    # c0 = cot(angle at v0) = cot(-e2, e1) ? No, angle between edges emanating from v0.
-    # Vectors from v0 are (v1-v0) = e2 and (v2-v0) = -e1.
-    # cot0 = dot(e2, -e1) / |e2 x -e1|
-
-    # Let's use standard edge vectors:
-    # u = v1-v0, v = v2-v0.  e2=u, -e1=v.
-    # cot0 = cot(u, v)
-
-    # For triangle (v0, v1, v2):
-    # cot0 depends on v0, v1, v2.
-
-    # We need to distribute `factor_K_vec` to the vertices.
-    # The sum for K_i involves neighbours.
-    # It's easier to iterate triangles and add contributions to K_i terms.
-    # K_i += 0.5 * cot_term * (x_i - x_j)
-
-    # Let's verify the K formula again.
-    # K_i = 0.5 * sum_j (cot_alpha_j + cot_beta_j) (x_i - x_j)
-    # This can be rewritten as K_i = -0.5 * sum_j (cot...)(x_j - x_i)
-    # Or in terms of the Laplacian matrix L: K = L * X.
-    # K_i = sum_j L_ij x_j.
-    # So d(K_i)/dx_k is L_ik * I (if L was constant) + sum_j d(L_ij)/dx_k * x_j.
-    # L is NOT constant (depends on cotans).
+    v0_idxs, v1_idxs, v2_idxs = tri_rows[:, 0], tri_rows[:, 1], tri_rows[:, 2]
+    v0, v1, v2 = positions[v0_idxs], positions[v1_idxs], positions[v2_idxs]
+    e0, e1, e2 = v2 - v1, v0 - v2, v1 - v0
+    c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
 
     # Term 1: Variation assuming cotans constant (L constant)
-    # grad_E += sum_i (dE/dK_i) * L_ik
-    # This is equivalent to L * (factor_K_vec).
-    # force_1 = _apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
-    # But wait, K = L X. So X^T L^T factor. L is symmetric.
-    # So yes, applying L to factor_K_vec gives the gradient contribution from the linear part.
-
-    grad_linear = np.zeros_like(positions)
-    # Apply L to factor_K_vec. L is defined by weights.
-    c0 = weights[:, 0]
-    c1 = weights[:, 1]
-    c2 = weights[:, 2]
-
-    # L_ij * f_j part:
-    # For edge (0,1) with weight c2: terms are c2 * (f0 - f1) added to 0, c2 * (f1 - f0) added to 1.
-    # This matches _apply_beltrami_laplacian logic.
-    # Note: our discrete integrated curvature vector is assembled as
-    # K_i += 0.5 * sum_j w_ij (x_j - x_i), i.e. K = -L X for the cotan Laplacian L.
-    # Therefore the "linear" backprop term uses -L^T = -L.
+    # factor_K_vec already zeroed at boundaries
     grad_linear = -_apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
 
     # Term 2: Variation of L (cotangents)
-    # E = ... K ...
-    # dE/dx = sum_i (dE/dK_i) . dK_i/dx
-    # dK_i = sum_j d(w_ij)/dx * (x_i - x_j) + w_ij * d(x_i - x_j)/dx
-    # The second part is the linear term we just handled.
-    # The first part depends on d(cot)/dx.
-
-    # For each triangle, we have 3 cotans: c0, c1, c2.
-    # c0 is on edge (1,2) opposite v0. It contributes to L_12 (weight between v1, v2).
-    # K term associated with edge (1,2) is: 0.5 * c0 * (x_1 - x_2) added to K_1, and (x_2 - x_1) to K_2?
-    # No, K_i = 0.5 * sum (cot) (xi - xj).
-    # For edge 1-2, weight is c0 (from this tri) + c_opp (from other tri).
-    # The contribution of c0 is to the interaction between 1 and 2.
-    # It adds 0.5 * c0 * (x1 - x2) to K_1
-    # It adds 0.5 * c0 * (x2 - x1) to K_2
-
-    # So variation of c0 affects K_1 and K_2.
-    # dE_c0 = (dE/dK_1) . (0.5 * (x1 - x2)) + (dE/dK_2) . (0.5 * (x2 - x1))
-    #       = 0.5 * (factor_K_1 - factor_K_2) . (x1 - x2)
-
-    # Scalar sensitivity of Energy w.r.t cotan c0:
-    # dE/dc0 = 0.5 * dot( factor_K_1 - factor_K_2, v1 - v2 )
-
-    fK = factor_K_vec  # Alias
-
-    # With K_i using (x_j - x_i), the cotan sensitivity picks up a minus sign
-    # compared to the (x_i - x_j) convention.
+    fK = factor_K_vec
     dE_dc0 = -0.5 * np.einsum("ij,ij->i", fK[v1_idxs] - fK[v2_idxs], v1 - v2)
     dE_dc1 = -0.5 * np.einsum("ij,ij->i", fK[v2_idxs] - fK[v0_idxs], v2 - v0)
     dE_dc2 = -0.5 * np.einsum("ij,ij->i", fK[v0_idxs] - fK[v1_idxs], v0 - v1)
 
-    # Now we need gradients of c0, c1, c2 w.r.t v0, v1, v2.
-    # c0 = cot(angle at v0).
-    # Vector u = v1-v0, v = v2-v0.
-    # c0 = cot(u, v).
-    # grad_c0_v1, grad_c0_v2 = grad_cotan(u, v)
-    # grad_c0_v0 = -(grad_c0_v1 + grad_c0_v2) (translation invariance)
-
-    # c0
-    u0 = np.empty_like(v1, order="F")
-    v0_vec = np.empty_like(v2, order="F")
-    np.subtract(v1, v0, out=u0)
-    np.subtract(v2, v0, out=v0_vec)
+    u0, v0_vec = v1 - v0, v2 - v0
     g_c0_u, g_c0_v = _grad_cotan(u0, v0_vec)
-
-    # c1 (angle at v1)
-    u1 = np.empty_like(v2, order="F")
-    v1_vec = np.empty_like(v0, order="F")
-    np.subtract(v2, v1, out=u1)
-    np.subtract(v0, v1, out=v1_vec)
+    u1, v1_vec = v2 - v1, v0 - v1
     g_c1_u, g_c1_v = _grad_cotan(u1, v1_vec)
-
-    # c2 (angle at v2)
-    u2 = np.empty_like(v0, order="F")
-    v2_vec = np.empty_like(v1, order="F")
-    np.subtract(v0, v2, out=u2)
-    np.subtract(v1, v2, out=v2_vec)
+    u2, v2_vec = v0 - v2, v1 - v2
     g_c2_u, g_c2_v = _grad_cotan(u2, v2_vec)
 
-    # Accumulate gradients from cotans
     grad_cot = np.zeros_like(positions)
-
-    # Contribution from c0 (depends on v0, v1, v2)
-    # v1 term: g_c0_u
-    # v2 term: g_c0_v
-    # v0 term: -(g_c0_u + g_c0_v)
-
-    # We multiply by dE_dc0 (scalar) and add to vertices
-    val0 = dE_dc0[:, None]
-    val1 = dE_dc1[:, None]
-    val2 = dE_dc2[:, None]
-
-    # c0 terms
+    val0, val1, val2 = dE_dc0[:, None], dE_dc1[:, None], dE_dc2[:, None]
     np.add.at(grad_cot, v1_idxs, val0 * g_c0_u)
     np.add.at(grad_cot, v2_idxs, val0 * g_c0_v)
     np.add.at(grad_cot, v0_idxs, val0 * -(g_c0_u + g_c0_v))
-
-    # c1 terms
     np.add.at(grad_cot, v2_idxs, val1 * g_c1_u)
     np.add.at(grad_cot, v0_idxs, val1 * g_c1_v)
     np.add.at(grad_cot, v1_idxs, val1 * -(g_c1_u + g_c1_v))
-
-    # c2 terms
     np.add.at(grad_cot, v0_idxs, val2 * g_c2_u)
     np.add.at(grad_cot, v1_idxs, val2 * g_c2_v)
     np.add.at(grad_cot, v2_idxs, val2 * -(g_c2_u + g_c2_v))
 
-    # --- Area Gradients (Mixed Voronoi) ---
+    # --- Area Gradients (Step 2: Propagate area reassignment) ---
     fA = factor_A
 
-    # Identify obtuse triangles
-    is_obtuse_0 = c0 < 0
-    is_obtuse_1 = c1 < 0
-    is_obtuse_2 = c2 < 0
-    is_obtuse = is_obtuse_0 | is_obtuse_1 | is_obtuse_2
+    # We define per-triangle-vertex coefficients C.
+    # The energy contribution from area variation is sum(C * grad(A_voronoi)).
+    # - For interior vertices: C = fA (standard)
+    # - For boundary vertices: A_voronoi is redistributed to interior neighbors.
+    #   Effectively, A_b contributes to energy with weight average(fA_interior).
 
-    # --- Case 1: Non-obtuse (Standard Voronoi) ---
-    mask_std = ~is_obtuse
+    tri_is_int = is_interior[tri_rows]
+    interior_counts = np.sum(tri_is_int, axis=1)
 
-    # Precompute squared lengths for the gradient terms (only needed for std)
-    l0_sq = np.einsum("ij,ij->i", e0, e0)
-    l1_sq = np.einsum("ij,ij->i", e1, e1)
-    l2_sq = np.einsum("ij,ij->i", e2, e2)
+    tri_fA = fA[tri_rows]
+    sum_fA_int = np.sum(tri_fA * tri_is_int, axis=1)
 
-    # factors for non-obtuse
-    m_std = mask_std
+    avg_fA = np.zeros(len(tri_rows), dtype=float)
+    mask_has_int = interior_counts > 0
+    avg_fA[mask_has_int] = sum_fA_int[mask_has_int] / interior_counts[mask_has_int]
+
+    # C[t, k] = tri_fA[t, k] if vertex k is interior, else avg_fA[t]
+    C = np.where(tri_is_int, tri_fA, avg_fA[:, None])
+
+    grad_area = np.zeros_like(positions)
+
+    # Now run standard Voronoi gradient logic using C instead of fA
+    # This applies to ALL triangles (pure interior and boundary adjacent)
+
+    # Check for obtuse triangles
+    is_obtuse = (c0 < 0) | (c1 < 0) | (c2 < 0)
+    m_std = ~is_obtuse
+
+    # Standard non-obtuse logic
     if np.any(m_std):
-        # We need to filter arrays by mask
-        c0_m = c0[m_std]
-        c1_m = c1[m_std]
-        c2_m = c2[m_std]
+        c0s, c1s, c2s = c0[m_std], c1[m_std], c2[m_std]
+        C0s, C1s, C2s = C[m_std, 0], C[m_std, 1], C[m_std, 2]
+        e0s, e1s, e2s = e0[m_std], e1[m_std], e2[m_std]
+        v0s, v1s, v2s = v0_idxs[m_std], v1_idxs[m_std], v2_idxs[m_std]
 
-        l0_sq_m = l0_sq[m_std]
-        l1_sq_m = l1_sq[m_std]
-        l2_sq_m = l2_sq[m_std]
+        # Length variation
+        coeff = 0.25 * c1s * C0s
+        np.add.at(grad_area, v0s, coeff[:, None] * e1s)
+        np.add.at(grad_area, v2s, -coeff[:, None] * e1s)
+        coeff = 0.25 * c2s * C0s
+        np.add.at(grad_area, v1s, coeff[:, None] * e2s)
+        np.add.at(grad_area, v0s, -coeff[:, None] * e2s)
+        coeff = 0.25 * c2s * C1s
+        np.add.at(grad_area, v1s, coeff[:, None] * e2s)
+        np.add.at(grad_area, v0s, -coeff[:, None] * e2s)
+        coeff = 0.25 * c0s * C1s
+        np.add.at(grad_area, v2s, coeff[:, None] * e0s)
+        np.add.at(grad_area, v1s, -coeff[:, None] * e0s)
+        coeff = 0.25 * c0s * C2s
+        np.add.at(grad_area, v2s, coeff[:, None] * e0s)
+        np.add.at(grad_area, v1s, -coeff[:, None] * e0s)
+        coeff = 0.25 * c1s * C2s
+        np.add.at(grad_area, v0s, coeff[:, None] * e1s)
+        np.add.at(grad_area, v2s, -coeff[:, None] * e1s)
 
-        fA0_m = fA[v0_idxs[m_std]]
-        fA1_m = fA[v1_idxs[m_std]]
-        fA2_m = fA[v2_idxs[m_std]]
+        # Cotan variation
+        l0sq = np.einsum("ij,ij->i", e0s, e0s)
+        l1sq = np.einsum("ij,ij->i", e1s, e1s)
+        l2sq = np.einsum("ij,ij->i", e2s, e2s)
 
-        # 1. Gradients from |e|^2 variation
-        # Mixed Voronoi areas (non-obtuse):
-        #   A0 += (l1^2*c1 + l2^2*c2)/8
-        #   A1 += (l2^2*c2 + l0^2*c0)/8
-        #   A2 += (l0^2*c0 + l1^2*c1)/8
-        #
-        # Energy contribution uses factor_A at the owning vertex only: fA[vk] * dAk.
-        grad_area_len = np.zeros_like(positions)
+        coeff_c0 = 0.125 * l0sq * (C1s + C2s)
+        coeff_c1 = 0.125 * l1sq * (C0s + C2s)
+        coeff_c2 = 0.125 * l2sq * (C0s + C1s)
 
-        # A0: l1^2*c1 term (e1 = v0-v2)
-        coeff = 0.25 * c1_m * fA0_m
-        np.add.at(grad_area_len, v0_idxs[m_std], coeff[:, None] * e1[m_std])
-        np.add.at(grad_area_len, v2_idxs[m_std], -coeff[:, None] * e1[m_std])
+        gc0u, gc0v = _grad_cotan(e2s, -e1s)
+        gc1u, gc1v = _grad_cotan(e0s, -e2s)
+        gc2u, gc2v = _grad_cotan(e1s, -e0s)
 
-        # A0: l2^2*c2 term (e2 = v1-v0)
-        coeff = 0.25 * c2_m * fA0_m
-        np.add.at(grad_area_len, v1_idxs[m_std], coeff[:, None] * e2[m_std])
-        np.add.at(grad_area_len, v0_idxs[m_std], -coeff[:, None] * e2[m_std])
+        v_c0, v_c1, v_c2 = coeff_c0[:, None], coeff_c1[:, None], coeff_c2[:, None]
+        np.add.at(grad_area, v1s, v_c0 * gc0u)
+        np.add.at(grad_area, v2s, v_c0 * gc0v)
+        np.add.at(grad_area, v0s, v_c0 * -(gc0u + gc0v))
+        np.add.at(grad_area, v2s, v_c1 * gc1u)
+        np.add.at(grad_area, v0s, v_c1 * gc1v)
+        np.add.at(grad_area, v1s, v_c1 * -(gc1u + gc1v))
+        np.add.at(grad_area, v0s, v_c2 * gc2u)
+        np.add.at(grad_area, v1s, v_c2 * gc2v)
+        np.add.at(grad_area, v2s, v_c2 * -(gc2u + gc2v))
 
-        # A1: l2^2*c2 term (e2 = v1-v0)
-        coeff = 0.25 * c2_m * fA1_m
-        np.add.at(grad_area_len, v1_idxs[m_std], coeff[:, None] * e2[m_std])
-        np.add.at(grad_area_len, v0_idxs[m_std], -coeff[:, None] * e2[m_std])
-
-        # A1: l0^2*c0 term (e0 = v2-v1)
-        coeff = 0.25 * c0_m * fA1_m
-        np.add.at(grad_area_len, v2_idxs[m_std], coeff[:, None] * e0[m_std])
-        np.add.at(grad_area_len, v1_idxs[m_std], -coeff[:, None] * e0[m_std])
-
-        # A2: l0^2*c0 term (e0 = v2-v1)
-        coeff = 0.25 * c0_m * fA2_m
-        np.add.at(grad_area_len, v2_idxs[m_std], coeff[:, None] * e0[m_std])
-        np.add.at(grad_area_len, v1_idxs[m_std], -coeff[:, None] * e0[m_std])
-
-        # A2: l1^2*c1 term (e1 = v0-v2)
-        coeff = 0.25 * c1_m * fA2_m
-        np.add.at(grad_area_len, v0_idxs[m_std], coeff[:, None] * e1[m_std])
-        np.add.at(grad_area_len, v2_idxs[m_std], -coeff[:, None] * e1[m_std])
-
-        # 2. Gradients from cotan variation
-        # 2. Gradients from cotan variation.
-        # Each cotan contributes to two vertex areas in the triangle:
-        #   c0 appears in A1 and A2; c1 appears in A0 and A2; c2 appears in A0 and A1.
-        coeff_c0 = 0.125 * l0_sq_m * (fA1_m + fA2_m)
-        coeff_c1 = 0.125 * l1_sq_m * (fA0_m + fA2_m)
-        coeff_c2 = 0.125 * l2_sq_m * (fA0_m + fA1_m)
-
-        grad_area_cot = np.zeros_like(positions)
-
-        # Need re-computation of cot gradients for masked subset?
-        # Or just use precomputed and mask them.
-        # u0, v0_vec were computed for ALL triangles.
-        # g_c0_u, g_c0_v are full size.
-
-        # c0 terms
-        v_c0 = coeff_c0[:, None]
-        np.add.at(grad_area_cot, v1_idxs[m_std], v_c0 * g_c0_u[m_std])
-        np.add.at(grad_area_cot, v2_idxs[m_std], v_c0 * g_c0_v[m_std])
-        np.add.at(
-            grad_area_cot, v0_idxs[m_std], v_c0 * -(g_c0_u[m_std] + g_c0_v[m_std])
-        )
-
-        # c1 terms
-        v_c1 = coeff_c1[:, None]
-        np.add.at(grad_area_cot, v2_idxs[m_std], v_c1 * g_c1_u[m_std])
-        np.add.at(grad_area_cot, v0_idxs[m_std], v_c1 * g_c1_v[m_std])
-        np.add.at(
-            grad_area_cot, v1_idxs[m_std], v_c1 * -(g_c1_u[m_std] + g_c1_v[m_std])
-        )
-
-        # c2 terms
-        v_c2 = coeff_c2[:, None]
-        np.add.at(grad_area_cot, v0_idxs[m_std], v_c2 * g_c2_u[m_std])
-        np.add.at(grad_area_cot, v1_idxs[m_std], v_c2 * g_c2_v[m_std])
-        np.add.at(
-            grad_area_cot, v2_idxs[m_std], v_c2 * -(g_c2_u[m_std] + g_c2_v[m_std])
-        )
-
-        grad_arr[:] += grad_area_len + grad_area_cot
-
-    # --- Case 2: Obtuse triangles ---
+    # Obtuse logic
     if np.any(is_obtuse):
-        # We need gradients of Triangle Area w.r.t v0, v1, v2
-        # T depends on u=v1-v0, v=v2-v0.
-        # gT_u, gT_v = grad_triangle_area(u, v)
-        # gT_v1 = gT_u
-        # gT_v2 = gT_v
-        # gT_v0 = -(gT_u + gT_v)
+        for i, m_sub in enumerate([(c0 < 0), (c1 < 0), (c2 < 0)]):
+            m_do = m_sub & is_obtuse
+            if np.any(m_do):
+                v0o, v1o, v2o = v0_idxs[m_do], v1_idxs[m_do], v2_idxs[m_do]
+                # Gradient of Triangle Area
+                gT_u, gT_v = grad_triangle_area(
+                    positions[v1o] - positions[v0o], positions[v2o] - positions[v0o]
+                )
 
-        # Triangle edges (v1-v0, v2-v0) correspond to u, v in our definition earlier.
-        # u = v1 - v0, v = v2 - v0
-        # g_c0_u used u=v1-v0, v=v2-v0. So we can reuse those vectors.
-        # We need new gradients for area though.
+                C0o, C1o, C2o = C[m_do, 0], C[m_do, 1], C[m_do, 2]
+                if i == 0:  # Angle at v0 obtuse
+                    # A0 = T/2, A1 = T/4, A2 = T/4
+                    factor = (0.5 * C0o + 0.25 * C1o + 0.25 * C2o)[:, None]
+                elif i == 1:  # Angle at v1 obtuse
+                    factor = (0.5 * C1o + 0.25 * C0o + 0.25 * C2o)[:, None]
+                else:  # Angle at v2 obtuse
+                    factor = (0.5 * C2o + 0.25 * C0o + 0.25 * C1o)[:, None]
 
-        u_vec = v1 - v0
-        v_vec = v2 - v0
-        gT_u, gT_v = grad_triangle_area(u_vec, v_vec)
+                np.add.at(grad_area, v1o, factor * gT_u)
+                np.add.at(grad_area, v2o, factor * gT_v)
+                np.add.at(grad_area, v0o, factor * -(gT_u + gT_v))
 
-        # Masking for each sub-case
-
-        # Case 2a: Obtuse at v0 (c0 < 0)
-        # A0 = T/2, A1 = T/4, A2 = T/4
-        # Energy variation: fA[v0]*dA0 + fA[v1]*dA1 + fA[v2]*dA2
-        # = (0.5*fA[v0] + 0.25*fA[v1] + 0.25*fA[v2]) * dT
-        m0 = is_obtuse_0
-        if np.any(m0):
-            factor = (
-                0.5 * fA[v0_idxs[m0]] + 0.25 * fA[v1_idxs[m0]] + 0.25 * fA[v2_idxs[m0]]
-            )[:, None]
-            np.add.at(grad_arr, v1_idxs[m0], factor * gT_u[m0])
-            np.add.at(grad_arr, v2_idxs[m0], factor * gT_v[m0])
-            np.add.at(grad_arr, v0_idxs[m0], factor * -(gT_u[m0] + gT_v[m0]))
-
-        # Case 2b: Obtuse at v1 (c1 < 0)
-        # A1 = T/2, A0 = T/4, A2 = T/4
-        m1 = is_obtuse_1
-        if np.any(m1):
-            factor = (
-                0.5 * fA[v1_idxs[m1]] + 0.25 * fA[v0_idxs[m1]] + 0.25 * fA[v2_idxs[m1]]
-            )[:, None]
-            np.add.at(grad_arr, v1_idxs[m1], factor * gT_u[m1])
-            np.add.at(grad_arr, v2_idxs[m1], factor * gT_v[m1])
-            np.add.at(grad_arr, v0_idxs[m1], factor * -(gT_u[m1] + gT_v[m1]))
-
-        # Case 2c: Obtuse at v2 (c2 < 0)
-        # A2 = T/2, A0 = T/4, A1 = T/4
-        m2 = is_obtuse_2
-        if np.any(m2):
-            factor = (
-                0.5 * fA[v2_idxs[m2]] + 0.25 * fA[v0_idxs[m2]] + 0.25 * fA[v1_idxs[m2]]
-            )[:, None]
-            np.add.at(grad_arr, v1_idxs[m2], factor * gT_u[m2])
-            np.add.at(grad_arr, v2_idxs[m2], factor * gT_v[m2])
-            np.add.at(grad_arr, v0_idxs[m2], factor * -(gT_u[m2] + gT_v[m2]))
-
-    grad_arr[:] += grad_linear + grad_cot
+    grad_arr[:] += grad_linear + grad_cot + grad_area
 
     return total_energy
 

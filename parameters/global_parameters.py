@@ -29,6 +29,11 @@ class GlobalParameters:
             "max_zero_steps": 10,
             "step_size_floor": 1e-8,
             "step_size": 1e-3,
+            # Step size control:
+            #   "adaptive" – steppers/line-search may adjust the per-iteration step size.
+            #   "fixed"    – keep the user-specified step_size as the initial guess
+            #               every iteration (no cross-iteration adaptation).
+            "step_size_mode": "adaptive",
             "intrinsic_curvature": 0.0,
             "bending_modulus": 0.0,
             "bending_energy_model": "helfrich",
