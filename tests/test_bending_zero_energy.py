@@ -76,7 +76,9 @@ def test_catenoid_surface_minimization_drives_bending_energy_toward_zero():
     idx_map1 = mesh.vertex_index_to_row
     e1 = bending.compute_total_energy(mesh, gp_bend, positions1, idx_map1)
 
-    assert e1 <= e0
+    # Discrete curvature + floating-point arithmetic can introduce tiny
+    # non-monotonic drift; treat values near machine zero as equivalent.
+    assert e1 <= e0 + 1e-10
     assert e1 < 0.05
 
 

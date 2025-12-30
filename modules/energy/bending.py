@@ -35,7 +35,7 @@ def _energy_model(global_params) -> BendingEnergyModel:
 
 
 def _gradient_mode(global_params) -> BendingGradientMode:
-    mode = str(global_params.get("bending_gradient_mode", "approx") or "approx")
+    mode = str(global_params.get("bending_gradient_mode", "analytic") or "analytic")
     mode = mode.lower().strip()
     if mode in {"fd", "finite_difference"}:
         return "finite_difference"
@@ -499,11 +499,11 @@ def compute_energy_and_gradient_array(
             diff_h_vecs = h_vecs - target_h_vecs
             field = np.empty_like(diff_h_vecs, order="F")
             np.multiply(diff_h_vecs, kappa_arr[:, None], out=field)
-            grad_arr[:] += _apply_beltrami_laplacian(weights, tri_rows, field)
+            grad_arr[:] -= _apply_beltrami_laplacian(weights, tri_rows, field)
         else:
             field = np.empty_like(h_vecs, order="F")
             np.multiply(h_vecs, kappa_arr[:, None], out=field)
-            grad_arr[:] += _apply_beltrami_laplacian(weights, tri_rows, field)
+            grad_arr[:] -= _apply_beltrami_laplacian(weights, tri_rows, field)
         return total_energy
 
     # --- Analytic gradient backpropagation ---

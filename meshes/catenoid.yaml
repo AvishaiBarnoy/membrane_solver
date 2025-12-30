@@ -53,20 +53,9 @@ faces:
 energy_modules:
   - bending
 global_parameters:
-  surface_tension: 1.0
+  surface_tension: 0
   bending_modulus: 0.01
+  bending_gradient_mode: "analytic"
 macros:
-  gogo:
-    - r2
-    - V3
-    - g50
-    - V5
-    - g50
-    - V5
-    - gd
-    - g50
-    - V3
-    - g50
-    - r
-    - V5
-    - g50
+  gogo1: "r; g30; r; g30"
+  gogo2: "r; u; V; g50; energy"

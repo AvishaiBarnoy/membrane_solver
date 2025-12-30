@@ -7,6 +7,7 @@ from commands.mesh_ops import (
     VertexAverageCommand,
 )
 from commands.meta import (
+    EnergyCommand,
     HelpCommand,
     HistoryCommand,
     PrintEntityCommand,
@@ -50,6 +51,7 @@ COMMAND_REGISTRY = {
     "h": HelpCommand(),
     "set": SetCommand(),
     "print": PrintEntityCommand(),
+    "energy": EnergyCommand(),
     "history": HistoryCommand(),
 }
 

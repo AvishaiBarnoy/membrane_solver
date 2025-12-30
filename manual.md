@@ -481,9 +481,9 @@ form. The preferred curvature (for Helfrich) is taken from
 
 Select the gradient implementation via `global_parameters.bending_gradient_mode`:
 
-- `approx` (default): fast Laplacian-based approximation (stable for large runs).
-- `analytic`: backpropagates through the discrete cotan-Laplacian + mixed-area
+- `analytic` (default): backpropagates through the discrete cotan-Laplacian + mixed-area
   discretization and is validated against finite differences.
+- `approx`: fast Laplacian-based approximation (stable for large runs, but less accurate).
 - `finite_difference`: central-difference gradient of `compute_total_energy`
   (slow; intended for tests and debugging).
 

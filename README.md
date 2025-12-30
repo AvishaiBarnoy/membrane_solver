@@ -218,7 +218,7 @@ Enable curvature/bending energy with `bending_modulus` and the `bending` energy
 module. Use:
 - `bending_energy_model`: `helfrich` (default) or `willmore`
 - `spontaneous_curvature` (alias: `intrinsic_curvature`) for Helfrich
-- `bending_gradient_mode`: `approx` (fast), `analytic` (validated), or
+- `bending_gradient_mode`: `analytic` (default), `approx` (fast), or
   `finite_difference` (slow, for verification)
 
 
