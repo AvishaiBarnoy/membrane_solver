@@ -32,7 +32,8 @@ contains
   subroutine grad_cotan_batch(n, u, v, grad_u, grad_v)
     integer(c_int), intent(in) :: n
     real(c_double), intent(in) :: u(n, 3), v(n, 3)
-    real(c_double), intent(out) :: grad_u(n, 3), grad_v(n, 3)
+    ! f2py: require caller to supply output buffers to avoid per-call allocations.
+    real(c_double), intent(inout) :: grad_u(n, 3), grad_v(n, 3)
 
   integer :: i
   real(c_double) :: ui(3), vi(3), w(3)
@@ -91,7 +92,8 @@ subroutine apply_beltrami_laplacian(dim, nv, nf, weights, tri, field, out, zero_
   real(c_double), intent(in) :: weights(nf, 3)
   integer(c_int), intent(in) :: tri(nf, 3)
   real(c_double), intent(in) :: field(nv, dim)
-  real(c_double), intent(out) :: out(nv, dim)
+  ! f2py: require caller to supply output buffer to avoid per-call allocations.
+  real(c_double), intent(inout) :: out(nv, dim)
   integer(c_int), intent(in) :: zero_based
 
   integer :: f, d

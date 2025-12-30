@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Dict, Literal
 
 import numpy as np
 
+from fortran_kernels.loader import (
+    get_bending_grad_cotan_kernel,
+    get_bending_laplacian_kernel,
+)
 from geometry.bending_derivatives import (
-    grad_cotan,
+    grad_cotan as _grad_cotan_numpy,
+)
+from geometry.bending_derivatives import (
     grad_triangle_area,
 )
 from geometry.curvature import compute_curvature_data
@@ -222,6 +229,53 @@ def _apply_beltrami_laplacian(
     weights: np.ndarray, tri_rows: np.ndarray, field: np.ndarray
 ) -> np.ndarray:
     """Apply the discrete Laplace-Beltrami operator (based on cotangent weights)."""
+    kernel_spec = get_bending_laplacian_kernel()
+    if kernel_spec is not None:
+        strict = os.environ.get("MEMBRANE_FORTRAN_STRICT_NOCOPY") in {
+            "1",
+            "true",
+            "TRUE",
+        }
+        if (
+            field.dtype != np.float64
+            or weights.dtype != np.float64
+            or tri_rows.dtype != np.int32
+        ):
+            if strict:
+                raise TypeError(
+                    "Fortran bending kernels require float64 weights/field and int32 tri_rows."
+                )
+            kernel_spec = None
+        elif not (
+            weights.flags["F_CONTIGUOUS"]
+            and tri_rows.flags["F_CONTIGUOUS"]
+            and field.flags["F_CONTIGUOUS"]
+        ):
+            if strict:
+                raise ValueError(
+                    "Fortran bending kernels require F-contiguous weights/tri_rows/field (to avoid hidden copies)."
+                )
+            kernel_spec = None
+
+    if kernel_spec is not None:
+        if kernel_spec.expects_transpose:
+            # Legacy wrapper (dim,nv) / (3,nf) style.
+            try:
+                out_t = np.empty_like(field.T, order="F")
+                kernel_spec.func(weights.T, tri_rows.T, field.T, out_t, 1)
+                return out_t.T
+            except TypeError:
+                out_t = kernel_spec.func(weights.T, tri_rows.T, field.T, 1)
+                return np.asarray(out_t).T
+
+        try:
+            out = np.empty_like(field, order="F")
+            kernel_spec.func(weights, tri_rows, field, out, 1)
+            return out
+        except TypeError:
+            out = kernel_spec.func(weights, tri_rows, field, 1)
+            return np.asarray(out)
+
     c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
     v0, v1, v2 = tri_rows[:, 0], tri_rows[:, 1], tri_rows[:, 2]
     f0, f1, f2 = field[v0], field[v1], field[v2]
@@ -230,6 +284,44 @@ def _apply_beltrami_laplacian(
     np.add.at(out, v1, 0.5 * (c2[:, None] * (f1 - f0) + c0[:, None] * (f1 - f2)))
     np.add.at(out, v2, 0.5 * (c0[:, None] * (f2 - f1) + c1[:, None] * (f2 - f0)))
     return out
+
+
+def _grad_cotan(u: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return (grad_u, grad_v) for cotan(u, v), using Fortran if available."""
+    kernel_spec = get_bending_grad_cotan_kernel()
+    if kernel_spec is None:
+        return _grad_cotan_numpy(u, v)
+
+    strict = os.environ.get("MEMBRANE_FORTRAN_STRICT_NOCOPY") in {"1", "true", "TRUE"}
+    if u.dtype != np.float64 or v.dtype != np.float64:
+        if strict:
+            raise TypeError("Fortran bending kernels require float64 u/v.")
+        return _grad_cotan_numpy(u, v)
+    if not (u.flags["F_CONTIGUOUS"] and v.flags["F_CONTIGUOUS"]):
+        if strict:
+            raise ValueError(
+                "Fortran bending kernels require F-contiguous u/v (to avoid hidden copies)."
+            )
+        return _grad_cotan_numpy(u, v)
+
+    if kernel_spec.expects_transpose:
+        try:
+            gu_t = np.zeros_like(u.T, order="F")
+            gv_t = np.zeros_like(v.T, order="F")
+            kernel_spec.func(u.T, v.T, gu_t, gv_t)
+            return gu_t.T, gv_t.T
+        except TypeError:
+            gu_t, gv_t = kernel_spec.func(u.T, v.T)
+            return np.asarray(gu_t).T, np.asarray(gv_t).T
+
+    try:
+        gu = np.zeros_like(u, order="F")
+        gv = np.zeros_like(v, order="F")
+        kernel_spec.func(u, v, gu, gv)
+        return gu, gv
+    except TypeError:
+        gu, gv = kernel_spec.func(u, v)
+        return np.asarray(gu), np.asarray(gv)
 
 
 def _finite_difference_gradient(
@@ -346,7 +438,9 @@ def compute_energy_and_gradient_array(
         K_dir[mask] = k_vecs[mask] / k_mag[mask][:, None]
         K_dir[~mask] = normals[~mask]  # Fallback to vertex normal
 
-        factor_K_vec = kappa_arr[:, None] * term[:, None] * K_dir  # (N, 3)
+        scale_K = (kappa_arr * term).astype(float, copy=False)
+        factor_K_vec = np.empty_like(K_dir, order="F")
+        np.multiply(K_dir, scale_K[:, None], out=factor_K_vec)
         factor_A = 0.5 * kappa_arr * term**2 - kappa_arr * term * (k_mag / safe_areas)
 
     else:
@@ -359,7 +453,9 @@ def compute_energy_and_gradient_array(
         # factor_K_vec = (kappa / 2A) * K
         # factor_A = - kappa * |K|^2 / (4A^2)
 
-        factor_K_vec = (kappa_arr / (2.0 * safe_areas))[:, None] * k_vecs
+        scale_K = (kappa_arr / (2.0 * safe_areas)).astype(float, copy=False)
+        factor_K_vec = np.empty_like(k_vecs, order="F")
+        np.multiply(k_vecs, scale_K[:, None], out=factor_K_vec)
         factor_A = -kappa_arr * k_mag**2 / (4.0 * safe_areas**2)
 
     boundary_vids = mesh.boundary_vertex_ids
@@ -401,13 +497,13 @@ def compute_energy_and_gradient_array(
             n_hats[mask_n] = h_vecs[mask_n] / h_norms[mask_n][:, None]
             target_h_vecs = (c0_arr / 2.0)[:, None] * n_hats
             diff_h_vecs = h_vecs - target_h_vecs
-            grad_arr[:] += _apply_beltrami_laplacian(
-                weights, tri_rows, kappa_arr[:, None] * diff_h_vecs
-            )
+            field = np.empty_like(diff_h_vecs, order="F")
+            np.multiply(diff_h_vecs, kappa_arr[:, None], out=field)
+            grad_arr[:] += _apply_beltrami_laplacian(weights, tri_rows, field)
         else:
-            grad_arr[:] += _apply_beltrami_laplacian(
-                weights, tri_rows, kappa_arr[:, None] * h_vecs
-            )
+            field = np.empty_like(h_vecs, order="F")
+            np.multiply(h_vecs, kappa_arr[:, None], out=field)
+            grad_arr[:] += _apply_beltrami_laplacian(weights, tri_rows, field)
         return total_energy
 
     # --- Analytic gradient backpropagation ---
@@ -518,19 +614,25 @@ def compute_energy_and_gradient_array(
     # grad_c0_v0 = -(grad_c0_v1 + grad_c0_v2) (translation invariance)
 
     # c0
-    u0 = v1 - v0
-    v0_vec = v2 - v0
-    g_c0_u, g_c0_v = grad_cotan(u0, v0_vec)
+    u0 = np.empty_like(v1, order="F")
+    v0_vec = np.empty_like(v2, order="F")
+    np.subtract(v1, v0, out=u0)
+    np.subtract(v2, v0, out=v0_vec)
+    g_c0_u, g_c0_v = _grad_cotan(u0, v0_vec)
 
     # c1 (angle at v1)
-    u1 = v2 - v1
-    v1_vec = v0 - v1
-    g_c1_u, g_c1_v = grad_cotan(u1, v1_vec)
+    u1 = np.empty_like(v2, order="F")
+    v1_vec = np.empty_like(v0, order="F")
+    np.subtract(v2, v1, out=u1)
+    np.subtract(v0, v1, out=v1_vec)
+    g_c1_u, g_c1_v = _grad_cotan(u1, v1_vec)
 
     # c2 (angle at v2)
-    u2 = v0 - v2
-    v2_vec = v1 - v2
-    g_c2_u, g_c2_v = grad_cotan(u2, v2_vec)
+    u2 = np.empty_like(v0, order="F")
+    v2_vec = np.empty_like(v1, order="F")
+    np.subtract(v0, v2, out=u2)
+    np.subtract(v1, v2, out=v2_vec)
+    g_c2_u, g_c2_v = _grad_cotan(u2, v2_vec)
 
     # Accumulate gradients from cotans
     grad_cot = np.zeros_like(positions)

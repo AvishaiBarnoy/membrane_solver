@@ -73,6 +73,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ### Changed
 - `history` command now records expanded macro commands and skips unknown instructions.
+- Compiled Fortran kernels are now opt-in via `MEMBRANE_ENABLE_FORTRAN=1`.
 - Bending energy now defaults to the Helfrich model (`bending_energy_model="helfrich"`) with zero spontaneous curvature unless overridden.
 - `gaussian_curvature` can now enforce strict topology validation via `gaussian_curvature_strict_topology`.
 - `gaussian_curvature` now supports boundary loops by default, using Gauss–Bonnet interior+boundary terms (with optional `gauss_bonnet_exclude` facet filtering).

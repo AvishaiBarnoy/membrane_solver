@@ -80,7 +80,7 @@ def compute_curvature_data(
     c2 = get_cot(-e0, e1, area_doubled)
 
     # 1. Curvature Vectors (Integrated)
-    k_vecs = np.zeros((n_verts, 3), dtype=float)
+    k_vecs = np.zeros((n_verts, 3), dtype=float, order="F")
     np.add.at(k_vecs, tri_rows[:, 0], 0.5 * (c1[:, None] * -e1 + c2[:, None] * e2))
     np.add.at(k_vecs, tri_rows[:, 1], 0.5 * (c2[:, None] * -e2 + c0[:, None] * e0))
     np.add.at(k_vecs, tri_rows[:, 2], 0.5 * (c0[:, None] * -e0 + c1[:, None] * e1))
@@ -119,7 +119,10 @@ def compute_curvature_data(
     np.add.at(vertex_areas, tri_rows[:, 1], va1)
     np.add.at(vertex_areas, tri_rows[:, 2], va2)
 
-    weights = np.column_stack([c0, c1, c2])
+    weights = np.empty((len(tri_rows), 3), dtype=float, order="F")
+    weights[:, 0] = c0
+    weights[:, 1] = c1
+    weights[:, 2] = c2
     return k_vecs, vertex_areas, weights, tri_rows
 
 

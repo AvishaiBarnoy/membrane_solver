@@ -849,6 +849,8 @@ degeneracy (tangling, overlapping triangles) during energy minimization.
 8. Optional compiled kernels (Fortran / f2py):
    - Some hot-loop kernels can be accelerated with Fortran, compiled into Python
      extension modules via NumPy f2py.
+   - Kernels are **opt-in** by default. To enable loading compiled kernels, set:
+     - `MEMBRANE_ENABLE_FORTRAN=1`
    - Example build (surface energy kernel):
      - From the repo root:
        - `python -m numpy.f2py -c -m surface_energy fortran_kernels/surface_energy.f90`

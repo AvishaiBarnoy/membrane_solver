@@ -71,19 +71,21 @@ def test_grad_cotan_batch_matches_numpy(n: int):
     if expects_transpose:
         u_in = np.asfortranarray(u.T, dtype=np.float64)
         v_in = np.asfortranarray(v.T, dtype=np.float64)
+        try:
+            gu_out, gv_out = fn(u_in, v_in)
+        except Exception:
+            gu_out = np.zeros_like(u_in, order="F")
+            gv_out = np.zeros_like(v_in, order="F")
+            fn(u_in, v_in, gu_out, gv_out)
     else:
         u_in = np.asfortranarray(u, dtype=np.float64)
         v_in = np.asfortranarray(v, dtype=np.float64)
-
-    # f2py may expose either:
-    #  - (grad_u, grad_v) = fn(u, v, [n])
-    #  - fn(n, u, v, grad_u, grad_v)
-    try:
-        gu_out, gv_out = fn(u_in, v_in)
-    except TypeError:
-        gu_out = np.zeros_like(u_in, order="F")
-        gv_out = np.zeros_like(v_in, order="F")
-        fn(n, u_in, v_in, gu_out, gv_out)
+        try:
+            gu_out, gv_out = fn(u_in, v_in)
+        except Exception:
+            gu_out = np.zeros_like(u_in, order="F")
+            gv_out = np.zeros_like(v_in, order="F")
+            fn(u_in, v_in, gu_out, gv_out)
 
     if expects_transpose:
         gu = np.asarray(gu_out).T
@@ -134,18 +136,18 @@ def test_apply_beltrami_laplacian_matches_numpy():
         weights_in = np.asfortranarray(weights, dtype=np.float64)
         field_in = np.asfortranarray(field, dtype=np.float64)
 
-    # f2py may expose either:
-    #  - out = fn(weights, tri, field, zero_based, [dim, nv, nf])
-    #  - fn(dim, nv, nf, weights, tri, field, out, zero_based)
-    try:
-        out_out = fn(weights_in, tri_in, field_in, 1)
-    except TypeError:
-        if expects_transpose:
-            out_out = np.zeros((dim, nv), dtype=np.float64, order="F")
-            fn(dim, nv, nf, weights_in, tri_in, field_in, out_out, 1)
-        else:
-            out_out = np.zeros((nv, dim), dtype=np.float64, order="F")
-            fn(dim, nv, nf, weights_in, tri_in, field_in, out_out, 1)
+    if expects_transpose:
+        out_out = np.zeros((dim, nv), dtype=np.float64, order="F")
+        try:
+            out_out = fn(weights_in, tri_in, field_in, 1)
+        except Exception:
+            fn(weights_in, tri_in, field_in, out_out, 1)
+    else:
+        out_out = np.zeros((nv, dim), dtype=np.float64, order="F")
+        try:
+            out_out = fn(weights_in, tri_in, field_in, 1)
+        except Exception:
+            fn(weights_in, tri_in, field_in, out_out, 1)
 
     out_out = np.asarray(out_out)
     out = out_out.T if expects_transpose else out_out

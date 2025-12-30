@@ -1,46 +1,36 @@
-         772 function calls in 47.899 seconds
+         772 function calls in 3.483 seconds
 
    Ordered by: cumulative time
-   List reduced from 108 to 40 due to restriction <40>
+   List reduced from 108 to 30 due to restriction <30>
 
    ncalls  tottime  percall  cumtime  percall filename:lineno(function)
-        1    0.000    0.000   47.899   47.899 /Users/User/github/membrane_solver/benchmarks/benchmark_cube_good.py:48(benchmark)
-        1    0.000    0.000   47.899   47.899 /Users/User/github/membrane_solver/benchmarks/benchmark_cube_good.py:50(<listcomp>)
-        3    0.000    0.000   47.899   15.966 /Users/User/github/membrane_solver/benchmarks/benchmark_cube_good.py:26(_run_simulation)
-        3    0.000    0.000   47.898   15.966 /Users/User/anaconda3/lib/python3.11/subprocess.py:506(run)
-        3    0.000    0.000   47.893   15.964 /Users/User/anaconda3/lib/python3.11/subprocess.py:1165(communicate)
-        6    0.000    0.000   47.893    7.982 /Users/User/anaconda3/lib/python3.11/subprocess.py:1259(wait)
-        6    0.000    0.000   47.893    7.982 /Users/User/anaconda3/lib/python3.11/subprocess.py:2014(_wait)
-        3    0.000    0.000   47.893   15.964 /Users/User/anaconda3/lib/python3.11/subprocess.py:2001(_try_wait)
-        3   47.893   15.964   47.893   15.964 {built-in method posix.waitpid}
+        1    0.000    0.000    3.483    3.483 /Users/User/github/membrane_solver/benchmarks/benchmark_cube_good.py:48(benchmark)
+        1    0.000    0.000    3.483    3.483 /Users/User/github/membrane_solver/benchmarks/benchmark_cube_good.py:50(<listcomp>)
+        3    0.000    0.000    3.483    1.161 /Users/User/github/membrane_solver/benchmarks/benchmark_cube_good.py:26(_run_simulation)
+        3    0.000    0.000    3.482    1.161 /Users/User/anaconda3/lib/python3.11/subprocess.py:506(run)
+        3    0.000    0.000    3.477    1.159 /Users/User/anaconda3/lib/python3.11/subprocess.py:1165(communicate)
+        6    0.000    0.000    3.477    0.580 /Users/User/anaconda3/lib/python3.11/subprocess.py:1259(wait)
+        6    0.000    0.000    3.477    0.580 /Users/User/anaconda3/lib/python3.11/subprocess.py:2014(_wait)
+        3    0.000    0.000    3.477    1.159 /Users/User/anaconda3/lib/python3.11/subprocess.py:2001(_try_wait)
+        3    3.477    1.159    3.477    1.159 {built-in method posix.waitpid}
         3    0.000    0.000    0.005    0.002 /Users/User/anaconda3/lib/python3.11/subprocess.py:807(__init__)
         3    0.000    0.000    0.004    0.001 /Users/User/anaconda3/lib/python3.11/subprocess.py:1789(_execute_child)
-        3    0.002    0.001    0.002    0.001 {built-in method posix.read}
         3    0.002    0.001    0.002    0.001 {built-in method _posixsubprocess.fork_exec}
+        3    0.002    0.001    0.002    0.001 {built-in method posix.read}
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1282(_close_pipe_fds)
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:981(resolve)
-        3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:868(__new__)
         3    0.000    0.000    0.000    0.000 <frozen posixpath>:412(realpath)
-        6    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:504(_from_parts)
-        9    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:484(_parse_args)
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1686(_get_handles)
         3    0.000    0.000    0.000    0.000 <frozen posixpath>:421(_joinrealpath)
-        9    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:56(parse_parts)
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:509(callback)
+        6    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:504(_from_parts)
         6    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1135(_get_devnull)
+        3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:868(__new__)
+        9    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:484(_parse_args)
        18    0.000    0.000    0.000    0.000 {built-in method posix.lstat}
         3    0.000    0.000    0.000    0.000 {built-in method posix.open}
-        3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:287(helper)
-        3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:460(__init__)
-        3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1092(__exit__)
-        3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/subprocess.py:1954(_handle_exitstatus)
+        9    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:56(parse_parts)
         3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:546(__exit__)
-       39    0.000    0.000    0.000    0.000 {built-in method sys.intern}
        51    0.000    0.000    0.000    0.000 {built-in method posix.fspath}
-        6    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:546(__fspath__)
-       69    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}
        12    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:536(__str__)
-        3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:104(__init__)
-        3    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/contextlib.py:454(_create_cb_wrapper)
-       18    0.000    0.000    0.000    0.000 <frozen posixpath>:71(join)
-        3    0.000    0.000    0.000    0.000 <frozen abc>:117(__instancecheck__)
+        6    0.000    0.000    0.000    0.000 /Users/User/anaconda3/lib/python3.11/pathlib.py:546(__fspath__)
