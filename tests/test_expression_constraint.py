@@ -5,9 +5,9 @@ import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Mesh, Vertex
 from modules.constraints import expression as expr_constraint
-from parameters.global_parameters import GlobalParameters
 
 
 def test_expression_constraint_moves_vertex_to_target():

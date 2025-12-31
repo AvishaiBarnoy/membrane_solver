@@ -7,9 +7,9 @@ import pytest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from core.parameters.global_parameters import GlobalParameters
+from core.parameters.resolver import ParameterResolver
 from modules.energy import volume as volume_module
-from parameters.global_parameters import GlobalParameters
-from parameters.resolver import ParameterResolver
 
 
 class DummyBody:

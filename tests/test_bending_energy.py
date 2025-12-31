@@ -1,10 +1,10 @@
 import numpy as np
 import pytest
 
+from core.parameters.global_parameters import GlobalParameters
+from core.parameters.resolver import ParameterResolver
 from geometry.entities import Edge, Facet, Mesh, Vertex
 from modules.energy import bending
-from parameters.global_parameters import GlobalParameters
-from parameters.resolver import ParameterResolver
 
 
 def create_sphere_mesh(subdivisions=3):

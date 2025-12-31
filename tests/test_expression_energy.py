@@ -5,9 +5,9 @@ import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Edge, Mesh, Vertex
 from modules.energy import expression as expr_energy
-from parameters.global_parameters import GlobalParameters
 
 
 def test_expression_energy_vertex():

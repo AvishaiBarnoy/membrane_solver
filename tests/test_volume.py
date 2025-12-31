@@ -5,10 +5,10 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from core.parameters.global_parameters import GlobalParameters
+from core.parameters.resolver import ParameterResolver
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from modules.energy.volume import calculate_volume_energy, compute_energy_and_gradient
-from parameters.global_parameters import GlobalParameters
-from parameters.resolver import ParameterResolver
 
 
 def test_volume_energy_and_gradient():

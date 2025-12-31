@@ -53,7 +53,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Vectorized volume gradient computations in `modules/energy/volume.py`.
   - Optimized memory allocation in hot loops (using `np.empty` instead of list comprehensions).
   - Total simulation runtime reduced by ~64% (from ~15.5s to ~5.6s on `cube_good_min_routine`).
-- New benchmark suite: `benchmarks/suite.py` runs and compares multiple scenarios (`cube_good`, `square_to_circle`, `catenoid`, `spherical_cap`) and tracks performance history.
+- New benchmark suite: `tools/suite.py` runs and compares multiple scenarios (`cube_good`, `square_to_circle`, `catenoid`, `spherical_cap`) and tracks performance history.
 - **CI**: Added benchmark suite execution to the CI workflow.
 - **Cleanup**: Removed broken `modules/gaussan_curvature.py` and obsolete methods in `energy_manager.py`.
 - Automatic target-area detection on bodies/facets and regression tests (square with area constraint, tetra with volume constraint).
@@ -61,7 +61,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ### Changed
 - Default `bending_gradient_mode` is now `"analytic"` (more accurate and typically easier to minimize than `"approx"`).
-- Benchmark suite profiling: `benchmarks/suite.py --profile` emits per-case `.pstats` files (plus optional text summaries) for easier A/B performance analysis.
+- Benchmark suite profiling: `python tools/suite.py --profile` emits per-case `.pstats` files (plus optional text summaries) for easier A/B performance analysis.
 - Fixed edges now freeze their endpoint vertices (including during refinement), matching Evolver-style behavior.
 - Expression-based energy and constraints with safe evaluation and numeric gradients.
 - Expression `defines`: top-level symbols evaluated from expressions (usable in energy/constraint expressions).

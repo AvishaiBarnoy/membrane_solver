@@ -6,10 +6,10 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from core.parameters.global_parameters import GlobalParameters
+from core.parameters.resolver import ParameterResolver
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from modules.energy import surface
-from parameters.global_parameters import GlobalParameters
-from parameters.resolver import ParameterResolver
 
 
 def _tetra_mesh_with_body() -> Mesh:

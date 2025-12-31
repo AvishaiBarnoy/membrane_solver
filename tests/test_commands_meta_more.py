@@ -13,8 +13,8 @@ from commands.meta import (
     QuitCommand,
     SetCommand,
 )
+from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
-from parameters.global_parameters import GlobalParameters
 
 
 def build_mesh():

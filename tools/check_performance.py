@@ -16,7 +16,7 @@ def run_check():
 
     # Run the existing benchmark suite
     print("Running benchmark suite...")
-    subprocess.run(["python3", "benchmarks/suite.py"], check=True)
+    subprocess.run([sys.executable, "tools/suite.py"], check=True)
 
     # Suite updates results.json
     with open(BASELINE_FILE, "r") as f:

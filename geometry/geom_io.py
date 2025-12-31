@@ -5,9 +5,9 @@ import logging
 import numpy as np
 import yaml
 
+from core.expr_eval import eval_expr
+from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
-from parameters.global_parameters import GlobalParameters
-from runtime.expr_eval import eval_expr
 from runtime.refinement import refine_polygonal_facets
 
 logger = logging.getLogger("membrane_solver")

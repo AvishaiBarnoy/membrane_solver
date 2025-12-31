@@ -6,8 +6,8 @@ import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from commands.context import CommandContext
 from commands.meta import PrintEntityCommand, SetCommand
+from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Body, Edge, Facet, Vertex
-from parameters.global_parameters import GlobalParameters
 
 
 class MockMesh:

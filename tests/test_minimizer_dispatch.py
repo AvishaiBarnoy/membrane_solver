@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
+from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Edge, Facet, Mesh, Vertex
-from parameters.global_parameters import GlobalParameters
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.minimizer import Minimizer
 

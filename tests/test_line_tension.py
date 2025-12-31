@@ -6,10 +6,10 @@ import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from core.parameters.resolver import ParameterResolver
 from geometry.entities import Edge, Mesh, Vertex
 from geometry.geom_io import parse_geometry
 from modules.energy import line_tension as line_module
-from parameters.resolver import ParameterResolver
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer

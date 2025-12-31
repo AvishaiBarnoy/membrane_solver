@@ -5,9 +5,9 @@ from typing import Callable, Dict, List, Optional
 
 import numpy as np
 
+from core.parameters.global_parameters import GlobalParameters
+from core.parameters.resolver import ParameterResolver
 from geometry.entities import Mesh
-from parameters.global_parameters import GlobalParameters
-from parameters.resolver import ParameterResolver
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.diagnostics.gauss_bonnet import GaussBonnetMonitor
 from runtime.energy_manager import EnergyModuleManager

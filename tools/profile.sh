@@ -6,11 +6,11 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-PROFILE_DIR="${SCRIPT_DIR}/benchmarks/outputs/profiles"
+PROFILE_DIR="$REPO_ROOT/benchmarks/outputs/profiles"
 
-python benchmarks/suite.py --profile --profile-dir "$PROFILE_DIR" --profile-top 30
+python "$REPO_ROOT/tools/suite.py" --profile --profile-dir "$PROFILE_DIR" --profile-top 30
 
 echo
 read -r -p "Delete profile output directory '$PROFILE_DIR'? [y/N] " REPLY

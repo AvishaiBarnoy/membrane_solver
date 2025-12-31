@@ -7,9 +7,9 @@ import numpy as np
 # Ensure we can import from the project root
 sys.path.append(os.getcwd())
 
+from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from modules.energy import volume
-from parameters.global_parameters import GlobalParameters
 from runtime.refinement import refine_triangle_mesh
 
 

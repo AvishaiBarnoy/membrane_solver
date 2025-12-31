@@ -6,8 +6,8 @@ from typing import Dict, Iterable
 
 import numpy as np
 
+from core.expr_eval import eval_expr
 from geometry.entities import Mesh, _fast_cross
-from runtime.expr_eval import eval_expr
 
 
 def _expression_from_options(options: dict | None) -> str | None:

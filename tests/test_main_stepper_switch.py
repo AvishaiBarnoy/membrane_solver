@@ -6,8 +6,8 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from commands.context import CommandContext
 from commands.minimization import SetStepperCommand
+from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Mesh, Vertex
-from parameters.global_parameters import GlobalParameters
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
