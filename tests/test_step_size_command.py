@@ -1,6 +1,8 @@
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from commands.context import CommandContext
@@ -25,34 +27,36 @@ def _build_context(data: dict) -> CommandContext:
     return CommandContext(mesh, minim, minim.stepper)
 
 
-def test_energy_command_prints_breakdown(capsys):
+def test_t_prefix_sets_step_size():
     data = {
         "vertices": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
         "edges": [[0, 1], [1, 2], [2, 0]],
         "faces": [[0, 1, 2]],
         "energy_modules": ["surface"],
-        "global_parameters": {"surface_tension": 1.0},
+        "global_parameters": {"surface_tension": 1.0, "step_size": 1e-2},
         "instructions": [],
     }
     ctx = _build_context(data)
+    assert ctx.mesh.global_parameters.get("step_size") == pytest.approx(1e-2)
 
-    execute_command_line(ctx, "energy")
-    out = capsys.readouterr().out
-    assert "Current Total Energy" in out
-    assert "surface" in out
+    execute_command_line(ctx, "t1e-3")
+    assert ctx.mesh.global_parameters.get("step_size") == pytest.approx(1e-3)
+    assert ctx.mesh.global_parameters.get("step_size_mode") == "fixed"
+    assert ctx.minimizer.step_size == pytest.approx(1e-3)
 
 
-def test_energy_command_prints_curvature_stats(capsys):
+def test_tf_reenables_adaptive_step_sizing():
     data = {
         "vertices": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
         "edges": [[0, 1], [1, 2], [2, 0]],
         "faces": [[0, 1, 2]],
         "energy_modules": ["surface"],
-        "global_parameters": {"surface_tension": 1.0},
+        "global_parameters": {"surface_tension": 1.0, "step_size": 1e-2},
         "instructions": [],
     }
     ctx = _build_context(data)
+    execute_command_line(ctx, "t1e-3")
+    assert ctx.mesh.global_parameters.get("step_size_mode") == "fixed"
 
-    execute_command_line(ctx, "energy stats")
-    out = capsys.readouterr().out
-    assert "Curvature diagnostics" in out
+    execute_command_line(ctx, "tf")
+    assert ctx.mesh.global_parameters.get("step_size_mode") == "adaptive"

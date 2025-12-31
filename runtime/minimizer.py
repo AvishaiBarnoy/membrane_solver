@@ -386,15 +386,28 @@ STEP SIZE:\t {self.step_size}
                     f"Step {i:4d}: Area = {total_area:.5f}, Energy = {E:.5f}, Step Size  = {self.step_size:.2e}"
                 )
 
+            step_mode = str(
+                self.global_params.get("step_size_mode", "adaptive") or "adaptive"
+            ).lower()
+            fixed_step = float(
+                self.global_params.get("step_size", self.step_size) or self.step_size
+            )
+            step_size_in = fixed_step if step_mode == "fixed" else self.step_size
+
             step_success, self.step_size = self.stepper.step(
                 self.mesh,
                 grad_arr,
-                self.step_size,
+                step_size_in,
                 self.compute_energy,
                 constraint_enforcer=self._enforce_constraints
                 if self._has_enforceable_constraints
                 else None,
             )
+            if step_mode == "fixed":
+                # Keep the cross-iteration step size constant, but still allow
+                # the line search to backtrack within each iteration for
+                # stability.
+                self.step_size = fixed_step
 
             self._check_gauss_bonnet()
             if not step_success:
