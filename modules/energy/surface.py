@@ -71,37 +71,12 @@ def calculate_surface_energy(mesh: Mesh, global_params) -> float:
 
     # Fast path: all facets are triangles with cached vertex loops.
     if _all_facets_are_triangles(mesh):
-        positions = mesh.positions_view()
-        index_map = mesh.vertex_index_to_row
-
-        cached_rows, cached_facets = mesh.triangle_row_cache()
+        cached_rows, _ = mesh.triangle_row_cache()
 
         if cached_rows is not None and len(cached_rows) == len(mesh.facets):
-            tri_rows = cached_rows
             gammas = mesh.get_facet_parameter_array("surface_tension")
-        else:
-            # Fallback if cache mismatch
-            n_facets = len(mesh.facets)
-            tri_rows = np.empty((n_facets, 3), dtype=int)
-            gammas = np.empty(n_facets, dtype=float)
-
-            for idx, facet in enumerate(mesh.facets.values()):
-                loop = mesh.facet_vertex_loops[facet.index]
-                tri_rows[idx, 0] = index_map[int(loop[0])]
-                tri_rows[idx, 1] = index_map[int(loop[1])]
-                tri_rows[idx, 2] = index_map[int(loop[2])]
-                gammas[idx] = facet.options.get(
-                    "surface_tension",
-                    global_params.get("surface_tension"),
-                )
-
-        tri_pos = positions[tri_rows]  # (n_facets, 3, 3)
-        v0 = tri_pos[:, 0, :]
-        v1 = tri_pos[:, 1, :]
-        v2 = tri_pos[:, 2, :]
-        cross = _fast_cross(v1 - v0, v2 - v0)
-        areas = 0.5 * np.linalg.norm(cross, axis=1)
-        return float(np.dot(np.asarray(gammas, dtype=float), areas))
+            areas = mesh.triangle_areas()
+            return float(np.dot(np.asarray(gammas, dtype=float), areas))
 
     # Fallback: per-facet loop if we cannot batch.
     gammas = []

@@ -147,9 +147,33 @@ class ConstraintModuleManager:
                     grad[vidx] -= lam_i * gvec
 
     def apply_gradient_modifications_array(self, grad_arr, mesh, global_params):
-        """Array-based variant of ``apply_gradient_modifications``."""
-        kkt_candidates: list[tuple[str, list[dict[int, np.ndarray]]]] = []
+        """Array-based variant of ``apply_gradient_modifications``.
+
+        Preferred interface for constraint modules is ``constraint_gradients_array``,
+        returning a list of dense arrays with the same shape as ``grad_arr``.
+        The legacy dict-based ``constraint_gradients`` is still supported.
+        """
+        mesh.build_position_cache()
+        positions = mesh.positions_view()
+        index_map = mesh.vertex_index_to_row
+
+        all_constraints: list[np.ndarray] = []
         for name, module in self.modules.items():
+            g_list_arr = None
+            if hasattr(module, "constraint_gradients_array"):
+                try:
+                    g_list_arr = module.constraint_gradients_array(
+                        mesh,
+                        global_params,
+                        positions=positions,
+                        index_map=index_map,
+                    )
+                except TypeError:
+                    g_list_arr = module.constraint_gradients_array(mesh, global_params)
+                if g_list_arr:
+                    all_constraints.extend(g_list_arr)
+                    continue
+
             g_list = None
             if hasattr(module, "constraint_gradients"):
                 try:
@@ -157,17 +181,34 @@ class ConstraintModuleManager:
                 except TypeError:
                     g_list = module.constraint_gradients(mesh)
                 if g_list:
-                    kkt_candidates.append((name, g_list))
+                    for gC in g_list:
+                        gC_arr = np.zeros_like(grad_arr)
+                        for vidx, gvec in gC.items():
+                            row = index_map.get(vidx)
+                            if row is None:
+                                continue
+                            gC_arr[row] += gvec
+                        all_constraints.append(gC_arr)
                     continue
+
             if hasattr(module, "constraint_gradient"):
                 try:
                     gC = module.constraint_gradient(mesh, global_params)
                 except TypeError:
                     gC = module.constraint_gradient(mesh)
                 if gC:
-                    kkt_candidates.append((name, [gC]))
+                    gC_arr = np.zeros_like(grad_arr)
+                    for vidx, gvec in gC.items():
+                        row = index_map.get(vidx)
+                        if row is None:
+                            continue
+                        gC_arr[row] += gvec
+                    all_constraints.append(gC_arr)
+                    continue
+
             if (
                 name not in self._warned_no_grad
+                and not hasattr(module, "constraint_gradients_array")
                 and not hasattr(module, "constraint_gradients")
                 and not hasattr(module, "constraint_gradient")
             ):
@@ -178,22 +219,8 @@ class ConstraintModuleManager:
                 )
                 self._warned_no_grad.add(name)
 
-        if not kkt_candidates:
+        if not all_constraints:
             return
-
-        mesh.build_position_cache()
-        index_map = mesh.vertex_index_to_row
-
-        all_constraints: list[np.ndarray] = []
-        for _, grads in kkt_candidates:
-            for gC in grads:
-                gC_arr = np.zeros_like(grad_arr)
-                for vidx, gvec in gC.items():
-                    row = index_map.get(vidx)
-                    if row is None:
-                        continue
-                    gC_arr[row] += gvec
-                all_constraints.append(gC_arr)
 
         k = len(all_constraints)
         if k == 1:

@@ -1,5 +1,4 @@
 import logging
-from typing import Dict
 
 import numpy as np
 
@@ -22,16 +21,9 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 3, **_kwargs) -
         index_map = mesh.vertex_index_to_row
 
     for _ in range(max_iter):
-        current_area = 0.0
-        grad: Dict[int, np.ndarray] = {vidx: np.zeros(3) for vidx in mesh.vertices}
-        for facet in mesh.facets.values():
-            area, facet_grad = facet.compute_area_and_gradient(
-                mesh, positions=positions, index_map=index_map
-            )
-            current_area += area
-            for vidx, vec in facet_grad.items():
-                grad[vidx] += vec
-
+        current_area, grad = mesh.compute_total_area_and_gradient(
+            positions=positions, index_map=index_map
+        )
         delta = current_area - target_area
         if abs(delta) < tol:
             break

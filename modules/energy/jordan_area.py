@@ -188,4 +188,63 @@ def compute_energy_and_gradient(
     return float(energy), dict(grad)
 
 
-__all__ = ["compute_energy_and_gradient"]
+def compute_energy_and_gradient_array(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    grad_arr: np.ndarray,
+) -> float:
+    """Dense-array Jordan-area penalty energy/gradient accumulation."""
+    target = global_params.get("jordan_target_area")
+    if target is None:
+        return 0.0
+
+    stiffness = float(global_params.get("jordan_stiffness", 0.0) or 0.0)
+    if stiffness == 0.0:
+        return 0.0
+
+    b_edges = _boundary_edges(mesh)
+    if not b_edges:
+        logger.debug("Jordan area: no boundary edges detected; skipping.")
+        return 0.0
+
+    loop = _build_boundary_loop(mesh, b_edges)
+    if len(loop) < 3:
+        logger.debug("Jordan area: boundary loop too short; skipping.")
+        return 0.0
+
+    rows = []
+    for vid in loop:
+        row = index_map.get(vid)
+        if row is None:
+            return 0.0
+        rows.append(row)
+
+    rows_arr = np.asarray(rows, dtype=int)
+    xs = positions[rows_arr, 0].astype(float, copy=False)
+    ys = positions[rows_arr, 1].astype(float, copy=False)
+
+    xs_next = np.roll(xs, -1)
+    ys_next = np.roll(ys, -1)
+    area = 0.5 * float(np.dot(xs, ys_next) - np.dot(xs_next, ys))
+
+    sign = 1.0 if area >= 0.0 else -1.0
+    area_eff = sign * area
+    delta = area_eff - float(target)
+    energy = 0.5 * stiffness * delta * delta
+
+    factor = stiffness * delta * sign
+    ys_prev = np.roll(ys, 1)
+    xs_prev = np.roll(xs, 1)
+    dA_dx = 0.5 * (ys_next - ys_prev)
+    dA_dy = 0.5 * (xs_prev - xs_next)
+
+    grad_arr[rows_arr, 0] += factor * dA_dx
+    grad_arr[rows_arr, 1] += factor * dA_dy
+    return float(energy)
+
+
+__all__ = ["compute_energy_and_gradient", "compute_energy_and_gradient_array"]

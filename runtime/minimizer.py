@@ -213,6 +213,40 @@ STEP SIZE:\t {self.step_size}
 
         return total_energy, grad
 
+    def compute_energy_and_gradient_dict(self):
+        """Return total energy and dict gradient using legacy module APIs.
+
+        This intentionally bypasses the dense-array pipeline and is useful for
+        regression tests comparing dict and array assembly.
+        """
+        total_energy = 0.0
+        grad: Dict[int, np.ndarray] = {
+            idx: np.zeros(3, dtype=float) for idx in self.mesh.vertices
+        }
+
+        for module in self.energy_modules:
+            res = module.compute_energy_and_gradient(
+                self.mesh, self.global_params, self.param_resolver
+            )
+            if isinstance(res, tuple) and len(res) >= 2:
+                E_mod = res[0]
+                g_mod = res[1]
+            else:
+                raise ValueError(
+                    f"Unexpected return from energy module {module}: {res!r}"
+                )
+
+            total_energy += float(E_mod)
+            for vidx, gvec in g_mod.items():
+                if vidx in grad:
+                    grad[vidx] += gvec
+
+        self.constraint_manager.apply_gradient_modifications(
+            grad, self.mesh, self.global_params
+        )
+        self._zero_fixed_gradients(grad)
+        return float(total_energy), grad
+
     def compute_energy(self):
         """Compute the total energy using the loaded modules."""
         positions = self.mesh.positions_view()
@@ -379,9 +413,7 @@ STEP SIZE:\t {self.step_size}
 
             if not self.quiet:
                 # Compute total area only when needed for diagnostics
-                total_area = sum(
-                    facet.compute_area(self.mesh) for facet in self.mesh.facets.values()
-                )
+                total_area = self.mesh.compute_total_surface_area()
                 print(
                     f"Step {i:4d}: Area = {total_area:.5f}, Energy = {E:.5f}, Step Size  = {self.step_size:.2e}"
                 )

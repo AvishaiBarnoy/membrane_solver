@@ -116,9 +116,9 @@ class Facet:
     surface_tension: float = 1.0
     options: Dict[str, Any] = field(default_factory=dict)
 
-    # TODO: Implement caching for area and gradient (similar to Body) to avoid
-    # redundant calculations when multiple modules (energy, constraints) access
-    # the same facet data within a single minimization step.
+    _cached_area: Optional[float] = field(init=False, default=None)
+    _cached_grad: Optional[Dict[int, np.ndarray]] = field(init=False, default=None)
+    _cached_version: int = field(init=False, default=-1)
 
     def copy(self):
         return Facet(
@@ -255,6 +255,17 @@ class Facet:
         callers that need both can avoid redundant geometric computation.
         Uses the Shoelace formula.
         """
+        is_cached_pos = positions is None or positions is getattr(
+            mesh, "_positions_cache", None
+        )
+        if (
+            is_cached_pos
+            and self._cached_version == mesh._version
+            and self._cached_area is not None
+            and self._cached_grad is not None
+        ):
+            return self._cached_area, self._cached_grad
+
         # ordered vertex loop
         if (
             getattr(mesh, "facet_vertex_loops", None)
@@ -307,6 +318,11 @@ class Facet:
         for i, vid in enumerate(v_ids):
             grad[vid] += grads[i]
 
+        if is_cached_pos:
+            self._cached_area = area
+            self._cached_grad = grad
+            self._cached_version = mesh._version
+
         return area, grad
 
 
@@ -321,6 +337,8 @@ class Body:
     _cached_volume_grad: Optional[Dict[int, np.ndarray]] = field(
         init=False, default=None
     )
+    _cached_area: Optional[float] = field(init=False, default=None)
+    _cached_area_grad: Optional[Dict[int, np.ndarray]] = field(init=False, default=None)
     _cached_version: int = field(init=False, default=-1)
 
     # Cache for vectorized operations
@@ -368,8 +386,11 @@ class Body:
         positions: "np.ndarray | None" = None,
         index_map: Dict[int, int] | None = None,
     ) -> float:
+        is_cached_pos = positions is None or positions is getattr(
+            mesh, "_positions_cache", None
+        )
         if (
-            positions is None
+            is_cached_pos
             and self._cached_version == mesh._version
             and self._cached_volume is not None
         ):
@@ -602,6 +623,8 @@ class Body:
         return grad
 
     def compute_surface_area(self, mesh) -> float:
+        if self._cached_version == mesh._version and self._cached_area is not None:
+            return self._cached_area
         area = 0.0
         for facet_idx in self.facet_indices:
             facet = mesh.facets[facet_idx]
@@ -631,7 +654,48 @@ class Body:
             v2 = v_pos[2:] - v0
             cross = _fast_cross(v1, v2)
             area += 0.5 * np.linalg.norm(cross, axis=1).sum()
+        self._cached_area = area
+        self._cached_version = mesh._version
         return area
+
+    def compute_area_and_gradient(
+        self,
+        mesh: "Mesh",
+        positions: "np.ndarray | None" = None,
+        index_map: Dict[int, int] | None = None,
+    ) -> tuple[float, Dict[int, np.ndarray]]:
+        is_cached_pos = positions is None or positions is getattr(
+            mesh, "_positions_cache", None
+        )
+        if (
+            is_cached_pos
+            and self._cached_version == mesh._version
+            and self._cached_area is not None
+            and self._cached_area_grad is not None
+        ):
+            return self._cached_area, self._cached_area_grad
+
+        total_area = 0.0
+        total_grad: Dict[int, np.ndarray] = {}
+
+        for facet_idx in self.facet_indices:
+            facet = mesh.facets[facet_idx]
+            area, grad = facet.compute_area_and_gradient(
+                mesh, positions=positions, index_map=index_map
+            )
+            total_area += area
+            for vid, gvec in grad.items():
+                if vid not in total_grad:
+                    total_grad[vid] = gvec.copy()
+                else:
+                    total_grad[vid] += gvec
+
+        if is_cached_pos:
+            self._cached_area = total_area
+            self._cached_area_grad = total_grad
+            self._cached_version = mesh._version
+
+        return total_area, total_grad
 
     def compute_volume_and_gradient(
         self,
@@ -645,8 +709,11 @@ class Body:
         This combines the work of ``compute_volume`` and ``compute_volume_gradient``
         so callers that need both can avoid redundant geometric computation.
         """
+        is_cached_pos = positions is None or positions is getattr(
+            mesh, "_positions_cache", None
+        )
         if (
-            positions is None
+            is_cached_pos
             and self._cached_version == mesh._version
             and self._cached_volume is not None
             and self._cached_volume_grad is not None
@@ -705,9 +772,10 @@ class Body:
                         if np.any(g):
                             grad[vid] = g
 
-                self._cached_volume = volume
-                self._cached_volume_grad = grad
-                self._cached_version = mesh._version
+                if is_cached_pos:
+                    self._cached_volume = volume
+                    self._cached_volume_grad = grad
+                    self._cached_version = mesh._version
                 return volume, grad
 
         # Fallback path
@@ -758,9 +826,10 @@ class Body:
                 grad[a] += cross_vb_v0[idx] / 6.0
                 grad[b] += cross_v0_va[idx] / 6.0
 
-        self._cached_volume = volume
-        self._cached_volume_grad = grad
-        self._cached_version = mesh._version
+        if is_cached_pos:
+            self._cached_volume = volume
+            self._cached_volume_grad = grad
+            self._cached_version = mesh._version
 
         return volume, grad
 
@@ -809,6 +878,19 @@ class Mesh:
 
     _parameter_array_cache: Dict[str, "np.ndarray"] = field(default_factory=dict)
     _parameter_cache_version: int = -1
+
+    _curvature_cache: Dict[str, Any] = field(default_factory=dict)
+    _curvature_version: int = -1
+
+    _cached_total_area: Optional[float] = field(init=False, default=None)
+    _cached_total_area_grad: Optional[Dict[int, np.ndarray]] = field(
+        init=False, default=None
+    )
+    _cached_total_area_version: int = field(init=False, default=-1)
+
+    _cached_tri_areas: Optional[np.ndarray] = field(init=False, default=None)
+    _cached_tri_normals: Optional[np.ndarray] = field(init=False, default=None)
+    _cached_tri_areas_version: int = field(init=False, default=-1)
 
     _version: int = 0
     _vertex_ids_version: int = 0
@@ -954,7 +1036,51 @@ class Mesh:
         raise InvalidEdgeIndexError(index)
 
     def compute_total_surface_area(self) -> float:
-        return sum(facet.compute_area(self) for facet in self.facets.values())
+        if (
+            self._cached_total_area_version == self._version
+            and self._cached_total_area is not None
+        ):
+            return self._cached_total_area
+        area = sum(facet.compute_area(self) for facet in self.facets.values())
+        self._cached_total_area = area
+        self._cached_total_area_version = self._version
+        return area
+
+    def compute_total_area_and_gradient(
+        self,
+        positions: "np.ndarray | None" = None,
+        index_map: Dict[int, int] | None = None,
+    ) -> tuple[float, Dict[int, np.ndarray]]:
+        is_cached_pos = positions is None or positions is getattr(
+            self, "_positions_cache", None
+        )
+        if (
+            is_cached_pos
+            and self._cached_total_area_version == self._version
+            and self._cached_total_area is not None
+            and self._cached_total_area_grad is not None
+        ):
+            return self._cached_total_area, self._cached_total_area_grad
+
+        total_area = 0.0
+        total_grad: Dict[int, np.ndarray] = {}
+        for facet in self.facets.values():
+            area, grad = facet.compute_area_and_gradient(
+                self, positions=positions, index_map=index_map
+            )
+            total_area += area
+            for vid, gvec in grad.items():
+                if vid not in total_grad:
+                    total_grad[vid] = gvec.copy()
+                else:
+                    total_grad[vid] += gvec
+
+        if is_cached_pos:
+            self._cached_total_area = total_area
+            self._cached_total_area_grad = total_grad
+            self._cached_total_area_version = self._version
+
+        return total_area, total_grad
 
     def compute_total_volume(self) -> float:
         return sum(body.compute_volume(self) for body in self.bodies.values())
@@ -1192,6 +1318,65 @@ class Mesh:
         self._triangle_row_facets = tri_facets
         self._triangle_rows_cache_version = self._facet_loops_version
         return tri_rows, tri_facets
+
+    def triangle_areas(self, positions: Optional[np.ndarray] = None) -> np.ndarray:
+        """Return a cached array of triangle areas for facets in triangle_row_cache."""
+        is_cached_pos = positions is None or positions is getattr(
+            self, "_positions_cache", None
+        )
+        if (
+            is_cached_pos
+            and self._cached_tri_areas_version == self._version
+            and self._cached_tri_areas is not None
+        ):
+            return self._cached_tri_areas
+
+        tri_rows, _ = self.triangle_row_cache()
+        if tri_rows is None:
+            return np.array([])
+
+        if positions is None:
+            positions = self.positions_view()
+
+        v0 = positions[tri_rows[:, 0]]
+        v1 = positions[tri_rows[:, 1]]
+        v2 = positions[tri_rows[:, 2]]
+
+        normals = _fast_cross(v1 - v0, v2 - v0)
+        areas = 0.5 * np.linalg.norm(normals, axis=1)
+
+        if is_cached_pos:
+            self._cached_tri_areas = areas
+            self._cached_tri_normals = normals
+            self._cached_tri_areas_version = self._version
+        return areas
+
+    def triangle_normals(self, positions: Optional[np.ndarray] = None) -> np.ndarray:
+        """Return a cached array of unnormalized triangle normals."""
+        is_cached_pos = positions is None or positions is getattr(
+            self, "_positions_cache", None
+        )
+        if (
+            is_cached_pos
+            and self._cached_tri_areas_version == self._version
+            and self._cached_tri_normals is not None
+        ):
+            return self._cached_tri_normals
+
+        self.triangle_areas(positions)  # This populates normals
+        if is_cached_pos:
+            return self._cached_tri_normals
+
+        # If not cached pos, we need to return the one computed just now.
+        # But triangle_areas only returns areas.
+        # Let's recompute or refactor.
+        if positions is None:
+            positions = self.positions_view()
+        tri_rows, _ = self.triangle_row_cache()
+        v0 = positions[tri_rows[:, 0]]
+        v1 = positions[tri_rows[:, 1]]
+        v2 = positions[tri_rows[:, 2]]
+        return _fast_cross(v1 - v0, v2 - v0)
 
     def get_facets_of_vertex(self, v_id: int) -> List["Facet"]:
         return [self.facets[fid] for fid in self.vertex_to_facets.get(v_id, [])]

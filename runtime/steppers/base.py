@@ -18,7 +18,7 @@ class BaseStepper(ABC):
     def step(
         self,
         mesh,
-        grad: Dict[int, np.ndarray],
+        grad: Dict[int, np.ndarray] | np.ndarray,
         step_size: float,
         energy_fn: Callable[[], float],
         constraint_enforcer: Callable[[Mesh], None] | None = None,
@@ -29,8 +29,9 @@ class BaseStepper(ABC):
         ----------
         mesh : Mesh
             The mesh being optimized.
-        grad : Dict[int, np.ndarray]
-            Gradient for each vertex index.
+        grad : Dict[int, np.ndarray] | np.ndarray
+            Gradient for each vertex index (dict) or a dense ``(N,3)`` array
+            in ``mesh.vertex_ids`` row order.
         step_size : float
             Proposed step size.
         energy_fn : Callable[[], float]
