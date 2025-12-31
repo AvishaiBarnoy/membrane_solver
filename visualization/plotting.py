@@ -147,8 +147,8 @@ def plot_geometry(
             tri_collection = Poly3DCollection(
                 triangles,
                 alpha=alpha,
-                edgecolor=edge_color if not draw_edges else "k",
-                linewidths=0.5 if draw_edges else 0.0,
+                edgecolor=edge_color if not draw_edges else (0.2, 0.2, 0.2),
+                linewidths=1.0 if draw_edges else 0.0,
             )
             tri_collection.set_facecolor(face_colors)
             ax.add_collection3d(tri_collection)
@@ -188,9 +188,9 @@ def plot_geometry(
             segments = list(segments_arr)
 
             line_collection = Line3DCollection(
-                segments, colors=line_colors, linewidths=0.5
+                segments, colors=line_colors, linewidths=1.0
             )
-            ax.add_collection3d(line_collection)
+            ax.add_collection3d(line_collection, zorder=10)
 
     # Optional: plot vertices
     if scatter:
