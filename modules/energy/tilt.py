@@ -5,12 +5,15 @@ This module currently models a simple per-vertex tilt penalty:
     E = 1/2 * k_t * sum_v (|t_v|^2 * A_v)
 
 where ``t_v`` is a 2D tilt vector stored on each vertex and ``A_v`` is a
-per-vertex area weight (Voronoi area).
+per-vertex area weight.
 
-Note: The solver's minimization state is currently vertex positions only.
-Accordingly, the dense-array API accumulates only the *shape* gradient
-(w.r.t. positions). The tilt gradient is returned by the legacy API for
-callers/tests that treat tilt as a separate degree of freedom.
+The current discretization uses a barycentric area weight:
+
+    A_v = (1/3) * sum_{tri incident to v} area(tri)
+
+This keeps the pure tilt term well-defined and provides a shape gradient
+through the triangle area derivatives, even when the tilt vectors are held
+fixed during minimization.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from typing import Dict, Tuple
 
 import numpy as np
 
-from geometry.entities import Mesh
+from geometry.entities import Mesh, _fast_cross
 
 
 def compute_energy_and_gradient(
@@ -27,29 +30,70 @@ def compute_energy_and_gradient(
 ) -> Tuple[float, Dict[int, np.ndarray], Dict[int, np.ndarray]]:
     """Return tilt energy and gradients.
 
-    Returns
-    -------
-    (E, shape_grad, tilt_grad)
-        ``shape_grad`` is currently zero because the Voronoi-area derivative
-        w.r.t. positions is not modeled here.
+    Returns (E, shape_grad, tilt_grad).
     """
     k_tilt = float(param_resolver.get(None, "tilt_rigidity") or 0.0)
-    if k_tilt == 0.0:
-        shape_grad = {i: np.zeros(3, dtype=float) for i in mesh.vertices}
-        tilt_grad = {i: np.zeros(2, dtype=float) for i in mesh.vertices}
-        return 0.0, shape_grad, tilt_grad
-
-    energy = 0.0
     shape_grad = {i: np.zeros(3, dtype=float) for i in mesh.vertices}
     tilt_grad = {i: np.zeros(2, dtype=float) for i in mesh.vertices}
+    if k_tilt == 0.0:
+        return 0.0, shape_grad, tilt_grad
 
-    for vertex in mesh.vertices.values():
-        tilt_vec = np.asarray(getattr(vertex, "tilt", np.zeros(2, dtype=float)))
-        area = float(vertex.voronoi_area())
-        energy += 0.5 * k_tilt * float(np.dot(tilt_vec, tilt_vec)) * area
-        tilt_grad[vertex.index] += k_tilt * tilt_vec * area
+    mesh.build_position_cache()
+    positions = np.empty((len(mesh.vertex_ids), 3), dtype=float)
+    for row, vid in enumerate(mesh.vertex_ids):
+        positions[row] = mesh.vertices[int(vid)].position
+    tri_rows, _ = mesh.triangle_row_cache()
+    if tri_rows is None or len(tri_rows) == 0:
+        return 0.0, shape_grad, tilt_grad
 
-    return float(energy), shape_grad, tilt_grad
+    tilt_sq = np.zeros(len(mesh.vertex_ids), dtype=float)
+    for row, vid in enumerate(mesh.vertex_ids):
+        tilt_vec = np.asarray(getattr(mesh.vertices[int(vid)], "tilt", (0.0, 0.0)))
+        tilt_sq[row] = float(np.dot(tilt_vec, tilt_vec))
+
+    tri_pos = positions[tri_rows]
+    v0 = tri_pos[:, 0, :]
+    v1 = tri_pos[:, 1, :]
+    v2 = tri_pos[:, 2, :]
+
+    n = _fast_cross(v1 - v0, v2 - v0)
+    n_norm = np.linalg.norm(n, axis=1)
+    mask = n_norm >= 1e-12
+    if not np.any(mask):
+        return 0.0, shape_grad, tilt_grad
+
+    areas = 0.5 * n_norm[mask]
+    tri_tilt_sq_sum = tilt_sq[tri_rows[mask]].sum(axis=1)
+    coeff = 0.5 * k_tilt * (tri_tilt_sq_sum / 3.0)  # dE/dA per triangle
+
+    energy = float(np.dot(coeff, areas))
+
+    n_hat = n[mask] / n_norm[mask][:, None]
+    # Area gradient per vertex for the v0,v1,v2 ordering (matches Facet.compute_area_gradient):
+    # dA/dv0 = 0.5 * n_hat x (v2 - v1), and cyclic permutations.
+    g0 = 0.5 * _fast_cross(n_hat, (v2[mask] - v1[mask]))
+    g1 = 0.5 * _fast_cross(n_hat, (v0[mask] - v2[mask]))
+    g2 = 0.5 * _fast_cross(n_hat, (v1[mask] - v0[mask]))
+
+    grad_arr = np.zeros_like(positions)
+    c = coeff[:, None]
+    np.add.at(grad_arr, tri_rows[mask, 0], c * g0)
+    np.add.at(grad_arr, tri_rows[mask, 1], c * g1)
+    np.add.at(grad_arr, tri_rows[mask, 2], c * g2)
+
+    vertex_areas = np.zeros(len(mesh.vertex_ids), dtype=float)
+    area_thirds = areas / 3.0
+    np.add.at(vertex_areas, tri_rows[mask, 0], area_thirds)
+    np.add.at(vertex_areas, tri_rows[mask, 1], area_thirds)
+    np.add.at(vertex_areas, tri_rows[mask, 2], area_thirds)
+
+    for row, vid in enumerate(mesh.vertex_ids):
+        vidx = int(vid)
+        shape_grad[vidx] = grad_arr[row]
+        tilt_vec = np.asarray(getattr(mesh.vertices[vidx], "tilt", (0.0, 0.0)))
+        tilt_grad[vidx] = k_tilt * tilt_vec * vertex_areas[row]
+
+    return energy, shape_grad, tilt_grad
 
 
 def compute_energy_and_gradient_array(
@@ -66,12 +110,45 @@ def compute_energy_and_gradient_array(
     if k_tilt == 0.0:
         return 0.0
 
-    energy = 0.0
-    for vertex in mesh.vertices.values():
-        tilt_vec = np.asarray(getattr(vertex, "tilt", np.zeros(2, dtype=float)))
-        area = float(vertex.voronoi_area())
-        energy += 0.5 * k_tilt * float(np.dot(tilt_vec, tilt_vec)) * area
-    return float(energy)
+    tri_rows, _ = mesh.triangle_row_cache()
+    if tri_rows is None or len(tri_rows) == 0:
+        return 0.0
+
+    mesh.build_position_cache()
+    tilt_sq = np.zeros(len(mesh.vertex_ids), dtype=float)
+    for row, vid in enumerate(mesh.vertex_ids):
+        tilt_vec = np.asarray(getattr(mesh.vertices[int(vid)], "tilt", (0.0, 0.0)))
+        tilt_sq[row] = float(np.dot(tilt_vec, tilt_vec))
+
+    tri_pos = positions[tri_rows]
+    v0 = tri_pos[:, 0, :]
+    v1 = tri_pos[:, 1, :]
+    v2 = tri_pos[:, 2, :]
+
+    n = _fast_cross(v1 - v0, v2 - v0)
+    n_norm = np.linalg.norm(n, axis=1)
+    mask = n_norm >= 1e-12
+    if not np.any(mask):
+        return 0.0
+
+    areas = 0.5 * n_norm[mask]
+    tri_tilt_sq_sum = tilt_sq[tri_rows[mask]].sum(axis=1)
+    coeff = 0.5 * k_tilt * (tri_tilt_sq_sum / 3.0)  # dE/dA per triangle
+
+    energy = float(np.dot(coeff, areas))
+
+    n_hat = n[mask] / n_norm[mask][:, None]
+    # Area gradient per vertex for the v0,v1,v2 ordering (matches Facet.compute_area_gradient).
+    g0 = 0.5 * _fast_cross(n_hat, (v2[mask] - v1[mask]))
+    g1 = 0.5 * _fast_cross(n_hat, (v0[mask] - v2[mask]))
+    g2 = 0.5 * _fast_cross(n_hat, (v1[mask] - v0[mask]))
+
+    c = coeff[:, None]
+    np.add.at(grad_arr, tri_rows[mask, 0], c * g0)
+    np.add.at(grad_arr, tri_rows[mask, 1], c * g1)
+    np.add.at(grad_arr, tri_rows[mask, 2], c * g2)
+
+    return energy
 
 
 __all__ = ["compute_energy_and_gradient", "compute_energy_and_gradient_array"]

@@ -276,6 +276,18 @@ def parse_geometry(data: dict) -> Mesh:
 
         mesh.vertices[vid] = Vertex(index=vid, position=pos_array, options=options)
 
+        if options.get("tilt") is not None:
+            raw_tilt = options.get("tilt")
+            if (
+                not isinstance(raw_tilt, (list, tuple))
+                or len(raw_tilt) != 2
+                or not all(isinstance(val, (int, float)) for val in raw_tilt)
+            ):
+                raise TypeError(
+                    f"Vertex {vid} tilt must be a 2-vector of numbers; got {raw_tilt!r}"
+                )
+            mesh.vertices[vid].tilt = np.asarray(raw_tilt, dtype=float)
+
         if "energy" in options:
             if isinstance(options["energy"], list):
                 energy_module_names.update(options["energy"])
