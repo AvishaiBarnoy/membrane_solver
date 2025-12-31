@@ -16,7 +16,14 @@ class SaveCommand(Command):
 
 class VisualizeCommand(Command):
     def execute(self, context, args):
-        plot_geometry(context.mesh, show_indices=False)
+        # Interactive visualize ("s") is primarily used for inspecting geometry
+        # during minimization, so draw edges by default and keep facets opaque.
+        plot_geometry(
+            context.mesh,
+            show_indices=False,
+            draw_edges=True,
+            transparent=False,
+        )
 
 
 class PropertiesCommand(Command):
