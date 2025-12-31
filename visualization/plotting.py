@@ -188,7 +188,7 @@ def plot_geometry(
             segments = list(segments_arr)
 
             line_collection = Line3DCollection(
-                segments, colors=line_colors, linewidths=0.5
+                segments, colors=line_colors, linewidths=1.0
             )
             ax.add_collection3d(line_collection)
 
