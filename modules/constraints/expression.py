@@ -73,6 +73,48 @@ def constraint_gradients(
     return gradients or None
 
 
+def constraint_gradients_array(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> list[np.ndarray] | None:
+    """Return dense constraint gradients for expression constraints."""
+    eps = float(global_params.get("expression_eps", 1e-6))
+    gradients: list[np.ndarray] = []
+    entities = [
+        ("vertex", mesh.vertices.values()),
+        ("edge", mesh.edges.values()),
+        ("facet", mesh.facets.values()),
+        ("body", mesh.bodies.values()),
+    ]
+    for entity_type, items in entities:
+        for entity in items:
+            options = getattr(entity, "options", None)
+            expr, _target = _constraint_spec(options)
+            if expr is None:
+                continue
+            expr_options = _constraint_options(options, expr)
+            g_entity = _entity_gradient(
+                mesh,
+                entity_type,
+                entity,
+                expr_options,
+                positions=positions,
+                index_map=index_map,
+                eps=eps,
+            )
+            g_arr = np.zeros_like(positions)
+            for vidx, gvec in g_entity.items():
+                row = index_map.get(vidx)
+                if row is None:
+                    continue
+                g_arr[row] += gvec
+            gradients.append(g_arr)
+    return gradients or None
+
+
 def enforce_constraint(
     mesh: Mesh,
     tol: float = 1e-12,
@@ -143,4 +185,4 @@ def enforce_constraint(
                 positions = mesh.positions_view()
 
 
-__all__ = ["enforce_constraint", "constraint_gradients"]
+__all__ = ["enforce_constraint", "constraint_gradients", "constraint_gradients_array"]

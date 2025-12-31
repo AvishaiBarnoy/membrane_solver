@@ -133,17 +133,26 @@ def _per_vertex_params(
 def _vertex_normals(
     mesh: Mesh, positions: np.ndarray, tri_rows: np.ndarray
 ) -> np.ndarray:
+    is_cached_pos = positions is getattr(mesh, "_positions_cache", None)
+    if (
+        is_cached_pos
+        and mesh._curvature_version == mesh._version
+        and "vertex_normals" in mesh._curvature_cache
+    ):
+        return mesh._curvature_cache["vertex_normals"]
+
     normals = np.zeros((len(mesh.vertex_ids), 3), dtype=float)
-    v0 = positions[tri_rows[:, 0]]
-    v1 = positions[tri_rows[:, 1]]
-    v2 = positions[tri_rows[:, 2]]
-    tri_normals = np.cross(v1 - v0, v2 - v0)
+    tri_normals = mesh.triangle_normals(positions)
     np.add.at(normals, tri_rows[:, 0], tri_normals)
     np.add.at(normals, tri_rows[:, 1], tri_normals)
     np.add.at(normals, tri_rows[:, 2], tri_normals)
     nrm = np.linalg.norm(normals, axis=1)
     mask = nrm > 1e-15
     normals[mask] /= nrm[mask, None]
+
+    if mesh._curvature_version == mesh._version:
+        mesh._curvature_cache["vertex_normals"] = normals
+
     return normals
 
 
@@ -158,6 +167,20 @@ def _compute_effective_areas(
 
     Returns (vertex_areas_eff, va0, va1, va2).
     """
+    is_cached_pos = positions is getattr(mesh, "_positions_cache", None)
+    if (
+        is_cached_pos
+        and mesh._curvature_version == mesh._version
+        and "vertex_areas_eff" in mesh._curvature_cache
+    ):
+        c = mesh._curvature_cache
+        return (
+            c["vertex_areas_eff"],
+            c["va0_eff"],
+            c["va1_eff"],
+            c["va2_eff"],
+        )
+
     n_verts = len(mesh.vertex_ids)
     if tri_rows.size == 0:
         return (
@@ -182,8 +205,7 @@ def _compute_effective_areas(
     c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
 
     # Triangle area (doubled)
-    cross = np.cross(e1, e2)
-    area_doubled = np.linalg.norm(cross, axis=1)
+    area_doubled = 2.0 * mesh.triangle_areas(positions)
     area_doubled = np.maximum(area_doubled, 1e-12)
     tri_areas = 0.5 * area_doubled
 
@@ -251,6 +273,12 @@ def _compute_effective_areas(
     np.add.at(vertex_areas_eff, tri_rows[:, 0], va_eff[:, 0])
     np.add.at(vertex_areas_eff, tri_rows[:, 1], va_eff[:, 1])
     np.add.at(vertex_areas_eff, tri_rows[:, 2], va_eff[:, 2])
+
+    if is_cached_pos and mesh._curvature_version == mesh._version:
+        mesh._curvature_cache["vertex_areas_eff"] = vertex_areas_eff
+        mesh._curvature_cache["va0_eff"] = va_eff[:, 0]
+        mesh._curvature_cache["va1_eff"] = va_eff[:, 1]
+        mesh._curvature_cache["va2_eff"] = va_eff[:, 2]
 
     return vertex_areas_eff, va_eff[:, 0], va_eff[:, 1], va_eff[:, 2]
 

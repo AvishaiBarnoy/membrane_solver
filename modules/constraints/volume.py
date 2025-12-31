@@ -40,6 +40,32 @@ def constraint_gradients(mesh, global_params) -> list[dict[int, np.ndarray]] | N
     return constrained or None
 
 
+def constraint_gradients_array(
+    mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> list[np.ndarray] | None:
+    """Return dense constraint gradients for all constrained bodies."""
+    mode = global_params.get("volume_constraint_mode", "lagrange")
+    if mode != "lagrange":
+        return None
+
+    constrained: list[np.ndarray] = []
+    for body in mesh.bodies.values():
+        V_target = body.target_volume
+        if V_target is None:
+            V_target = body.options.get("target_volume")
+        if V_target is None:
+            continue
+        gC = np.zeros_like(positions)
+        body.accumulate_volume_gradient(mesh, positions, gC, factor=1.0)
+        constrained.append(gC)
+
+    return constrained or None
+
+
 def enforce_constraint(
     mesh,
     tol: float = 1e-12,
@@ -123,4 +149,4 @@ def enforce_constraint(
                 positions = mesh.positions_view()
 
 
-__all__ = ["enforce_constraint", "constraint_gradients"]
+__all__ = ["enforce_constraint", "constraint_gradients", "constraint_gradients_array"]

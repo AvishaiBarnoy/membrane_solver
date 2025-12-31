@@ -1,5 +1,4 @@
 import logging
-from collections import defaultdict
 from typing import Dict
 
 import numpy as np
@@ -18,17 +17,68 @@ def constraint_gradients(mesh, _global_params) -> list[Dict[int, np.ndarray]] | 
     for body in mesh.bodies.values():
         if body.options.get("target_area") is None:
             continue
-        gA = {}
+        _, gA = body.compute_area_and_gradient(
+            mesh, positions=positions, index_map=index_map
+        )
+        gradients.append(gA)
+
+    return gradients or None
+
+
+def constraint_gradients_array(
+    mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> list[np.ndarray] | None:
+    """Return dense constraint gradients for body target areas."""
+    tri_rows, _ = mesh.triangle_row_cache()
+
+    gradients: list[np.ndarray] = []
+    for body in mesh.bodies.values():
+        if body.options.get("target_area") is None:
+            continue
+
+        gA = np.zeros_like(positions)
+        body_rows = body._get_triangle_rows(mesh)
+        if body_rows is not None and tri_rows is not None:
+            indices = tri_rows[body_rows]
+            v0 = positions[indices[:, 0]]
+            v1 = positions[indices[:, 1]]
+            v2 = positions[indices[:, 2]]
+
+            e1 = v1 - v0
+            e2 = v2 - v0
+            n = np.cross(e1, e2)
+            A2 = np.linalg.norm(n, axis=1)
+            mask = A2 >= 1e-12
+            if np.any(mask):
+                n_hat = n[mask] / A2[mask][:, None]
+                v0m = v0[mask]
+                v1m = v1[mask]
+                v2m = v2[mask]
+                g0 = 0.5 * np.cross(v1m - v2m, n_hat)
+                g1 = 0.5 * np.cross(v2m - v0m, n_hat)
+                g2 = 0.5 * np.cross(v0m - v1m, n_hat)
+                idx_masked = indices[mask]
+                np.add.at(gA, idx_masked[:, 0], g0)
+                np.add.at(gA, idx_masked[:, 1], g1)
+                np.add.at(gA, idx_masked[:, 2], g2)
+            gradients.append(gA)
+            continue
+
+        positions_fallback = positions
         for facet_idx in body.facet_indices:
             facet = mesh.facets[facet_idx]
             _, g_f = facet.compute_area_and_gradient(
-                mesh, positions=positions, index_map=index_map
+                mesh, positions=positions_fallback, index_map=index_map
             )
             for vidx, vec in g_f.items():
-                if vidx not in gA:
-                    gA[vidx] = vec.copy()
-                else:
-                    gA[vidx] += vec
+                row = index_map.get(vidx)
+                if row is None:
+                    continue
+                gA[row] += vec
         gradients.append(gA)
 
     return gradients or None
@@ -54,16 +104,9 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 20, **_kwargs) 
             continue
 
         for _ in range(max_iter):
-            current_area = 0.0
-            grad: Dict[int, np.ndarray] = defaultdict(lambda: np.zeros(3))
-            for facet_idx in body.facet_indices:
-                facet = mesh.facets[facet_idx]
-                area, facet_grad = facet.compute_area_and_gradient(
-                    mesh, positions=positions, index_map=index_map
-                )
-                current_area += area
-                for vidx, vec in facet_grad.items():
-                    grad[vidx] += vec
+            current_area, grad = body.compute_area_and_gradient(
+                mesh, positions=positions, index_map=index_map
+            )
 
             delta = current_area - target_area
             if abs(delta) < tol:
@@ -96,4 +139,4 @@ def enforce_constraint(mesh, tol: float = 1e-12, max_iter: int = 20, **_kwargs) 
                 positions = mesh.positions_view()
 
 
-__all__ = ["enforce_constraint", "constraint_gradients"]
+__all__ = ["enforce_constraint", "constraint_gradients", "constraint_gradients_array"]
