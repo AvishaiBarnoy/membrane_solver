@@ -99,6 +99,10 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Visualization: Facet rendering skips <3-edge facets so line-only meshes can be displayed cleanly. Enforced equal aspect ratio in 3D plots.
 
 ### Fixed
+- **Bending Energy & Gradients**:
+  - Corrected the mean curvature calculation to use standard **Voronoi Areas** instead of redistributed "Effective Areas", resolving physical inaccuracy near boundaries (e.g., spherical cap energy fixed).
+  - Fixed a missing factor of **2** in the analytic gradient of the Helfrich energy density.
+  - Harmonized the energy and gradient functions to use a "Mixed Area" formulation (Curvature from Voronoi, Weight from Effective), reducing the relative error between Analytic and Finite Difference gradients on open meshes from ~50% to ~1.7e-10.
 - **Mesh Validation**: Fixed `validate_edge_indices` in `geometry/entities.py`. It previously assumed contiguous 1-based indices, which caused `equiangulate` (which creates sparse indices) to fail validation and revert topology changes. This resolves "cone-like" artifacts in spherical cap simulations.
 - **Visualization**: Fixed transparency bug where alpha channel was ignored.
 - Fixed `square_to_circle.json`: Added missing instruction list and updated it to interleave minimization with mesh maintenance (`r`, `g10`, `u`, `V`) to prevent mesh tangling/overlap during large deformations.
