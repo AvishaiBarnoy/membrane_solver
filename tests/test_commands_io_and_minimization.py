@@ -47,9 +47,11 @@ def test_visualize_command_calls_plot(monkeypatch):
     ctx = SimpleNamespace(mesh=mesh)
     called = {}
 
-    def fake_plot(m, show_indices=False):
+    def fake_plot(m, show_indices=False, draw_edges=False, transparent=False):
         called["mesh"] = m
         called["show_indices"] = show_indices
+        called["draw_edges"] = draw_edges
+        called["transparent"] = transparent
 
     monkeypatch.setattr("commands.io.plot_geometry", fake_plot)
     VisualizeCommand().execute(ctx, [])

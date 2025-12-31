@@ -87,73 +87,8 @@ def plot_geometry(
     vertex_positions = [mesh.vertices[v].position for v in mesh.vertices.keys()]
     X, Y, Z = zip(*vertex_positions)
 
-    # Plot facets as filled polygons.
-    if draw_facets:
-        # Try to use vectorized triangle cache first
-        tri_rows, tri_facets = mesh.triangle_row_cache()
-        positions = mesh.positions_view()
-
-        triangles = []
-        face_colors = []
-        default_facet_color = (
-            facet_color if facet_color is not None else (0.6, 0.8, 1.0)
-        )
-
-        # 1. Vectorized triangles
-        if tri_rows is not None and len(tri_rows) > 0:
-            # (N_tri, 3, 3) array of positions
-            tri_data = positions[tri_rows]
-            triangles.extend(list(tri_data))
-
-            # Map colors
-            # We need to map tri_facets (list of fid) to colors
-            for fid in tri_facets:
-                if facet_colors is not None and fid in facet_colors:
-                    face_colors.append(facet_colors[fid])
-                else:
-                    # Fallback to option or default
-                    # Accessing mesh.facets[fid] might be slow if loop is huge,
-                    # but usually options are sparse.
-                    opts = mesh.facets[fid].options
-                    face_colors.append(opts.get("color", default_facet_color))
-
-        # 2. Non-triangle facets (polygons) - Fallback
-        # We need to find facets that are NOT in tri_facets
-        # A set lookup is fast
-        tri_set = set(tri_facets) if tri_facets else set()
-
-        for facet in mesh.facets.values():
-            if facet.index in tri_set:
-                continue
-
-            if len(facet.edge_indices) < 3:
-                continue
-
-            # Slow path for polygons
-            tri = [
-                mesh.vertices[mesh.get_edge(e).tail_index].position
-                for e in facet.edge_indices
-            ]
-            triangles.append(tri)
-
-            if facet_colors is not None and facet.index in facet_colors:
-                color = facet_colors[facet.index]
-            else:
-                color = facet.options.get("color", default_facet_color)
-            face_colors.append(color)
-
-        if triangles:
-            alpha = 0.4 if transparent else 1.0
-            tri_collection = Poly3DCollection(
-                triangles,
-                alpha=alpha,
-                edgecolor=edge_color if not draw_edges else (0.2, 0.2, 0.2),
-                linewidths=1.0 if draw_edges else 0.0,
-            )
-            tri_collection.set_facecolor(face_colors)
-            ax.add_collection3d(tri_collection)
-
-    # Plot all edges as line segments, including standalone edges.
+    # Plot edges first so opaque facets can occlude back-facing edges in the
+    # 3D painter's algorithm (reduces the "transparent facets" look).
     if draw_edges and mesh.edges:
         # Try vectorized edge extraction
         positions = mesh.positions_view()
@@ -190,7 +125,66 @@ def plot_geometry(
             line_collection = Line3DCollection(
                 segments, colors=line_colors, linewidths=1.0
             )
-            ax.add_collection3d(line_collection, zorder=10)
+            ax.add_collection3d(line_collection)
+
+    # Plot facets as filled polygons.
+    if draw_facets:
+        # Try to use vectorized triangle cache first
+        tri_rows, tri_facets = mesh.triangle_row_cache()
+        positions = mesh.positions_view()
+
+        triangles = []
+        face_colors = []
+        default_facet_color = (
+            facet_color if facet_color is not None else (0.6, 0.8, 1.0)
+        )
+
+        # 1. Vectorized triangles
+        if tri_rows is not None and len(tri_rows) > 0:
+            # (N_tri, 3, 3) array of positions
+            tri_data = positions[tri_rows]
+            triangles.extend(list(tri_data))
+
+            # Map colors
+            for fid in tri_facets:
+                if facet_colors is not None and fid in facet_colors:
+                    face_colors.append(facet_colors[fid])
+                else:
+                    opts = mesh.facets[fid].options
+                    face_colors.append(opts.get("color", default_facet_color))
+
+        # 2. Non-triangle facets (polygons) - Fallback
+        tri_set = set(tri_facets) if tri_facets else set()
+
+        for facet in mesh.facets.values():
+            if facet.index in tri_set:
+                continue
+
+            if len(facet.edge_indices) < 3:
+                continue
+
+            tri = [
+                mesh.vertices[mesh.get_edge(e).tail_index].position
+                for e in facet.edge_indices
+            ]
+            triangles.append(tri)
+
+            if facet_colors is not None and facet.index in facet_colors:
+                color = facet_colors[facet.index]
+            else:
+                color = facet.options.get("color", default_facet_color)
+            face_colors.append(color)
+
+        if triangles:
+            alpha = 0.4 if transparent else 1.0
+            tri_collection = Poly3DCollection(
+                triangles,
+                alpha=alpha,
+                edgecolor=edge_color if not draw_edges else (0.2, 0.2, 0.2),
+                linewidths=1.0 if draw_edges else 0.0,
+            )
+            tri_collection.set_facecolor(face_colors)
+            ax.add_collection3d(tri_collection)
 
     # Optional: plot vertices
     if scatter:
@@ -309,7 +303,9 @@ def update_live_vis(
     # Actually, let's just make plot_geometry return the collections if we want to reuse them.
     # Or we can inspect ax.collections after calling.
 
-    plot_geometry(mesh, ax=ax, show=False)
+    # Live visualization should be an inspection tool: keep facets opaque and
+    # draw edges so structure is readable while stepping.
+    plot_geometry(mesh, ax=ax, show=False, draw_edges=True, transparent=False)
 
     # Capture collections for next time
     # ax.collections usually has [Poly3DCollection, Line3DCollection] (or similar order)
