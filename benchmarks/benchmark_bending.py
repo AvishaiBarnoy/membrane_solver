@@ -5,7 +5,7 @@ import sys
 import time
 from pathlib import Path
 
-# Ensure the project root is in sys.path when running via benchmarks/suite.py.
+# Ensure the project root is in sys.path when running via tools/suite.py.
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry

@@ -5,7 +5,7 @@ parameter overrides and falls back to global
 parameters when none are provided.
 """
 
-from parameters.global_parameters import GlobalParameters
+from core.parameters.global_parameters import GlobalParameters
 
 
 class ParameterResolver:

@@ -131,6 +131,14 @@ Instructions: ['g100', 'r', 'u', 'g100', 'V', 'g20', 'r', 'g50', 'r', 'g50']
 Type commands at the prompt; multiple commands can be written without spaces
 (`g10rV5`), or as separate tokens (`g10 r V5`). Use `help` at any time.
 
+Command history:
+
+- Use the up/down arrow keys to cycle through previously-entered commands.
+- History is persisted across sessions to `~/.membrane_solver_history` when the
+  prompt is running in a terminal (TTY).
+- Override the file via `MEMBRANE_HISTORY_FILE` or the length via
+  `MEMBRANE_HISTORY_LENGTH`.
+
 Interactive commands:
 
 - `gN`
@@ -190,7 +198,7 @@ Interactive commands:
 - `properties` / `props` / `p` / `i`
   Print physical properties (global/per‑body area, volume, surface Rg, target volume).
 
-- `benchmarks/suite.py --profile`
+- `python tools/suite.py --profile`
   Profile each benchmark case and save per-case `.pstats` files (plus optional
   text summaries via `--profile-top`) under `benchmarks/outputs/profiles` by default.
 
@@ -845,18 +853,27 @@ degeneracy (tangling, overlapping triangles) during energy minimization.
    - Core geometry routines (cross products, volume gradients) are heavily optimized.
    - Use `geometry.entities._fast_cross` for small-array cross products instead of `numpy.cross`.
    - Prefer pre-allocating numpy arrays with `np.empty` over list comprehensions in hot loops.
-   - See `benchmarks/suite.py` for regression testing.
+   - See `tools/suite.py` for regression testing.
 
 8. Optional compiled kernels (Fortran / f2py):
    - Some hot-loop kernels can be accelerated with Fortran, compiled into Python
      extension modules via NumPy f2py.
    - Kernels are **opt-in** by default. To enable loading compiled kernels, set:
      - `MEMBRANE_ENABLE_FORTRAN=1`
+   - Prerequisites:
+     - A Fortran compiler (typically `gfortran`).
+     - NumPy (for `numpy.f2py`).
+     - On macOS, you may need to install a compiler toolchain (e.g. via Homebrew or Xcode CLI tools).
    - Example build (surface energy kernel):
      - From the repo root:
        - `python -m numpy.f2py -c -m surface_energy fortran_kernels/surface_energy.f90`
      - This should produce `fortran_kernels/surface_energy.*.so` (platform-specific name).
+   - Example build (bending kernels, optional):
+     - From the repo root:
+       - `python -m numpy.f2py -c -m bending_kernels fortran_kernels/bending_kernels.f90`
+     - This should produce `bending_kernels.*.so` (platform-specific name).
    - Runtime behaviour:
      - If `fortran_kernels.surface_energy` is importable, the `surface` energy module
        will use it automatically for pure-triangle meshes; otherwise it falls back to NumPy.
      - Set `MEMBRANE_DISABLE_FORTRAN_SURFACE=1` to force the NumPy fallback.
+     - Set `MEMBRANE_DISABLE_FORTRAN_BENDING=1` to disable compiled bending kernels.

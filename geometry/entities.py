@@ -6,8 +6,8 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 
-from exceptions import InvalidEdgeIndexError
-from parameters.global_parameters import GlobalParameters
+from core.exceptions import InvalidEdgeIndexError
+from core.parameters.global_parameters import GlobalParameters
 
 logger = logging.getLogger("membrane_solver")
 

@@ -69,5 +69,14 @@ coverage.xml
 .coverage
 
 # Compiled extension modules (local builds)
-*.so
+*.dylib
+*.dll
+*.pyd
+*.mod
+*.o
+*.obj
+*.a
+*.lib
+*.pdb
+*.exp
 fortran_kernels/*.mod

@@ -7,6 +7,8 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from core.parameters.global_parameters import GlobalParameters
+from core.parameters.resolver import ParameterResolver
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from modules import mean_curvature_tilt
 from modules.constraints import body_area as body_area_constraint
@@ -22,8 +24,6 @@ from modules.energy import (
     tilt,
     volume,
 )
-from parameters.global_parameters import GlobalParameters
-from parameters.resolver import ParameterResolver
 
 
 def create_random_mesh():

@@ -5,11 +5,11 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from core.parameters.global_parameters import GlobalParameters
+from core.parameters.resolver import ParameterResolver
 from geometry.curvature import compute_angle_defects
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from modules.energy import gaussian_curvature
-from parameters.global_parameters import GlobalParameters
-from parameters.resolver import ParameterResolver
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer

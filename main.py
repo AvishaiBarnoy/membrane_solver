@@ -1,10 +1,9 @@
 import argparse
+import atexit
 import logging
 import os
 import sys
 from pathlib import Path
-
-import matplotlib.pyplot as plt
 
 from commands.context import CommandContext
 from commands.executor import execute_command_line
@@ -28,6 +27,67 @@ def resolve_json_path(path: str) -> str:
         if os.path.isfile(alt):
             return alt
     raise FileNotFoundError(f"Cannot find file '{path}' or '{path}.json'")
+
+
+def _setup_interactive_history() -> None:
+    """Enable up/down arrow history in the interactive prompt (when available).
+
+    Uses the stdlib ``readline`` module when present. History is persisted to a
+    file across sessions when running in a TTY.
+
+    Environment variables
+    ---------------------
+    MEMBRANE_HISTORY_FILE:
+        Override the path for the history file (default:
+        ``~/.membrane_solver_history``).
+    MEMBRANE_HISTORY_LENGTH:
+        Max number of history entries to keep (default: 2000).
+    """
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return
+
+    try:
+        import readline  # noqa: F401
+    except ImportError:
+        return
+
+    import readline
+
+    history_path = os.environ.get("MEMBRANE_HISTORY_FILE")
+    if not history_path:
+        history_path = str(Path.home() / ".membrane_solver_history")
+
+    try:
+        history_len = int(os.environ.get("MEMBRANE_HISTORY_LENGTH", "2000"))
+    except ValueError:
+        history_len = 2000
+
+    try:
+        readline.set_history_length(history_len)
+    except Exception:
+        pass
+
+    history_file = Path(history_path).expanduser()
+    try:
+        history_file.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
+    try:
+        readline.read_history_file(str(history_file))
+    except FileNotFoundError:
+        pass
+    except Exception:
+        # History is a UX improvement; never fail program startup on it.
+        return
+
+    def _save_history() -> None:
+        try:
+            readline.write_history_file(str(history_file))
+        except Exception:
+            pass
+
+    atexit.register(_save_history)
 
 
 def main():
@@ -193,6 +253,8 @@ def main():
             print(f"  {name}: {body}")
 
     if args.viz or args.viz_save:
+        import matplotlib.pyplot as plt
+
         from visualization.plotting import plot_geometry
 
         show = args.viz_save is None
@@ -308,6 +370,7 @@ def main():
         execute_command_line(context, line, get_command_fn=get_command)
 
     if not args.non_interactive:
+        _setup_interactive_history()
         while not context.should_exit:
             try:
                 line = input("> ").strip()

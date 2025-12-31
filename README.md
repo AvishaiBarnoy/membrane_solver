@@ -107,10 +107,10 @@ two vertices and preserves that behavior through refinement.
 To profile each benchmark case and generate per-case `.pstats` outputs:
 
 ```bash
-./profile.sh
+./tools/profile.sh
 ```
 
-This runs `benchmarks/suite.py --profile` and writes results under
+This runs `python tools/suite.py --profile` and writes results under
 `benchmarks/outputs/profiles` by default.
 
 ## Optional Fortran kernels (f2py)
@@ -278,7 +278,7 @@ near‑term goals include:
 
 ## Performance benchmarks
 
-- `python benchmarks/suite.py` is the main entry point for performance testing. It runs a set of standard scenarios (`cube_good`, `square_to_circle`, `catenoid`, `spherical_cap`, `dented_cube`, `two_disks_sphere`), tracks execution time history in `benchmarks/results.json`, and highlights regressions or improvements.
+- `python tools/suite.py` is the main entry point for performance testing. It runs a set of standard scenarios (`cube_good`, `square_to_circle`, `catenoid`, `spherical_cap`, `dented_cube`, `two_disks_sphere`), tracks execution time history in `benchmarks/results.json`, and highlights regressions or improvements.
 - `python benchmarks/benchmark_cube_good.py` runs the full `cube_good_min_routine` recipe (minimization, refinement, equiangulation, vertex averaging, etc.) and reports the average wall-clock time.
 - `python benchmarks/benchmark_square_to_circle.py` runs the `square_to_circle` scenario (square sheet relaxing to a circle with line tension), serving as a stress test for mesh maintenance operations.
 - `python benchmarks/benchmark_catenoid.py` runs the `catenoid` scenario (surface tension minimization between two fixed rings), validating `pin_to_circle` constraints and surface minimization.

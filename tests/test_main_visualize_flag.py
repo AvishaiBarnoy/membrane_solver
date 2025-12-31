@@ -8,7 +8,8 @@ matplotlib.use("Agg")
 
 
 def test_main_viz_save_calls_plot_geometry(tmp_path, monkeypatch):
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    sys.modules.pop("main", None)
 
     import main as main_module
     from visualization import plotting as plotting_module

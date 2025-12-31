@@ -3,8 +3,8 @@ import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from parameters.global_parameters import GlobalParameters
-from parameters.resolver import ParameterResolver
+from core.parameters.global_parameters import GlobalParameters
+from core.parameters.resolver import ParameterResolver
 
 
 class DummyObj:

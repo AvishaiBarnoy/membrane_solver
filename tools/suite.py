@@ -8,14 +8,10 @@ and compares them against a stored history of "best" results in ``results.json``
 import argparse
 import cProfile
 import json
-import os
 import pstats
 import sys
 from datetime import datetime
 from pathlib import Path
-
-# Add local directory to path to import benchmark modules
-sys.path.append(os.path.dirname(__file__))
 
 import benchmark_bending
 import benchmark_cap
@@ -26,8 +22,14 @@ import benchmark_square_to_circle
 import benchmark_two_disks_sphere
 import benchmark_volume_optimization
 
-RESULTS_FILE = Path(__file__).parent / "results.json"
-DEFAULT_PROFILE_DIR = Path(__file__).parent / "outputs" / "profiles"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+BENCHMARKS_DIR = REPO_ROOT / "benchmarks"
+
+# Import benchmark modules from benchmarks/ without requiring it to be a package.
+sys.path.insert(0, str(BENCHMARKS_DIR))
+
+RESULTS_FILE = BENCHMARKS_DIR / "results.json"
+DEFAULT_PROFILE_DIR = BENCHMARKS_DIR / "outputs" / "profiles"
 
 BENCHMARKS = {
     "cube_good": benchmark_cube_good.benchmark,
