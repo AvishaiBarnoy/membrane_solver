@@ -6,7 +6,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import numpy as np
 
-from core.exceptions import InvalidEdgeIndexError
+from core.exceptions import BodyOrientationError, InvalidEdgeIndexError
 from core.parameters.global_parameters import GlobalParameters
 
 logger = logging.getLogger("membrane_solver")
@@ -1186,6 +1186,154 @@ class Mesh:
                     )
         return True
 
+    def validate_body_orientation(self) -> bool:
+        """Validate that facets in each body have consistent orientation.
+
+        For every edge shared by exactly two facets within a body, the two
+        facets must traverse the shared edge with opposite orientation
+        (i.e., one facet uses ``+eid`` and the other uses ``-eid``).
+
+        Boundary edges (edges used by only one facet in the body) are allowed;
+        this check focuses on orientation consistency, not closure.
+        """
+        if not self.bodies:
+            return True
+
+        for body in self.bodies.values():
+            edge_uses: dict[int, list[tuple[int, int]]] = {}
+            for fid in body.facet_indices:
+                facet = self.facets.get(fid)
+                if facet is None:
+                    raise BodyOrientationError(
+                        f"Body {body.index} references missing facet {fid}.",
+                        body_index=body.index,
+                        mesh=self,
+                    )
+                for signed_ei in facet.edge_indices:
+                    ei = abs(int(signed_ei))
+                    sign = 1 if int(signed_ei) > 0 else -1
+                    edge_uses.setdefault(ei, []).append((facet.index, sign))
+
+            for ei, uses in edge_uses.items():
+                if len(uses) > 2:
+                    facets = [fid for fid, _ in uses]
+                    raise BodyOrientationError(
+                        f"Body {body.index} is non-manifold: edge {ei} is used by "
+                        f"{len(uses)} facets {facets}.",
+                        body_index=body.index,
+                        edge_index=ei,
+                        mesh=self,
+                    )
+                if len(uses) == 2:
+                    (f0, s0), (f1, s1) = uses
+                    if s0 != -s1:
+                        raise BodyOrientationError(
+                            f"Body {body.index} has inconsistent facet orientation across "
+                            f"edge {ei}: facets {f0} and {f1} traverse it with the same "
+                            "direction.",
+                            body_index=body.index,
+                            edge_index=ei,
+                            facet_indices=(f0, f1),
+                            mesh=self,
+                        )
+
+        return True
+
+    def orient_body_facets(self, body_index: int) -> int:
+        """Re-orient facets in a body to make shared-edge orientations consistent.
+
+        This flips a subset of facets so that any edge shared by two facets is
+        traversed with opposite directions by the two facets.
+
+        Returns the number of flipped facets.
+        """
+        body = self.bodies.get(body_index)
+        if body is None:
+            raise KeyError(f"Body {body_index} not found in mesh.")
+
+        facet_ids = list(body.facet_indices)
+        if not facet_ids:
+            return 0
+
+        # Build edge -> [(facet_id, sign)] within the body.
+        edge_uses: dict[int, list[tuple[int, int]]] = {}
+        for fid in facet_ids:
+            facet = self.facets.get(fid)
+            if facet is None:
+                raise BodyOrientationError(
+                    f"Body {body.index} references missing facet {fid}.",
+                    body_index=body.index,
+                    mesh=self,
+                )
+            for signed_ei in facet.edge_indices:
+                ei = abs(int(signed_ei))
+                sign = 1 if int(signed_ei) > 0 else -1
+                edge_uses.setdefault(ei, []).append((facet.index, sign))
+
+        # Build facet adjacency across shared edges.
+        adjacency: dict[int, list[tuple[int, int, int]]] = {
+            fid: [] for fid in facet_ids
+        }
+        for ei, uses in edge_uses.items():
+            if len(uses) > 2:
+                facets = [fid for fid, _ in uses]
+                raise BodyOrientationError(
+                    f"Cannot orient body {body.index}: edge {ei} is used by "
+                    f"{len(uses)} facets {facets}.",
+                    body_index=body.index,
+                    edge_index=ei,
+                    mesh=self,
+                )
+            if len(uses) != 2:
+                continue
+            (f0, s0), (f1, s1) = uses
+            adjacency.setdefault(f0, []).append((f1, s0, s1))
+            adjacency.setdefault(f1, []).append((f0, s1, s0))
+
+        # BFS "flip parity" assignment.
+        flips: dict[int, int] = {}
+        queue: list[int] = []
+        for start in facet_ids:
+            if start in flips:
+                continue
+            flips[start] = 0
+            queue.append(start)
+            while queue:
+                fid = queue.pop()
+                f_flip = flips[fid]
+                for nbr, sign_here, sign_nbr in adjacency.get(fid, []):
+                    # If the two facets already traverse the shared edge in opposite
+                    # directions, keep the same flip parity; otherwise flip the neighbor.
+                    nbr_flip = f_flip if sign_here == -sign_nbr else 1 - f_flip
+                    if nbr in flips:
+                        if flips[nbr] != nbr_flip:
+                            raise BodyOrientationError(
+                                f"Cannot orient body {body.index}: inconsistent parity "
+                                f"assignment between facets {fid} and {nbr}.",
+                                body_index=body.index,
+                                edge_index=None,
+                                facet_indices=(fid, nbr),
+                                mesh=self,
+                            )
+                        continue
+                    flips[nbr] = nbr_flip
+                    queue.append(nbr)
+
+        flipped_count = 0
+        for fid, flip in flips.items():
+            if not flip:
+                continue
+            facet = self.facets[fid]
+            facet.edge_indices = [-int(ei) for ei in reversed(facet.edge_indices)]
+            flipped_count += 1
+
+        if flipped_count:
+            # Orientation affects cached vertex loops/normals/volume signs.
+            self.build_facet_vertex_loops()
+            self.increment_version()
+
+        return flipped_count
+
     def build_connectivity_maps(self):
         counts = (len(self.vertices), len(self.edges), len(self.facets))
         if (
@@ -1583,8 +1731,9 @@ class Mesh:
         # 2. Check all edge indices are valid
         self.validate_edge_indices()
 
-        # 3. (optional future checks: vertex connectivity, bodies, etc.)
-        # Pass for now
+        # 3. Ensure bodies have consistent facet orientation (if defined).
+        self.validate_body_orientation()
+
         return True
 
     def __post_init__(self):
