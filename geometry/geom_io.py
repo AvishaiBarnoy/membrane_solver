@@ -280,13 +280,18 @@ def parse_geometry(data: dict) -> Mesh:
             raw_tilt = options.get("tilt")
             if (
                 not isinstance(raw_tilt, (list, tuple))
-                or len(raw_tilt) != 2
+                or len(raw_tilt) not in (2, 3)
                 or not all(isinstance(val, (int, float)) for val in raw_tilt)
             ):
                 raise TypeError(
-                    f"Vertex {vid} tilt must be a 2-vector of numbers; got {raw_tilt!r}"
+                    f"Vertex {vid} tilt must be a 2- or 3-vector of numbers; got {raw_tilt!r}"
                 )
-            mesh.vertices[vid].tilt = np.asarray(raw_tilt, dtype=float)
+            if len(raw_tilt) == 2:
+                mesh.vertices[vid].tilt = np.asarray(
+                    [raw_tilt[0], raw_tilt[1], 0.0], dtype=float
+                )
+            else:
+                mesh.vertices[vid].tilt = np.asarray(raw_tilt, dtype=float)
 
         if "energy" in options:
             if isinstance(options["energy"], list):
@@ -787,6 +792,7 @@ def parse_geometry(data: dict) -> Mesh:
 
     mesh.build_connectivity_maps()
     mesh.build_facet_vertex_loops()
+    mesh.initialize_tilts_from_options()
 
     # Basic validation (connectivity)
     try:
@@ -798,6 +804,7 @@ def parse_geometry(data: dict) -> Mesh:
     # Automatically triangulate polygonal facets if needed
     if any(len(f.edge_indices) > 3 for f in mesh.facets.values()):
         refined = refine_polygonal_facets(mesh)
+        refined.initialize_tilts_from_options()
         try:
             refined.full_mesh_validate()
         except Exception as e:

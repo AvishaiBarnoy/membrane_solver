@@ -4,7 +4,7 @@ import numpy as np
 def compute_energy_and_gradient(mesh, gp, resolver):
     E = 0.0
     shape_grad = {i: np.zeros(3) for i in mesh.vertices}
-    tilt_grad = {i: np.zeros(2) for i in mesh.vertices}
+    tilt_grad = {i: np.zeros(3) for i in mesh.vertices}
 
     for facet in mesh.facets.values():
         # 1. Evaluate discrete mean curvature J at this facet
@@ -38,7 +38,7 @@ def compute_energy_and_gradient(mesh, gp, resolver):
             ddivt_dxi = facet.dDivT_dvertex(vidx)
             shape_grad[vidx] += dE_d_divt * ddivt_dxi
 
-            # discrete ∂(div_t)/∂t_i  → a 2-vector in the tangent plane
+            # discrete ∂(div_t)/∂t_i  → a 3-vector in ambient coordinates (tangent-projected)
             ddivt_dti = facet.dDivT_dtilt(vidx)
             tilt_grad[vidx] += dE_d_divt * ddivt_dti
 

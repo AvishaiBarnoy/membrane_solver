@@ -32,7 +32,11 @@ class DummyFacet:
         )
 
     def dDivT_dtilt(self, vidx):
-        return np.array([1.0, -1.0]) if vidx == self.vertex_indices[2] else np.zeros(2)
+        return (
+            np.array([1.0, -1.0, 0.0])
+            if vidx == self.vertex_indices[2]
+            else np.zeros(3)
+        )
 
 
 class DummyResolver:
@@ -61,4 +65,4 @@ def test_mean_curvature_tilt_energy_and_grads_shapes():
     for g in shape_grad.values():
         assert g.shape == (3,)
     for g in tilt_grad.values():
-        assert g.shape == (2,)
+        assert g.shape == (3,)
