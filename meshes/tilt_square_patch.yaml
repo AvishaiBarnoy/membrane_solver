@@ -1,0 +1,47 @@
+definitions:
+  boundary:
+    fixed: true
+
+vertices:
+  # Fixed square boundary (z=0).
+  - [0.0, 0.0, 0.0, {preset: boundary, tilt: [2.0, 0.0]}]
+  - [1.0, 0.0, 0.0, {preset: boundary, tilt: [0.0, 0.0]}]
+  - [1.0, 1.0, 0.0, {preset: boundary, tilt: [0.0, 0.0]}]
+  - [0.0, 1.0, 0.0, {preset: boundary, tilt: [0.0, 0.0]}]
+
+  # Free interior vertex pinned to the z=0 plane.
+  - [0.5, 0.5, 0.0, {constraints: [pin_to_plane], tilt: [0.0, 0.0]}]
+
+edges:
+  # Boundary edges.
+  1: [0, 1]
+  2: [1, 2]
+  3: [2, 3]
+  4: [3, 0]
+  # Spokes to the interior vertex (4).
+  5: [0, 4]
+  6: [1, 4]
+  7: [2, 4]
+  8: [3, 4]
+
+faces:
+  # Four triangles around the interior vertex.
+  0: [1, 6, r5]
+  1: [2, 7, r6]
+  2: [3, 8, r7]
+  3: [4, 5, r8]
+
+energy_modules:
+  - tilt
+
+global_parameters:
+  surface_tension: 0.0
+  tilt_rigidity: 10.0
+  pin_to_plane_normal: [0.0, 0.0, 1.0]
+  pin_to_plane_point: [0.0, 0.0, 0.0]
+
+instructions:
+  - r2
+  - g 30
+  - gd
+  - g 200

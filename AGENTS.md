@@ -9,6 +9,7 @@ organized under `geometry/`, `modules/`, `runtime/` and other directories.
 - Document public functions with standard docstrings.
 - Prioritize efficient algorithms and data structures.
 - Debugging should be through logger.
+- If requirements or physics/discretization details are unclear, ask the user concise clarifying questions before implementing; if proceeding, state the assumptions in the PR description.
 
 ## Performance & Architecture
 - **Hybrid SoA Pattern**: Use the "Scatter-Gather" pattern for numerical optimization. Mesh topology remains object-oriented (AoS) for ease of manipulation, but minimization MUST use dense NumPy arrays (SoA).
