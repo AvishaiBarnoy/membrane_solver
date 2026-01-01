@@ -8,6 +8,7 @@ from pathlib import Path
 from commands.context import CommandContext
 from commands.executor import execute_command_line
 from commands.registry import get_command
+from core.exceptions import BodyOrientationError
 from geometry.geom_io import load_data, parse_geometry, save_geometry
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
@@ -240,7 +241,47 @@ def main():
 
     # Load mesh and parameters
     data = load_data(args.input)
-    mesh = parse_geometry(data)
+    try:
+        mesh = parse_geometry(data)
+    except BodyOrientationError as exc:
+        logger.error("%s", exc)
+        bad_mesh = getattr(exc, "mesh", None)
+        if bad_mesh is None:
+            print(str(exc), file=sys.stderr)
+            sys.exit(1)
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            print(
+                "Body orientation is inconsistent. Run in a TTY to fix interactively.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        try:
+            answer = (
+                input(
+                    "Body orientation is inconsistent. Fix and save corrected geometry? [y/N] "
+                )
+                .strip()
+                .lower()
+            )
+        except EOFError:
+            sys.exit(1)
+        if answer not in {"y", "yes"}:
+            sys.exit(1)
+
+        flipped = 0
+        for bid in sorted(bad_mesh.bodies):
+            flipped += bad_mesh.orient_body_facets(bid)
+        bad_mesh.validate_body_orientation()
+
+        inp = Path(args.input)
+        fixed_path = inp.with_name(f"{inp.stem}.oriented.json")
+        save_geometry(bad_mesh, str(fixed_path), compact=args.compact_output_json)
+        logger.info(
+            "Saved oriented geometry to %s (flipped %d facets).",
+            fixed_path,
+            flipped,
+        )
+        mesh = bad_mesh
 
     macros = getattr(mesh, "macros", {}) or {}
     if macros:

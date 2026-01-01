@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 class MembraneSolverError(Exception):
     """Base class for domain-specific errors."""
@@ -20,4 +22,23 @@ class InvalidEdgeIndexError(MembraneSolverError):
         self.index = index
 
 
-__all__ = ["MembraneSolverError", "InvalidEdgeIndexError"]
+class BodyOrientationError(MembraneSolverError):
+    """Raised when facets belonging to a body are not oriented consistently."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        body_index: int | None = None,
+        edge_index: int | None = None,
+        facet_indices: tuple[int, int] | None = None,
+        mesh: Any | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.body_index = body_index
+        self.edge_index = edge_index
+        self.facet_indices = facet_indices
+        self.mesh = mesh
+
+
+__all__ = ["MembraneSolverError", "InvalidEdgeIndexError", "BodyOrientationError"]
