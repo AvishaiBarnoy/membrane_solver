@@ -4,8 +4,8 @@ This module currently models a simple per-vertex tilt penalty:
 
     E = 1/2 * k_t * sum_v (|t_v|^2 * A_v)
 
-where ``t_v`` is a 2D tilt vector stored on each vertex and ``A_v`` is a
-per-vertex area weight.
+where ``t_v`` is a 3D tangent tilt vector stored on each vertex and ``A_v`` is
+an area weight.
 
 The current discretization uses a barycentric area weight:
 
@@ -34,7 +34,7 @@ def compute_energy_and_gradient(
     """
     k_tilt = float(param_resolver.get(None, "tilt_rigidity") or 0.0)
     shape_grad = {i: np.zeros(3, dtype=float) for i in mesh.vertices}
-    tilt_grad = {i: np.zeros(2, dtype=float) for i in mesh.vertices}
+    tilt_grad = {i: np.zeros(3, dtype=float) for i in mesh.vertices}
     if k_tilt == 0.0:
         return 0.0, shape_grad, tilt_grad
 
@@ -48,7 +48,7 @@ def compute_energy_and_gradient(
 
     tilt_sq = np.zeros(len(mesh.vertex_ids), dtype=float)
     for row, vid in enumerate(mesh.vertex_ids):
-        tilt_vec = np.asarray(getattr(mesh.vertices[int(vid)], "tilt", (0.0, 0.0)))
+        tilt_vec = np.asarray(mesh.vertices[int(vid)].tilt, dtype=float)
         tilt_sq[row] = float(np.dot(tilt_vec, tilt_vec))
 
     tri_pos = positions[tri_rows]
@@ -90,7 +90,7 @@ def compute_energy_and_gradient(
     for row, vid in enumerate(mesh.vertex_ids):
         vidx = int(vid)
         shape_grad[vidx] = grad_arr[row]
-        tilt_vec = np.asarray(getattr(mesh.vertices[vidx], "tilt", (0.0, 0.0)))
+        tilt_vec = np.asarray(mesh.vertices[vidx].tilt, dtype=float)
         tilt_grad[vidx] = k_tilt * tilt_vec * vertex_areas[row]
 
     return energy, shape_grad, tilt_grad
@@ -104,8 +104,10 @@ def compute_energy_and_gradient_array(
     positions: np.ndarray,
     index_map: Dict[int, int],
     grad_arr: np.ndarray,
+    tilts: np.ndarray | None = None,
+    tilt_grad_arr: np.ndarray | None = None,
 ) -> float:
-    """Dense-array tilt energy accumulation (shape gradient only)."""
+    """Dense-array tilt energy accumulation (shape gradient; optional tilt gradient)."""
     k_tilt = float(param_resolver.get(None, "tilt_rigidity") or 0.0)
     if k_tilt == 0.0:
         return 0.0
@@ -115,10 +117,16 @@ def compute_energy_and_gradient_array(
         return 0.0
 
     mesh.build_position_cache()
-    tilt_sq = np.zeros(len(mesh.vertex_ids), dtype=float)
-    for row, vid in enumerate(mesh.vertex_ids):
-        tilt_vec = np.asarray(getattr(mesh.vertices[int(vid)], "tilt", (0.0, 0.0)))
-        tilt_sq[row] = float(np.dot(tilt_vec, tilt_vec))
+    if tilts is None:
+        tilts = np.zeros((len(mesh.vertex_ids), 3), dtype=float)
+        for row, vid in enumerate(mesh.vertex_ids):
+            tilts[row] = np.asarray(mesh.vertices[int(vid)].tilt, dtype=float)
+    else:
+        tilts = np.asarray(tilts, dtype=float)
+        if tilts.shape != (len(mesh.vertex_ids), 3):
+            raise ValueError("tilts must have shape (N_vertices, 3)")
+
+    tilt_sq = np.einsum("ij,ij->i", tilts, tilts)
 
     tri_pos = positions[tri_rows]
     v0 = tri_pos[:, 0, :]
@@ -147,6 +155,19 @@ def compute_energy_and_gradient_array(
     np.add.at(grad_arr, tri_rows[mask, 0], c * g0)
     np.add.at(grad_arr, tri_rows[mask, 1], c * g1)
     np.add.at(grad_arr, tri_rows[mask, 2], c * g2)
+
+    if tilt_grad_arr is not None:
+        tilt_grad_arr = np.asarray(tilt_grad_arr, dtype=float)
+        if tilt_grad_arr.shape != (len(mesh.vertex_ids), 3):
+            raise ValueError("tilt_grad_arr must have shape (N_vertices, 3)")
+
+        vertex_areas = np.zeros(len(mesh.vertex_ids), dtype=float)
+        area_thirds = areas / 3.0
+        np.add.at(vertex_areas, tri_rows[mask, 0], area_thirds)
+        np.add.at(vertex_areas, tri_rows[mask, 1], area_thirds)
+        np.add.at(vertex_areas, tri_rows[mask, 2], area_thirds)
+
+        tilt_grad_arr += k_tilt * tilts * vertex_areas[:, None]
 
     return energy
 

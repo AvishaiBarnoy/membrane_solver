@@ -310,7 +310,7 @@ def create_planar_mesh():
 def initialize_tilt(mesh):
     """Initialize random tilt vectors for testing."""
     for v in mesh.vertices.values():
-        v.tilt = np.array([0.1, -0.2], dtype=float)
+        v.tilt = np.array([0.1, -0.2, 0.0], dtype=float)
 
 
 def check_gradient_consistency_dict(module, mesh, eps=1e-6, tol=1e-5):
@@ -400,11 +400,7 @@ def test_jordan_area_gradient_consistency():
 def test_tilt_energy_gradient_consistency():
     mesh = create_random_mesh()
     initialize_tilt(mesh)
-    # Tilt uses Voronoi area which depends on position
-    # Patch Vertex.voronoi_area to return a constant
-    with patch("geometry.entities.Vertex.voronoi_area", create=True) as mock_area:
-        mock_area.return_value = 0.1
-        check_gradient_consistency_dict(tilt, mesh, tol=1e-4)
+    check_gradient_consistency_dict(tilt, mesh, tol=1e-4)
 
 
 def test_mean_curvature_tilt_gradient_consistency():
@@ -430,7 +426,7 @@ def test_mean_curvature_tilt_gradient_consistency():
         mock_div.return_value = 0.0
         mock_dJ.return_value = np.zeros(3)
         mock_dDivT_v.return_value = np.zeros(3)
-        mock_dDivT_t.return_value = np.zeros(2)
+        mock_dDivT_t.return_value = np.zeros(3)
         mock_area.return_value = 0.5
         mock_v_indices.return_value = [0, 1, 2]
 

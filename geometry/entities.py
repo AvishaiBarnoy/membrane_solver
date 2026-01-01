@@ -39,9 +39,16 @@ class Vertex:
     position: np.ndarray
     fixed: bool = False
     options: Dict[str, Any] = field(default_factory=dict)
+    tilt: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))
 
     def copy(self):
-        return Vertex(self.index, self.position.copy(), self.fixed, self.options.copy())
+        return Vertex(
+            self.index,
+            self.position.copy(),
+            fixed=self.fixed,
+            options=self.options.copy(),
+            tilt=self.tilt.copy(),
+        )
 
     def project_position(self, pos: np.ndarray) -> np.ndarray:
         """
@@ -857,6 +864,9 @@ class Mesh:
 
     _positions_cache: "np.ndarray | None" = None
     _positions_cache_version: int = -1
+    _tilts_cache: "np.ndarray | None" = None
+    _tilts_cache_version: int = -1
+    _tilt_cache_counts: int = -1
     _triangle_rows_cache: "np.ndarray | None" = None
     _triangle_rows_cache_version: int = -1
     _triangle_row_facets: list[int] = field(default_factory=list)
@@ -891,6 +901,10 @@ class Mesh:
     _cached_tri_areas: Optional[np.ndarray] = field(init=False, default=None)
     _cached_tri_normals: Optional[np.ndarray] = field(init=False, default=None)
     _cached_tri_areas_version: int = field(init=False, default=-1)
+
+    _cached_vertex_normals: Optional[np.ndarray] = field(init=False, default=None)
+    _cached_vertex_normals_version: int = field(init=False, default=-1)
+    _cached_vertex_normals_loops_version: int = field(init=False, default=-1)
 
     _version: int = 0
     _vertex_ids_version: int = 0
@@ -1251,6 +1265,36 @@ class Mesh:
 
         return self._positions_cache
 
+    def tilts_view(self) -> "np.ndarray":
+        """Return a dense ``(N_vertices, 3)`` array of vertex tilt vectors.
+
+        The ordering matches ``vertex_ids``. This returns a freshly built array
+        so it always reflects the current per-vertex values.
+        """
+        import numpy as np
+
+        self.build_position_cache()
+        n_verts = len(self.vertex_ids)
+        tilts = np.zeros((n_verts, 3), dtype=float, order="F")
+        for i, vid in enumerate(self.vertex_ids):
+            tilts[i] = np.asarray(self.vertices[int(vid)].tilt, dtype=float)
+        return tilts
+
+    def set_tilts_from_array(self, tilts: "np.ndarray") -> None:
+        """Scatter a dense tilt array back onto vertex objects."""
+        import numpy as np
+
+        self.build_position_cache()
+        tilts_arr = np.asarray(tilts, dtype=float)
+        if tilts_arr.shape != (len(self.vertex_ids), 3):
+            raise ValueError("tilts must have shape (N_vertices, 3)")
+
+        for row, vid in enumerate(self.vertex_ids):
+            self.vertices[int(vid)].tilt = tilts_arr[row].copy()
+        self._tilts_cache = tilts_arr.copy(order="F")
+        self._tilts_cache_version = self._vertex_ids_version
+        self._tilt_cache_counts = len(self.vertex_ids)
+
     def build_facet_vertex_loops(self):
         """Precompute ordered vertex loops for all facets.
 
@@ -1377,6 +1421,146 @@ class Mesh:
         v1 = positions[tri_rows[:, 1]]
         v2 = positions[tri_rows[:, 2]]
         return _fast_cross(v1 - v0, v2 - v0)
+
+    def vertex_normals(self, positions: Optional[np.ndarray] = None) -> np.ndarray:
+        """Return per-vertex unit normals from triangle normals.
+
+        The result is in ``vertex_ids`` row order. Vertices without incident
+        triangles receive a zero normal.
+        """
+        import numpy as np
+
+        is_cached_pos = positions is None or positions is getattr(
+            self, "_positions_cache", None
+        )
+        if (
+            is_cached_pos
+            and self._cached_vertex_normals is not None
+            and self._cached_vertex_normals_version == self._version
+            and self._cached_vertex_normals_loops_version == self._facet_loops_version
+        ):
+            return self._cached_vertex_normals
+
+        tri_rows, _ = self.triangle_row_cache()
+        self.build_position_cache()
+        n_verts = len(self.vertex_ids)
+        if tri_rows is None or len(tri_rows) == 0:
+            normals = np.zeros((n_verts, 3), dtype=float)
+            if is_cached_pos:
+                self._cached_vertex_normals = normals
+                self._cached_vertex_normals_version = self._version
+                self._cached_vertex_normals_loops_version = self._facet_loops_version
+            return normals
+
+        if positions is None:
+            positions = self.positions_view()
+
+        v0 = positions[tri_rows[:, 0]]
+        v1 = positions[tri_rows[:, 1]]
+        v2 = positions[tri_rows[:, 2]]
+        tri_normals = _fast_cross(v1 - v0, v2 - v0)
+
+        normals = np.zeros((n_verts, 3), dtype=float)
+        np.add.at(normals, tri_rows[:, 0], tri_normals)
+        np.add.at(normals, tri_rows[:, 1], tri_normals)
+        np.add.at(normals, tri_rows[:, 2], tri_normals)
+
+        lens = np.linalg.norm(normals, axis=1)
+        mask = lens >= 1e-12
+        normals[mask] /= lens[mask][:, None]
+
+        if is_cached_pos:
+            self._cached_vertex_normals = normals
+            self._cached_vertex_normals_version = self._version
+            self._cached_vertex_normals_loops_version = self._facet_loops_version
+        return normals
+
+    def project_tilts_to_tangent(self) -> None:
+        """Project all vertex tilt vectors into their local tangent planes."""
+        import numpy as np
+
+        self.build_position_cache()
+        tilts = self.tilts_view()
+        if tilts is None or tilts.size == 0:
+            return
+
+        normals = self.vertex_normals()
+        if normals.size == 0:
+            return
+
+        dot = np.einsum("ij,ij->i", tilts, normals)
+        projected = tilts - dot[:, None] * normals
+        self.set_tilts_from_array(projected)
+
+    def initialize_tilts_from_options(self) -> None:
+        """Initialize 3D tangent tilt vectors from ``vertex.options['tilt']``.
+
+        Supported option formats
+        ------------------------
+        - ``[t1, t2]``: components in a deterministic local tangent basis.
+        - ``[tx, ty, tz]``: ambient vector projected onto the tangent plane.
+        """
+        import numpy as np
+
+        has_tilt = False
+        for vertex in self.vertices.values():
+            opts = getattr(vertex, "options", None)
+            if isinstance(opts, dict) and opts.get("tilt") is not None:
+                has_tilt = True
+                break
+        if not has_tilt:
+            return
+
+        self.build_position_cache()
+        normals = self.vertex_normals()
+        if normals.size == 0:
+            return
+
+        ref_x = np.array([1.0, 0.0, 0.0], dtype=float)
+        ref_y = np.array([0.0, 1.0, 0.0], dtype=float)
+
+        for row, vid in enumerate(self.vertex_ids):
+            vertex = self.vertices[int(vid)]
+            raw = getattr(vertex, "options", {}).get("tilt")
+            if raw is None:
+                continue
+
+            if not isinstance(raw, (list, tuple)):
+                raise TypeError(
+                    f"Vertex {int(vid)} tilt must be a 2- or 3-vector; got {raw!r}"
+                )
+
+            n = normals[row]
+            if np.linalg.norm(n) < 1e-12:
+                # No reliable normal; fall back to global coordinates.
+                if len(raw) == 2:
+                    vertex.tilt = np.asarray([raw[0], raw[1], 0.0], dtype=float)
+                elif len(raw) == 3:
+                    vertex.tilt = np.asarray(raw, dtype=float)
+                else:
+                    raise TypeError(
+                        f"Vertex {int(vid)} tilt must have length 2 or 3; got {raw!r}"
+                    )
+                continue
+
+            if len(raw) == 2:
+                t1, t2 = (float(raw[0]), float(raw[1]))
+                e1 = ref_x - float(np.dot(ref_x, n)) * n
+                if np.linalg.norm(e1) < 1e-12:
+                    e1 = ref_y - float(np.dot(ref_y, n)) * n
+                e1_norm = np.linalg.norm(e1)
+                if e1_norm < 1e-12:
+                    continue
+                e1 = e1 / e1_norm
+                e2 = np.cross(n, e1)
+                vertex.tilt = t1 * e1 + t2 * e2
+            elif len(raw) == 3:
+                t = np.asarray(raw, dtype=float)
+                vertex.tilt = t - float(np.dot(t, n)) * n
+            else:
+                raise TypeError(
+                    f"Vertex {int(vid)} tilt must have length 2 or 3; got {raw!r}"
+                )
 
     def get_facets_of_vertex(self, v_id: int) -> List["Facet"]:
         return [self.facets[fid] for fid in self.vertex_to_facets.get(v_id, [])]
