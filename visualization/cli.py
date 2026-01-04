@@ -55,6 +55,17 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Render facets semi‑transparent.",
     )
+    tilt_group = parser.add_mutually_exclusive_group()
+    tilt_group.add_argument(
+        "--tilt",
+        action="store_true",
+        help="Color facets by |t| (tilt magnitude).",
+    )
+    tilt_group.add_argument(
+        "--tilt-div",
+        action="store_true",
+        help="Color facets by div(t).",
+    )
     parser.add_argument(
         "--save",
         metavar="PATH",
@@ -108,6 +119,11 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
     draw_facets = not args.no_facets
     draw_edges = not args.no_edges
+    color_by = None
+    if args.tilt_div:
+        color_by = "tilt_div"
+    elif args.tilt:
+        color_by = "tilt_mag"
 
     # If saving but the user did not request otherwise, avoid blocking
     # interactive display. The figure can still be inspected manually
@@ -125,6 +141,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         edge_color="k",
         facet_colors=None,
         edge_colors=None,
+        color_by=color_by,
         no_axes=args.no_axes,
         show=show,
     )

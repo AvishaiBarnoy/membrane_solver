@@ -30,7 +30,15 @@ class GoCommand(Command):
 
             def cb(mesh, i):
                 nonlocal state
-                state = update_live_vis(mesh, state=state, title=f"Step {i}")
+                state = update_live_vis(
+                    mesh,
+                    state=state,
+                    title=f"Step {i}",
+                    color_by=getattr(context.minimizer, "live_vis_color_by", None),
+                    show_tilt_arrows=getattr(
+                        context.minimizer, "live_vis_show_tilt_arrows", False
+                    ),
+                )
                 context.minimizer.live_vis_state = state
 
             callback = cb
@@ -119,7 +127,15 @@ class HessianCommand(Command):
                 from visualization.plotting import update_live_vis
 
                 state = getattr(context.minimizer, "live_vis_state", None)
-                state = update_live_vis(context.mesh, state=state, title="Hessian step")
+                state = update_live_vis(
+                    context.mesh,
+                    state=state,
+                    title="Hessian step",
+                    color_by=getattr(context.minimizer, "live_vis_color_by", None),
+                    show_tilt_arrows=getattr(
+                        context.minimizer, "live_vis_show_tilt_arrows", False
+                    ),
+                )
                 context.minimizer.live_vis_state = state
         logger.info(
             "Hessian step complete (%d step%s).",
@@ -134,16 +150,73 @@ class LiveVisCommand(Command):
     def execute(self, context, args):
         if not hasattr(context.minimizer, "live_vis"):
             context.minimizer.live_vis = False
-        context.minimizer.live_vis = not context.minimizer.live_vis
-        if context.minimizer.live_vis:
-            context.minimizer.live_vis_state = None
-        else:
-            state = getattr(context.minimizer, "live_vis_state", None)
-            if state and "fig" in state:
-                import matplotlib.pyplot as plt
+        if args:
+            tokens = [str(tok).strip().lower() for tok in args if str(tok).strip()]
+            if any(tok in {"tilt", "t", "mag", "abs"} for tok in tokens):
+                context.minimizer.live_vis_color_by = "tilt_mag"
+            elif any(tok in {"div", "divt"} for tok in tokens):
+                context.minimizer.live_vis_color_by = "tilt_div"
+            elif any(tok in {"plain", "none", "off"} for tok in tokens):
+                context.minimizer.live_vis_color_by = None
 
-                plt.close(state["fig"])
-            context.minimizer.live_vis_state = None
+            if not hasattr(context.minimizer, "live_vis_show_tilt_arrows"):
+                context.minimizer.live_vis_show_tilt_arrows = False
+            if any(tok in {"noarrows", "noarrow"} for tok in tokens):
+                context.minimizer.live_vis_show_tilt_arrows = False
+            elif any(tok in {"arrows", "arrow", "quiver"} for tok in tokens):
+                context.minimizer.live_vis_show_tilt_arrows = True
+
+            supported = {
+                "tilt",
+                "t",
+                "mag",
+                "abs",
+                "div",
+                "divt",
+                "plain",
+                "none",
+                "off",
+                "arrows",
+                "arrow",
+                "quiver",
+                "noarrows",
+                "noarrow",
+            }
+            unknown = [tok for tok in tokens if tok not in supported]
+            if unknown:
+                print("Usage: lv [tilt|div|plain] [arrows|noarrows]")
+                return
+
+            if not context.minimizer.live_vis:
+                context.minimizer.live_vis = True
+                context.minimizer.live_vis_state = None
+            else:
+                # Force a redraw so arrows/colorbar mode updates immediately.
+                context.minimizer.live_vis_state = None
+        else:
+            context.minimizer.live_vis = not context.minimizer.live_vis
+            if context.minimizer.live_vis:
+                if not hasattr(context.minimizer, "live_vis_color_by"):
+                    try:
+                        import numpy as np
+
+                        tilts = context.mesh.tilts_view()
+                        if np.any(np.linalg.norm(tilts, axis=1) > 0):
+                            context.minimizer.live_vis_color_by = "tilt_mag"
+                        else:
+                            context.minimizer.live_vis_color_by = None
+                    except Exception:
+                        context.minimizer.live_vis_color_by = None
+                if not hasattr(context.minimizer, "live_vis_show_tilt_arrows"):
+                    context.minimizer.live_vis_show_tilt_arrows = False
+                context.minimizer.live_vis_state = None
+            else:
+                state = getattr(context.minimizer, "live_vis_state", None)
+                if state and "fig" in state:
+                    import matplotlib.pyplot as plt
+
+                    plt.close(state["fig"])
+                context.minimizer.live_vis_state = None
         logger.info(
             f"Live visualization {'enabled' if context.minimizer.live_vis else 'disabled'}"
         )
