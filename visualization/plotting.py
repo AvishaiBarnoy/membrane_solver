@@ -4,15 +4,128 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import logging
+import warnings
 from typing import Any, Dict, Optional
 
+import matplotlib.colors as mpl_colors
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.cm import ScalarMappable
 from mpl_toolkits.mplot3d.art3d import Line3DCollection, Poly3DCollection
 
 from geometry.entities import Mesh
 
 logger = logging.getLogger("membrane_solver")
+
+_TILT_COLOR_BY = {"tilt_mag", "tilt_div"}
+
+
+def _safe_pause(interval: float) -> None:
+    """Pause briefly to let interactive backends process events.
+
+    Matplotlib emits a UserWarning on non-interactive backends (e.g. Agg); we
+    silence that warning so headless/test runs remain clean even if warnings are
+    treated as errors.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r".*non-interactive.*cannot be shown.*",
+            category=UserWarning,
+        )
+        plt.pause(interval)
+
+
+def triangle_tilt_magnitudes(mesh: Mesh) -> tuple[np.ndarray, list[int]]:
+    """Return per-triangle mean tilt magnitudes for facets in triangle_row_cache."""
+    tri_rows, tri_facets = mesh.triangle_row_cache()
+    if tri_rows is None or len(tri_rows) == 0:
+        return np.array([], dtype=float), []
+    mags = np.linalg.norm(mesh.tilts_view(), axis=1)
+    values = mags[tri_rows].mean(axis=1)
+    return values, tri_facets
+
+
+def _triangle_divergence_from_arrays(
+    positions: np.ndarray, tilts: np.ndarray, tri_rows: np.ndarray
+) -> np.ndarray:
+    """Compute per-triangle divergence values for a nodal vector field.
+
+    The nodal field is assumed piecewise-linear on each triangle. Divergence is
+    constant per triangle and returned as a dense array with one value per row
+    in ``tri_rows``.
+    """
+    v0 = positions[tri_rows[:, 0]]
+    v1 = positions[tri_rows[:, 1]]
+    v2 = positions[tri_rows[:, 2]]
+
+    t0 = tilts[tri_rows[:, 0]]
+    t1 = tilts[tri_rows[:, 1]]
+    t2 = tilts[tri_rows[:, 2]]
+
+    n = np.cross(v1 - v0, v2 - v0)
+    denom = np.einsum("ij,ij->i", n, n)
+    good = denom > 1e-24
+
+    g0 = np.zeros_like(n)
+    g1 = np.zeros_like(n)
+    g2 = np.zeros_like(n)
+
+    g0[good] = np.cross(n[good], v2[good] - v1[good]) / denom[good][:, None]
+    g1[good] = np.cross(n[good], v0[good] - v2[good]) / denom[good][:, None]
+    g2[good] = np.cross(n[good], v1[good] - v0[good]) / denom[good][:, None]
+
+    div = (
+        np.einsum("ij,ij->i", t0, g0)
+        + np.einsum("ij,ij->i", t1, g1)
+        + np.einsum("ij,ij->i", t2, g2)
+    )
+    div[~good] = 0.0
+    return div
+
+
+def triangle_tilt_divergence(mesh: Mesh) -> tuple[np.ndarray, list[int]]:
+    """Return per-triangle divergence of the tilt field for facets in triangle_row_cache."""
+    tri_rows, tri_facets = mesh.triangle_row_cache()
+    if tri_rows is None or len(tri_rows) == 0:
+        return np.array([], dtype=float), []
+    positions = mesh.positions_view()
+    tilts = mesh.tilts_view()
+    values = _triangle_divergence_from_arrays(positions, tilts, tri_rows)
+    return values, tri_facets
+
+
+def _colormap_norm_for_scalars(
+    color_by: str, values: np.ndarray
+) -> tuple[mpl_colors.Colormap, mpl_colors.Normalize]:
+    values = np.asarray(values, dtype=float)
+    finite = np.isfinite(values)
+    if not finite.any():
+        values = np.zeros_like(values)
+        finite = np.ones_like(values, dtype=bool)
+
+    if color_by == "tilt_mag":
+        vmax = float(values[finite].max()) if finite.any() else 1.0
+        vmax = vmax if vmax > 0 else 1.0
+        norm = mpl_colors.Normalize(vmin=0.0, vmax=vmax)
+        cmap = plt.get_cmap("viridis")
+    elif color_by == "tilt_div":
+        vlim = float(np.abs(values[finite]).max()) if finite.any() else 1.0
+        vlim = vlim if vlim > 0 else 1.0
+        norm = mpl_colors.TwoSlopeNorm(vmin=-vlim, vcenter=0.0, vmax=vlim)
+        cmap = plt.get_cmap("coolwarm")
+    else:  # pragma: no cover - defensive
+        raise ValueError(f"Unsupported color_by={color_by!r}")
+    return cmap, norm
+
+
+def _colors_from_scalars(color_by: str, values: np.ndarray) -> np.ndarray:
+    cmap, norm = _colormap_norm_for_scalars(color_by, values)
+    colors = cmap(norm(np.nan_to_num(values, nan=0.0)))
+    colors = np.asarray(colors, dtype=float)
+    if colors.ndim == 2 and colors.shape[1] == 4:
+        colors[:, 3] = 1.0
+    return colors
 
 
 def plot_geometry(
@@ -27,6 +140,9 @@ def plot_geometry(
     edge_color: str = "k",
     facet_colors: Optional[Dict[int, Any]] = None,
     edge_colors: Optional[Dict[int, Any]] = None,
+    color_by: Optional[str] = None,
+    show_colorbar: bool | None = None,
+    show_tilt_arrows: bool = False,
     no_axes: bool = False,
     show: bool = True,
 ) -> None:
@@ -67,6 +183,17 @@ def plot_geometry(
         Optional mapping ``edge_index -> color``. When provided it
         overrides both ``edge_color`` and any ``"color"`` entry in
         ``edge.options``.
+    color_by : str, optional
+        When set, override facet colors with a colormap based on tilt values.
+        Supported values are ``"tilt_mag"`` (mean ``|t|`` per facet) and
+        ``"tilt_div"`` (piecewise-linear per-triangle ``div(t)``).
+    show_colorbar : bool, optional
+        When ``True``, draw a colorbar matching ``color_by``. Defaults to
+        ``True`` when ``color_by`` is provided.
+    show_tilt_arrows : bool, optional
+        When ``True``, draw short arrows at vertices showing the tilt
+        direction (in 3D). This is an overlay to complement magnitude/divergence
+        coloring.
     show : bool, optional
         If ``True`` (default), call :func:`matplotlib.pyplot.show` after
         drawing. Set to ``False`` when using non‑interactive backends
@@ -80,9 +207,33 @@ def plot_geometry(
     # For line-only meshes, automatically draw edges so the plot isn't empty.
     draw_edges = bool(draw_edges or (not mesh.facets and mesh.edges))
 
+    if color_by is not None and color_by not in _TILT_COLOR_BY:
+        raise ValueError(
+            f"Unsupported color_by={color_by!r}; expected one of {sorted(_TILT_COLOR_BY)}"
+        )
+
     if ax is None:
         fig = plt.figure()
         ax = fig.add_subplot(111, projection="3d")
+    fig = ax.get_figure()
+
+    show_colorbar_flag = (
+        color_by is not None if show_colorbar is None else bool(show_colorbar)
+    )
+    if not draw_facets:
+        show_colorbar_flag = False
+    if not show_colorbar_flag or color_by is None:
+        prev_cbar = getattr(ax, "_membrane_colorbar", None)
+        if prev_cbar is not None:
+            try:
+                prev_cbar.remove()
+            except Exception:
+                try:
+                    prev_cbar.ax.remove()
+                except Exception:
+                    pass
+        setattr(ax, "_membrane_colorbar", None)
+        setattr(ax, "_membrane_mappable", None)
 
     vertex_positions = [mesh.vertices[v].position for v in mesh.vertices.keys()]
     X, Y, Z = zip(*vertex_positions)
@@ -125,6 +276,7 @@ def plot_geometry(
             line_collection = Line3DCollection(
                 segments, colors=line_colors, linewidths=1.0
             )
+            line_collection.set_label("_mesh_edges")
             ax.add_collection3d(line_collection)
 
     # Plot facets as filled polygons.
@@ -135,6 +287,7 @@ def plot_geometry(
 
         triangles = []
         face_colors = []
+        scalar_values: list[float] = []
         default_facet_color = (
             facet_color if facet_color is not None else (0.6, 0.8, 1.0)
         )
@@ -145,13 +298,20 @@ def plot_geometry(
             tri_data = positions[tri_rows]
             triangles.extend(list(tri_data))
 
-            # Map colors
-            for fid in tri_facets:
-                if facet_colors is not None and fid in facet_colors:
-                    face_colors.append(facet_colors[fid])
-                else:
-                    opts = mesh.facets[fid].options
-                    face_colors.append(opts.get("color", default_facet_color))
+            if color_by is None:
+                # Map colors
+                for fid in tri_facets:
+                    if facet_colors is not None and fid in facet_colors:
+                        face_colors.append(facet_colors[fid])
+                    else:
+                        opts = mesh.facets[fid].options
+                        face_colors.append(opts.get("color", default_facet_color))
+            elif color_by == "tilt_mag":
+                tri_vals, _ = triangle_tilt_magnitudes(mesh)
+                scalar_values.extend(list(map(float, tri_vals)))
+            elif color_by == "tilt_div":
+                tri_vals, _ = triangle_tilt_divergence(mesh)
+                scalar_values.extend(list(map(float, tri_vals)))
 
         # 2. Non-triangle facets (polygons) - Fallback
         tri_set = set(tri_facets) if tri_facets else set()
@@ -169,13 +329,56 @@ def plot_geometry(
             ]
             triangles.append(tri)
 
-            if facet_colors is not None and facet.index in facet_colors:
-                color = facet_colors[facet.index]
-            else:
-                color = facet.options.get("color", default_facet_color)
-            face_colors.append(color)
+            if color_by is None:
+                if facet_colors is not None and facet.index in facet_colors:
+                    color = facet_colors[facet.index]
+                else:
+                    color = facet.options.get("color", default_facet_color)
+                face_colors.append(color)
+            elif color_by == "tilt_mag":
+                mags = [
+                    float(
+                        np.linalg.norm(mesh.vertices[mesh.get_edge(e).tail_index].tilt)
+                    )
+                    for e in facet.edge_indices
+                ]
+                scalar_values.append(float(np.mean(mags)) if mags else 0.0)
+            elif color_by == "tilt_div":
+                vids = [mesh.get_edge(e).tail_index for e in facet.edge_indices]
+                if len(vids) < 3:
+                    scalar_values.append(0.0)
+                else:
+                    v0 = mesh.vertices[int(vids[0])]
+                    total_area = 0.0
+                    weighted_div = 0.0
+                    for i in range(1, len(vids) - 1):
+                        v1 = mesh.vertices[int(vids[i])]
+                        v2 = mesh.vertices[int(vids[i + 1])]
+                        tri_pos = np.stack(
+                            [v0.position, v1.position, v2.position], axis=0
+                        )
+                        tri_tilt = np.stack([v0.tilt, v1.tilt, v2.tilt], axis=0)
+                        n = np.cross(tri_pos[1] - tri_pos[0], tri_pos[2] - tri_pos[0])
+                        area2 = float(np.linalg.norm(n))
+                        if area2 <= 1e-12:
+                            continue
+                        area = 0.5 * area2
+                        tri_rows_local = np.array([[0, 1, 2]], dtype=np.int32)
+                        div_val = float(
+                            _triangle_divergence_from_arrays(
+                                tri_pos, tri_tilt, tri_rows_local
+                            )[0]
+                        )
+                        weighted_div += area * div_val
+                        total_area += area
+                    scalar_values.append(
+                        weighted_div / total_area if total_area > 0 else 0.0
+                    )
 
         if triangles:
+            if color_by is not None:
+                values_arr = np.asarray(scalar_values, dtype=float)
+                face_colors = list(_colors_from_scalars(color_by, values_arr))
             alpha = 0.4 if transparent else 1.0
             tri_collection = Poly3DCollection(
                 triangles,
@@ -184,7 +387,57 @@ def plot_geometry(
                 linewidths=1.0 if draw_edges else 0.0,
             )
             tri_collection.set_facecolor(face_colors)
+            tri_collection.set_label("_mesh_facets")
             ax.add_collection3d(tri_collection)
+
+            if (
+                color_by is not None
+                and show_colorbar_flag
+                and values_arr.size
+                and fig is not None
+            ):
+                prev_cbar = getattr(ax, "_membrane_colorbar", None)
+                if prev_cbar is not None:
+                    try:
+                        prev_cbar.remove()
+                    except Exception:
+                        try:
+                            prev_cbar.ax.remove()
+                        except Exception:
+                            pass
+                cmap, norm = _colormap_norm_for_scalars(color_by, values_arr)
+                mappable = ScalarMappable(norm=norm, cmap=cmap)
+                mappable.set_array(values_arr)
+                cbar = fig.colorbar(mappable, ax=ax, shrink=0.6, pad=0.05)
+                cbar.set_label("|t|" if color_by == "tilt_mag" else "div(t)")
+                setattr(ax, "_membrane_colorbar", cbar)
+                setattr(ax, "_membrane_mappable", mappable)
+            else:
+                setattr(ax, "_membrane_colorbar", None)
+                setattr(ax, "_membrane_mappable", None)
+
+    if show_tilt_arrows:
+        positions = mesh.positions_view()
+        tilts = mesh.tilts_view()
+        mags = np.linalg.norm(tilts, axis=1)
+        good = mags > 1e-12
+        dirs = np.zeros_like(tilts)
+        dirs[good] = tilts[good] / mags[good][:, None]
+
+        span = positions.max(axis=0) - positions.min(axis=0)
+        max_range = float(np.max(span)) if span.size else 0.0
+        arrow_len = 0.1 * max_range if max_range > 0 else 1.0
+
+        ends = positions + arrow_len * dirs
+        segments_arr = np.stack([positions, ends], axis=1)
+        arrow_collection = Line3DCollection(
+            list(segments_arr),
+            colors="k",
+            linewidths=1.0,
+            alpha=0.8,
+        )
+        arrow_collection.set_label("_tilt_arrows")
+        ax.add_collection3d(arrow_collection)
 
     # Optional: plot vertices
     if scatter:
@@ -231,15 +484,34 @@ def update_live_vis(
     *,
     state: Optional[Dict[str, Any]] = None,
     title: Optional[str] = None,
+    color_by: Optional[str] = None,
+    show_colorbar: bool | None = None,
+    show_tilt_arrows: bool = False,
 ) -> Dict[str, Any]:
     """Update or create a live visualization window for a mesh."""
     import matplotlib.pyplot as plt
+
+    if color_by is not None and color_by not in _TILT_COLOR_BY:
+        raise ValueError(
+            f"Unsupported color_by={color_by!r}; expected one of {sorted(_TILT_COLOR_BY)}"
+        )
+
+    show_colorbar_flag = (
+        color_by is not None if show_colorbar is None else bool(show_colorbar)
+    )
 
     if state is None:
         plt.ion()
         fig = plt.figure()
         ax = fig.add_subplot(111, projection="3d")
-        state = {"fig": fig, "ax": ax, "mesh_version": -1}
+        state = {
+            "fig": fig,
+            "ax": ax,
+            "mesh_version": -1,
+            "color_by": color_by,
+            "show_colorbar": show_colorbar_flag,
+            "show_tilt_arrows": show_tilt_arrows,
+        }
     else:
         fig = state["fig"]
         ax = state["ax"]
@@ -256,22 +528,51 @@ def update_live_vis(
     current_topo_version = getattr(mesh, "_topology_version", -1)
     last_topo_version = state.get("topology_version", -2)
 
-    if (
-        "tri_collection" in state
-        and "line_collection" in state
-        and current_topo_version == last_topo_version
-    ):
-        fast_update = True
+    if current_topo_version == last_topo_version:
+        tri_rows = state.get("tri_rows")
+        if (
+            "tri_collection" in state
+            and "line_collection" in state
+            and tri_rows is not None
+            and state.get("triangle_mesh_only", False)
+            and state.get("color_by") == color_by
+            and state.get("show_colorbar") == show_colorbar_flag
+            and state.get("show_tilt_arrows") == show_tilt_arrows
+        ):
+            fast_update = True
 
     if fast_update:
         # Update positions only
         positions = mesh.positions_view()
 
         # Triangles
-        tri_rows, _ = mesh.triangle_row_cache()
-        if tri_rows is not None and state["tri_collection"]:
+        tri_rows = state.get("tri_rows")
+        if tri_rows is not None and state["tri_collection"] is not None:
             tri_data = positions[tri_rows]
             state["tri_collection"].set_verts(list(tri_data))
+            if color_by is not None:
+                tilts = mesh.tilts_view()
+                if color_by == "tilt_mag":
+                    mags = np.linalg.norm(tilts, axis=1)
+                    values = mags[tri_rows].mean(axis=1)
+                else:
+                    values = _triangle_divergence_from_arrays(
+                        positions, tilts, tri_rows
+                    )
+                colors = _colors_from_scalars(color_by, values)
+                state["tri_collection"].set_facecolor(colors)
+                if show_colorbar_flag:
+                    mappable = state.get("mappable")
+                    cbar = state.get("colorbar")
+                    if mappable is not None and cbar is not None:
+                        cmap, norm = _colormap_norm_for_scalars(color_by, values)
+                        mappable.set_array(values)
+                        mappable.cmap = cmap
+                        mappable.norm = norm
+                        try:
+                            cbar.update_normal(mappable)
+                        except Exception:
+                            pass
 
         # Edges
         # We need cached edge indices to be fast.
@@ -284,13 +585,40 @@ def update_live_vis(
             segments_arr = positions[edge_indices]
             state["line_collection"].set_segments(list(segments_arr))
 
+        if show_tilt_arrows and state.get("tilt_arrows") is not None:
+            tilts = mesh.tilts_view()
+            mags = np.linalg.norm(tilts, axis=1)
+            good = mags > 1e-12
+            dirs = np.zeros_like(tilts)
+            dirs[good] = tilts[good] / mags[good][:, None]
+
+            span = positions.max(axis=0) - positions.min(axis=0)
+            max_range = float(np.max(span)) if span.size else 0.0
+            arrow_len = 0.1 * max_range if max_range > 0 else 1.0
+
+            ends = positions + arrow_len * dirs
+            segments_arr = np.stack([positions, ends], axis=1)
+            state["tilt_arrows"].set_segments(list(segments_arr))
+
         if title:
             ax.set_title(title)
         fig.canvas.draw_idle()
-        plt.pause(0.001)
+        _safe_pause(0.001)
         return state
 
     # Slow path: Full redraw
+    prev_cbar = state.get("colorbar")
+    if prev_cbar is not None:
+        try:
+            prev_cbar.remove()
+        except Exception:
+            try:
+                prev_cbar.ax.remove()
+            except Exception:
+                pass
+    state.pop("colorbar", None)
+    state.pop("mappable", None)
+
     ax.cla()
 
     # We call plot_geometry but we need to intercept the collections it creates.
@@ -305,7 +633,16 @@ def update_live_vis(
 
     # Live visualization should be an inspection tool: keep facets opaque and
     # draw edges so structure is readable while stepping.
-    plot_geometry(mesh, ax=ax, show=False, draw_edges=True, transparent=False)
+    plot_geometry(
+        mesh,
+        ax=ax,
+        show=False,
+        draw_edges=True,
+        transparent=False,
+        color_by=color_by,
+        show_colorbar=show_colorbar_flag,
+        show_tilt_arrows=False,
+    )
 
     # Capture collections for next time
     # ax.collections usually has [Poly3DCollection, Line3DCollection] (or similar order)
@@ -317,11 +654,23 @@ def update_live_vis(
         if isinstance(col, Poly3DCollection):
             tri_col = col
         elif isinstance(col, Line3DCollection):
-            line_col = col
+            if col.get_label() == "_mesh_edges":
+                line_col = col
 
     state["tri_collection"] = tri_col
     state["line_collection"] = line_col
     state["topology_version"] = current_topo_version
+    state["color_by"] = color_by
+    state["show_colorbar"] = show_colorbar_flag
+    state["show_tilt_arrows"] = show_tilt_arrows
+    state["colorbar"] = getattr(ax, "_membrane_colorbar", None)
+    state["mappable"] = getattr(ax, "_membrane_mappable", None)
+
+    tri_rows, tri_facets = mesh.triangle_row_cache()
+    state["triangle_mesh_only"] = tri_rows is not None and len(tri_facets) == len(
+        mesh.facets
+    )
+    state["tri_rows"] = tri_rows if state["triangle_mesh_only"] else None
 
     # Cache edge indices for next time
     idx_map = mesh.vertex_index_to_row
@@ -336,8 +685,34 @@ def update_live_vis(
     else:
         state.pop("edge_indices", None)
 
+    if show_tilt_arrows:
+        positions = mesh.positions_view()
+        tilts = mesh.tilts_view()
+        mags = np.linalg.norm(tilts, axis=1)
+        good = mags > 1e-12
+        dirs = np.zeros_like(tilts)
+        dirs[good] = tilts[good] / mags[good][:, None]
+
+        span = positions.max(axis=0) - positions.min(axis=0)
+        max_range = float(np.max(span)) if span.size else 0.0
+        arrow_len = 0.1 * max_range if max_range > 0 else 1.0
+
+        ends = positions + arrow_len * dirs
+        segments_arr = np.stack([positions, ends], axis=1)
+        arrow_collection = Line3DCollection(
+            list(segments_arr),
+            colors="k",
+            linewidths=1.0,
+            alpha=0.8,
+        )
+        arrow_collection.set_label("_tilt_arrows")
+        ax.add_collection3d(arrow_collection)
+        state["tilt_arrows"] = arrow_collection
+    else:
+        state["tilt_arrows"] = None
+
     if title:
         ax.set_title(title)
     fig.canvas.draw_idle()
-    plt.pause(0.001)
+    _safe_pause(0.001)
     return state

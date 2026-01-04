@@ -143,6 +143,17 @@ def main():
         action="store_true",
         help="Render facets semi-transparent in --viz mode.",
     )
+    viz_group = parser.add_mutually_exclusive_group()
+    viz_group.add_argument(
+        "--viz-tilt",
+        action="store_true",
+        help="Color facets by |t| (tilt magnitude) in --viz mode.",
+    )
+    viz_group.add_argument(
+        "--viz-tilt-div",
+        action="store_true",
+        help="Color facets by div(t) in --viz mode.",
+    )
     parser.add_argument(
         "--viz-no-axes",
         action="store_true",
@@ -299,6 +310,11 @@ def main():
         from visualization.plotting import plot_geometry
 
         show = args.viz_save is None
+        color_by = None
+        if getattr(args, "viz_tilt_div", False):
+            color_by = "tilt_div"
+        elif getattr(args, "viz_tilt", False):
+            color_by = "tilt_mag"
         plot_geometry(
             mesh,
             show_indices=args.viz_show_indices,
@@ -307,6 +323,7 @@ def main():
             draw_facets=not args.viz_no_facets,
             draw_edges=not args.viz_no_edges,
             no_axes=args.viz_no_axes,
+            color_by=color_by,
             show=show,
         )
         if args.viz_save:

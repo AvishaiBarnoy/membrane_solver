@@ -20,7 +20,9 @@ class HelpCommand(Command):
         print("  V / Vn        Vertex averaging once or n times (e.g. V5)")
         print("  vertex_average Same as V")
         print("  u             Equiangulate mesh")
-        print("  visualize / s Plot current geometry")
+        print(
+            "  visualize / s [tilt|div|plain] [arrows|noarrows] Plot current geometry"
+        )
         print("  properties    Print physical properties (area, volume, surface Rg)")
         print(
             "  print [entity] [id|filter] Query geometry (e.g. print edges len > 0.1)"
@@ -31,7 +33,9 @@ class HelpCommand(Command):
         print(
             "                            or entity property (e.g. set vertex 0 fixed true)"
         )
-        print("  live_vis / lv Turn on/off live visualization during minimization")
+        print(
+            "  live_vis / lv [tilt|div|plain] [arrows|noarrows] Turn on/off live visualization during minimization"
+        )
         print("  save          Save geometry to 'interactive.temp'")
         print("  energy        Shortcut for 'print energy breakdown'")
         print("  history       Show commands entered in this session")
