@@ -274,10 +274,20 @@ def parse_geometry(data: dict) -> Mesh:
         if np.any(np.isinf(pos_array)):
             raise ValueError(f"Vertex {vid} has infinite coordinates.")
 
-        mesh.vertices[vid] = Vertex(index=vid, position=pos_array, options=options)
+        tilt_fixed_val = options.get("tilt_fixed", options.get("fixed_tilt", False))
+        if isinstance(tilt_fixed_val, str):
+            tilt_fixed_val = tilt_fixed_val.strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "y",
+                "on",
+            )
+        options.pop("tilt_fixed", None)
+        options.pop("fixed_tilt", None)
 
-        if options.get("tilt") is not None:
-            raw_tilt = options.get("tilt")
+        raw_tilt = options.get("tilt")
+        if raw_tilt is not None:
             if (
                 not isinstance(raw_tilt, (list, tuple))
                 or len(raw_tilt) not in (2, 3)
@@ -286,12 +296,13 @@ def parse_geometry(data: dict) -> Mesh:
                 raise TypeError(
                     f"Vertex {vid} tilt must be a 2- or 3-vector of numbers; got {raw_tilt!r}"
                 )
-            if len(raw_tilt) == 2:
-                mesh.vertices[vid].tilt = np.asarray(
-                    [raw_tilt[0], raw_tilt[1], 0.0], dtype=float
-                )
-            else:
-                mesh.vertices[vid].tilt = np.asarray(raw_tilt, dtype=float)
+
+        mesh.vertices[vid] = Vertex(
+            index=vid,
+            position=pos_array,
+            options=options,
+            tilt_fixed=bool(tilt_fixed_val),
+        )
 
         if "energy" in options:
             if isinstance(options["energy"], list):
@@ -790,6 +801,14 @@ def parse_geometry(data: dict) -> Mesh:
     # Constraint modules
     mesh.constraint_modules = list(set(constraint_module_names))
 
+    def _strip_tilt_options(target: Mesh) -> None:
+        for vertex in target.vertices.values():
+            opts = getattr(vertex, "options", None)
+            if isinstance(opts, dict):
+                opts.pop("tilt", None)
+                opts.pop("tilt_fixed", None)
+                opts.pop("fixed_tilt", None)
+
     mesh.build_connectivity_maps()
     mesh.build_facet_vertex_loops()
     mesh.initialize_tilts_from_options()
@@ -805,6 +824,7 @@ def parse_geometry(data: dict) -> Mesh:
     if any(len(f.edge_indices) > 3 for f in mesh.facets.values()):
         refined = refine_polygonal_facets(mesh)
         refined.initialize_tilts_from_options()
+        _strip_tilt_options(refined)
         try:
             refined.full_mesh_validate()
         except Exception as e:
@@ -812,6 +832,7 @@ def parse_geometry(data: dict) -> Mesh:
             raise
         return refined
 
+    _strip_tilt_options(mesh)
     try:
         mesh.full_mesh_validate()
     except Exception as e:
@@ -865,6 +886,11 @@ def save_geometry(
         opts = entity.options.copy() if entity.options else {}
         if entity.fixed:
             opts["fixed"] = True
+        if isinstance(entity, Vertex):
+            if hasattr(entity, "tilt") and np.any(entity.tilt):
+                opts["tilt"] = entity.tilt.tolist()
+            if hasattr(entity, "tilt_fixed") and entity.tilt_fixed:
+                opts["tilt_fixed"] = True
         return opts if opts else None
 
     data = {

@@ -40,6 +40,7 @@ class Vertex:
     fixed: bool = False
     options: Dict[str, Any] = field(default_factory=dict)
     tilt: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))
+    tilt_fixed: bool = False
 
     def copy(self):
         return Vertex(
@@ -48,6 +49,7 @@ class Vertex:
             fixed=self.fixed,
             options=self.options.copy(),
             tilt=self.tilt.copy(),
+            tilt_fixed=self.tilt_fixed,
         )
 
     def project_position(self, pos: np.ndarray) -> np.ndarray:
@@ -867,6 +869,7 @@ class Mesh:
     _tilts_cache: "np.ndarray | None" = None
     _tilts_cache_version: int = -1
     _tilt_cache_counts: int = -1
+    _tilts_version: int = 0
     _triangle_rows_cache: "np.ndarray | None" = None
     _triangle_rows_cache_version: int = -1
     _triangle_row_facets: list[int] = field(default_factory=list)
@@ -1416,17 +1419,33 @@ class Mesh:
     def tilts_view(self) -> "np.ndarray":
         """Return a dense ``(N_vertices, 3)`` array of vertex tilt vectors.
 
-        The ordering matches ``vertex_ids``. This returns a freshly built array
-        so it always reflects the current per-vertex values.
+        The ordering matches ``vertex_ids``. The returned array is cached and
+        invalidated via ``touch_tilts``/``set_tilts_from_array``.
         """
         import numpy as np
 
         self.build_position_cache()
         n_verts = len(self.vertex_ids)
-        tilts = np.zeros((n_verts, 3), dtype=float, order="F")
+        if (
+            self._tilts_cache is not None
+            and self._tilts_cache_version == self._tilts_version
+            and self._tilt_cache_counts == n_verts
+            and self._tilts_cache.shape == (n_verts, 3)
+        ):
+            return self._tilts_cache
+
+        if self._tilts_cache is None or self._tilts_cache.shape != (n_verts, 3):
+            self._tilts_cache = np.empty((n_verts, 3), dtype=float, order="F")
         for i, vid in enumerate(self.vertex_ids):
-            tilts[i] = np.asarray(self.vertices[int(vid)].tilt, dtype=float)
-        return tilts
+            self._tilts_cache[i] = np.asarray(self.vertices[int(vid)].tilt, dtype=float)
+        self._tilts_cache_version = self._tilts_version
+        self._tilt_cache_counts = n_verts
+        return self._tilts_cache
+
+    def touch_tilts(self) -> None:
+        """Invalidate cached tilt arrays after direct per-vertex updates."""
+        self._tilts_version += 1
+        self._tilts_cache_version = -1
 
     def set_tilts_from_array(self, tilts: "np.ndarray") -> None:
         """Scatter a dense tilt array back onto vertex objects."""
@@ -1437,10 +1456,11 @@ class Mesh:
         if tilts_arr.shape != (len(self.vertex_ids), 3):
             raise ValueError("tilts must have shape (N_vertices, 3)")
 
+        self._tilts_version += 1
         for row, vid in enumerate(self.vertex_ids):
             self.vertices[int(vid)].tilt = tilts_arr[row].copy()
         self._tilts_cache = tilts_arr.copy(order="F")
-        self._tilts_cache_version = self._vertex_ids_version
+        self._tilts_cache_version = self._tilts_version
         self._tilt_cache_counts = len(self.vertex_ids)
 
     def build_facet_vertex_loops(self):
@@ -1709,6 +1729,8 @@ class Mesh:
                 raise TypeError(
                     f"Vertex {int(vid)} tilt must have length 2 or 3; got {raw!r}"
                 )
+
+        self.touch_tilts()
 
     def get_facets_of_vertex(self, v_id: int) -> List["Facet"]:
         return [self.facets[fid] for fid in self.vertex_to_facets.get(v_id, [])]
