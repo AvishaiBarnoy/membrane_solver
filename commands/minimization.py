@@ -30,7 +30,12 @@ class GoCommand(Command):
 
             def cb(mesh, i):
                 nonlocal state
-                state = update_live_vis(mesh, state=state, title=f"Step {i}")
+                state = update_live_vis(
+                    mesh,
+                    state=state,
+                    title=f"Step {i}",
+                    color_by=getattr(context.minimizer, "live_vis_color_by", None),
+                )
                 context.minimizer.live_vis_state = state
 
             callback = cb
@@ -119,7 +124,12 @@ class HessianCommand(Command):
                 from visualization.plotting import update_live_vis
 
                 state = getattr(context.minimizer, "live_vis_state", None)
-                state = update_live_vis(context.mesh, state=state, title="Hessian step")
+                state = update_live_vis(
+                    context.mesh,
+                    state=state,
+                    title="Hessian step",
+                    color_by=getattr(context.minimizer, "live_vis_color_by", None),
+                )
                 context.minimizer.live_vis_state = state
         logger.info(
             "Hessian step complete (%d step%s).",
@@ -134,16 +144,42 @@ class LiveVisCommand(Command):
     def execute(self, context, args):
         if not hasattr(context.minimizer, "live_vis"):
             context.minimizer.live_vis = False
-        context.minimizer.live_vis = not context.minimizer.live_vis
-        if context.minimizer.live_vis:
-            context.minimizer.live_vis_state = None
+        if args:
+            token = str(args[0]).strip().lower()
+            if token in {"tilt", "t", "mag", "abs"}:
+                context.minimizer.live_vis_color_by = "tilt_mag"
+            elif token in {"div", "divt"}:
+                context.minimizer.live_vis_color_by = "tilt_div"
+            elif token in {"plain", "none", "off"}:
+                context.minimizer.live_vis_color_by = None
+            else:
+                print("Usage: lv [tilt|div|plain]")
+                return
+            if not context.minimizer.live_vis:
+                context.minimizer.live_vis = True
+                context.minimizer.live_vis_state = None
         else:
-            state = getattr(context.minimizer, "live_vis_state", None)
-            if state and "fig" in state:
-                import matplotlib.pyplot as plt
+            context.minimizer.live_vis = not context.minimizer.live_vis
+            if context.minimizer.live_vis:
+                if not hasattr(context.minimizer, "live_vis_color_by"):
+                    try:
+                        import numpy as np
 
-                plt.close(state["fig"])
-            context.minimizer.live_vis_state = None
+                        tilts = context.mesh.tilts_view()
+                        if np.any(np.linalg.norm(tilts, axis=1) > 0):
+                            context.minimizer.live_vis_color_by = "tilt_mag"
+                        else:
+                            context.minimizer.live_vis_color_by = None
+                    except Exception:
+                        context.minimizer.live_vis_color_by = None
+                context.minimizer.live_vis_state = None
+            else:
+                state = getattr(context.minimizer, "live_vis_state", None)
+                if state and "fig" in state:
+                    import matplotlib.pyplot as plt
+
+                    plt.close(state["fig"])
+                context.minimizer.live_vis_state = None
         logger.info(
             f"Live visualization {'enabled' if context.minimizer.live_vis else 'disabled'}"
         )

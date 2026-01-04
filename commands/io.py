@@ -16,6 +16,34 @@ class SaveCommand(Command):
 
 class VisualizeCommand(Command):
     def execute(self, context, args):
+        minimizer = getattr(context, "minimizer", None)
+        color_by = getattr(minimizer, "vis_color_by", None) if minimizer else None
+        if args:
+            token = str(args[0]).strip().lower()
+            if token in {"tilt", "t", "mag", "abs"}:
+                color_by = "tilt_mag"
+            elif token in {"div", "divt"}:
+                color_by = "tilt_div"
+            elif token in {"plain", "none", "off"}:
+                color_by = None
+            else:
+                print("Usage: s [tilt|div|plain]")
+                return
+            if minimizer is not None:
+                setattr(minimizer, "vis_color_by", color_by)
+        else:
+            if color_by is None:
+                try:
+                    import numpy as np
+
+                    tilts = context.mesh.tilts_view()
+                    if np.any(np.linalg.norm(tilts, axis=1) > 0):
+                        color_by = "tilt_mag"
+                        if minimizer is not None:
+                            setattr(minimizer, "vis_color_by", color_by)
+                except Exception:
+                    pass
+
         # Interactive visualize ("s") is primarily used for inspecting geometry
         # during minimization, so draw edges by default and keep facets opaque.
         plot_geometry(
@@ -23,6 +51,7 @@ class VisualizeCommand(Command):
             show_indices=False,
             draw_edges=True,
             transparent=False,
+            color_by=color_by,
         )
 
 

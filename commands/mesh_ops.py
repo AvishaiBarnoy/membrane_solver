@@ -27,7 +27,10 @@ class RefineCommand(Command):
 
                 state = getattr(context.minimizer, "live_vis_state", None)
                 state = update_live_vis(
-                    context.mesh, state=state, title=f"Refine {i + 1}/{count}"
+                    context.mesh,
+                    state=state,
+                    title=f"Refine {i + 1}/{count}",
+                    color_by=getattr(context.minimizer, "live_vis_color_by", None),
                 )
                 context.minimizer.live_vis_state = state
         logger.info("Mesh refinement complete after %d pass(es).", count)
@@ -47,7 +50,12 @@ class VertexAverageCommand(Command):
             from visualization.plotting import update_live_vis
 
             state = getattr(context.minimizer, "live_vis_state", None)
-            state = update_live_vis(context.mesh, state=state, title="Vertex average")
+            state = update_live_vis(
+                context.mesh,
+                state=state,
+                title="Vertex average",
+                color_by=getattr(context.minimizer, "live_vis_color_by", None),
+            )
             context.minimizer.live_vis_state = state
 
 
@@ -62,7 +70,12 @@ class EquiangulateCommand(Command):
             from visualization.plotting import update_live_vis
 
             state = getattr(context.minimizer, "live_vis_state", None)
-            state = update_live_vis(context.mesh, state=state, title="Equiangulate")
+            state = update_live_vis(
+                context.mesh,
+                state=state,
+                title="Equiangulate",
+                color_by=getattr(context.minimizer, "live_vis_color_by", None),
+            )
             context.minimizer.live_vis_state = state
 
 

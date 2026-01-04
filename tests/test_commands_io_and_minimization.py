@@ -47,16 +47,41 @@ def test_visualize_command_calls_plot(monkeypatch):
     ctx = SimpleNamespace(mesh=mesh)
     called = {}
 
-    def fake_plot(m, show_indices=False, draw_edges=False, transparent=False):
+    def fake_plot(
+        m,
+        show_indices=False,
+        draw_edges=False,
+        transparent=False,
+        color_by=None,
+    ):
         called["mesh"] = m
         called["show_indices"] = show_indices
         called["draw_edges"] = draw_edges
         called["transparent"] = transparent
+        called["color_by"] = color_by
 
     monkeypatch.setattr("commands.io.plot_geometry", fake_plot)
     VisualizeCommand().execute(ctx, [])
     assert called["mesh"] is mesh
     assert called["show_indices"] is False
+    assert called["color_by"] is None
+
+
+def test_visualize_command_allows_tilt_coloring(monkeypatch):
+    mesh = build_line_mesh()
+    minimizer = SimpleNamespace(vis_color_by=None)
+    ctx = SimpleNamespace(mesh=mesh, minimizer=minimizer)
+    called = {}
+
+    def fake_plot(m, **kwargs):
+        called["mesh"] = m
+        called.update(kwargs)
+
+    monkeypatch.setattr("commands.io.plot_geometry", fake_plot)
+    VisualizeCommand().execute(ctx, ["tilt"])
+
+    assert called["mesh"] is mesh
+    assert called.get("color_by") == "tilt_mag"
 
 
 def test_properties_command_prints_header(capsys):
