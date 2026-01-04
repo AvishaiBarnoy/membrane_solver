@@ -4,6 +4,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import logging
+import warnings
 from typing import Any, Dict, Optional
 
 import matplotlib.colors as mpl_colors
@@ -17,6 +18,22 @@ from geometry.entities import Mesh
 logger = logging.getLogger("membrane_solver")
 
 _TILT_COLOR_BY = {"tilt_mag", "tilt_div"}
+
+
+def _safe_pause(interval: float) -> None:
+    """Pause briefly to let interactive backends process events.
+
+    Matplotlib emits a UserWarning on non-interactive backends (e.g. Agg); we
+    silence that warning so headless/test runs remain clean even if warnings are
+    treated as errors.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=r".*non-interactive.*cannot be shown.*",
+            category=UserWarning,
+        )
+        plt.pause(interval)
 
 
 def triangle_tilt_magnitudes(mesh: Mesh) -> tuple[np.ndarray, list[int]]:
@@ -586,7 +603,7 @@ def update_live_vis(
         if title:
             ax.set_title(title)
         fig.canvas.draw_idle()
-        plt.pause(0.001)
+        _safe_pause(0.001)
         return state
 
     # Slow path: Full redraw
@@ -697,5 +714,5 @@ def update_live_vis(
     if title:
         ax.set_title(title)
     fig.canvas.draw_idle()
-    plt.pause(0.001)
+    _safe_pause(0.001)
     return state
