@@ -18,19 +18,47 @@ class VisualizeCommand(Command):
     def execute(self, context, args):
         minimizer = getattr(context, "minimizer", None)
         color_by = getattr(minimizer, "vis_color_by", None) if minimizer else None
+        show_tilt_arrows = (
+            getattr(minimizer, "vis_show_tilt_arrows", False) if minimizer else False
+        )
         if args:
-            token = str(args[0]).strip().lower()
-            if token in {"tilt", "t", "mag", "abs"}:
+            tokens = [str(tok).strip().lower() for tok in args if str(tok).strip()]
+            if any(tok in {"tilt", "t", "mag", "abs"} for tok in tokens):
                 color_by = "tilt_mag"
-            elif token in {"div", "divt"}:
+            elif any(tok in {"div", "divt"} for tok in tokens):
                 color_by = "tilt_div"
-            elif token in {"plain", "none", "off"}:
+            elif any(tok in {"plain", "none", "off"} for tok in tokens):
                 color_by = None
-            else:
-                print("Usage: s [tilt|div|plain]")
+
+            if any(tok in {"noarrows", "noarrow"} for tok in tokens):
+                show_tilt_arrows = False
+            elif any(tok in {"arrows", "arrow", "quiver"} for tok in tokens):
+                show_tilt_arrows = True
+
+            supported = {
+                "tilt",
+                "t",
+                "mag",
+                "abs",
+                "div",
+                "divt",
+                "plain",
+                "none",
+                "off",
+                "arrows",
+                "arrow",
+                "quiver",
+                "noarrows",
+                "noarrow",
+            }
+            unknown = [tok for tok in tokens if tok not in supported]
+            if unknown:
+                print("Usage: s [tilt|div|plain] [arrows|noarrows]")
                 return
+
             if minimizer is not None:
                 setattr(minimizer, "vis_color_by", color_by)
+                setattr(minimizer, "vis_show_tilt_arrows", show_tilt_arrows)
         else:
             if color_by is None:
                 try:
@@ -52,6 +80,7 @@ class VisualizeCommand(Command):
             draw_edges=True,
             transparent=False,
             color_by=color_by,
+            show_tilt_arrows=show_tilt_arrows,
         )
 
 

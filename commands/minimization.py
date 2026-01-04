@@ -35,6 +35,9 @@ class GoCommand(Command):
                     state=state,
                     title=f"Step {i}",
                     color_by=getattr(context.minimizer, "live_vis_color_by", None),
+                    show_tilt_arrows=getattr(
+                        context.minimizer, "live_vis_show_tilt_arrows", False
+                    ),
                 )
                 context.minimizer.live_vis_state = state
 
@@ -129,6 +132,9 @@ class HessianCommand(Command):
                     state=state,
                     title="Hessian step",
                     color_by=getattr(context.minimizer, "live_vis_color_by", None),
+                    show_tilt_arrows=getattr(
+                        context.minimizer, "live_vis_show_tilt_arrows", False
+                    ),
                 )
                 context.minimizer.live_vis_state = state
         logger.info(
@@ -145,18 +151,47 @@ class LiveVisCommand(Command):
         if not hasattr(context.minimizer, "live_vis"):
             context.minimizer.live_vis = False
         if args:
-            token = str(args[0]).strip().lower()
-            if token in {"tilt", "t", "mag", "abs"}:
+            tokens = [str(tok).strip().lower() for tok in args if str(tok).strip()]
+            if any(tok in {"tilt", "t", "mag", "abs"} for tok in tokens):
                 context.minimizer.live_vis_color_by = "tilt_mag"
-            elif token in {"div", "divt"}:
+            elif any(tok in {"div", "divt"} for tok in tokens):
                 context.minimizer.live_vis_color_by = "tilt_div"
-            elif token in {"plain", "none", "off"}:
+            elif any(tok in {"plain", "none", "off"} for tok in tokens):
                 context.minimizer.live_vis_color_by = None
-            else:
-                print("Usage: lv [tilt|div|plain]")
+
+            if not hasattr(context.minimizer, "live_vis_show_tilt_arrows"):
+                context.minimizer.live_vis_show_tilt_arrows = False
+            if any(tok in {"noarrows", "noarrow"} for tok in tokens):
+                context.minimizer.live_vis_show_tilt_arrows = False
+            elif any(tok in {"arrows", "arrow", "quiver"} for tok in tokens):
+                context.minimizer.live_vis_show_tilt_arrows = True
+
+            supported = {
+                "tilt",
+                "t",
+                "mag",
+                "abs",
+                "div",
+                "divt",
+                "plain",
+                "none",
+                "off",
+                "arrows",
+                "arrow",
+                "quiver",
+                "noarrows",
+                "noarrow",
+            }
+            unknown = [tok for tok in tokens if tok not in supported]
+            if unknown:
+                print("Usage: lv [tilt|div|plain] [arrows|noarrows]")
                 return
+
             if not context.minimizer.live_vis:
                 context.minimizer.live_vis = True
+                context.minimizer.live_vis_state = None
+            else:
+                # Force a redraw so arrows/colorbar mode updates immediately.
                 context.minimizer.live_vis_state = None
         else:
             context.minimizer.live_vis = not context.minimizer.live_vis
@@ -172,6 +207,8 @@ class LiveVisCommand(Command):
                             context.minimizer.live_vis_color_by = None
                     except Exception:
                         context.minimizer.live_vis_color_by = None
+                if not hasattr(context.minimizer, "live_vis_show_tilt_arrows"):
+                    context.minimizer.live_vis_show_tilt_arrows = False
                 context.minimizer.live_vis_state = None
             else:
                 state = getattr(context.minimizer, "live_vis_state", None)

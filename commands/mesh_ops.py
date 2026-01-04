@@ -31,6 +31,9 @@ class RefineCommand(Command):
                     state=state,
                     title=f"Refine {i + 1}/{count}",
                     color_by=getattr(context.minimizer, "live_vis_color_by", None),
+                    show_tilt_arrows=getattr(
+                        context.minimizer, "live_vis_show_tilt_arrows", False
+                    ),
                 )
                 context.minimizer.live_vis_state = state
         logger.info("Mesh refinement complete after %d pass(es).", count)
@@ -55,6 +58,9 @@ class VertexAverageCommand(Command):
                 state=state,
                 title="Vertex average",
                 color_by=getattr(context.minimizer, "live_vis_color_by", None),
+                show_tilt_arrows=getattr(
+                    context.minimizer, "live_vis_show_tilt_arrows", False
+                ),
             )
             context.minimizer.live_vis_state = state
 
@@ -75,6 +81,9 @@ class EquiangulateCommand(Command):
                 state=state,
                 title="Equiangulate",
                 color_by=getattr(context.minimizer, "live_vis_color_by", None),
+                show_tilt_arrows=getattr(
+                    context.minimizer, "live_vis_show_tilt_arrows", False
+                ),
             )
             context.minimizer.live_vis_state = state
 

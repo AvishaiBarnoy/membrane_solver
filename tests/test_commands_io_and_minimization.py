@@ -53,18 +53,21 @@ def test_visualize_command_calls_plot(monkeypatch):
         draw_edges=False,
         transparent=False,
         color_by=None,
+        show_tilt_arrows=False,
     ):
         called["mesh"] = m
         called["show_indices"] = show_indices
         called["draw_edges"] = draw_edges
         called["transparent"] = transparent
         called["color_by"] = color_by
+        called["show_tilt_arrows"] = show_tilt_arrows
 
     monkeypatch.setattr("commands.io.plot_geometry", fake_plot)
     VisualizeCommand().execute(ctx, [])
     assert called["mesh"] is mesh
     assert called["show_indices"] is False
     assert called["color_by"] is None
+    assert called["show_tilt_arrows"] is False
 
 
 def test_visualize_command_allows_tilt_coloring(monkeypatch):
