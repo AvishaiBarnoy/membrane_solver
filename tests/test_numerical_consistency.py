@@ -311,6 +311,7 @@ def initialize_tilt(mesh):
     """Initialize random tilt vectors for testing."""
     for v in mesh.vertices.values():
         v.tilt = np.array([0.1, -0.2, 0.0], dtype=float)
+    mesh.touch_tilts()
 
 
 def check_gradient_consistency_dict(module, mesh, eps=1e-6, tol=1e-5):

@@ -118,9 +118,7 @@ def compute_energy_and_gradient_array(
 
     mesh.build_position_cache()
     if tilts is None:
-        tilts = np.zeros((len(mesh.vertex_ids), 3), dtype=float)
-        for row, vid in enumerate(mesh.vertex_ids):
-            tilts[row] = np.asarray(mesh.vertices[int(vid)].tilt, dtype=float)
+        tilts = mesh.tilts_view()
     else:
         tilts = np.asarray(tilts, dtype=float)
         if tilts.shape != (len(mesh.vertex_ids), 3):

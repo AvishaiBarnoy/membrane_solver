@@ -41,6 +41,7 @@ def test_tilt_energy_single_triangle_matches_closed_form():
     mesh.vertices[0].tilt = np.array([1.0, -2.0, 0.0], dtype=float)
     mesh.vertices[1].tilt = np.array([0.5, 0.25, 0.0], dtype=float)
     mesh.vertices[2].tilt = np.array([-1.5, 0.0, 0.0], dtype=float)
+    mesh.touch_tilts()
 
     k_tilt = 2.0
     gp = GlobalParameters({"tilt_rigidity": k_tilt})
@@ -74,6 +75,7 @@ def test_tilt_shape_gradient_matches_directional_derivative():
     mesh = _build_single_triangle_mesh()
     for v in mesh.vertices.values():
         v.tilt = np.array([0.2, -0.1, 0.0], dtype=float)
+    mesh.touch_tilts()
 
     gp = GlobalParameters({"tilt_rigidity": 1.7})
     resolver = ParameterResolver(gp)
@@ -112,6 +114,7 @@ def test_tilt_array_matches_dict_energy_and_gradient():
     mesh.vertices[0].tilt = np.array([0.3, 0.1, 0.0], dtype=float)
     mesh.vertices[1].tilt = np.array([-0.2, 0.05, 0.0], dtype=float)
     mesh.vertices[2].tilt = np.array([0.0, -0.4, 0.0], dtype=float)
+    mesh.touch_tilts()
 
     gp = GlobalParameters({"tilt_rigidity": 0.9})
     resolver = ParameterResolver(gp)

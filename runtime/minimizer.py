@@ -71,6 +71,240 @@ class Minimizer:
         self.param_resolver = ParameterResolver(global_params)
         self._gauss_bonnet_monitor: GaussBonnetMonitor | None = None
 
+    def _tilt_fixed_mask(self) -> np.ndarray:
+        """Return a boolean mask for vertices whose tilt is clamped.
+
+        The mask is in ``mesh.vertex_ids`` row order.
+        """
+        return np.array(
+            [
+                bool(getattr(self.mesh.vertices[int(vid)], "tilt_fixed", False))
+                for vid in self.mesh.vertex_ids
+            ],
+            dtype=bool,
+        )
+
+    @staticmethod
+    def _project_tilts_to_tangent_array(
+        tilts: np.ndarray, normals: np.ndarray
+    ) -> np.ndarray:
+        """Project a dense tilt array into the vertex tangent planes."""
+        dot = np.einsum("ij,ij->i", tilts, normals)
+        return tilts - dot[:, None] * normals
+
+    def _compute_energy_array_with_tilts(
+        self,
+        *,
+        positions: np.ndarray,
+        tilts: np.ndarray,
+    ) -> float:
+        """Compute total energy for a fixed ``positions``/``tilts`` state.
+
+        Uses the array API when available and passes ``tilts`` opportunistically
+        (falling back when a module does not accept tilt arguments).
+        """
+        index_map = self.mesh.vertex_index_to_row
+        grad_dummy = np.zeros_like(positions)
+        total_energy = 0.0
+
+        for module in self.energy_modules:
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                try:
+                    E_mod = module.compute_energy_and_gradient_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                        tilts=tilts,
+                        tilt_grad_arr=None,
+                    )
+                except TypeError:
+                    try:
+                        E_mod = module.compute_energy_and_gradient_array(
+                            self.mesh,
+                            self.global_params,
+                            self.param_resolver,
+                            positions=positions,
+                            index_map=index_map,
+                            grad_arr=grad_dummy,
+                            tilts=tilts,
+                        )
+                    except TypeError:
+                        E_mod = module.compute_energy_and_gradient_array(
+                            self.mesh,
+                            self.global_params,
+                            self.param_resolver,
+                            positions=positions,
+                            index_map=index_map,
+                            grad_arr=grad_dummy,
+                        )
+                total_energy += float(E_mod)
+                continue
+
+            # Legacy dict modules (typically tilt-independent): energy-only path.
+            try:
+                E_mod, _ = module.compute_energy_and_gradient(
+                    self.mesh,
+                    self.global_params,
+                    self.param_resolver,
+                    compute_gradient=False,
+                )
+            except TypeError:
+                E_mod, _ = module.compute_energy_and_gradient(
+                    self.mesh, self.global_params, self.param_resolver
+                )
+            total_energy += float(E_mod)
+
+        return float(total_energy)
+
+    def _compute_energy_and_tilt_gradient_array(
+        self,
+        *,
+        positions: np.ndarray,
+        tilts: np.ndarray,
+        tilt_grad_arr: np.ndarray,
+    ) -> float:
+        """Compute total energy and accumulate dense tilt gradient."""
+        index_map = self.mesh.vertex_index_to_row
+        grad_dummy = np.zeros_like(positions)
+        tilt_grad_arr.fill(0.0)
+        total_energy = 0.0
+
+        for module in self.energy_modules:
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                try:
+                    E_mod = module.compute_energy_and_gradient_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                        tilts=tilts,
+                        tilt_grad_arr=tilt_grad_arr,
+                    )
+                except TypeError:
+                    try:
+                        E_mod = module.compute_energy_and_gradient_array(
+                            self.mesh,
+                            self.global_params,
+                            self.param_resolver,
+                            positions=positions,
+                            index_map=index_map,
+                            grad_arr=grad_dummy,
+                            tilts=tilts,
+                        )
+                    except TypeError:
+                        E_mod = module.compute_energy_and_gradient_array(
+                            self.mesh,
+                            self.global_params,
+                            self.param_resolver,
+                            positions=positions,
+                            index_map=index_map,
+                            grad_arr=grad_dummy,
+                        )
+                total_energy += float(E_mod)
+                continue
+
+            # Dict fallback: accept modules that optionally return a tilt gradient.
+            res = module.compute_energy_and_gradient(
+                self.mesh, self.global_params, self.param_resolver
+            )
+
+            if not isinstance(res, tuple) or len(res) < 2:
+                raise ValueError(
+                    f"Unexpected return from energy module {module}: {res!r}"
+                )
+
+            total_energy += float(res[0])
+            if len(res) >= 3 and res[2] is not None:
+                g_tilt = res[2]
+                for vidx, gvec in g_tilt.items():
+                    row = index_map.get(int(vidx))
+                    if row is not None:
+                        tilt_grad_arr[row] += gvec
+
+        return float(total_energy)
+
+    def _relax_tilts(
+        self,
+        *,
+        positions: np.ndarray,
+        mode: str,
+    ) -> None:
+        """Relax vertex tilt vectors according to the configured solve mode."""
+        mode_norm = str(mode or "").strip().lower()
+        if mode_norm in ("", "none", "off", "false", "fixed"):
+            return
+
+        if mode_norm not in ("nested", "coupled"):
+            logger.warning("Unknown tilt_solve_mode=%r; treating as 'fixed'.", mode)
+            return
+
+        step_size = float(self.global_params.get("tilt_step_size", 0.0) or 0.0)
+        if step_size <= 0.0:
+            return
+
+        tol = float(self.global_params.get("tilt_tol", 0.0) or 0.0)
+        if tol <= 0.0:
+            tol = 0.0
+
+        if mode_norm == "nested":
+            n_inner = int(self.global_params.get("tilt_inner_steps", 0) or 0)
+        else:
+            n_inner = int(self.global_params.get("tilt_coupled_steps", 0) or 0)
+        if n_inner <= 0:
+            return
+
+        fixed_mask = self._tilt_fixed_mask()
+        has_free = bool(np.any(~fixed_mask))
+        if not has_free:
+            return
+
+        tilts = self.mesh.tilts_view().copy(order="F")
+        normals = self.mesh.vertex_normals(positions)
+        tilts = self._project_tilts_to_tangent_array(tilts, normals)
+        tilt_fixed_vals = tilts[fixed_mask].copy() if np.any(fixed_mask) else None
+
+        tilt_grad = np.zeros_like(tilts)
+        for _ in range(n_inner):
+            E0 = self._compute_energy_and_tilt_gradient_array(
+                positions=positions, tilts=tilts, tilt_grad_arr=tilt_grad
+            )
+            if np.any(fixed_mask):
+                tilt_grad[fixed_mask] = 0.0
+
+            gnorm = float(np.linalg.norm(tilt_grad[~fixed_mask]))
+            if gnorm == 0.0:
+                break
+            if tol > 0.0 and gnorm < tol:
+                break
+
+            step = step_size
+            accepted = False
+            for _bt in range(12):
+                trial = tilts - step * tilt_grad
+                trial = self._project_tilts_to_tangent_array(trial, normals)
+                if tilt_fixed_vals is not None:
+                    trial[fixed_mask] = tilt_fixed_vals
+                E1 = self._compute_energy_array_with_tilts(
+                    positions=positions, tilts=trial
+                )
+                if E1 <= E0:
+                    tilts = trial
+                    accepted = True
+                    break
+                step *= 0.5
+                if step < 1e-16:
+                    break
+
+            if not accepted:
+                break
+
+        self.mesh.set_tilts_from_array(tilts)
+
     def _check_gauss_bonnet(self) -> None:
         """Emit Gauss-Bonnet diagnostics if enabled."""
         if not bool(self.global_params.get("gauss_bonnet_monitor", False)):
@@ -384,12 +618,18 @@ STEP SIZE:\t {self.step_size}
 
         if self._has_enforceable_constraints:
             self.enforce_constraints_after_mesh_ops(self.mesh)
+            self.mesh.project_tilts_to_tangent()
 
         self._check_gauss_bonnet()
         last_grad_arr = None
         for i in range(n_steps):
             if callback:
                 callback(self.mesh, i)
+
+            # Tilt solve modes are evaluated before the shape convergence check so
+            # that fixed-geometry runs can still relax the tilt field.
+            tilt_mode = self.global_params.get("tilt_solve_mode", "fixed")
+            self._relax_tilts(positions=self.mesh.positions_view(), mode=tilt_mode)
 
             # Use array-based path for main loop
             E, grad_arr = self.compute_energy_and_gradient_array()
@@ -435,6 +675,8 @@ STEP SIZE:\t {self.step_size}
                 if self._has_enforceable_constraints
                 else None,
             )
+            # Keep any stored 3D tilt field tangent to the updated surface.
+            self.mesh.project_tilts_to_tangent()
             if step_mode == "fixed":
                 # Keep the cross-iteration step size constant, but still allow
                 # the line search to backtrack within each iteration for
@@ -528,6 +770,7 @@ STEP SIZE:\t {self.step_size}
                             vol_tol,
                         )
                         self.enforce_constraints_after_mesh_ops(self.mesh)
+                        self.mesh.project_tilts_to_tangent()
                         reset = getattr(self.stepper, "reset", None)
                         if callable(reset):
                             reset()
@@ -541,6 +784,7 @@ STEP SIZE:\t {self.step_size}
                 global_params=self.global_params,
                 context="finalize",
             )
+            self.mesh.project_tilts_to_tangent()
 
         return {
             "energy": E,
