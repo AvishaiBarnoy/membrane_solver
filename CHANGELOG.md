@@ -4,7 +4,22 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ## [Unreleased]
 ### Added
+- **Kozlov–Hamm Tilt Coupling**: Implemented coupled bending+tilt energy integral $\frac{1}{2} \int \kappa (2H - c_0 + \text{div}(t))^2 dA$ in `modules/energy/bending_tilt.py`.
+- **Tilt Solve Modes**: Added `nested` and `coupled` relaxation modes in `Minimizer` to optimize the tilt field alongside surface geometry.
+- **Enhanced Tilt Visualization**:
+  - `lv tilt` / `lv div`: Heatmap visualization of tilt magnitude and divergence.
+  - `--tilt-arrows`: Vector field overlay showing vertex tilt directions in 3D.
+  - Interactive colorbar support for scalar fields in live visualization.
+- **Repo Hygiene & Packaging**:
+  - Comprehensive `.gitignore` for compiled extensions (`*.so`, `*.dylib`), build outputs, and caches.
+  - Standardized packaging with `pyproject.toml` and `setup.py`.
+  - Explicit build helper: `python -m membrane_solver.build_ext` for f2py kernels.
+  - Hardened CI: Python version matrix (3.11, 3.12) and packaging-based test execution.
 - Optional Fortran (f2py) surface-energy kernel (`fortran_kernels/surface_energy.f90`) with automatic runtime fallback to NumPy when not built/available.
+
+### Fixed
+- **Tilt Persistence**: Corrected `save_geometry` to persist `tilt` and `tilt_fixed` vertex properties to output JSON files.
+- **Live-Vis Warnings**: Silenced `plt.pause` warnings on headless CI backends.
 - **Hybrid SoA Architecture**: Refactored the minimization pipeline to use a Structure-of-Arrays pattern. Optimization now runs on dense NumPy arrays, eliminating O(N) Python dictionary overhead and resulting in a **3.5x speedup** for large meshes.
 - **Gauss-Bonnet diagnostics**: Added `runtime/diagnostics/gauss_bonnet.py` to monitor Gaussian curvature invariants on open surfaces with boundary loops, including per-loop boundary geodesic sums and drift checks during minimization.
   - Supports excluding facets from the diagnostic via `gauss_bonnet_exclude` in facet options to model effective holes.
