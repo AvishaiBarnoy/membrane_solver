@@ -64,7 +64,7 @@ def _build_boundary_loop(mesh: Mesh, edge_ids: List[int]) -> List[int]:
 
     remaining = set(edge_ids)
     # Start from an arbitrary edge; orient tail->head.
-    first_eid = next(iter(remaining))
+    first_eid = min(remaining)
     first_edge = mesh.edges[first_eid]
     loop: List[int] = [first_edge.tail_index, first_edge.head_index]
     remaining.remove(first_eid)
@@ -75,7 +75,7 @@ def _build_boundary_loop(mesh: Mesh, edge_ids: List[int]) -> List[int]:
         # Find an edge incident to the current vertex.
         next_eid = None
         next_head = None
-        for eid in list(remaining):
+        for eid in sorted(remaining):
             e = mesh.edges[eid]
             if e.tail_index == current:
                 next_eid = eid
