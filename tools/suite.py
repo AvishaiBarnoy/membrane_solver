@@ -7,40 +7,50 @@ and compares them against a stored history of "best" results in ``results.json``
 
 import argparse
 import cProfile
+import importlib
 import json
 import pstats
 import sys
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-
-import benchmark_bending
-import benchmark_cap
-import benchmark_catenoid
-import benchmark_cube_good
-import benchmark_dented_cube
-import benchmark_square_to_circle
-import benchmark_two_disks_sphere
-import benchmark_volume_optimization
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BENCHMARKS_DIR = REPO_ROOT / "benchmarks"
 
 # Import benchmark modules from benchmarks/ without requiring it to be a package.
-sys.path.insert(0, str(BENCHMARKS_DIR))
+if str(BENCHMARKS_DIR) not in sys.path:
+    sys.path.insert(0, str(BENCHMARKS_DIR))
 
 RESULTS_FILE = BENCHMARKS_DIR / "results.json"
 DEFAULT_PROFILE_DIR = BENCHMARKS_DIR / "outputs" / "profiles"
 
-BENCHMARKS = {
-    "cube_good": benchmark_cube_good.benchmark,
-    "dented_cube": benchmark_dented_cube.benchmark,
-    "square_to_circle": benchmark_square_to_circle.benchmark,
-    "catenoid": benchmark_catenoid.benchmark,
-    "spherical_cap": benchmark_cap.benchmark,
-    "two_disks_sphere": benchmark_two_disks_sphere.benchmark,
-    "bending_analytic": benchmark_bending.benchmark,
-    "volume_optimization": benchmark_volume_optimization.benchmark,
+_BENCHMARK_MODULES = {
+    "cube_good": "benchmark_cube_good",
+    "dented_cube": "benchmark_dented_cube",
+    "square_to_circle": "benchmark_square_to_circle",
+    "catenoid": "benchmark_catenoid",
+    "spherical_cap": "benchmark_cap",
+    "two_disks_sphere": "benchmark_two_disks_sphere",
+    "bending_analytic": "benchmark_bending",
+    "volume_optimization": "benchmark_volume_optimization",
 }
+
+
+def _load_benchmarks() -> dict[str, Callable[[], float]]:
+    benchmarks: dict[str, Callable[[], float]] = {}
+    for name, module_name in _BENCHMARK_MODULES.items():
+        mod = importlib.import_module(module_name)
+        fn = getattr(mod, "benchmark", None)
+        if not callable(fn):
+            raise AttributeError(
+                f"Benchmark module {module_name} is missing a callable `benchmark()`"
+            )
+        benchmarks[name] = fn
+    return benchmarks
+
+
+BENCHMARKS = _load_benchmarks()
 
 
 def load_results():

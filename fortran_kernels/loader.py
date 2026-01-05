@@ -25,16 +25,6 @@ _BENDING_GRAD_COTAN: KernelSpec | None | bool = None
 _BENDING_LAPLACIAN: KernelSpec | None | bool = None
 
 
-def _fortran_opt_in_enabled() -> bool:
-    """Return True if compiled kernels are allowed to load.
-
-    Compiled kernels are opt-in to keep default installs pure-Python and avoid
-    surprising performance differences or import issues on systems without a
-    working compiler toolchain.
-    """
-    return os.environ.get("MEMBRANE_ENABLE_FORTRAN") in {"1", "true", "TRUE"}
-
-
 def get_surface_energy_kernel() -> KernelSpec | None:
     """Return the compiled surface-energy kernel, if available.
 
@@ -51,10 +41,6 @@ def get_surface_energy_kernel() -> KernelSpec | None:
         return None
     if isinstance(_SURFACE_KERNEL, KernelSpec):
         return _SURFACE_KERNEL
-
-    if not _fortran_opt_in_enabled():
-        _SURFACE_KERNEL = False
-        return None
 
     if os.environ.get("MEMBRANE_DISABLE_FORTRAN_SURFACE") in {"1", "true", "TRUE"}:
         _SURFACE_KERNEL = False
@@ -105,10 +91,6 @@ def get_bending_grad_cotan_kernel() -> KernelSpec | None:
         return None
     if isinstance(_BENDING_GRAD_COTAN, KernelSpec):
         return _BENDING_GRAD_COTAN
-
-    if not _fortran_opt_in_enabled():
-        _BENDING_GRAD_COTAN = False
-        return None
 
     if os.environ.get("MEMBRANE_DISABLE_FORTRAN_BENDING") in {"1", "true", "TRUE"}:
         _BENDING_GRAD_COTAN = False
@@ -163,10 +145,6 @@ def get_bending_laplacian_kernel() -> KernelSpec | None:
         return None
     if isinstance(_BENDING_LAPLACIAN, KernelSpec):
         return _BENDING_LAPLACIAN
-
-    if not _fortran_opt_in_enabled():
-        _BENDING_LAPLACIAN = False
-        return None
 
     if os.environ.get("MEMBRANE_DISABLE_FORTRAN_BENDING") in {"1", "true", "TRUE"}:
         _BENDING_LAPLACIAN = False

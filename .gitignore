@@ -41,7 +41,8 @@ evolver/
 *.pdf
 *.log  # logfiles
 membrane_solver.log
-membrane_solver
+/membrane_solver
+!/membrane_solver/
 outputs/*.json
 .DS_Store
 .venv/
