@@ -67,6 +67,11 @@ def create_parser() -> argparse.ArgumentParser:
         help="Color facets by div(t).",
     )
     parser.add_argument(
+        "--tilt-arrows",
+        action="store_true",
+        help="Overlay arrows showing vertex tilt direction.",
+    )
+    parser.add_argument(
         "--save",
         metavar="PATH",
         help="Save the rendered figure to PATH instead of only showing it.",
@@ -142,6 +147,7 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         facet_colors=None,
         edge_colors=None,
         color_by=color_by,
+        show_tilt_arrows=args.tilt_arrows,
         no_axes=args.no_axes,
         show=show,
     )
