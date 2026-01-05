@@ -858,20 +858,22 @@ degeneracy (tangling, overlapping triangles) during energy minimization.
 8. Optional compiled kernels (Fortran / f2py):
    - Some hot-loop kernels can be accelerated with Fortran, compiled into Python
      extension modules via NumPy f2py.
-   - Kernels are **opt-in** by default. To enable loading compiled kernels, set:
-     - `MEMBRANE_ENABLE_FORTRAN=1`
+   - Kernels are **optional** and are not built on import. Build them explicitly
+     (see below), otherwise the solver uses the pure Python/NumPy implementation.
    - Prerequisites:
      - A Fortran compiler (typically `gfortran`).
      - NumPy (for `numpy.f2py`).
      - On macOS, you may need to install a compiler toolchain (e.g. via Homebrew or Xcode CLI tools).
-   - Example build (surface energy kernel):
-     - From the repo root:
-       - `python -m numpy.f2py -c -m surface_energy fortran_kernels/surface_energy.f90`
+   - Build helper (recommended):
+     - `python -m membrane_solver.build_ext`
+     - Or at install time:
+       - `MEMBRANE_SOLVER_BUILD_EXT=1 pip install -e .`
+   - Example manual build (surface energy kernel):
+     - `cd fortran_kernels && python -m numpy.f2py -c -m surface_energy surface_energy.f90`
      - This should produce `fortran_kernels/surface_energy.*.so` (platform-specific name).
-   - Example build (bending kernels, optional):
-     - From the repo root:
-       - `python -m numpy.f2py -c -m bending_kernels fortran_kernels/bending_kernels.f90`
-     - This should produce `bending_kernels.*.so` (platform-specific name).
+   - Example manual build (bending kernels, optional):
+     - `cd fortran_kernels && python -m numpy.f2py -c -m bending_kernels bending_kernels.f90`
+     - This should produce `fortran_kernels/bending_kernels.*.so` (platform-specific name).
    - Runtime behaviour:
      - If `fortran_kernels.surface_energy` is importable, the `surface` energy module
        will use it automatically for pure-triangle meshes; otherwise it falls back to NumPy.
