@@ -115,9 +115,14 @@ This runs `python tools/suite.py --profile` and writes results under
 
 ## Optional Fortran kernels (f2py)
 
-Compiled Fortran kernels are opt-in. To enable loading compiled kernels, set
-`MEMBRANE_ENABLE_FORTRAN=1` in your environment. Without this, the solver uses
-the pure Python/NumPy implementation.
+Optional hot-loop kernels can be compiled with NumPy `f2py` for speedups.
+
+- Build on demand: `python -m membrane_solver.build_ext`
+- Build at install time: `MEMBRANE_SOLVER_BUILD_EXT=1 pip install -e .` (or `pip install .`)
+
+If the compiled modules are importable, the solver will use them automatically.
+Set `MEMBRANE_DISABLE_FORTRAN_SURFACE=1` or `MEMBRANE_DISABLE_FORTRAN_BENDING=1`
+to force the NumPy fallback.
 
 ## Gauss-Bonnet diagnostics
 
