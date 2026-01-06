@@ -111,11 +111,23 @@ def refine_polygonal_facets(mesh):
         centroid_options = facet.options.copy()
         for key in ("energy", "surface_tension", "target_area", "parent_facet"):
             centroid_options.pop(key, None)
+        loop_tilts = np.array(
+            [np.asarray(mesh.vertices[v].tilt, dtype=float) for v in vertex_loop],
+            dtype=float,
+        )
+        centroid_tilt = (
+            loop_tilts.mean(axis=0) if loop_tilts.size else np.zeros(3, dtype=float)
+        )
+        centroid_tilt_fixed = all(
+            bool(getattr(mesh.vertices[v], "tilt_fixed", False)) for v in vertex_loop
+        )
         centroid_vertex = Vertex(
             index=centroid_idx,
             position=np.asarray(centroid_pos, dtype=float),
             fixed=facet.fixed,
             options=centroid_options,
+            tilt=centroid_tilt,
+            tilt_fixed=centroid_tilt_fixed,
         )
         new_vertices[centroid_idx] = centroid_vertex
 
@@ -230,6 +242,11 @@ def refine_polygonal_facets(mesh):
     new_mesh.macros = getattr(mesh, "macros", {}).copy()
     new_mesh.build_connectivity_maps()
     new_mesh.build_facet_vertex_loops()
+    new_mesh.project_tilts_to_tangent()
+    # Avoid retaining a stale positions cache when callers mutate vertex
+    # positions in-place without incrementing the mesh version (common in tests).
+    new_mesh._positions_cache = None
+    new_mesh._positions_cache_version = -1
 
     return new_mesh
 
@@ -308,11 +325,21 @@ def refine_triangle_mesh(mesh):
                 mesh.vertices[v1].position + mesh.vertices[v2].position
             )
             midpoint_idx = max(new_vertices.keys()) + 1 if new_vertices else 0
+            midpoint_tilt = 0.5 * (
+                np.asarray(mesh.vertices[v1].tilt, dtype=float)
+                + np.asarray(mesh.vertices[v2].tilt, dtype=float)
+            )
+            midpoint_tilt_fixed = bool(
+                getattr(mesh.vertices[v1], "tilt_fixed", False)
+                and getattr(mesh.vertices[v2], "tilt_fixed", False)
+            )
             midpoint = Vertex(
                 midpoint_idx,
                 np.asarray(midpoint_position, dtype=float),
                 fixed=edge.fixed,
                 options=edge.options.copy(),
+                tilt=midpoint_tilt,
+                tilt_fixed=midpoint_tilt_fixed,
             )
             new_vertices[midpoint_idx] = midpoint
             edge_midpoints[key] = midpoint
@@ -641,5 +668,10 @@ def refine_triangle_mesh(mesh):
 
     new_mesh.build_connectivity_maps()
     new_mesh.build_facet_vertex_loops()
+    new_mesh.project_tilts_to_tangent()
+    # Avoid retaining a stale positions cache when callers mutate vertex
+    # positions in-place without incrementing the mesh version (common in tests).
+    new_mesh._positions_cache = None
+    new_mesh._positions_cache_version = -1
 
     return new_mesh

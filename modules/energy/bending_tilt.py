@@ -30,7 +30,8 @@ import numpy as np
 
 from geometry.bending_derivatives import grad_triangle_area
 from geometry.curvature import compute_curvature_data
-from geometry.entities import Mesh, _fast_cross
+from geometry.entities import Mesh
+from geometry.tilt_operators import p1_triangle_divergence
 
 # Reuse the validated bending implementation helpers.
 from modules.energy.bending import (  # noqa: PLC0415
@@ -42,98 +43,6 @@ from modules.energy.bending import (  # noqa: PLC0415
     _per_vertex_params,
     _vertex_normals,
 )
-
-
-def _divergence_vertex_field(
-    mesh: Mesh,
-    *,
-    positions: np.ndarray,
-    tilts: np.ndarray,
-    tri_rows: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Return (div_v, area_bary, w, g0, g1, g2) in vertex-row order.
-
-    ``div_v`` is an area-weighted vertex divergence computed by:
-      - constant per-triangle divergence from P1 shape functions
-      - barycentric area averaging onto vertices
-    """
-    n_verts = len(mesh.vertex_ids)
-    if tri_rows.size == 0:
-        zeros = np.zeros(n_verts, dtype=float)
-        return (
-            zeros,
-            np.zeros(n_verts, dtype=float),
-            np.zeros(0, dtype=float),
-            np.zeros((0, 3), dtype=float),
-            np.zeros((0, 3), dtype=float),
-            np.zeros((0, 3), dtype=float),
-        )
-
-    div_tri, area, g0, g1, g2 = _divergence_triangle_field(
-        mesh, positions=positions, tilts=tilts, tri_rows=tri_rows
-    )
-    w = area / 3.0
-
-    accum_div = np.zeros(n_verts, dtype=float)
-    accum_area = np.zeros(n_verts, dtype=float)
-    np.add.at(accum_div, tri_rows[:, 0], w * div_tri)
-    np.add.at(accum_div, tri_rows[:, 1], w * div_tri)
-    np.add.at(accum_div, tri_rows[:, 2], w * div_tri)
-    np.add.at(accum_area, tri_rows[:, 0], w)
-    np.add.at(accum_area, tri_rows[:, 1], w)
-    np.add.at(accum_area, tri_rows[:, 2], w)
-
-    div_v = np.zeros(n_verts, dtype=float)
-    mask = accum_area > 1e-20
-    div_v[mask] = accum_div[mask] / accum_area[mask]
-    return div_v, accum_area, w, g0, g1, g2
-
-
-def _divergence_triangle_field(
-    mesh: Mesh,
-    *,
-    positions: np.ndarray,
-    tilts: np.ndarray,
-    tri_rows: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Return (div_tri, area, g0, g1, g2) for a P1 vertex tilt field."""
-    if tri_rows.size == 0:
-        return (
-            np.zeros(0, dtype=float),
-            np.zeros(0, dtype=float),
-            np.zeros((0, 3), dtype=float),
-            np.zeros((0, 3), dtype=float),
-            np.zeros((0, 3), dtype=float),
-        )
-
-    v0 = positions[tri_rows[:, 0]]
-    v1 = positions[tri_rows[:, 1]]
-    v2 = positions[tri_rows[:, 2]]
-
-    n = _fast_cross(v1 - v0, v2 - v0)
-    n2 = np.einsum("ij,ij->i", n, n)
-    denom = np.maximum(n2, 1e-20)
-
-    e0 = v2 - v1
-    e1 = v0 - v2
-    e2 = v1 - v0
-
-    g0 = _fast_cross(n, e0) / denom[:, None]
-    g1 = _fast_cross(n, e1) / denom[:, None]
-    g2 = _fast_cross(n, e2) / denom[:, None]
-
-    t0 = tilts[tri_rows[:, 0]]
-    t1 = tilts[tri_rows[:, 1]]
-    t2 = tilts[tri_rows[:, 2]]
-
-    div_tri = (
-        np.einsum("ij,ij->i", t0, g0)
-        + np.einsum("ij,ij->i", t1, g1)
-        + np.einsum("ij,ij->i", t2, g2)
-    )
-
-    area = 0.5 * np.sqrt(np.maximum(n2, 0.0))
-    return div_tri, area, g0, g1, g2
 
 
 def _total_energy(
@@ -152,8 +61,8 @@ def _total_energy(
     if tri_rows.size == 0:
         return 0.0
 
-    div_tri, _, _, _, _ = _divergence_triangle_field(
-        mesh, positions=positions, tilts=tilts, tri_rows=tri_rows
+    div_tri, _, _, _, _ = p1_triangle_divergence(
+        positions=positions, tilts=tilts, tri_rows=tri_rows
     )
 
     _, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
@@ -260,8 +169,8 @@ def compute_energy_and_gradient_array(
         if tilts.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts must have shape (N_vertices, 3)")
 
-    div_tri, _, g0, g1, g2 = _divergence_triangle_field(
-        mesh, positions=positions, tilts=tilts, tri_rows=tri_rows
+    div_tri, _, g0, g1, g2 = p1_triangle_divergence(
+        positions=positions, tilts=tilts, tri_rows=tri_rows
     )
 
     # Step 1: Boundary area reassignment (integration weight)
