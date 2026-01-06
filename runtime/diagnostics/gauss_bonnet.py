@@ -59,6 +59,11 @@ def extract_boundary_loops(
         for vid in (edge.tail_index, edge.head_index):
             vertex_to_edges.setdefault(vid, []).append(edge.index)
 
+    # Deterministic traversal: sort incident edge IDs so loop reconstruction
+    # is stable across Python hash seeds and runs.
+    for eids in vertex_to_edges.values():
+        eids.sort()
+
     for vid, eids in vertex_to_edges.items():
         if len(eids) != 2:
             logger.warning(
@@ -69,7 +74,7 @@ def extract_boundary_loops(
     loops: List[List[Vertex]] = []
 
     while remaining:
-        start_eid = next(iter(remaining))
+        start_eid = min(remaining)
         start_edge = edge_by_id[start_eid]
         start_vid = start_edge.tail_index
         current_vid = start_edge.head_index
@@ -110,9 +115,46 @@ def extract_boundary_loops(
             loop_vids.append(next_vid)
             current_vid = next_vid
 
+        loop_vids = _canonicalize_boundary_loop(mesh, loop_vids)
         loops.append([mesh.vertices[vid] for vid in loop_vids])
 
     return loops
+
+
+def _rotate_loop_to_min_vertex(loop_vids: List[int]) -> List[int]:
+    if not loop_vids:
+        return loop_vids
+    min_vid = min(loop_vids)
+    start = loop_vids.index(min_vid)
+    return loop_vids[start:] + loop_vids[:start]
+
+
+def _canonicalize_boundary_loop(mesh: Mesh, loop_vids: List[int]) -> List[int]:
+    """Return a deterministically oriented boundary loop.
+
+    The output is rotated so that the smallest vertex ID is first, and the loop
+    orientation is chosen so the dominant component of the polygon area-vector
+    is non-negative. This keeps boundary-loop orientation stable across runs
+    and mesh operations (e.g. refinement) without relying on hash iteration.
+    """
+    if len(loop_vids) > 1 and loop_vids[0] == loop_vids[-1]:
+        loop_vids = loop_vids[:-1]
+
+    loop_vids = _rotate_loop_to_min_vertex(loop_vids)
+    if len(loop_vids) < 3:
+        return loop_vids
+
+    coords = np.array([mesh.vertices[vid].position for vid in loop_vids], dtype=float)
+    area_vec = np.sum(np.cross(coords, np.roll(coords, -1, axis=0)), axis=0)
+    if float(np.max(np.abs(area_vec))) < 1e-14:
+        return loop_vids
+
+    axis = int(np.argmax(np.abs(area_vec)))
+    if float(area_vec[axis]) < 0.0:
+        loop_vids = list(reversed(loop_vids))
+        loop_vids = _rotate_loop_to_min_vertex(loop_vids)
+
+    return loop_vids
 
 
 def _facet_vertex_loop(mesh: Mesh, face: Facet) -> List[int]:

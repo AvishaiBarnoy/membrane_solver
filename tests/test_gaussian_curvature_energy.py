@@ -159,3 +159,29 @@ def test_gaussian_energy_open_surface_uses_boundary_terms():
 
     assert np.isclose(float(energy), 2.0 * np.pi, atol=1e-6)
     assert float(np.max(np.abs(grad_arr))) == 0.0
+
+
+def test_gaussian_energy_annulus_cancels_boundary_loops():
+    from sample_meshes import square_annulus_mesh
+
+    mesh = square_annulus_mesh()
+
+    gp = GlobalParameters()
+    gp.gaussian_modulus = 1.0
+    resolver = ParameterResolver(gp)
+
+    positions = mesh.positions_view()
+    idx_map = mesh.vertex_index_to_row
+    grad_arr = np.zeros_like(positions)
+
+    energy = gaussian_curvature.compute_energy_and_gradient_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=idx_map,
+        grad_arr=grad_arr,
+    )
+
+    assert np.isclose(float(energy), 0.0, atol=1e-6)
+    assert float(np.max(np.abs(grad_arr))) == 0.0

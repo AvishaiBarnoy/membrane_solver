@@ -230,3 +230,66 @@ def generate_open_cylinder(radius=1.0, height=2.0, n_segments=16):
     mesh.global_parameters.set("volume_stiffness", 1000.0)
 
     return mesh
+
+
+def square_annulus_mesh() -> Mesh:
+    """Return a small planar annulus mesh (outer square minus inner square).
+
+    The mesh is a triangulated topological cylinder with two boundary loops.
+    It is useful for Gauss–Bonnet regression tests because the total invariant
+    should be 0 (Euler characteristic χ=0), with opposite-signed boundary
+    contributions from the outer and inner loops.
+    """
+    mesh = Mesh()
+
+    outer_xy = [
+        (0.0, 0.0),
+        (1.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 1.0),
+        (2.0, 2.0),
+        (1.0, 2.0),
+        (0.0, 2.0),
+        (0.0, 1.0),
+    ]
+    inner_xy = [
+        (0.75, 0.75),
+        (1.0, 0.75),
+        (1.25, 0.75),
+        (1.25, 1.0),
+        (1.25, 1.25),
+        (1.0, 1.25),
+        (0.75, 1.25),
+        (0.75, 1.0),
+    ]
+
+    for vid, (x, y) in enumerate([*outer_xy, *inner_xy]):
+        mesh.vertices[vid] = Vertex(vid, np.array([x, y, 0.0]))
+
+    triangles: list[tuple[int, int, int]] = []
+    for k in range(8):
+        o0 = k
+        o1 = (k + 1) % 8
+        i0 = 8 + k
+        i1 = 8 + ((k + 1) % 8)
+        triangles.append((o0, o1, i1))
+        triangles.append((o0, i1, i0))
+
+    edge_map: dict[tuple[int, int], int] = {}
+    next_eid = 1
+    for fidx, tri in enumerate(triangles):
+        e_ids: list[int] = []
+        for a, b in ((tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])):
+            key = tuple(sorted((a, b)))
+            if key not in edge_map:
+                edge_map[key] = next_eid
+                mesh.edges[next_eid] = Edge(next_eid, a, b)
+                next_eid += 1
+            eid = edge_map[key]
+            edge = mesh.edges[eid]
+            e_ids.append(eid if edge.tail_index == a and edge.head_index == b else -eid)
+        mesh.facets[fidx] = Facet(fidx, e_ids)
+
+    mesh.build_connectivity_maps()
+    mesh.build_facet_vertex_loops()
+    return mesh
