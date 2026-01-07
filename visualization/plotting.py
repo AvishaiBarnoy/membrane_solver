@@ -712,63 +712,148 @@ def update_live_vis(
         fig = state["fig"]
         ax = state["ax"]
 
-    # Check if we can do a fast update (topology unchanged)
-    # We rely on mesh._topology_version or similar.
-    # But mesh._version increments on positions too.
-    # Let's check mesh._topology_version
-
-    # Actually, plot_geometry creates collections. We need to store them in state to update them.
-    # If state doesn't have collections, or topology changed, we redraw.
-
-    fast_update = False
     current_topo_version = getattr(mesh, "_topology_version", -1)
     last_topo_version = state.get("topology_version", -2)
 
-    if current_topo_version == last_topo_version:
-        tri_rows = state.get("tri_rows")
-        if (
-            "tri_collection" in state
-            and "line_collection" in state
-            and tri_rows is not None
-            and state.get("triangle_mesh_only", False)
-            and state.get("color_by") == color_by
-            and state.get("show_colorbar") == show_colorbar_flag
-            and state.get("show_tilt_arrows") == show_tilt_arrows
-        ):
-            fast_update = True
+    def _tilt_divergence_for_loops(
+        positions: np.ndarray, tilts: np.ndarray, loops: list[np.ndarray]
+    ) -> np.ndarray:
+        values = np.zeros(len(loops), dtype=float)
+        tri_indices = [i for i, rows in enumerate(loops) if len(rows) == 3]
+        if tri_indices:
+            tri_rows = np.stack([loops[i] for i in tri_indices], axis=0).astype(
+                np.int32, copy=False
+            )
+            values[np.array(tri_indices, dtype=int)] = _triangle_divergence_from_arrays(
+                positions, tilts, tri_rows
+            )
+
+        for idx, rows in enumerate(loops):
+            if len(rows) <= 3:
+                continue
+
+            r0 = int(rows[0])
+            r1 = np.asarray(rows[1:-1], dtype=int)
+            r2 = np.asarray(rows[2:], dtype=int)
+            if r1.size == 0 or r2.size == 0:
+                values[idx] = 0.0
+                continue
+
+            v0 = positions[r0]
+            v1 = positions[r1]
+            v2 = positions[r2]
+            t0 = tilts[r0]
+            t1 = tilts[r1]
+            t2 = tilts[r2]
+
+            v0s = np.broadcast_to(v0, v1.shape)
+            t0s = np.broadcast_to(t0, t1.shape)
+
+            n = np.cross(v1 - v0s, v2 - v0s)
+            denom = np.einsum("ij,ij->i", n, n)
+            good = denom > 1e-24
+            if not np.any(good):
+                values[idx] = 0.0
+                continue
+
+            g0 = np.zeros_like(n)
+            g1 = np.zeros_like(n)
+            g2 = np.zeros_like(n)
+
+            g0[good] = np.cross(n[good], v2[good] - v1[good]) / denom[good][:, None]
+            g1[good] = np.cross(n[good], v0s[good] - v2[good]) / denom[good][:, None]
+            g2[good] = np.cross(n[good], v1[good] - v0s[good]) / denom[good][:, None]
+
+            div = (
+                np.einsum("ij,ij->i", t0s, g0)
+                + np.einsum("ij,ij->i", t1, g1)
+                + np.einsum("ij,ij->i", t2, g2)
+            )
+            div[~good] = 0.0
+
+            area = 0.5 * np.sqrt(denom)
+            area[~good] = 0.0
+            total_area = float(area.sum())
+            if total_area > 0:
+                values[idx] = float((area * div).sum() / total_area)
+            else:
+                values[idx] = 0.0
+        return values
+
+    mode_matches = (
+        state.get("color_by") == color_by
+        and state.get("show_colorbar") == show_colorbar_flag
+        and state.get("show_tilt_arrows") == show_tilt_arrows
+    )
+    fast_update = (
+        current_topo_version == last_topo_version
+        and state.get("tri_collection") is not None
+        and mode_matches
+        and (
+            (
+                state.get("tri_rows") is not None
+                and state.get("triangle_mesh_only", False)
+            )
+            or state.get("facet_row_loops") is not None
+        )
+    )
 
     if fast_update:
-        # Update positions only
         positions = mesh.positions_view()
+        tri_collection = state["tri_collection"]
 
-        # Triangles
+        facet_row_loops = state.get("facet_row_loops")
         tri_rows = state.get("tri_rows")
-        if tri_rows is not None and state["tri_collection"] is not None:
+
+        if facet_row_loops is not None:
+            verts = [positions[rows] for rows in facet_row_loops]
+            tri_collection.set_verts(verts)
+        elif tri_rows is not None:
             tri_data = positions[tri_rows]
-            state["tri_collection"].set_verts(list(tri_data))
-            if color_by is not None:
-                tilts = mesh.tilts_view()
+            tri_collection.set_verts(list(tri_data))
+
+        if color_by is not None:
+            tilts = mesh.tilts_view()
+            if facet_row_loops is not None:
                 if color_by == "tilt_mag":
+                    mags = np.linalg.norm(tilts, axis=1)
+                    values = np.array(
+                        [
+                            float(mags[rows].mean()) if len(rows) else 0.0
+                            for rows in facet_row_loops
+                        ],
+                        dtype=float,
+                    )
+                else:
+                    values = _tilt_divergence_for_loops(
+                        positions, tilts, facet_row_loops
+                    )
+            else:
+                if tri_rows is None:  # pragma: no cover - defensive
+                    values = np.array([], dtype=float)
+                elif color_by == "tilt_mag":
                     mags = np.linalg.norm(tilts, axis=1)
                     values = mags[tri_rows].mean(axis=1)
                 else:
                     values = _triangle_divergence_from_arrays(
                         positions, tilts, tri_rows
                     )
-                colors = _colors_from_scalars(color_by, values)
-                state["tri_collection"].set_facecolor(colors)
-                if show_colorbar_flag:
-                    mappable = state.get("mappable")
-                    cbar = state.get("colorbar")
-                    if mappable is not None and cbar is not None:
-                        cmap, norm = _colormap_norm_for_scalars(color_by, values)
-                        mappable.set_array(values)
-                        mappable.cmap = cmap
-                        mappable.norm = norm
-                        try:
-                            cbar.update_normal(mappable)
-                        except Exception:
-                            pass
+
+            colors = _colors_from_scalars(color_by, values)
+            tri_collection.set_facecolor(colors)
+
+            if show_colorbar_flag:
+                mappable = state.get("mappable")
+                cbar = state.get("colorbar")
+                if mappable is not None and cbar is not None:
+                    cmap, norm = _colormap_norm_for_scalars(color_by, values)
+                    mappable.set_array(values)
+                    mappable.cmap = cmap
+                    mappable.norm = norm
+                    try:
+                        cbar.update_normal(mappable)
+                    except Exception:
+                        pass
 
         # Edges
         # We need cached edge indices to be fast.
@@ -814,6 +899,22 @@ def update_live_vis(
                 pass
     state.pop("colorbar", None)
     state.pop("mappable", None)
+
+    prev_view = None
+    prev_limits = None
+    if "topology_version" in state:
+        try:
+            prev_view = (float(ax.elev), float(ax.azim))
+        except Exception:
+            prev_view = None
+        try:
+            prev_limits = (
+                tuple(map(float, ax.get_xlim3d())),
+                tuple(map(float, ax.get_ylim3d())),
+                tuple(map(float, ax.get_zlim3d())),
+            )
+        except Exception:
+            prev_limits = None
 
     ax.cla()
 
@@ -867,6 +968,32 @@ def update_live_vis(
         mesh.facets
     )
     state["tri_rows"] = tri_rows if state["triangle_mesh_only"] else None
+    state["facet_row_loops"] = None
+    if not state["triangle_mesh_only"] and tri_col is not None:
+        mesh.build_position_cache()
+        idx_map = mesh.vertex_index_to_row
+        tri_set = set(tri_facets) if tri_facets else set()
+
+        loops: list[np.ndarray] = []
+        if tri_rows is not None and len(tri_rows) > 0:
+            loops.extend([np.asarray(row, dtype=np.int32) for row in tri_rows])
+
+        for facet in mesh.facets.values():
+            if facet.index in tri_set:
+                continue
+            if len(facet.edge_indices) < 3:
+                continue
+            rows: list[int] = []
+            for signed_ei in facet.edge_indices:
+                tail = mesh.get_edge(int(signed_ei)).tail_index
+                row = idx_map.get(int(tail))
+                if row is None:
+                    rows = []
+                    break
+                rows.append(int(row))
+            if rows:
+                loops.append(np.array(rows, dtype=np.int32))
+        state["facet_row_loops"] = loops
 
     # Cache edge indices for next time
     idx_map = mesh.vertex_index_to_row
@@ -909,6 +1036,18 @@ def update_live_vis(
 
     if title:
         ax.set_title(title)
+    if prev_view is not None:
+        try:
+            ax.view_init(elev=prev_view[0], azim=prev_view[1])
+        except Exception:
+            pass
+    if prev_limits is not None:
+        try:
+            ax.set_xlim(prev_limits[0])
+            ax.set_ylim(prev_limits[1])
+            ax.set_zlim(prev_limits[2])
+        except Exception:
+            pass
     fig.canvas.draw_idle()
     _safe_pause(0.001)
     return state
