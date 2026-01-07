@@ -2,7 +2,6 @@ import logging
 
 from commands.base import Command
 from geometry.geom_io import save_geometry
-from visualization.plotting import plot_geometry
 
 logger = logging.getLogger("membrane_solver")
 
@@ -16,6 +15,8 @@ class SaveCommand(Command):
 
 class VisualizeCommand(Command):
     def execute(self, context, args):
+        from visualization.plotting import plot_geometry
+
         minimizer = getattr(context, "minimizer", None)
         color_by = getattr(minimizer, "vis_color_by", None) if minimizer else None
         show_tilt_arrows = (

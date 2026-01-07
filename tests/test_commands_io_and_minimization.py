@@ -62,7 +62,7 @@ def test_visualize_command_calls_plot(monkeypatch):
         called["color_by"] = color_by
         called["show_tilt_arrows"] = show_tilt_arrows
 
-    monkeypatch.setattr("commands.io.plot_geometry", fake_plot)
+    monkeypatch.setattr("visualization.plotting.plot_geometry", fake_plot)
     VisualizeCommand().execute(ctx, [])
     assert called["mesh"] is mesh
     assert called["show_indices"] is False
@@ -80,7 +80,7 @@ def test_visualize_command_allows_tilt_coloring(monkeypatch):
         called["mesh"] = m
         called.update(kwargs)
 
-    monkeypatch.setattr("commands.io.plot_geometry", fake_plot)
+    monkeypatch.setattr("visualization.plotting.plot_geometry", fake_plot)
     VisualizeCommand().execute(ctx, ["tilt"])
 
     assert called["mesh"] is mesh
