@@ -844,6 +844,10 @@ degeneracy (tangling, overlapping triangles) during energy minimization.
 - **Collision Detection**: After every `g` command, the solver checks for vertices
   that have drifted dangerously close to edges they do not belong to. A warning is
   logged (`TOPOLOGY WARNING`) if collisions are detected.
+- **Body Orientation Checks**: Closed bodies are validated to ensure consistent
+  facet orientation and positive signed volume. Open bodies (e.g., a droplet on a
+  hard plane) are exempt from the outwardness check because their volume depends
+  on the closure convention.
 - **Recommendations**: If you see topology warnings:
   1. Reduce step size (`t`).
   2. Interleave `equiangulation` (`u`) and `vertex_averaging` (`V`) more frequently.

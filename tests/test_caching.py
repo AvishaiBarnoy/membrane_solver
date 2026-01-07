@@ -61,9 +61,12 @@ def test_body_cache_hit_and_miss():
     mesh = parse_geometry(data)
     body = mesh.bodies[0]
 
-    # Initial state
-    assert body._cached_volume is None
-    assert body._cached_version == -1
+    # Initial state: geometry validation may pre-warm volume cache.
+    if body._cached_volume is None:
+        assert body._cached_version == -1
+    else:
+        assert body._cached_version == mesh._version
+        assert body._cached_volume_grad is None
     initial_version = mesh._version
 
     # 2. First Computation (Populate Cache)

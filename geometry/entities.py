@@ -1242,6 +1242,79 @@ class Mesh:
 
         return True
 
+    def _body_edge_uses(self, body: "Body") -> dict[int, list[tuple[int, int]]]:
+        """Return mapping ``edge_id -> [(facet_id, sign), ...]`` within a body."""
+        edge_uses: dict[int, list[tuple[int, int]]] = {}
+        for fid in body.facet_indices:
+            facet = self.facets.get(fid)
+            if facet is None:
+                raise BodyOrientationError(
+                    f"Body {body.index} references missing facet {fid}.",
+                    body_index=body.index,
+                    mesh=self,
+                )
+            for signed_ei in facet.edge_indices:
+                ei = abs(int(signed_ei))
+                sign = 1 if int(signed_ei) > 0 else -1
+                edge_uses.setdefault(ei, []).append((facet.index, sign))
+        return edge_uses
+
+    def _body_is_closed(self, body: "Body") -> bool:
+        """Return ``True`` when the body's facets form a closed 2-manifold."""
+        edge_uses = self._body_edge_uses(body)
+        return bool(edge_uses) and all(len(uses) == 2 for uses in edge_uses.values())
+
+    def validate_body_outwardness(self, volume_tol: float = 1e-12) -> bool:
+        """Validate that closed bodies have outward (positive) signed volume.
+
+        Open bodies are skipped because their volume depends on the chosen
+        closure surface (e.g. a drop on a hard plane).
+        """
+        if not self.bodies:
+            return True
+
+        tol = float(volume_tol)
+        for body in self.bodies.values():
+            if not self._body_is_closed(body):
+                continue
+            vol = float(body.compute_volume(self))
+            if abs(vol) <= tol:
+                continue
+            if vol < -tol:
+                raise BodyOrientationError(
+                    f"Body {body.index} is inward-oriented (signed volume {vol:.6g} < 0).",
+                    body_index=body.index,
+                    mesh=self,
+                )
+        return True
+
+    def orient_body_outward(self, body_index: int, volume_tol: float = 1e-12) -> int:
+        """Flip all facets in ``body_index`` if signed volume is negative.
+
+        Returns the number of flipped facets (0 for open bodies or positive volume).
+        """
+        body = self.bodies.get(body_index)
+        if body is None:
+            raise KeyError(f"Body {body_index} not found in mesh.")
+
+        if not self._body_is_closed(body):
+            return 0
+
+        tol = float(volume_tol)
+        vol = float(body.compute_volume(self))
+        if vol >= -tol:
+            return 0
+
+        for fid in body.facet_indices:
+            facet = self.facets.get(fid)
+            if facet is None:  # pragma: no cover - defensive
+                continue
+            facet.edge_indices = [-int(ei) for ei in reversed(facet.edge_indices)]
+
+        self.build_facet_vertex_loops()
+        self.increment_version()
+        return len(body.facet_indices)
+
     def orient_body_facets(self, body_index: int) -> int:
         """Re-orient facets in a body to make shared-edge orientations consistent.
 
@@ -1755,6 +1828,7 @@ class Mesh:
 
         # 3. Ensure bodies have consistent facet orientation (if defined).
         self.validate_body_orientation()
+        self.validate_body_outwardness()
 
         return True
 

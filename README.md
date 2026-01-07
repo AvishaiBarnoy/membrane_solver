@@ -152,6 +152,10 @@ returned mesh is therefore ready for optimization without further refinement.
 
 For edge‑only or “wire‑frame” geometries, the `faces` section is optional.
 
+Closed bodies are validated for consistent facet orientation and positive signed
+volume; open bodies (e.g., droplets on hard planes) skip the outwardness check
+because their volume depends on the closure convention.
+
 ## Visualization
 
 Use the visualization module to inspect geometries:
