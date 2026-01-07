@@ -143,6 +143,16 @@ def plot_geometry(
     color_by: Optional[str] = None,
     show_colorbar: bool | None = None,
     show_tilt_arrows: bool = False,
+    tilt_arrows_max: int | None = 2000,
+    tilt_arrow_scale: float = 0.1,
+    show_tilt_streamlines: bool = False,
+    tilt_streamlines_max: int = 200,
+    tilt_streamlines_steps: int = 80,
+    tilt_streamlines_cos_min: float = 0.2,
+    show_patch_boundaries: bool = False,
+    patch_key: str = "disk_patch",
+    show_boundary_loops: bool = False,
+    annotate_boundary_geodesic: bool = False,
     no_axes: bool = False,
     show: bool = True,
 ) -> None:
@@ -194,6 +204,26 @@ def plot_geometry(
         When ``True``, draw short arrows at vertices showing the tilt
         direction (in 3D). This is an overlay to complement magnitude/divergence
         coloring.
+    tilt_arrows_max : int, optional
+        Maximum number of arrows to draw when ``show_tilt_arrows`` is enabled.
+        Large meshes can produce unreadable plots if every vertex is drawn.
+        Set to ``None`` to draw all arrows.
+    tilt_arrow_scale : float, optional
+        Arrow length as a fraction of the plot bounding-box span.
+    show_tilt_streamlines : bool, optional
+        When ``True``, draw simple mesh-graph streamlines that follow the tilt
+        direction. These are qualitative diagnostics and are not a substitute
+        for a proper covariant transport scheme.
+    show_patch_boundaries : bool, optional
+        When ``True``, draw edges separating facets with different values for
+        ``facet.options[patch_key]`` (e.g. disk patch rims).
+    patch_key : str, optional
+        Facet option key storing patch labels (default: ``"disk_patch"``).
+    show_boundary_loops : bool, optional
+        When ``True``, overlay mesh boundary loops ("holes") as polylines.
+    annotate_boundary_geodesic : bool, optional
+        When ``True``, annotate boundary loops with their discrete geodesic
+        curvature sums (Gauss–Bonnet turning angles).
     show : bool, optional
         If ``True`` (default), call :func:`matplotlib.pyplot.show` after
         drawing. Set to ``False`` when using non‑interactive backends
@@ -420,16 +450,20 @@ def plot_geometry(
         positions = mesh.positions_view()
         tilts = mesh.tilts_view()
         mags = np.linalg.norm(tilts, axis=1)
-        good = mags > 1e-12
-        dirs = np.zeros_like(tilts)
-        dirs[good] = tilts[good] / mags[good][:, None]
+        good_idx = np.where(mags > 1e-12)[0]
+        if tilt_arrows_max is not None and good_idx.size > tilt_arrows_max:
+            sample = np.linspace(0, good_idx.size - 1, int(tilt_arrows_max), dtype=int)
+            good_idx = good_idx[sample]
+
+        dirs = tilts[good_idx] / mags[good_idx][:, None]
 
         span = positions.max(axis=0) - positions.min(axis=0)
         max_range = float(np.max(span)) if span.size else 0.0
-        arrow_len = 0.1 * max_range if max_range > 0 else 1.0
+        arrow_len = float(tilt_arrow_scale) * max_range if max_range > 0 else 1.0
 
-        ends = positions + arrow_len * dirs
-        segments_arr = np.stack([positions, ends], axis=1)
+        starts = positions[good_idx]
+        ends = starts + arrow_len * dirs
+        segments_arr = np.stack([starts, ends], axis=1)
         arrow_collection = Line3DCollection(
             list(segments_arr),
             colors="k",
@@ -438,6 +472,168 @@ def plot_geometry(
         )
         arrow_collection.set_label("_tilt_arrows")
         ax.add_collection3d(arrow_collection)
+
+    if show_tilt_streamlines:
+        positions = mesh.positions_view()
+        tilts = mesh.tilts_view()
+        mags = np.linalg.norm(tilts, axis=1)
+        good_rows = np.where(mags > 1e-12)[0]
+        if good_rows.size:
+            if good_rows.size > int(tilt_streamlines_max):
+                sample = np.linspace(
+                    0, good_rows.size - 1, int(tilt_streamlines_max), dtype=int
+                )
+                good_rows = good_rows[sample]
+
+            neighbors: dict[int, list[int]] = {vid: [] for vid in mesh.vertex_ids}
+            for edge in mesh.edges.values():
+                neighbors[int(edge.tail_index)].append(int(edge.head_index))
+                neighbors[int(edge.head_index)].append(int(edge.tail_index))
+            for vids in neighbors.values():
+                vids.sort()
+
+            idx_map = mesh.vertex_index_to_row
+            row_to_vid = [int(v) for v in mesh.vertex_ids]
+
+            def _step(vid: int, direction: np.ndarray, visited: set[int]) -> int | None:
+                row = idx_map.get(vid)
+                if row is None:
+                    return None
+                origin = positions[row]
+                best_vid = None
+                best_cos = float(tilt_streamlines_cos_min)
+                for nb in neighbors.get(vid, []):
+                    if nb in visited:
+                        continue
+                    nb_row = idx_map.get(nb)
+                    if nb_row is None:
+                        continue
+                    dpos = positions[nb_row] - origin
+                    nd = float(np.linalg.norm(dpos))
+                    if nd <= 1e-15:
+                        continue
+                    cosv = float(np.dot(dpos / nd, direction))
+                    if cosv > best_cos:
+                        best_cos = cosv
+                        best_vid = nb
+                return best_vid
+
+            stream_segments: list[np.ndarray] = []
+
+            for row in good_rows:
+                seed_vid = row_to_vid[int(row)]
+                seed_dir = tilts[int(row)]
+                nrm = float(np.linalg.norm(seed_dir))
+                if nrm <= 1e-12:
+                    continue
+                d0 = seed_dir / nrm
+
+                def _trace(sign: float) -> list[int]:
+                    path = [seed_vid]
+                    visited = {seed_vid}
+                    vid = seed_vid
+                    direction = sign * d0
+                    for _ in range(int(tilt_streamlines_steps)):
+                        nxt = _step(vid, direction, visited)
+                        if nxt is None:
+                            break
+                        path.append(nxt)
+                        visited.add(nxt)
+                        vid = nxt
+                        row_n = idx_map.get(vid)
+                        if row_n is None:
+                            break
+                        t = tilts[row_n]
+                        nt = float(np.linalg.norm(t))
+                        if nt <= 1e-12:
+                            break
+                        direction = sign * (t / nt)
+                    return path
+
+                backward = _trace(-1.0)
+                forward = _trace(1.0)
+                full = list(reversed(backward[:-1])) + forward
+                if len(full) < 2:
+                    continue
+
+                pts = np.stack([mesh.vertices[vid].position for vid in full], axis=0)
+                segs = np.stack([pts[:-1], pts[1:]], axis=1)
+                stream_segments.extend(list(segs))
+
+            if stream_segments:
+                stream_collection = Line3DCollection(
+                    stream_segments,
+                    colors=(0.1, 0.1, 0.1, 0.6),
+                    linewidths=1.0,
+                )
+                stream_collection.set_label("_tilt_streamlines")
+                ax.add_collection3d(stream_collection)
+
+    if show_patch_boundaries:
+        from runtime.diagnostics.patches import patch_boundary_edges
+
+        groups = patch_boundary_edges(mesh, patch_key=patch_key)
+        if groups:
+            positions = mesh.positions_view()
+            idx_map = mesh.vertex_index_to_row
+            cmap = plt.get_cmap("tab10")
+            for idx, (label, edges) in enumerate(sorted(groups.items())):
+                if not edges:
+                    continue
+                edge_rows = np.array(
+                    [(idx_map[e.tail_index], idx_map[e.head_index]) for e in edges],
+                    dtype=int,
+                )
+                segments_arr = positions[edge_rows]
+                color = cmap(idx % 10)
+                coll = Line3DCollection(
+                    list(segments_arr),
+                    colors=[color],
+                    linewidths=2.0,
+                    alpha=0.9,
+                )
+                coll.set_label("_patch_boundaries")
+                ax.add_collection3d(coll)
+
+    if show_boundary_loops:
+        from runtime.diagnostics.gauss_bonnet import (
+            boundary_geodesic_sum,
+            extract_boundary_loops,
+            find_boundary_edges,
+        )
+
+        boundary_edges = find_boundary_edges(mesh)
+        loops = extract_boundary_loops(mesh, boundary_edges)
+        per_loop = (
+            boundary_geodesic_sum(mesh, loops) if annotate_boundary_geodesic else {}
+        )
+
+        cmap = plt.get_cmap("tab10")
+        for idx, loop in enumerate(loops):
+            if len(loop) < 2:
+                continue
+            pts = np.stack([v.position for v in loop] + [loop[0].position], axis=0)
+            segs = np.stack([pts[:-1], pts[1:]], axis=1)
+            color = cmap(idx % 10)
+            coll = Line3DCollection(
+                list(segs),
+                colors=[color],
+                linewidths=2.5,
+                alpha=0.9,
+            )
+            coll.set_label("_boundary_loops")
+            ax.add_collection3d(coll)
+
+            if annotate_boundary_geodesic and idx in per_loop:
+                c = pts[:-1].mean(axis=0)
+                ax.text(
+                    float(c[0]),
+                    float(c[1]),
+                    float(c[2]),
+                    f"B{idx}={per_loop[idx]:.3g}",
+                    fontsize=8,
+                    color="k",
+                )
 
     # Optional: plot vertices
     if scatter:

@@ -72,6 +72,61 @@ def create_parser() -> argparse.ArgumentParser:
         help="Overlay arrows showing vertex tilt direction.",
     )
     parser.add_argument(
+        "--tilt-arrows-max",
+        type=int,
+        default=2000,
+        help="Maximum number of tilt arrows to draw (default: 2000).",
+    )
+    parser.add_argument(
+        "--tilt-arrow-scale",
+        type=float,
+        default=0.1,
+        help="Arrow length as a fraction of the plot span (default: 0.1).",
+    )
+    parser.add_argument(
+        "--tilt-streamlines",
+        action="store_true",
+        help="Overlay simple mesh-graph streamlines following the tilt field.",
+    )
+    parser.add_argument(
+        "--tilt-streamlines-max",
+        type=int,
+        default=200,
+        help="Maximum number of tilt streamlines to draw (default: 200).",
+    )
+    parser.add_argument(
+        "--tilt-streamlines-steps",
+        type=int,
+        default=80,
+        help="Maximum steps per streamline (default: 80).",
+    )
+    parser.add_argument(
+        "--tilt-streamlines-cos-min",
+        type=float,
+        default=0.2,
+        help="Minimum cosine alignment to continue a streamline (default: 0.2).",
+    )
+    parser.add_argument(
+        "--patch-boundaries",
+        action="store_true",
+        help="Overlay patch boundaries (edges separating facet patch labels).",
+    )
+    parser.add_argument(
+        "--patch-key",
+        default="disk_patch",
+        help="Facet option key used for patch labels (default: disk_patch).",
+    )
+    parser.add_argument(
+        "--boundary-loops",
+        action="store_true",
+        help='Overlay mesh boundary loops ("holes").',
+    )
+    parser.add_argument(
+        "--boundary-geodesic",
+        action="store_true",
+        help="Annotate boundary loops with geodesic curvature sums (Gauss–Bonnet).",
+    )
+    parser.add_argument(
         "--save",
         metavar="PATH",
         help="Save the rendered figure to PATH instead of only showing it.",
@@ -148,6 +203,16 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
         edge_colors=None,
         color_by=color_by,
         show_tilt_arrows=args.tilt_arrows,
+        tilt_arrows_max=None if args.tilt_arrows_max <= 0 else args.tilt_arrows_max,
+        tilt_arrow_scale=args.tilt_arrow_scale,
+        show_tilt_streamlines=args.tilt_streamlines,
+        tilt_streamlines_max=args.tilt_streamlines_max,
+        tilt_streamlines_steps=args.tilt_streamlines_steps,
+        tilt_streamlines_cos_min=args.tilt_streamlines_cos_min,
+        show_patch_boundaries=args.patch_boundaries,
+        patch_key=args.patch_key,
+        show_boundary_loops=args.boundary_loops,
+        annotate_boundary_geodesic=args.boundary_geodesic,
         no_axes=args.no_axes,
         show=show,
     )

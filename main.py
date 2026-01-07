@@ -155,6 +155,48 @@ def main():
         help="Color facets by div(t) in --viz mode.",
     )
     parser.add_argument(
+        "--viz-tilt-arrows",
+        action="store_true",
+        help="Overlay tilt arrows in --viz mode.",
+    )
+    parser.add_argument(
+        "--viz-tilt-arrows-max",
+        type=int,
+        default=2000,
+        help="Maximum number of tilt arrows to draw (default: 2000).",
+    )
+    parser.add_argument(
+        "--viz-tilt-arrow-scale",
+        type=float,
+        default=0.1,
+        help="Arrow length as a fraction of the plot span (default: 0.1).",
+    )
+    parser.add_argument(
+        "--viz-tilt-streamlines",
+        action="store_true",
+        help="Overlay simple tilt streamlines in --viz mode.",
+    )
+    parser.add_argument(
+        "--viz-patch-boundaries",
+        action="store_true",
+        help="Overlay facet patch boundaries in --viz mode.",
+    )
+    parser.add_argument(
+        "--viz-patch-key",
+        default="disk_patch",
+        help="Facet option key used for patch labels (default: disk_patch).",
+    )
+    parser.add_argument(
+        "--viz-boundary-loops",
+        action="store_true",
+        help='Overlay mesh boundary loops ("holes") in --viz mode.',
+    )
+    parser.add_argument(
+        "--viz-boundary-geodesic",
+        action="store_true",
+        help="Annotate boundary loops with geodesic curvature sums in --viz mode.",
+    )
+    parser.add_argument(
         "--viz-no-axes",
         action="store_true",
         help="Remove axes from the plot in --viz mode.",
@@ -324,6 +366,18 @@ def main():
             draw_edges=not args.viz_no_edges,
             no_axes=args.viz_no_axes,
             color_by=color_by,
+            show_tilt_arrows=getattr(args, "viz_tilt_arrows", False),
+            tilt_arrows_max=(
+                None
+                if int(getattr(args, "viz_tilt_arrows_max", 2000)) <= 0
+                else int(getattr(args, "viz_tilt_arrows_max", 2000))
+            ),
+            tilt_arrow_scale=float(getattr(args, "viz_tilt_arrow_scale", 0.1)),
+            show_tilt_streamlines=getattr(args, "viz_tilt_streamlines", False),
+            show_patch_boundaries=getattr(args, "viz_patch_boundaries", False),
+            patch_key=str(getattr(args, "viz_patch_key", "disk_patch")),
+            show_boundary_loops=getattr(args, "viz_boundary_loops", False),
+            annotate_boundary_geodesic=getattr(args, "viz_boundary_geodesic", False),
             show=show,
         )
         if args.viz_save:

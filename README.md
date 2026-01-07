@@ -160,6 +160,15 @@ Use the visualization module to inspect geometries:
 python -m visualization.cli meshes/cube.json
 ```
 
+For multi-disk / inclusion studies, patch and boundary overlays are available:
+
+- `python -m visualization.cli meshes/bench_two_disks_sphere.json --patch-boundaries`
+  Draws edges separating facet patch labels (default key: `disk_patch`).
+- `python -m visualization.cli meshes/open_mesh.json --boundary-loops --boundary-geodesic`
+  Draws mesh boundary loops ("holes") and annotates discrete geodesic curvature sums.
+- `python -m visualization.cli meshes/cube.json --tilt --tilt-arrows --tilt-streamlines`
+  Colors by tilt magnitude and overlays tilt glyphs/streamlines.
+
 You can also visualize any input mesh directly via `main.py`:
 
 ```bash
@@ -185,6 +194,17 @@ The CLI accepts several flags:
 
 All interactive visualizations are based on the shared `visualization.plotting.plot_geometry`
 helper, which ensures equal aspect ratios to prevent distortion.
+
+## Multi-disk sweep reports
+
+To analyze a directory of sweep outputs (one output mesh per separation), run:
+
+```bash
+python -m membrane_solver.analysis.multidisk_sweep outputs/sweep --outdir outputs/report
+```
+
+This writes `outputs/report/results.csv` + `outputs/report/results.json` and generates:
+`energy_vs_L.png`, `interaction_energy_vs_L.png`, and `observables_vs_L.png`.
 
 ## Constraint modules
 
