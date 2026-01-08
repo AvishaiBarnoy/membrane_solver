@@ -854,6 +854,7 @@ class Mesh:
     constraint_modules: List[str] = field(default_factory=list)
     instructions: List[str] = field(default_factory=list)
     macros: Dict[str, List[str]] = field(default_factory=dict)
+    definitions: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
     vertex_to_facets: Dict[int, set] = field(default_factory=dict)
     vertex_to_edges: Dict[int, set] = field(default_factory=dict)
