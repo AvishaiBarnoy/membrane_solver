@@ -85,3 +85,4 @@ def test_refine_command_updates_mesh_and_keeps_body_orientation() -> None:
     assert n1[1] > n0[1]
     assert n1[2] > n0[2]
     assert ctx.mesh.validate_body_orientation() is True
+    assert ctx.mesh.validate_body_outwardness() is True

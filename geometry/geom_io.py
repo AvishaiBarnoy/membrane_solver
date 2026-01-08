@@ -198,6 +198,7 @@ def parse_geometry(data: dict) -> Mesh:
         constraint_module_names.append("global_area")
 
     definitions = data.get("definitions", {})
+    mesh.definitions = definitions.copy() if isinstance(definitions, dict) else {}
 
     def resolve_options(raw_options):
         if not raw_options:
@@ -823,6 +824,7 @@ def parse_geometry(data: dict) -> Mesh:
     # Automatically triangulate polygonal facets if needed
     if any(len(f.edge_indices) > 3 for f in mesh.facets.values()):
         refined = refine_polygonal_facets(mesh)
+        refined.definitions = getattr(mesh, "definitions", {}).copy()
         refined.initialize_tilts_from_options()
         _strip_tilt_options(refined)
         try:
@@ -954,6 +956,8 @@ def save_geometry(
         "global_parameters": mesh.global_parameters.to_dict(),
         "instructions": mesh.instructions,
     }
+    if getattr(mesh, "definitions", None):
+        data["definitions"] = mesh.definitions
     with open(path, "w") as f:
         if compact:
             json.dump(data, f, separators=(",", ":"), ensure_ascii=False)
