@@ -1,0 +1,84 @@
+vertices:
+- - 0.0
+  - 0.0
+  - 0.0
+  - tilt:
+    - 0.2
+    - -0.1
+    - 0.3
+    tilt_fixed: true
+- - 1.0
+  - 0.0
+  - 0.0
+  - tilt:
+    - 0.2
+    - -0.1
+    - 0.3
+    tilt_fixed: true
+- - 0.0
+  - 1.0
+  - 0.0
+  - tilt:
+    - 0.2
+    - -0.1
+    - 0.3
+    tilt_fixed: true
+- - 0.0
+  - 0.0
+  - 1.0
+  - tilt:
+    - 0.2
+    - -0.1
+    - 0.3
+    tilt_fixed: true
+edges:
+- - 0
+  - 1
+- - 1
+  - 2
+- - 2
+  - 0
+- - 0
+  - 3
+- - 1
+  - 3
+- - 2
+  - 3
+faces:
+- - r2
+  - r1
+  - r0
+- - 0
+  - 4
+  - r3
+- - 3
+  - r5
+  - 2
+- - 1
+  - 5
+  - r4
+bodies:
+  faces:
+  - - 0
+    - 1
+    - 2
+    - 3
+  target_volume:
+  - 0.2
+energy_modules:
+- bending_tilt
+- tilt
+global_parameters:
+  surface_tension: 0.0
+  bending_modulus: 0.2
+  bending_energy_model: helfrich
+  spontaneous_curvature: 0.0
+  tilt_rigidity: 0.05
+  tilt_solve_mode: nested
+  tilt_step_size: 0.2
+  tilt_inner_steps: 50
+  tilt_tol: 1.0e-10
+  step_size: 0.002
+  step_size_mode: fixed
+  volume_constraint_mode: lagrange
+instructions: []
