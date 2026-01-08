@@ -131,6 +131,24 @@ def test_tilt_source_decay_on_planar_patch():
     assert float(near.mean()) > float(mid.mean()) > float(far.mean())
 
 
+def test_tilt_tangency_projection_on_closed_mesh():
+    """B0.1: projecting tilt on a closed mesh removes normal components."""
+    data = cube_soft_volume_input(volume_mode="lagrange")
+    mesh = parse_geometry(data)
+
+    rng = np.random.default_rng(0)
+    for vid in mesh.vertices:
+        mesh.vertices[vid].tilt = rng.normal(size=3)
+    mesh.touch_tilts()
+
+    mesh.project_tilts_to_tangent()
+
+    normals = mesh.vertex_normals()
+    tilts = mesh.tilts_view()
+    dot = np.einsum("ij,ij->i", normals, tilts)
+    assert float(np.max(np.abs(dot))) < 1e-12
+
+
 def test_tilt_opposite_sources_cancel_at_midpoint():
     mesh_single, vid = _planar_grid_mesh(10)
     mesh_dipole = mesh_single.copy()
