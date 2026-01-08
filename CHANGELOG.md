@@ -16,6 +16,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Explicit build helper: `python -m membrane_solver.build_ext` for f2py kernels.
   - Hardened CI: Python version matrix (3.11, 3.12) and packaging-based test execution.
 - Optional Fortran (f2py) surface-energy kernel (`fortran_kernels/surface_energy.f90`) with automatic runtime fallback to NumPy when not built/available.
+- Closed-body outwardness validation (signed volume check) with open-body exemption for cases like droplets on hard planes.
 
 ### Fixed
 - **Tilt Persistence**: Corrected `save_geometry` to persist `tilt` and `tilt_fixed` vertex properties to output JSON files.

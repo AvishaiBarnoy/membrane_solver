@@ -322,17 +322,21 @@ def main():
             sys.exit(1)
 
         flipped = 0
+        outward_flipped = 0
         for bid in sorted(bad_mesh.bodies):
             flipped += bad_mesh.orient_body_facets(bid)
+            outward_flipped += bad_mesh.orient_body_outward(bid)
         bad_mesh.validate_body_orientation()
+        bad_mesh.validate_body_outwardness()
 
         inp = Path(args.input)
         fixed_path = inp.with_name(f"{inp.stem}.oriented.json")
         save_geometry(bad_mesh, str(fixed_path), compact=args.compact_output_json)
         logger.info(
-            "Saved oriented geometry to %s (flipped %d facets).",
+            "Saved oriented geometry to %s (flipped %d facets, outward flips %d).",
             fixed_path,
             flipped,
+            outward_flipped,
         )
         mesh = bad_mesh
 
