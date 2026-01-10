@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from sample_meshes import cube_soft_volume_input
 
 from core.parameters.global_parameters import GlobalParameters
@@ -293,3 +294,98 @@ def test_tilt_pipeline_stable_after_triangle_refinement():
     assert refined_min.mesh.validate_edge_indices()
     assert not np.any(np.isnan(refined_min.mesh.positions_view()))
     assert not np.any(np.isnan(refined_min.mesh.tilts_view()))
+
+
+def test_refinement_inherits_tilt_fixed_on_boundary_loop_midpoints() -> None:
+    """Refinement: midpoints on a fixed-tilt loop keep fixed_tilt and average tilt."""
+    mesh = Mesh()
+    mesh.global_parameters = GlobalParameters({"surface_tension": 0.0})
+    mesh.energy_modules = []
+    mesh.constraint_modules = []
+
+    mesh.vertices = {
+        0: Vertex(
+            0,
+            np.array([0.0, 0.0, 0.0], dtype=float),
+            fixed=True,
+            tilt=np.array([1.0, 0.0, 0.0], dtype=float),
+            tilt_fixed=True,
+        ),
+        1: Vertex(
+            1,
+            np.array([1.0, 0.0, 0.0], dtype=float),
+            fixed=True,
+            tilt=np.array([0.0, 1.0, 0.0], dtype=float),
+            tilt_fixed=True,
+        ),
+        2: Vertex(
+            2,
+            np.array([1.0, 1.0, 0.0], dtype=float),
+            fixed=True,
+            tilt=np.array([-1.0, 0.0, 0.0], dtype=float),
+            tilt_fixed=True,
+        ),
+        3: Vertex(
+            3,
+            np.array([0.0, 1.0, 0.0], dtype=float),
+            fixed=True,
+            tilt=np.array([0.0, -1.0, 0.0], dtype=float),
+            tilt_fixed=True,
+        ),
+    }
+
+    # Boundary edges + diagonal; edges are *not* marked fixed to ensure
+    # tilt_fixed inheritance depends only on parent vertices.
+    mesh.edges = {
+        1: Edge(1, 0, 1),
+        2: Edge(2, 1, 2),
+        3: Edge(3, 2, 0),  # diagonal (2 -> 0)
+        4: Edge(4, 2, 3),
+        5: Edge(5, 3, 0),
+    }
+    mesh.facets = {
+        0: Facet(0, [1, 2, 3]),  # (0,1,2)
+        1: Facet(1, [-3, 4, 5]),  # (0,2,3)
+    }
+    mesh.build_connectivity_maps()
+    mesh.build_facet_vertex_loops()
+    mesh.build_position_cache()
+    mesh.touch_tilts()
+
+    refined = refine_triangle_mesh(mesh)
+
+    def find_vertex_by_position(pos: np.ndarray) -> Vertex:
+        for v in refined.vertices.values():
+            if np.allclose(v.position, pos, atol=1e-12, rtol=0.0):
+                return v
+        raise AssertionError(
+            f"Could not find refined vertex at position {pos.tolist()}"
+        )
+
+    checks = [
+        # edge (0,1)
+        (
+            np.array([0.5, 0.0, 0.0], dtype=float),
+            0.5 * (mesh.vertices[0].tilt + mesh.vertices[1].tilt),
+        ),
+        # edge (1,2)
+        (
+            np.array([1.0, 0.5, 0.0], dtype=float),
+            0.5 * (mesh.vertices[1].tilt + mesh.vertices[2].tilt),
+        ),
+        # edge (2,3)
+        (
+            np.array([0.5, 1.0, 0.0], dtype=float),
+            0.5 * (mesh.vertices[2].tilt + mesh.vertices[3].tilt),
+        ),
+        # edge (3,0)
+        (
+            np.array([0.0, 0.5, 0.0], dtype=float),
+            0.5 * (mesh.vertices[3].tilt + mesh.vertices[0].tilt),
+        ),
+    ]
+
+    for midpoint_pos, expected_tilt in checks:
+        v = find_vertex_by_position(midpoint_pos)
+        assert v.tilt_fixed is True
+        assert v.tilt == pytest.approx(expected_tilt, rel=0.0, abs=1e-12)
