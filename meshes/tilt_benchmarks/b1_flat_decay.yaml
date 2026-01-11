@@ -1907,11 +1907,9 @@ faces:
   - r314
 energy_modules:
 - tilt
-- tilt_smoothness
 global_parameters:
   surface_tension: 0.0
   tilt_rigidity: 0.1
-  tilt_smoothness_rigidity: 1.0
   tilt_solve_mode: nested
   tilt_step_size: 0.35
   tilt_inner_steps: 300

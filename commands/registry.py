@@ -12,6 +12,7 @@ from commands.meta import (
     HistoryCommand,
     PrintEntityCommand,
     QuitCommand,
+    RefreshModulesCommand,
     SetCommand,
     StepSizeCommand,
 )
@@ -54,6 +55,9 @@ COMMAND_REGISTRY = {
     "print": PrintEntityCommand(),
     "energy": EnergyCommand(),
     "history": HistoryCommand(),
+    "refresh": RefreshModulesCommand(),
+    "reload": RefreshModulesCommand(),
+    "modules": RefreshModulesCommand(),
     "t": StepSizeCommand(),
     "tf": StepSizeCommand(),
 }

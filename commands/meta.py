@@ -39,6 +39,7 @@ class HelpCommand(Command):
         print("  save          Save geometry to 'interactive.temp'")
         print("  energy        Shortcut for 'print energy breakdown'")
         print("  history       Show commands entered in this session")
+        print("  refresh       Reload energy/constraint modules from mesh state")
         print("  quit / exit / q  Leave interactive mode")
 
 
@@ -135,6 +136,17 @@ class EnergyCommand(Command):
             return
 
         print("Usage: energy [breakdown|total]")
+
+
+class RefreshModulesCommand(Command):
+    """Reload energy/constraint modules from the current mesh state."""
+
+    def execute(self, context, args):
+        minimizer = getattr(context, "minimizer", None)
+        if minimizer is None:
+            print("No minimizer available to refresh modules.")
+            return
+        minimizer.refresh_modules()
 
 
 class SetCommand(Command):
