@@ -29,11 +29,13 @@ organized under `geometry/`, `modules/`, `runtime/` and other directories.
   they are missing.
 
 ## TDD Workflow
+- Create feature branch
 - Start with a failing test that captures the intended behavior (bug repro or new feature).
 - Make the smallest code change to pass the test; avoid unrelated refactors in the same step.
 - Refactor only after tests are green, keeping changes behavior-preserving.
 - Prefer targeted test runs while iterating (e.g., `pytest -q tests/test_foo.py -k case_name`), then run the full suite before finalizing.
 - For performance-sensitive code (energy/constraint hot loops), add regression tests that guard both correctness (finite diff / directional derivative) and vectorization (avoid per-entity Python loops).
+- Update documentation
 
 ## Pull Requests
 - Summarize your changes clearly in commit messages and PR descriptions.
