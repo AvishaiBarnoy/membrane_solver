@@ -78,6 +78,22 @@
   - Link any relevant issues or documentation.
   - Request reviews from appropriate team members.
 
+  6.1 CR Flow Checklist
+  Use this quick checklist before asking for code review.
+
+  Before committing:
+  git status
+  git diff
+  git add -p
+  git diff --staged
+
+  After commits:
+  git fetch origin
+  git diff origin/main...
+  git difftool origin/main...
+  git log --oneline origin/main..HEAD
+  git log -p origin/main..HEAD
+
   7. Review and Merge Pull Request
   Once your PR has been approved and all checks pass:
 
