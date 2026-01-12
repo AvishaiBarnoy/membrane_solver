@@ -39,6 +39,7 @@ class HelpCommand(Command):
         print("  save          Save geometry to 'interactive.temp'")
         print("  energy        Shortcut for 'print energy breakdown'")
         print("  history       Show commands entered in this session")
+        print("  tilt_stats    Print |tilt| and div(tilt) diagnostics")
         print("  refresh       Reload energy/constraint modules from mesh state")
         print("  quit / exit / q  Leave interactive mode")
 
@@ -147,6 +148,63 @@ class RefreshModulesCommand(Command):
             print("No minimizer available to refresh modules.")
             return
         minimizer.refresh_modules()
+
+
+class TiltStatsCommand(Command):
+    """Print summary statistics for tilt magnitude and divergence."""
+
+    def execute(self, context, args):
+        from geometry.tilt_operators import p1_vertex_divergence
+
+        mesh = context.mesh
+        mesh.build_position_cache()
+        positions = mesh.positions_view()
+        tilts = mesh.tilts_view()
+        tri_rows, _ = mesh.triangle_row_cache()
+        if tilts is None or tilts.size == 0 or tri_rows is None:
+            print("Tilt diagnostics: no tilt data available.")
+            return
+
+        mags = np.linalg.norm(tilts, axis=1)
+        div_v, _areas = p1_vertex_divergence(
+            n_vertices=len(mesh.vertex_ids),
+            positions=positions,
+            tilts=tilts,
+            tri_rows=tri_rows,
+        )
+
+        boundary_vids = getattr(mesh, "boundary_vertex_ids", None) or []
+        boundary_rows = np.array(
+            [
+                mesh.vertex_index_to_row[vid]
+                for vid in boundary_vids
+                if vid in mesh.vertex_index_to_row
+            ],
+            dtype=int,
+        )
+        mask_interior = np.ones(len(mesh.vertex_ids), dtype=bool)
+        if boundary_rows.size:
+            mask_interior[boundary_rows] = False
+
+        def _stats(label: str, values):
+            if values.size == 0:
+                print(f"{label}: (no vertices)")
+                return
+            q = np.quantile(values, [0.0, 0.5, 0.9, 0.99, 1.0])
+            print(
+                f"{label}: min={q[0]:.4e} med={q[1]:.4e} "
+                f"p90={q[2]:.4e} p99={q[3]:.4e} max={q[4]:.4e}"
+            )
+
+        print("Tilt diagnostics (|t|):")
+        _stats("  all", mags)
+        if np.any(mask_interior):
+            _stats("  interior", mags[mask_interior])
+
+        print("Tilt diagnostics (div t):")
+        _stats("  all", div_v)
+        if np.any(mask_interior):
+            _stats("  interior", div_v[mask_interior])
 
 
 class SetCommand(Command):

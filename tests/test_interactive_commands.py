@@ -3,6 +3,7 @@ from sample_meshes import cube_soft_volume_input
 from commands.context import CommandContext
 from commands.io import PropertiesCommand
 from commands.mesh_ops import RefineCommand
+from commands.meta import TiltStatsCommand
 from commands.registry import get_command
 from geometry.geom_io import parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
@@ -39,6 +40,16 @@ def test_get_command_aliases():
 
     cmd, args = get_command("props")
     assert isinstance(cmd, PropertiesCommand)
+
+
+def test_get_command_tilt_stats():
+    cmd, args = get_command("tilt_stats")
+    assert isinstance(cmd, TiltStatsCommand)
+    assert args == []
+
+    cmd, args = get_command("tstats")
+    assert isinstance(cmd, TiltStatsCommand)
+    assert args == []
 
 
 def test_execute_refine_command():
