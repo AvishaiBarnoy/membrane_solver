@@ -15,6 +15,7 @@ from commands.meta import (
     RefreshModulesCommand,
     SetCommand,
     StepSizeCommand,
+    TiltStatsCommand,
 )
 from commands.minimization import (
     GoCommand,
@@ -58,6 +59,8 @@ COMMAND_REGISTRY = {
     "refresh": RefreshModulesCommand(),
     "reload": RefreshModulesCommand(),
     "modules": RefreshModulesCommand(),
+    "tilt_stats": TiltStatsCommand(),
+    "tstats": TiltStatsCommand(),
     "t": StepSizeCommand(),
     "tf": StepSizeCommand(),
 }
@@ -74,7 +77,9 @@ def get_command(name):
     if name.lower() in {"tf", "tfree"}:
         return COMMAND_REGISTRY["t"], ["free"]
     if name.lower().startswith("t") and len(name) > 1:
-        # Allow t1e-3, t0.01, etc.
+        # Allow t1e-3, t0.01, etc. (avoid colliding with tilt_stats).
+        if name.lower() in {"tilt_stats", "tstats"}:
+            return COMMAND_REGISTRY["tilt_stats"], []
         return COMMAND_REGISTRY["t"], [name[1:]]
 
     cmd = COMMAND_REGISTRY.get(name.lower())

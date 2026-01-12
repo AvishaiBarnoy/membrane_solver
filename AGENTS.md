@@ -30,6 +30,7 @@ organized under `geometry/`, `modules/`, `runtime/` and other directories.
 
 ## TDD Workflow
 - Create feature branch
+- Checkout to new branch
 - Start with a failing test that captures the intended behavior (bug repro or new feature).
 - Make the smallest code change to pass the test; avoid unrelated refactors in the same step.
 - Refactor only after tests are green, keeping changes behavior-preserving.
