@@ -62,8 +62,9 @@ intended for development and planning; users should consult `README.md` and
    - Introduce localized tilt sources that decay away from the source region;
      should form a “dimple” or invagination.
    - [ ] Placeholder module for tilt energy with CLI toggles so users can enable
-         the hook even before the math lands.
+     the hook even before the math lands.
    - [ ] KH-pure variants: curl-free vs curl-rich tilt fields on flat patches.
+   - [x] KH-pure refinement stability regression tests (`tests/test_kh_pure_benchmarks.py`).
    - [x] Benchmark runner for tilt mesh suite (summaries + plots + smoke test).
 
 10. Plane with an inner disk and outer perimeter

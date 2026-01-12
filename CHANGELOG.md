@@ -7,6 +7,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - KH-pure tilt benchmark variants without smoothness regularization (`meshes/tilt_benchmarks/kh_pure_*`).
 - Tilt benchmark runner script (`tools/tilt_benchmark_runner.py`) for energy/tilt/divergence summaries.
 - Tilt benchmark runner smoke test to ensure tilt meshes load and metrics print (`tests/test_tilt_benchmark_runner.py`).
+- KH-pure refinement stability regression coverage (`tests/test_kh_pure_benchmarks.py`).
 - Feature-branch guard script and pre-commit hook (`tools/ensure_feature_branch.sh`).
 - **Kozlov–Hamm Tilt Coupling**: Implemented coupled bending+tilt energy integral $\frac{1}{2} \int \kappa (2H - c_0 + \text{div}(t))^2 dA$ in `modules/energy/bending_tilt.py`.
 - **Tilt Solve Modes**: Added `nested` and `coupled` relaxation modes in `Minimizer` to optimize the tilt field alongside surface geometry.
