@@ -37,6 +37,8 @@ organized under `geometry/`, `modules/`, `runtime/` and other directories.
 - Prefer targeted test runs while iterating (e.g., `pytest -q tests/test_foo.py -k case_name`), then run the full suite before finalizing.
 - For performance-sensitive code (energy/constraint hot loops), add regression tests that guard both correctness (finite diff / directional derivative) and vectorization (avoid per-entity Python loops).
 - Update documentation
+- Commit changes with a clear message
+- Push the branch and open a PR
 
 ## Pull Requests
 - Summarize your changes clearly in commit messages and PR descriptions.
