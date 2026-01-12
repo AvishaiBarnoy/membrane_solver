@@ -202,6 +202,10 @@ Interactive commands:
   Profile each benchmark case and save per-case `.pstats` files (plus optional
   text summaries via `--profile-top`) under `benchmarks/outputs/profiles` by default.
 
+- `python tools/tilt_benchmark_runner.py`
+  Run `meshes/tilt_benchmarks/*.yaml` and print energy/tilt/divergence summaries
+  (optionally writing JSON/CSV and plots).
+
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.
 
