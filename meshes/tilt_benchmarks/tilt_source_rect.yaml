@@ -1,0 +1,35 @@
+global_parameters:
+  surface_tension: 0.0
+  tilt_smoothness_rigidity: 1.0
+  tilt_rigidity: 0.1
+  tilt_solve_mode: nested
+  tilt_step_size: 0.05
+  tilt_inner_steps: 25
+
+energy_modules:
+  - tilt_smoothness
+  - tilt
+
+vertices:
+  # Rectangle spanning x in [0, 2] (length L=2) and y in [0, 1].
+  - [0.0, 0.0, 0.0, {tilt_fixed: true, tilt: [1.0, 0.0]}]
+  - [1.0, 0.0, 0.0]
+  - [2.0, 0.0, 0.0, {tilt_fixed: true, tilt: [-1.0, 0.0]}]
+  - [0.0, 0.5, 0.0, {tilt_fixed: true, tilt: [1.0, 0.0]}]
+  - [1.0, 0.5, 0.0]
+  - [2.0, 0.5, 0.0, {tilt_fixed: true, tilt: [-1.0, 0.0]}]
+  - [0.0, 1.0, 0.0, {tilt_fixed: true, tilt: [1.0, 0.0]}]
+  - [1.0, 1.0, 0.0]
+  - [2.0, 1.0, 0.0, {tilt_fixed: true, tilt: [-1.0, 0.0]}]
+
+faces:
+  - [0, 1, 4]
+  - [0, 4, 3]
+  - [1, 2, 5]
+  - [1, 5, 4]
+  - [3, 4, 7]
+  - [3, 7, 6]
+  - [4, 5, 8]
+  - [4, 8, 7]
+
+instructions: []

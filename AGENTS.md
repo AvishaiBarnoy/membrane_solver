@@ -39,6 +39,7 @@ organized under `geometry/`, `modules/`, `runtime/` and other directories.
 - Update documentation
 - Commit changes with a clear message
 - Push the branch and open a PR
+- End each work chunk on a branch with a commit so it is ready for code review.
 
 ## Pull Requests
 - Summarize your changes clearly in commit messages and PR descriptions.

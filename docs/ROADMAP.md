@@ -66,6 +66,8 @@ intended for development and planning; users should consult `README.md` and
    - [ ] KH-pure variants: curl-free vs curl-rich tilt fields on flat patches.
    - [x] KH-pure refinement stability regression tests (`tests/test_kh_pure_benchmarks.py`).
    - [x] Benchmark runner for tilt mesh suite (summaries + plots + smoke test).
+   - [x] Tilt-source decay benchmark meshes (`meshes/tilt_benchmarks/tilt_source_rect.yaml`,
+         `meshes/tilt_benchmarks/tilt_source_annulus.yaml`).
 
 10. Plane with an inner disk and outer perimeter
    - [ ] Test mixed boundary conditions and perimeter constraints.
