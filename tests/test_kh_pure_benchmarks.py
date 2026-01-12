@@ -25,11 +25,11 @@ def _compute_energy(path: str) -> float:
     return float(minim.compute_energy())
 
 
-def test_kh_pure_curl_free_has_nonzero_energy():
+def test_kh_pure_divergent_field_has_nonzero_energy():
     energy = _compute_energy("meshes/tilt_benchmarks/kh_pure_curl_free.yaml")
     assert energy > 1e-4
 
 
-def test_kh_pure_curl_rich_is_near_zero_energy():
+def test_kh_pure_curl_rich_field_is_near_zero_energy():
     energy = _compute_energy("meshes/tilt_benchmarks/kh_pure_curl_rich.yaml")
     assert energy == pytest.approx(0.0, abs=1e-12)
