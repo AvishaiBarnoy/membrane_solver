@@ -63,6 +63,7 @@ intended for development and planning; users should consult `README.md` and
      should form a “dimple” or invagination.
    - [ ] Placeholder module for tilt energy with CLI toggles so users can enable
          the hook even before the math lands.
+   - [ ] KH-pure variants: curl-free vs curl-rich tilt fields on flat patches.
 
 10. Plane with an inner disk and outer perimeter
    - [ ] Test mixed boundary conditions and perimeter constraints.

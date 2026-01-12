@@ -304,3 +304,17 @@ A correct KH implementation should demonstrate:
 - Multiple sources show reinforcement/cancellation with crossover controlled by `d/ℓ`.
 - Curvature is never independent: it is slaved to splay through `(J − ∇·t)^2`.
 - In coupled runs, curvature appears only where splay exists, and mismatch decreases with refinement.
+
+---
+
+## 13) KH-Pure Variants (No Smoothness Regularizer)
+
+These variants use **only** `bending_tilt` with `tilt_fixed` patterns on a flat
+surface, omitting `tilt` and `tilt_smoothness`. They are intended to isolate
+the KH coupling term.
+
+- Curl-free field (nonzero divergence): should register **nonzero** energy.
+- Curl-rich field (near-zero divergence): should register **near-zero** energy.
+
+See `meshes/tilt_benchmarks/kh_pure_curl_free.yaml` and
+`meshes/tilt_benchmarks/kh_pure_curl_rich.yaml`.

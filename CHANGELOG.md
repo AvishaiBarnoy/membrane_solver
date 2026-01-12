@@ -4,6 +4,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ## [Unreleased]
 ### Added
+- KH-pure tilt benchmark variants without smoothness regularization (`meshes/tilt_benchmarks/kh_pure_*`).
 - **Kozlov–Hamm Tilt Coupling**: Implemented coupled bending+tilt energy integral $\frac{1}{2} \int \kappa (2H - c_0 + \text{div}(t))^2 dA$ in `modules/energy/bending_tilt.py`.
 - **Tilt Solve Modes**: Added `nested` and `coupled` relaxation modes in `Minimizer` to optimize the tilt field alongside surface geometry.
 - **Enhanced Tilt Visualization**:
