@@ -36,11 +36,13 @@ def test_kh_pure_divergent_field_has_nonzero_energy():
 
 
 def test_kh_pure_curl_rich_field_is_near_zero_energy():
+    """Curl-rich mesh is constructed to be divergence-free, so KH-pure energy ~ 0."""
     energy = _compute_energy("meshes/tilt_benchmarks/kh_pure_curl_rich.yaml")
     assert energy == pytest.approx(0.0, abs=1e-12)
 
 
 def test_kh_pure_divergent_field_energy_stable_under_refinement():
+    """Divergent KH-pure mesh should stay nonzero under refinement."""
     mesh = parse_geometry(load_data("meshes/tilt_benchmarks/kh_pure_curl_free.yaml"))
     e0 = _compute_energy_mesh(mesh)
     refined = refine_triangle_mesh(mesh)
@@ -51,6 +53,7 @@ def test_kh_pure_divergent_field_energy_stable_under_refinement():
 
 
 def test_kh_pure_curl_rich_energy_stable_under_refinement():
+    """Divergence-free KH-pure mesh should remain near zero after refinement."""
     mesh = parse_geometry(load_data("meshes/tilt_benchmarks/kh_pure_curl_rich.yaml"))
     e0 = _compute_energy_mesh(mesh)
     refined = refine_triangle_mesh(mesh)
