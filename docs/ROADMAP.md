@@ -64,7 +64,7 @@ intended for development and planning; users should consult `README.md` and
    - [ ] Placeholder module for tilt energy with CLI toggles so users can enable
          the hook even before the math lands.
    - [ ] KH-pure variants: curl-free vs curl-rich tilt fields on flat patches.
-   - [ ] Benchmark runner for tilt mesh suite (summaries + plots).
+   - [x] Benchmark runner for tilt mesh suite (summaries + plots + smoke test).
 
 10. Plane with an inner disk and outer perimeter
    - [ ] Test mixed boundary conditions and perimeter constraints.

@@ -22,6 +22,9 @@ should extend this manual before they are merged.
   pytest -q
   ```
 
+- The tilt benchmark runner has smoke coverage to ensure all tilt meshes load and print metrics (`tests/test_tilt_benchmark_runner.py`).
+- Pre-commit includes a feature-branch guard; set `ALLOW_MAIN_BRANCH=1` to bypass if you must commit on `main`.
+
 ### 1.1 Development tooling (optional)
 
 - Lint:
