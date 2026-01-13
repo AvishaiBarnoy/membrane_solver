@@ -1046,6 +1046,7 @@ def update_live_vis(
             ax.set_xlim(prev_limits[0])
             ax.set_ylim(prev_limits[1])
             ax.set_zlim(prev_limits[2])
+            ax.set_autoscale_on(False)
         except Exception:
             pass
     fig.canvas.draw_idle()
