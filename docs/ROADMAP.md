@@ -68,6 +68,45 @@ intended for development and planning; users should consult `README.md` and
    - [x] Benchmark runner for tilt mesh suite (summaries + plots + smoke test).
    - [x] Tilt-source decay benchmark meshes (`meshes/tilt_benchmarks/tilt_source_rect.yaml`,
          `meshes/tilt_benchmarks/tilt_source_annulus.yaml`).
+   - [ ] **Bilayer tilt fields (`tilt_in` / `tilt_out`)**: extend the 2D leaflet model
+         in `docs/s41467-025-64084-9.pdf` to a 3D surface with per-leaflet tilt vectors.
+     - [ ] Data model: extend `Vertex` and `Mesh` with `tilt_in`, `tilt_out`,
+           `tilt_fixed_in`, `tilt_fixed_out`, plus SoA views + cache invalidation.
+     - [ ] I/O: parse/save `tilt_in`/`tilt_out` in YAML/JSON; keep backwards-compatible
+           `tilt` as a single-field alias (or require explicit selection per benchmark).
+     - [ ] Refinement: midpoint inheritance per leaflet:
+           - midpoint `tilt_*` is always the average of parent tilts
+           - midpoint `tilt_fixed_*` is `True` iff both parents are `tilt_fixed_*`
+     - [ ] Operators/metrics: expose `|t_in|`, `|t_out|`, `div(t_in)`, `div(t_out)`
+           and (optionally) `t_out - t_in` for diagnostics/plots.
+     - [ ] Energies (first pass: fixed geometry):
+           - per-leaflet `tilt` magnitude term (`tilt_rigidity_in/out`)
+           - per-leaflet `tilt_smoothness` term (`tilt_smoothness_rigidity_in/out`)
+           - optional inter-leaflet coupling (e.g. penalize `|t_out - t_in|^2` or `|t_out + t_in|^2`)
+     - [ ] Energies (second pass: shape coupling):
+           - generalize `bending_tilt` to accept a selected leaflet tilt field
+             (and document sign conventions / leaflet orientation).
+           - add bilayer-thickness parameters if needed for offset-surface corrections.
+     - [ ] Minimizer: relax both tilt fields (nested/coupled) with independent fixed masks,
+           plus a combined mode for coupled leaflet relaxation.
+     - [ ] Visualization: add `lv tilt_in`, `lv tilt_out`, `lv div_in`, `lv div_out`,
+           plus a `--color-by` mode in `tools/tilt_benchmark_runner.py`.
+     - [ ] Unit tests:
+           - YAML/JSON round-trip preserves both tilt fields + fixed flags
+           - `project_tilts_to_tangent` keeps both fields tangent
+           - refinement inheritance tests for each leaflet + mixed fixed/non-fixed parents
+     - [ ] Regression tests:
+           - finite-difference / directional-derivative checks for new energy gradients
+           - refinement convergence (energy decreases under refinement for fixed-geometry decay benchmarks)
+           - vectorization guardrails for hot-loop energy assembly (no per-vertex Python loops)
+     - [ ] E2E benchmarks (expected behavior):
+           - **Independent leaflets** (no inter-leaflet coupling): a source in `tilt_in`
+             decays with length scale λ≈sqrt(k_s/k_t) while `tilt_out` remains ~0 if initialized at 0.
+           - **Strong inter-leaflet coupling**: `tilt_out` tracks `tilt_in` (or anti-tracks,
+             depending on the chosen coupling) and both share a common decay profile.
+           - **With shape coupling** (`bending_tilt`): localized leaflet sources induce
+             localized curvature; flipping `tilt_in`↔`tilt_out` should flip the sign
+             of the preferred curvature if the model is implemented with correct leaflet orientation.
 
 10. Plane with an inner disk and outer perimeter
    - [ ] Test mixed boundary conditions and perimeter constraints.
