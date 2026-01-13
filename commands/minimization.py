@@ -218,7 +218,7 @@ class LiveVisCommand(Command):
                     plt.close(state["fig"])
                 context.minimizer.live_vis_state = None
 
-        if getattr(context.minimizer, "live_vis", False):
+        if getattr(context.minimizer, "live_vis", False) and hasattr(context, "mesh"):
             from visualization.plotting import update_live_vis
 
             state = getattr(context.minimizer, "live_vis_state", None)
