@@ -389,3 +389,63 @@ def test_refinement_inherits_tilt_fixed_on_boundary_loop_midpoints() -> None:
         v = find_vertex_by_position(midpoint_pos)
         assert v.tilt_fixed is True
         assert v.tilt == pytest.approx(expected_tilt, rel=0.0, abs=1e-12)
+
+
+def test_refinement_midpoint_tilt_is_averaged_when_one_parent_is_not_tilt_fixed() -> (
+    None
+):
+    """Refinement: midpoint averages tilt but only inherits tilt_fixed if both parents are fixed."""
+    mesh = Mesh()
+    mesh.global_parameters = GlobalParameters({"surface_tension": 0.0})
+    mesh.energy_modules = []
+    mesh.constraint_modules = []
+
+    mesh.vertices = {
+        0: Vertex(
+            0,
+            np.array([0.0, 0.0, 0.0], dtype=float),
+            fixed=True,
+            tilt=np.array([1.0, 0.0, 0.0], dtype=float),
+            tilt_fixed=True,
+        ),
+        1: Vertex(
+            1,
+            np.array([1.0, 0.0, 0.0], dtype=float),
+            fixed=True,
+            tilt=np.array([0.0, 1.0, 0.0], dtype=float),
+            tilt_fixed=False,
+        ),
+        2: Vertex(
+            2,
+            np.array([0.0, 1.0, 0.0], dtype=float),
+            fixed=True,
+            tilt=np.array([0.0, 0.0, 0.0], dtype=float),
+            tilt_fixed=False,
+        ),
+    }
+
+    mesh.edges = {
+        1: Edge(1, 0, 1),
+        2: Edge(2, 1, 2),
+        3: Edge(3, 2, 0),
+    }
+    mesh.facets = {0: Facet(0, [1, 2, 3])}
+    mesh.build_connectivity_maps()
+    mesh.build_facet_vertex_loops()
+    mesh.build_position_cache()
+    mesh.touch_tilts()
+
+    refined = refine_triangle_mesh(mesh)
+
+    midpoint = None
+    for v in refined.vertices.values():
+        if np.allclose(v.position, np.array([0.5, 0.0, 0.0], dtype=float), atol=1e-12):
+            midpoint = v
+            break
+    assert midpoint is not None
+    assert midpoint.tilt_fixed is False
+    assert midpoint.tilt == pytest.approx(
+        0.5 * (mesh.vertices[0].tilt + mesh.vertices[1].tilt),
+        rel=0.0,
+        abs=1e-12,
+    )
