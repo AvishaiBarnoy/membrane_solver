@@ -902,6 +902,7 @@ def update_live_vis(
 
     prev_view = None
     prev_limits = None
+    prev_dist = None
     if "topology_version" in state:
         try:
             prev_view = (float(ax.elev), float(ax.azim))
@@ -915,6 +916,10 @@ def update_live_vis(
             )
         except Exception:
             prev_limits = None
+        try:
+            prev_dist = float(getattr(ax, "dist", None))
+        except Exception:
+            prev_dist = None
 
     ax.cla()
 
@@ -1039,6 +1044,11 @@ def update_live_vis(
     if prev_view is not None:
         try:
             ax.view_init(elev=prev_view[0], azim=prev_view[1])
+        except Exception:
+            pass
+    if prev_dist is not None:
+        try:
+            ax.dist = prev_dist
         except Exception:
             pass
     if prev_limits is not None:
