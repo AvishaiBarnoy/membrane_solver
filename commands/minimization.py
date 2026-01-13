@@ -217,6 +217,21 @@ class LiveVisCommand(Command):
 
                     plt.close(state["fig"])
                 context.minimizer.live_vis_state = None
+
+        if getattr(context.minimizer, "live_vis", False):
+            from visualization.plotting import update_live_vis
+
+            state = getattr(context.minimizer, "live_vis_state", None)
+            state = update_live_vis(
+                context.mesh,
+                state=state,
+                title="Live visualization",
+                color_by=getattr(context.minimizer, "live_vis_color_by", None),
+                show_tilt_arrows=getattr(
+                    context.minimizer, "live_vis_show_tilt_arrows", False
+                ),
+            )
+            context.minimizer.live_vis_state = state
         logger.info(
             f"Live visualization {'enabled' if context.minimizer.live_vis else 'disabled'}"
         )
