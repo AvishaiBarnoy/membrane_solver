@@ -155,6 +155,7 @@ def plot_geometry(
     annotate_boundary_geodesic: bool = False,
     no_axes: bool = False,
     show: bool = True,
+    tight_layout: bool = True,
 ) -> None:
     """
     Visualize a mesh in 3D using Matplotlib.
@@ -669,7 +670,8 @@ def plot_geometry(
     if no_axes:
         ax.set_axis_off()
 
-    plt.tight_layout()
+    if tight_layout:
+        plt.tight_layout()
 
     if show:
         plt.show()
@@ -903,6 +905,7 @@ def update_live_vis(
     prev_view = None
     prev_limits = None
     prev_dist = None
+    prev_axes_pos = None
     if "topology_version" in state:
         try:
             prev_view = (float(ax.elev), float(ax.azim))
@@ -920,6 +923,10 @@ def update_live_vis(
             prev_dist = float(getattr(ax, "dist", None))
         except Exception:
             prev_dist = None
+        try:
+            prev_axes_pos = ax.get_position().frozen()
+        except Exception:
+            prev_axes_pos = None
 
     ax.cla()
 
@@ -944,6 +951,7 @@ def update_live_vis(
         color_by=color_by,
         show_colorbar=show_colorbar_flag,
         show_tilt_arrows=False,
+        tight_layout=False,
     )
 
     # Capture collections for next time
@@ -1051,6 +1059,11 @@ def update_live_vis(
             ax.dist = prev_dist
         except Exception:
             pass
+    if prev_axes_pos is not None:
+        try:
+            ax.set_position(prev_axes_pos)
+        except Exception:
+            pass
     if prev_limits is not None:
         try:
             ax.set_xlim(prev_limits[0])
@@ -1059,6 +1072,32 @@ def update_live_vis(
             ax.set_autoscale_on(False)
         except Exception:
             pass
+
+    # Colorbar placement can change the axes rectangle (Matplotlib shrinks the
+    # parent axes when attaching a colorbar). Live visualization should keep a
+    # stable view when topology changes, so we pin the axes position and move
+    # the colorbar into a fixed side gutter when possible.
+    if prev_axes_pos is not None and show_colorbar_flag:
+        cbar = getattr(ax, "_membrane_colorbar", None)
+        if cbar is not None and getattr(cbar, "ax", None) is not None:
+            try:
+                gutter_pad = 0.02
+                gutter_w = 0.03
+                x0 = min(prev_axes_pos.x1 + gutter_pad, 0.95)
+                max_w = max(0.0, 0.98 - x0)
+                w = min(gutter_w, max_w)
+                if w > 1e-6:
+                    cbar.ax.set_position(
+                        [x0, prev_axes_pos.y0, w, prev_axes_pos.height]
+                    )
+            except Exception:
+                pass
+
+    if state.get("axes_position") is None:
+        try:
+            state["axes_position"] = ax.get_position().frozen()
+        except Exception:
+            state["axes_position"] = None
     fig.canvas.draw_idle()
     _safe_pause(0.001)
     return state
