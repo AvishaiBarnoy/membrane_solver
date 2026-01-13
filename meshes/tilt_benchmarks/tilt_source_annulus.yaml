@@ -1,0 +1,74 @@
+global_parameters:
+  surface_tension: 0.0
+  tilt_smoothness_rigidity: 1.0
+  tilt_rigidity: 0.1
+  tilt_solve_mode: nested
+  tilt_step_size: 0.05
+  tilt_inner_steps: 25
+
+  pin_to_circle_mode: fixed
+
+energy_modules:
+  - tilt_smoothness
+  - tilt
+
+constraint_modules:
+  - pin_to_circle
+
+definitions:
+  outer_rim:
+    constraints: ["pin_to_circle"]
+    pin_to_circle_group: "outer"
+    pin_to_circle_radius: 1.0
+    pin_to_circle_normal: [0.0, 0.0, 1.0]
+    pin_to_circle_point: [0.0, 0.0, 0.0]
+  inner_rim:
+    constraints: ["pin_to_circle"]
+    pin_to_circle_group: "inner"
+    pin_to_circle_radius: 0.4
+    pin_to_circle_normal: [0.0, 0.0, 1.0]
+    pin_to_circle_point: [0.0, 0.0, 0.0]
+    tilt_fixed: true
+    tilt: [1.0, 0.0]
+
+vertices:
+  # Outer rectangle (targets circle of radius R=1).
+  - [-1.0, -1.0, 0.0, {preset: "outer_rim"}]
+  - [ 1.0, -1.0, 0.0, {preset: "outer_rim"}]
+  - [ 1.0,  1.0, 0.0, {preset: "outer_rim"}]
+  - [-1.0,  1.0, 0.0, {preset: "outer_rim"}]
+  # Inner rectangle (targets circle of radius r=0.4).
+  - [-0.4, -0.4, 0.0, {preset: "inner_rim"}]
+  - [ 0.4, -0.4, 0.0, {preset: "inner_rim"}]
+  - [ 0.4,  0.4, 0.0, {preset: "inner_rim"}]
+  - [-0.4,  0.4, 0.0, {preset: "inner_rim"}]
+
+faces:
+  - [8, 9, r2]
+  - [10, r6, r8]
+  - [11, 12, 1]
+  - [r9, r5, r11]
+  - [13, 14, r0]
+  - [r12, r4, r13]
+  - [15, r10, 3]
+  - [r14, r7, r15]
+
+edges:
+  - [0, 1]
+  - [1, 2]
+  - [2, 3]
+  - [3, 0]
+  - [4, 5]
+  - [5, 6]
+  - [6, 7]
+  - [7, 4]
+  - [3, 6]
+  - [6, 2]
+  - [3, 7]
+  - [2, 5]
+  - [5, 1]
+  - [1, 4]
+  - [4, 0]
+  - [0, 7]
+
+instructions: []

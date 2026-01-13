@@ -209,6 +209,7 @@ Interactive commands:
 - `python tools/tilt_benchmark_runner.py`
   Run `meshes/tilt_benchmarks/*.yaml` and print energy/tilt/divergence summaries
   (optionally writing JSON/CSV and plots).
+- Tilt-source decay meshes are available under `meshes/tilt_benchmarks/` (rectangle source pair, annulus with inner-rim source).
 
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.
