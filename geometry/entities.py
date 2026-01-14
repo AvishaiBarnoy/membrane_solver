@@ -41,6 +41,10 @@ class Vertex:
     options: Dict[str, Any] = field(default_factory=dict)
     tilt: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))
     tilt_fixed: bool = False
+    tilt_in: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))
+    tilt_out: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))
+    tilt_fixed_in: bool = False
+    tilt_fixed_out: bool = False
 
     def copy(self):
         return Vertex(
@@ -50,6 +54,10 @@ class Vertex:
             options=self.options.copy(),
             tilt=self.tilt.copy(),
             tilt_fixed=self.tilt_fixed,
+            tilt_in=self.tilt_in.copy(),
+            tilt_out=self.tilt_out.copy(),
+            tilt_fixed_in=self.tilt_fixed_in,
+            tilt_fixed_out=self.tilt_fixed_out,
         )
 
     def project_position(self, pos: np.ndarray) -> np.ndarray:
@@ -871,6 +879,14 @@ class Mesh:
     _tilts_cache_version: int = -1
     _tilt_cache_counts: int = -1
     _tilts_version: int = 0
+    _tilts_in_cache: "np.ndarray | None" = None
+    _tilts_in_cache_version: int = -1
+    _tilts_in_cache_counts: int = -1
+    _tilts_in_version: int = 0
+    _tilts_out_cache: "np.ndarray | None" = None
+    _tilts_out_cache_version: int = -1
+    _tilts_out_cache_counts: int = -1
+    _tilts_out_version: int = 0
     _triangle_rows_cache: "np.ndarray | None" = None
     _triangle_rows_cache_version: int = -1
     _triangle_row_facets: list[int] = field(default_factory=list)
@@ -1516,10 +1532,71 @@ class Mesh:
         self._tilt_cache_counts = n_verts
         return self._tilts_cache
 
+    def tilts_in_view(self) -> "np.ndarray":
+        """Return a dense ``(N_vertices, 3)`` array of inner-leaflet tilt vectors."""
+        import numpy as np
+
+        self.build_position_cache()
+        n_verts = len(self.vertex_ids)
+        if (
+            self._tilts_in_cache is not None
+            and self._tilts_in_cache_version == self._tilts_in_version
+            and self._tilts_in_cache_counts == n_verts
+            and self._tilts_in_cache.shape == (n_verts, 3)
+        ):
+            return self._tilts_in_cache
+
+        if self._tilts_in_cache is None or self._tilts_in_cache.shape != (n_verts, 3):
+            self._tilts_in_cache = np.empty((n_verts, 3), dtype=float, order="F")
+        for i, vid in enumerate(self.vertex_ids):
+            self._tilts_in_cache[i] = np.asarray(
+                self.vertices[int(vid)].tilt_in, dtype=float
+            )
+        self._tilts_in_cache_version = self._tilts_in_version
+        self._tilts_in_cache_counts = n_verts
+        return self._tilts_in_cache
+
+    def tilts_out_view(self) -> "np.ndarray":
+        """Return a dense ``(N_vertices, 3)`` array of outer-leaflet tilt vectors."""
+        import numpy as np
+
+        self.build_position_cache()
+        n_verts = len(self.vertex_ids)
+        if (
+            self._tilts_out_cache is not None
+            and self._tilts_out_cache_version == self._tilts_out_version
+            and self._tilts_out_cache_counts == n_verts
+            and self._tilts_out_cache.shape == (n_verts, 3)
+        ):
+            return self._tilts_out_cache
+
+        if self._tilts_out_cache is None or self._tilts_out_cache.shape != (
+            n_verts,
+            3,
+        ):
+            self._tilts_out_cache = np.empty((n_verts, 3), dtype=float, order="F")
+        for i, vid in enumerate(self.vertex_ids):
+            self._tilts_out_cache[i] = np.asarray(
+                self.vertices[int(vid)].tilt_out, dtype=float
+            )
+        self._tilts_out_cache_version = self._tilts_out_version
+        self._tilts_out_cache_counts = n_verts
+        return self._tilts_out_cache
+
     def touch_tilts(self) -> None:
         """Invalidate cached tilt arrays after direct per-vertex updates."""
         self._tilts_version += 1
         self._tilts_cache_version = -1
+
+    def touch_tilts_in(self) -> None:
+        """Invalidate cached inner-leaflet tilt arrays after per-vertex updates."""
+        self._tilts_in_version += 1
+        self._tilts_in_cache_version = -1
+
+    def touch_tilts_out(self) -> None:
+        """Invalidate cached outer-leaflet tilt arrays after per-vertex updates."""
+        self._tilts_out_version += 1
+        self._tilts_out_cache_version = -1
 
     def set_tilts_from_array(self, tilts: "np.ndarray") -> None:
         """Scatter a dense tilt array back onto vertex objects."""
@@ -1536,6 +1613,38 @@ class Mesh:
         self._tilts_cache = tilts_arr.copy(order="F")
         self._tilts_cache_version = self._tilts_version
         self._tilt_cache_counts = len(self.vertex_ids)
+
+    def set_tilts_in_from_array(self, tilts: "np.ndarray") -> None:
+        """Scatter a dense inner-leaflet tilt array back onto vertex objects."""
+        import numpy as np
+
+        self.build_position_cache()
+        tilts_arr = np.asarray(tilts, dtype=float)
+        if tilts_arr.shape != (len(self.vertex_ids), 3):
+            raise ValueError("tilts_in must have shape (N_vertices, 3)")
+
+        self._tilts_in_version += 1
+        for row, vid in enumerate(self.vertex_ids):
+            self.vertices[int(vid)].tilt_in = tilts_arr[row].copy()
+        self._tilts_in_cache = tilts_arr.copy(order="F")
+        self._tilts_in_cache_version = self._tilts_in_version
+        self._tilts_in_cache_counts = len(self.vertex_ids)
+
+    def set_tilts_out_from_array(self, tilts: "np.ndarray") -> None:
+        """Scatter a dense outer-leaflet tilt array back onto vertex objects."""
+        import numpy as np
+
+        self.build_position_cache()
+        tilts_arr = np.asarray(tilts, dtype=float)
+        if tilts_arr.shape != (len(self.vertex_ids), 3):
+            raise ValueError("tilts_out must have shape (N_vertices, 3)")
+
+        self._tilts_out_version += 1
+        for row, vid in enumerate(self.vertex_ids):
+            self.vertices[int(vid)].tilt_out = tilts_arr[row].copy()
+        self._tilts_out_cache = tilts_arr.copy(order="F")
+        self._tilts_out_cache_version = self._tilts_out_version
+        self._tilts_out_cache_counts = len(self.vertex_ids)
 
     def build_facet_vertex_loops(self):
         """Precompute ordered vertex loops for all facets.
@@ -1723,19 +1832,36 @@ class Mesh:
 
         self.build_position_cache()
         tilts = self.tilts_view()
-        if tilts is None or tilts.size == 0:
+        tilts_in = self.tilts_in_view()
+        tilts_out = self.tilts_out_view()
+        if (
+            (tilts is None or tilts.size == 0)
+            and (tilts_in is None or tilts_in.size == 0)
+            and (tilts_out is None or tilts_out.size == 0)
+        ):
             return
 
         normals = self.vertex_normals()
         if normals.size == 0:
             return
 
-        dot = np.einsum("ij,ij->i", tilts, normals)
-        projected = tilts - dot[:, None] * normals
-        self.set_tilts_from_array(projected)
+        if tilts is not None and tilts.size:
+            dot = np.einsum("ij,ij->i", tilts, normals)
+            projected = tilts - dot[:, None] * normals
+            self.set_tilts_from_array(projected)
+
+        if tilts_in is not None and tilts_in.size:
+            dot_in = np.einsum("ij,ij->i", tilts_in, normals)
+            projected_in = tilts_in - dot_in[:, None] * normals
+            self.set_tilts_in_from_array(projected_in)
+
+        if tilts_out is not None and tilts_out.size:
+            dot_out = np.einsum("ij,ij->i", tilts_out, normals)
+            projected_out = tilts_out - dot_out[:, None] * normals
+            self.set_tilts_out_from_array(projected_out)
 
     def initialize_tilts_from_options(self) -> None:
-        """Initialize 3D tangent tilt vectors from ``vertex.options['tilt']``.
+        """Initialize tangent tilt vectors from vertex options.
 
         Supported option formats
         ------------------------
@@ -1744,67 +1870,80 @@ class Mesh:
         """
         import numpy as np
 
-        has_tilt = False
-        for vertex in self.vertices.values():
-            opts = getattr(vertex, "options", None)
-            if isinstance(opts, dict) and opts.get("tilt") is not None:
-                has_tilt = True
-                break
-        if not has_tilt:
-            return
+        def _apply_tilt_field(field_key: str, setter_name: str) -> bool:
+            has_field = False
+            for vertex in self.vertices.values():
+                opts = getattr(vertex, "options", None)
+                if isinstance(opts, dict) and opts.get(field_key) is not None:
+                    has_field = True
+                    break
+            if not has_field:
+                return False
 
-        self.build_position_cache()
-        normals = self.vertex_normals()
-        if normals.size == 0:
-            return
+            self.build_position_cache()
+            normals = self.vertex_normals()
+            if normals.size == 0:
+                return False
 
-        ref_x = np.array([1.0, 0.0, 0.0], dtype=float)
-        ref_y = np.array([0.0, 1.0, 0.0], dtype=float)
+            ref_x = np.array([1.0, 0.0, 0.0], dtype=float)
+            ref_y = np.array([0.0, 1.0, 0.0], dtype=float)
 
-        for row, vid in enumerate(self.vertex_ids):
-            vertex = self.vertices[int(vid)]
-            raw = getattr(vertex, "options", {}).get("tilt")
-            if raw is None:
-                continue
+            for row, vid in enumerate(self.vertex_ids):
+                vertex = self.vertices[int(vid)]
+                raw = getattr(vertex, "options", {}).get(field_key)
+                if raw is None:
+                    continue
 
-            if not isinstance(raw, (list, tuple)):
-                raise TypeError(
-                    f"Vertex {int(vid)} tilt must be a 2- or 3-vector; got {raw!r}"
-                )
+                if not isinstance(raw, (list, tuple)):
+                    raise TypeError(
+                        f"Vertex {int(vid)} {field_key} must be a 2- or 3-vector; got {raw!r}"
+                    )
 
-            n = normals[row]
-            if np.linalg.norm(n) < 1e-12:
-                # No reliable normal; fall back to global coordinates.
+                n = normals[row]
+                if np.linalg.norm(n) < 1e-12:
+                    if len(raw) == 2:
+                        vec = np.asarray([raw[0], raw[1], 0.0], dtype=float)
+                    elif len(raw) == 3:
+                        vec = np.asarray(raw, dtype=float)
+                    else:
+                        raise TypeError(
+                            f"Vertex {int(vid)} {field_key} must have length 2 or 3; got {raw!r}"
+                        )
+                    setattr(vertex, setter_name, vec)
+                    continue
+
                 if len(raw) == 2:
-                    vertex.tilt = np.asarray([raw[0], raw[1], 0.0], dtype=float)
+                    t1, t2 = (float(raw[0]), float(raw[1]))
+                    e1 = ref_x - float(np.dot(ref_x, n)) * n
+                    if np.linalg.norm(e1) < 1e-12:
+                        e1 = ref_y - float(np.dot(ref_y, n)) * n
+                    e1_norm = np.linalg.norm(e1)
+                    if e1_norm < 1e-12:
+                        continue
+                    e1 = e1 / e1_norm
+                    e2 = np.cross(n, e1)
+                    vec = t1 * e1 + t2 * e2
                 elif len(raw) == 3:
-                    vertex.tilt = np.asarray(raw, dtype=float)
+                    t = np.asarray(raw, dtype=float)
+                    vec = t - float(np.dot(t, n)) * n
                 else:
                     raise TypeError(
-                        f"Vertex {int(vid)} tilt must have length 2 or 3; got {raw!r}"
+                        f"Vertex {int(vid)} {field_key} must have length 2 or 3; got {raw!r}"
                     )
-                continue
+                setattr(vertex, setter_name, vec)
 
-            if len(raw) == 2:
-                t1, t2 = (float(raw[0]), float(raw[1]))
-                e1 = ref_x - float(np.dot(ref_x, n)) * n
-                if np.linalg.norm(e1) < 1e-12:
-                    e1 = ref_y - float(np.dot(ref_y, n)) * n
-                e1_norm = np.linalg.norm(e1)
-                if e1_norm < 1e-12:
-                    continue
-                e1 = e1 / e1_norm
-                e2 = np.cross(n, e1)
-                vertex.tilt = t1 * e1 + t2 * e2
-            elif len(raw) == 3:
-                t = np.asarray(raw, dtype=float)
-                vertex.tilt = t - float(np.dot(t, n)) * n
-            else:
-                raise TypeError(
-                    f"Vertex {int(vid)} tilt must have length 2 or 3; got {raw!r}"
-                )
+            return True
 
-        self.touch_tilts()
+        any_tilt = _apply_tilt_field("tilt", "tilt")
+        any_tilt_in = _apply_tilt_field("tilt_in", "tilt_in")
+        any_tilt_out = _apply_tilt_field("tilt_out", "tilt_out")
+
+        if any_tilt:
+            self.touch_tilts()
+        if any_tilt_in:
+            self.touch_tilts_in()
+        if any_tilt_out:
+            self.touch_tilts_out()
 
     def get_facets_of_vertex(self, v_id: int) -> List["Facet"]:
         return [self.facets[fid] for fid in self.vertex_to_facets.get(v_id, [])]

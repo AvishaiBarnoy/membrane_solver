@@ -70,14 +70,14 @@ intended for development and planning; users should consult `README.md` and
          `meshes/tilt_benchmarks/tilt_source_annulus.yaml`).
    - [ ] **Bilayer tilt fields (`tilt_in` / `tilt_out`)**: extend the 2D leaflet model
          in `docs/s41467-025-64084-9.pdf` to a 3D surface with per-leaflet tilt vectors.
-     - [ ] Data model: extend `Vertex` and `Mesh` with `tilt_in`, `tilt_out`,
+     - [x] Data model: extend `Vertex` and `Mesh` with `tilt_in`, `tilt_out`,
            `tilt_fixed_in`, `tilt_fixed_out`, plus SoA views + cache invalidation.
-     - [ ] I/O: parse/save `tilt_in`/`tilt_out` in YAML/JSON; keep backwards-compatible
+     - [x] I/O: parse/save `tilt_in`/`tilt_out` in YAML/JSON; keep backwards-compatible
            `tilt` as a single-field alias (or require explicit selection per benchmark).
-     - [ ] Refinement: midpoint inheritance per leaflet:
+     - [x] Refinement: midpoint inheritance per leaflet:
            - midpoint `tilt_*` is always the average of parent tilts
            - midpoint `tilt_fixed_*` is `True` iff both parents are `tilt_fixed_*`
-     - [ ] Operators/metrics: expose `|t_in|`, `|t_out|`, `div(t_in)`, `div(t_out)`
+     - [x] Operators/metrics: expose `|t_in|`, `|t_out|`, `div(t_in)`, `div(t_out)`
            and (optionally) `t_out - t_in` for diagnostics/plots.
      - [ ] Energies (first pass: fixed geometry):
            - per-leaflet `tilt` magnitude term (`tilt_rigidity_in/out`)
@@ -89,7 +89,7 @@ intended for development and planning; users should consult `README.md` and
            - add bilayer-thickness parameters if needed for offset-surface corrections.
      - [ ] Minimizer: relax both tilt fields (nested/coupled) with independent fixed masks,
            plus a combined mode for coupled leaflet relaxation.
-     - [ ] Visualization: add `lv tilt_in`, `lv tilt_out`, `lv div_in`, `lv div_out`,
+     - [x] Visualization: add `lv tilt_in`, `lv tilt_out`, `lv div_in`, `lv div_out`,
            plus a `--color-by` mode in `tools/tilt_benchmark_runner.py`.
      - [ ] Unit tests:
            - YAML/JSON round-trip preserves both tilt fields + fixed flags

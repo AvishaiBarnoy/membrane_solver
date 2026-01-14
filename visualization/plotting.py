@@ -17,7 +17,22 @@ from geometry.entities import Mesh
 
 logger = logging.getLogger("membrane_solver")
 
-_TILT_COLOR_BY = {"tilt_mag", "tilt_div"}
+_TILT_COLOR_BY = {
+    "tilt_mag",
+    "tilt_div",
+    "tilt_in",
+    "tilt_out",
+    "tilt_div_in",
+    "tilt_div_out",
+}
+
+
+def _tilt_field_for_color_by(mesh: Mesh, color_by: str | None) -> np.ndarray:
+    if color_by in {"tilt_in", "tilt_div_in"}:
+        return mesh.tilts_in_view()
+    if color_by in {"tilt_out", "tilt_div_out"}:
+        return mesh.tilts_out_view()
+    return mesh.tilts_view()
 
 
 def _safe_pause(interval: float) -> None:
@@ -36,12 +51,16 @@ def _safe_pause(interval: float) -> None:
         plt.pause(interval)
 
 
-def triangle_tilt_magnitudes(mesh: Mesh) -> tuple[np.ndarray, list[int]]:
+def triangle_tilt_magnitudes(
+    mesh: Mesh, *, tilts: np.ndarray | None = None
+) -> tuple[np.ndarray, list[int]]:
     """Return per-triangle mean tilt magnitudes for facets in triangle_row_cache."""
     tri_rows, tri_facets = mesh.triangle_row_cache()
     if tri_rows is None or len(tri_rows) == 0:
         return np.array([], dtype=float), []
-    mags = np.linalg.norm(mesh.tilts_view(), axis=1)
+    if tilts is None:
+        tilts = mesh.tilts_view()
+    mags = np.linalg.norm(tilts, axis=1)
     values = mags[tri_rows].mean(axis=1)
     return values, tri_facets
 
@@ -84,13 +103,16 @@ def _triangle_divergence_from_arrays(
     return div
 
 
-def triangle_tilt_divergence(mesh: Mesh) -> tuple[np.ndarray, list[int]]:
+def triangle_tilt_divergence(
+    mesh: Mesh, *, tilts: np.ndarray | None = None
+) -> tuple[np.ndarray, list[int]]:
     """Return per-triangle divergence of the tilt field for facets in triangle_row_cache."""
     tri_rows, tri_facets = mesh.triangle_row_cache()
     if tri_rows is None or len(tri_rows) == 0:
         return np.array([], dtype=float), []
     positions = mesh.positions_view()
-    tilts = mesh.tilts_view()
+    if tilts is None:
+        tilts = mesh.tilts_view()
     values = _triangle_divergence_from_arrays(positions, tilts, tri_rows)
     return values, tri_facets
 
@@ -104,12 +126,12 @@ def _colormap_norm_for_scalars(
         values = np.zeros_like(values)
         finite = np.ones_like(values, dtype=bool)
 
-    if color_by == "tilt_mag":
+    if color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
         vmax = float(values[finite].max()) if finite.any() else 1.0
         vmax = vmax if vmax > 0 else 1.0
         norm = mpl_colors.Normalize(vmin=0.0, vmax=vmax)
         cmap = plt.get_cmap("viridis")
-    elif color_by == "tilt_div":
+    elif color_by in {"tilt_div", "tilt_div_in", "tilt_div_out"}:
         vlim = float(np.abs(values[finite]).max()) if finite.any() else 1.0
         vlim = vlim if vlim > 0 else 1.0
         norm = mpl_colors.TwoSlopeNorm(vmin=-vlim, vcenter=0.0, vmax=vlim)
@@ -366,15 +388,29 @@ def plot_geometry(
                 else:
                     color = facet.options.get("color", default_facet_color)
                 face_colors.append(color)
-            elif color_by == "tilt_mag":
+            elif color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
+                tilt_attr = "tilt"
+                if color_by == "tilt_in":
+                    tilt_attr = "tilt_in"
+                elif color_by == "tilt_out":
+                    tilt_attr = "tilt_out"
                 mags = [
                     float(
-                        np.linalg.norm(mesh.vertices[mesh.get_edge(e).tail_index].tilt)
+                        np.linalg.norm(
+                            getattr(
+                                mesh.vertices[mesh.get_edge(e).tail_index], tilt_attr
+                            )
+                        )
                     )
                     for e in facet.edge_indices
                 ]
                 scalar_values.append(float(np.mean(mags)) if mags else 0.0)
-            elif color_by == "tilt_div":
+            elif color_by in {"tilt_div", "tilt_div_in", "tilt_div_out"}:
+                tilt_attr = "tilt"
+                if color_by == "tilt_div_in":
+                    tilt_attr = "tilt_in"
+                elif color_by == "tilt_div_out":
+                    tilt_attr = "tilt_out"
                 vids = [mesh.get_edge(e).tail_index for e in facet.edge_indices]
                 if len(vids) < 3:
                     scalar_values.append(0.0)
@@ -388,7 +424,14 @@ def plot_geometry(
                         tri_pos = np.stack(
                             [v0.position, v1.position, v2.position], axis=0
                         )
-                        tri_tilt = np.stack([v0.tilt, v1.tilt, v2.tilt], axis=0)
+                        tri_tilt = np.stack(
+                            [
+                                getattr(v0, tilt_attr),
+                                getattr(v1, tilt_attr),
+                                getattr(v2, tilt_attr),
+                            ],
+                            axis=0,
+                        )
                         n = np.cross(tri_pos[1] - tri_pos[0], tri_pos[2] - tri_pos[0])
                         area2 = float(np.linalg.norm(n))
                         if area2 <= 1e-12:
@@ -449,7 +492,7 @@ def plot_geometry(
 
     if show_tilt_arrows:
         positions = mesh.positions_view()
-        tilts = mesh.tilts_view()
+        tilts = _tilt_field_for_color_by(mesh, color_by)
         mags = np.linalg.norm(tilts, axis=1)
         good_idx = np.where(mags > 1e-12)[0]
         if tilt_arrows_max is not None and good_idx.size > tilt_arrows_max:
@@ -815,9 +858,9 @@ def update_live_vis(
             tri_collection.set_verts(list(tri_data))
 
         if color_by is not None:
-            tilts = mesh.tilts_view()
+            tilts = _tilt_field_for_color_by(mesh, color_by)
             if facet_row_loops is not None:
-                if color_by == "tilt_mag":
+                if color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
                     mags = np.linalg.norm(tilts, axis=1)
                     values = np.array(
                         [
@@ -833,7 +876,7 @@ def update_live_vis(
             else:
                 if tri_rows is None:  # pragma: no cover - defensive
                     values = np.array([], dtype=float)
-                elif color_by == "tilt_mag":
+                elif color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
                     mags = np.linalg.norm(tilts, axis=1)
                     values = mags[tri_rows].mean(axis=1)
                 else:
@@ -869,7 +912,7 @@ def update_live_vis(
             state["line_collection"].set_segments(list(segments_arr))
 
         if show_tilt_arrows and state.get("tilt_arrows") is not None:
-            tilts = mesh.tilts_view()
+            tilts = _tilt_field_for_color_by(mesh, color_by)
             mags = np.linalg.norm(tilts, axis=1)
             good = mags > 1e-12
             dirs = np.zeros_like(tilts)
@@ -1023,7 +1066,7 @@ def update_live_vis(
 
     if show_tilt_arrows:
         positions = mesh.positions_view()
-        tilts = mesh.tilts_view()
+        tilts = _tilt_field_for_color_by(mesh, color_by)
         mags = np.linalg.norm(tilts, axis=1)
         good = mags > 1e-12
         dirs = np.zeros_like(tilts)
