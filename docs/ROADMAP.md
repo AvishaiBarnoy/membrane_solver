@@ -127,9 +127,58 @@ intended for development and planning; users should consult `README.md` and
 
 ## 4. Caveolin and complex inclusions
 
-13. Single caveolin with outer membrane decay
-    - Full 3D generalization of the caveolin model with a local curvature /
-      tilt source and far‑field membrane.
+13. Caveolin / caveolae (Kozlov bilayer tilt → 3D)
+   - Goal: implement the two‑monolayer physics needed to reproduce the Kozlov
+     single‑caveolin “2D membrane” model, then generalize to 3D caveolae with
+     caveolin disks on a sphere.
+   - References: `docs/caveolin_generate_curvature.pdf`,
+     `docs/SI_caveolin_generate_curvature.pdf`, `docs/s41467-025-64084-9.pdf`.
+
+   - [ ] **Milestone A: bilayer tilt physics modules**
+     - [ ] Per‑leaflet tilt magnitude/smoothness energies operating on
+           `tilt_in` / `tilt_out` (vectorized `*_array` API; no per‑vertex loops).
+           - Unit tests: closed-form single triangle energies; dict/array parity.
+           - Regression: finite-difference / directional-derivative gradients.
+     - [ ] Inter‑leaflet coupling energy (e.g. `∫|tilt_out - tilt_in|^2 dA` or
+           `∫|tilt_out + tilt_in|^2 dA`) with analytic tilt gradients.
+           - Unit tests: symmetry (swap leaflets) and limiting cases (coupling→0 / →∞).
+     - [ ] Minimizer: relax both leaflets with independent fixed masks
+           (`tilt_fixed_in/out`) and a combined solve mode.
+
+   - [ ] **Milestone B: Kozlov 2D single caveolin on an “endless” flat membrane**
+     - [ ] Benchmark geometry: planar annulus (inner rim = caveolin footprint,
+           outer rim = far field). Outer boundary constrained to remain flat
+           and to remove rigid motions; inner rim carries the caveolin source.
+     - [ ] Caveolin source model (from Kozlov PDF): encode the source as
+           leaflet‑specific boundary conditions and/or local parameters on the
+           inclusion patch (document sign conventions).
+     - [ ] Expected behavior (E2E):
+           - tilt decays away from the inclusion with λ≈sqrt(k_s/k_t) in the
+             small-slope / flat‑geometry limit
+           - with strong inter‑leaflet coupling, `tilt_in` and `tilt_out` track
+             (or anti‑track) according to the coupling definition
+           - invariance: rotating the inclusion on a flat far field should not
+             change energies (up to discretization error)
+     - [ ] Tests:
+           - E2E: relax tilts (and then shape if enabled) and assert monotone
+             decay + far‑field flatness tolerances.
+           - Regression: refinement convergence (energy decreases with refinement
+             and approaches a stable limit for fixed parameters).
+           - (Optional) compare radial profiles against reference curves/values
+             digitized from the Kozlov PDFs once parameter sets are pinned.
+
+   - [ ] **Milestone C: 3D single caveolin on a flat far field**
+     - [ ] Enable full shape coupling (bilayer tilt ↔ curvature) and validate
+           that the far field remains approximately flat while a localized
+           invagination forms near the inclusion.
+     - [ ] Sign test: swapping `tilt_in`↔`tilt_out` (or flipping the leaflet
+           convention) flips the preferred curvature direction.
+
+   - [ ] **Milestone D: caveolin disks on a sphere (caveolae)**
+     - [ ] Use `meshes/bench_two_disks_sphere.json` as scaffold; add a
+           single‑disk variant and then multi‑disk configurations.
+     - [ ] E2E: sphere remains stable under refinement; inclusion produces a
+           localized deformation without introducing self‑intersections.
 
 14. Multi-disk positional constraints
     - Add positional constraints between circular rims (specified by chord
