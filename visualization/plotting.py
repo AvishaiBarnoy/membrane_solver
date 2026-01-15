@@ -359,11 +359,13 @@ def plot_geometry(
                     else:
                         opts = mesh.facets[fid].options
                         face_colors.append(opts.get("color", default_facet_color))
-            elif color_by == "tilt_mag":
-                tri_vals, _ = triangle_tilt_magnitudes(mesh)
+            elif color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
+                tilts = _tilt_field_for_color_by(mesh, color_by)
+                tri_vals, _ = triangle_tilt_magnitudes(mesh, tilts=tilts)
                 scalar_values.extend(list(map(float, tri_vals)))
-            elif color_by == "tilt_div":
-                tri_vals, _ = triangle_tilt_divergence(mesh)
+            elif color_by in {"tilt_div", "tilt_div_in", "tilt_div_out"}:
+                tilts = _tilt_field_for_color_by(mesh, color_by)
+                tri_vals, _ = triangle_tilt_divergence(mesh, tilts=tilts)
                 scalar_values.extend(list(map(float, tri_vals)))
 
         # 2. Non-triangle facets (polygons) - Fallback
@@ -483,7 +485,11 @@ def plot_geometry(
                 mappable = ScalarMappable(norm=norm, cmap=cmap)
                 mappable.set_array(values_arr)
                 cbar = fig.colorbar(mappable, ax=ax, shrink=0.6, pad=0.05)
-                cbar.set_label("|t|" if color_by == "tilt_mag" else "div(t)")
+                cbar.set_label(
+                    "|t|"
+                    if color_by in {"tilt_mag", "tilt_in", "tilt_out"}
+                    else "div(t)"
+                )
                 setattr(ax, "_membrane_colorbar", cbar)
                 setattr(ax, "_membrane_mappable", mappable)
             else:
