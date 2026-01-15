@@ -219,7 +219,7 @@ Interactive commands:
   `tilt_coupling_mode`.
 - Leaflet-aware bending-tilt coupling is available via `bending_tilt_in` and
   `bending_tilt_out`, using `bending_modulus_in/out` (fallback to `bending_modulus`).
-- Example bilayer tilt decay meshes live under `docs/bilayer_tilt/`.
+- Example bilayer tilt decay meshes live under `meshes/bilayer_tilt/`.
 
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.

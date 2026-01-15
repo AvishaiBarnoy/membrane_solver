@@ -13,7 +13,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Bilayer tilt energies (`tilt_in`, `tilt_out`, `tilt_smoothness_in/out`) with optional `tilt_coupling`, plus leaflet-aware tilt relaxation in the minimizer.
 - Leaflet-specific bending-tilt coupling modules (`bending_tilt_in`, `bending_tilt_out`).
 - E2E tilt relaxation tests for leaflet-specific bending-tilt modules.
-- Example bilayer tilt decay meshes under `docs/bilayer_tilt/`.
+- Example bilayer tilt decay meshes under `meshes/bilayer_tilt/`.
 - Feature-branch guard script and pre-commit hook (`tools/ensure_feature_branch.sh`).
 - **Kozlov–Hamm Tilt Coupling**: Implemented coupled bending+tilt energy integral $\frac{1}{2} \int \kappa (2H - c_0 + \text{div}(t))^2 dA$ in `modules/energy/bending_tilt.py`.
 - **Tilt Solve Modes**: Added `nested` and `coupled` relaxation modes in `Minimizer` to optimize the tilt field alongside surface geometry.
