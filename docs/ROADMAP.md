@@ -83,10 +83,10 @@ intended for development and planning; users should consult `README.md` and
           - per-leaflet `tilt` magnitude term (`tilt_modulus_in/out`)
           - per-leaflet `tilt_smoothness` term using `bending_modulus` (or `bending_modulus_in/out`)
           - optional inter-leaflet coupling (e.g. penalize `|t_out - t_in|^2` or `|t_out + t_in|^2`)
-     - [ ] Energies (second pass: shape coupling):
-           - generalize `bending_tilt` to accept a selected leaflet tilt field
-             (and document sign conventions / leaflet orientation).
-           - add bilayer-thickness parameters if needed for offset-surface corrections.
+    - [x] Energies (second pass: shape coupling):
+          - add `bending_tilt_in` / `bending_tilt_out` for leaflet-specific coupling
+            (document sign conventions / leaflet orientation).
+          - add bilayer-thickness parameters if needed for offset-surface corrections.
     - [x] Minimizer: relax both tilt fields (nested/coupled) with independent fixed masks,
           plus a combined mode for coupled leaflet relaxation.
      - [x] Visualization: add `lv tilt_in`, `lv tilt_out`, `lv div_in`, `lv div_out`,

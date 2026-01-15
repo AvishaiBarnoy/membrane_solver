@@ -217,6 +217,8 @@ Interactive commands:
   and optional `tilt_coupling`. Parameters: `tilt_modulus_in/out`,
   `bending_modulus` (or `bending_modulus_in/out`), `tilt_coupling_modulus`,
   `tilt_coupling_mode`.
+- Leaflet-aware bending-tilt coupling is available via `bending_tilt_in` and
+  `bending_tilt_out`, using `bending_modulus_in/out` (fallback to `bending_modulus`).
 
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.
