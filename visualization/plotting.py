@@ -24,6 +24,7 @@ _TILT_COLOR_BY = {
     "tilt_out",
     "tilt_div_in",
     "tilt_div_out",
+    "tilt_bilayer",
 }
 
 
@@ -33,6 +34,36 @@ def _tilt_field_for_color_by(mesh: Mesh, color_by: str | None) -> np.ndarray:
     if color_by in {"tilt_out", "tilt_div_out"}:
         return mesh.tilts_out_view()
     return mesh.tilts_view()
+
+
+def _bilayer_offset_scale(positions: np.ndarray) -> float:
+    if positions.size == 0:
+        return 0.0
+    span = positions.max(axis=0) - positions.min(axis=0)
+    max_range = float(np.max(span)) if span.size else 0.0
+    return 0.01 * max_range if max_range > 0 else 0.0
+
+
+def _triangle_unit_normals(tri_data: np.ndarray) -> np.ndarray:
+    normals = np.cross(tri_data[:, 1] - tri_data[:, 0], tri_data[:, 2] - tri_data[:, 0])
+    norms = np.linalg.norm(normals, axis=1)
+    unit = np.zeros_like(normals)
+    good = norms > 1e-12
+    unit[good] = normals[good] / norms[good][:, None]
+    return unit
+
+
+def _loop_unit_normal(loop_positions: np.ndarray) -> np.ndarray:
+    if loop_positions.shape[0] < 3:
+        return np.zeros(3, dtype=float)
+    normal = np.cross(
+        loop_positions[1] - loop_positions[0],
+        loop_positions[2] - loop_positions[0],
+    )
+    norm = float(np.linalg.norm(normal))
+    if norm <= 1e-12:
+        return np.zeros(3, dtype=float)
+    return normal / norm
 
 
 def _safe_pause(interval: float) -> None:
@@ -218,6 +249,8 @@ def plot_geometry(
         ``edge.options``.
     color_by : str, optional
         When set, override facet colors with a colormap based on tilt values.
+        Use ``tilt_bilayer`` to render outer vs inner leaflet magnitudes on
+        dual offset surfaces.
         Supported values are ``"tilt_mag"`` (mean ``|t|`` per facet) and
         ``"tilt_div"`` (piecewise-linear per-triangle ``div(t)``).
     show_colorbar : bool, optional
@@ -345,156 +378,271 @@ def plot_geometry(
             facet_color if facet_color is not None else (0.6, 0.8, 1.0)
         )
 
-        # 1. Vectorized triangles
-        if tri_rows is not None and len(tri_rows) > 0:
-            # (N_tri, 3, 3) array of positions
-            tri_data = positions[tri_rows]
-            triangles.extend(list(tri_data))
+        if color_by == "tilt_bilayer":
+            triangles_top = []
+            triangles_bottom = []
+            scalar_values_in: list[float] = []
+            scalar_values_out: list[float] = []
+            offset = _bilayer_offset_scale(positions)
 
-            if color_by is None:
-                # Map colors
-                for fid in tri_facets:
-                    if facet_colors is not None and fid in facet_colors:
-                        face_colors.append(facet_colors[fid])
-                    else:
-                        opts = mesh.facets[fid].options
-                        face_colors.append(opts.get("color", default_facet_color))
-            elif color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
-                tilts = _tilt_field_for_color_by(mesh, color_by)
-                tri_vals, _ = triangle_tilt_magnitudes(mesh, tilts=tilts)
-                scalar_values.extend(list(map(float, tri_vals)))
-            elif color_by in {"tilt_div", "tilt_div_in", "tilt_div_out"}:
-                tilts = _tilt_field_for_color_by(mesh, color_by)
-                tri_vals, _ = triangle_tilt_divergence(mesh, tilts=tilts)
-                scalar_values.extend(list(map(float, tri_vals)))
+            # 1. Vectorized triangles
+            if tri_rows is not None and len(tri_rows) > 0:
+                tri_data = positions[tri_rows]
+                unit = _triangle_unit_normals(tri_data)
+                offsets = unit * offset
+                triangles_top.extend(list(tri_data + offsets[:, None, :]))
+                triangles_bottom.extend(list(tri_data - offsets[:, None, :]))
 
-        # 2. Non-triangle facets (polygons) - Fallback
-        tri_set = set(tri_facets) if tri_facets else set()
+                tilts_in = _tilt_field_for_color_by(mesh, "tilt_in")
+                tilts_out = _tilt_field_for_color_by(mesh, "tilt_out")
+                vals_in, _ = triangle_tilt_magnitudes(mesh, tilts=tilts_in)
+                vals_out, _ = triangle_tilt_magnitudes(mesh, tilts=tilts_out)
+                scalar_values_in.extend(list(map(float, vals_in)))
+                scalar_values_out.extend(list(map(float, vals_out)))
 
-        for facet in mesh.facets.values():
-            if facet.index in tri_set:
-                continue
+            # 2. Non-triangle facets (polygons) - Fallback
+            tri_set = set(tri_facets) if tri_facets else set()
+            for facet in mesh.facets.values():
+                if facet.index in tri_set:
+                    continue
+                if len(facet.edge_indices) < 3:
+                    continue
 
-            if len(facet.edge_indices) < 3:
-                continue
+                tri = [
+                    mesh.vertices[mesh.get_edge(e).tail_index].position
+                    for e in facet.edge_indices
+                ]
+                loop_positions = np.asarray(tri, dtype=float)
+                unit = _loop_unit_normal(loop_positions)
+                triangles_top.append(loop_positions + offset * unit)
+                triangles_bottom.append(loop_positions - offset * unit)
 
-            tri = [
-                mesh.vertices[mesh.get_edge(e).tail_index].position
-                for e in facet.edge_indices
-            ]
-            triangles.append(tri)
-
-            if color_by is None:
-                if facet_colors is not None and facet.index in facet_colors:
-                    color = facet_colors[facet.index]
-                else:
-                    color = facet.options.get("color", default_facet_color)
-                face_colors.append(color)
-            elif color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
-                tilt_attr = "tilt"
-                if color_by == "tilt_in":
-                    tilt_attr = "tilt_in"
-                elif color_by == "tilt_out":
-                    tilt_attr = "tilt_out"
-                mags = [
+                mags_in = [
                     float(
                         np.linalg.norm(
-                            getattr(
-                                mesh.vertices[mesh.get_edge(e).tail_index], tilt_attr
-                            )
+                            mesh.vertices[mesh.get_edge(e).tail_index].tilt_in
                         )
                     )
                     for e in facet.edge_indices
                 ]
-                scalar_values.append(float(np.mean(mags)) if mags else 0.0)
-            elif color_by in {"tilt_div", "tilt_div_in", "tilt_div_out"}:
-                tilt_attr = "tilt"
-                if color_by == "tilt_div_in":
-                    tilt_attr = "tilt_in"
-                elif color_by == "tilt_div_out":
-                    tilt_attr = "tilt_out"
-                vids = [mesh.get_edge(e).tail_index for e in facet.edge_indices]
-                if len(vids) < 3:
-                    scalar_values.append(0.0)
-                else:
-                    v0 = mesh.vertices[int(vids[0])]
-                    total_area = 0.0
-                    weighted_div = 0.0
-                    for i in range(1, len(vids) - 1):
-                        v1 = mesh.vertices[int(vids[i])]
-                        v2 = mesh.vertices[int(vids[i + 1])]
-                        tri_pos = np.stack(
-                            [v0.position, v1.position, v2.position], axis=0
+                mags_out = [
+                    float(
+                        np.linalg.norm(
+                            mesh.vertices[mesh.get_edge(e).tail_index].tilt_out
                         )
-                        tri_tilt = np.stack(
-                            [
-                                getattr(v0, tilt_attr),
-                                getattr(v1, tilt_attr),
-                                getattr(v2, tilt_attr),
-                            ],
-                            axis=0,
-                        )
-                        n = np.cross(tri_pos[1] - tri_pos[0], tri_pos[2] - tri_pos[0])
-                        area2 = float(np.linalg.norm(n))
-                        if area2 <= 1e-12:
-                            continue
-                        area = 0.5 * area2
-                        tri_rows_local = np.array([[0, 1, 2]], dtype=np.int32)
-                        div_val = float(
-                            _triangle_divergence_from_arrays(
-                                tri_pos, tri_tilt, tri_rows_local
-                            )[0]
-                        )
-                        weighted_div += area * div_val
-                        total_area += area
-                    scalar_values.append(
-                        weighted_div / total_area if total_area > 0 else 0.0
                     )
+                    for e in facet.edge_indices
+                ]
+                scalar_values_in.append(float(np.mean(mags_in)) if mags_in else 0.0)
+                scalar_values_out.append(float(np.mean(mags_out)) if mags_out else 0.0)
 
-        if triangles:
-            if color_by is not None:
-                values_arr = np.asarray(scalar_values, dtype=float)
-                face_colors = list(_colors_from_scalars(color_by, values_arr))
-            alpha = 0.4 if transparent else 1.0
-            tri_collection = Poly3DCollection(
-                triangles,
-                alpha=alpha,
-                edgecolor=edge_color if not draw_edges else (0.2, 0.2, 0.2),
-                linewidths=1.0 if draw_edges else 0.0,
-            )
-            tri_collection.set_facecolor(face_colors)
-            tri_collection.set_label("_mesh_facets")
-            ax.add_collection3d(tri_collection)
+            if triangles_top:
+                values_in = np.asarray(scalar_values_in, dtype=float)
+                values_out = np.asarray(scalar_values_out, dtype=float)
+                values_all = np.concatenate([values_in, values_out])
+                cmap, norm = _colormap_norm_for_scalars("tilt_mag", values_all)
+                colors_in = cmap(norm(values_in))
+                colors_out = cmap(norm(values_out))
+                if colors_in.ndim == 2 and colors_in.shape[1] == 4:
+                    colors_in[:, 3] = 1.0
+                if colors_out.ndim == 2 and colors_out.shape[1] == 4:
+                    colors_out[:, 3] = 1.0
 
-            if (
-                color_by is not None
-                and show_colorbar_flag
-                and values_arr.size
-                and fig is not None
-            ):
-                prev_cbar = getattr(ax, "_membrane_colorbar", None)
-                if prev_cbar is not None:
-                    try:
-                        prev_cbar.remove()
-                    except Exception:
-                        try:
-                            prev_cbar.ax.remove()
-                        except Exception:
-                            pass
-                cmap, norm = _colormap_norm_for_scalars(color_by, values_arr)
-                mappable = ScalarMappable(norm=norm, cmap=cmap)
-                mappable.set_array(values_arr)
-                cbar = fig.colorbar(mappable, ax=ax, shrink=0.6, pad=0.05)
-                cbar.set_label(
-                    "|t|"
-                    if color_by in {"tilt_mag", "tilt_in", "tilt_out"}
-                    else "div(t)"
+                alpha = 0.4 if transparent else 1.0
+                top_collection = Poly3DCollection(
+                    triangles_top,
+                    alpha=alpha,
+                    edgecolor=edge_color if not draw_edges else (0.2, 0.2, 0.2),
+                    linewidths=1.0 if draw_edges else 0.0,
                 )
-                setattr(ax, "_membrane_colorbar", cbar)
-                setattr(ax, "_membrane_mappable", mappable)
-            else:
-                setattr(ax, "_membrane_colorbar", None)
-                setattr(ax, "_membrane_mappable", None)
+                top_collection.set_facecolor(colors_out)
+                top_collection.set_label("_mesh_facets_out")
+                ax.add_collection3d(top_collection)
+
+                bottom_collection = Poly3DCollection(
+                    triangles_bottom,
+                    alpha=alpha,
+                    edgecolor=edge_color if not draw_edges else (0.2, 0.2, 0.2),
+                    linewidths=1.0 if draw_edges else 0.0,
+                )
+                bottom_collection.set_facecolor(colors_in)
+                bottom_collection.set_label("_mesh_facets_in")
+                ax.add_collection3d(bottom_collection)
+
+                if show_colorbar_flag and values_all.size and fig is not None:
+                    prev_cbar = getattr(ax, "_membrane_colorbar", None)
+                    if prev_cbar is not None:
+                        try:
+                            prev_cbar.remove()
+                        except Exception:
+                            try:
+                                prev_cbar.ax.remove()
+                            except Exception:
+                                pass
+                    mappable = ScalarMappable(norm=norm, cmap=cmap)
+                    mappable.set_array(values_all)
+                    cbar = fig.colorbar(mappable, ax=ax, shrink=0.6, pad=0.05)
+                    cbar.set_label("|t|")
+                    setattr(ax, "_membrane_colorbar", cbar)
+                    setattr(ax, "_membrane_mappable", mappable)
+                else:
+                    setattr(ax, "_membrane_colorbar", None)
+                    setattr(ax, "_membrane_mappable", None)
+        else:
+            # 1. Vectorized triangles
+            if tri_rows is not None and len(tri_rows) > 0:
+                # (N_tri, 3, 3) array of positions
+                tri_data = positions[tri_rows]
+                triangles.extend(list(tri_data))
+
+                if color_by is None:
+                    # Map colors
+                    for fid in tri_facets:
+                        if facet_colors is not None and fid in facet_colors:
+                            face_colors.append(facet_colors[fid])
+                        else:
+                            opts = mesh.facets[fid].options
+                            face_colors.append(opts.get("color", default_facet_color))
+                elif color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
+                    tilts = _tilt_field_for_color_by(mesh, color_by)
+                    tri_vals, _ = triangle_tilt_magnitudes(mesh, tilts=tilts)
+                    scalar_values.extend(list(map(float, tri_vals)))
+                elif color_by in {"tilt_div", "tilt_div_in", "tilt_div_out"}:
+                    tilts = _tilt_field_for_color_by(mesh, color_by)
+                    tri_vals, _ = triangle_tilt_divergence(mesh, tilts=tilts)
+                    scalar_values.extend(list(map(float, tri_vals)))
+
+            # 2. Non-triangle facets (polygons) - Fallback
+            tri_set = set(tri_facets) if tri_facets else set()
+
+            for facet in mesh.facets.values():
+                if facet.index in tri_set:
+                    continue
+
+                if len(facet.edge_indices) < 3:
+                    continue
+
+                tri = [
+                    mesh.vertices[mesh.get_edge(e).tail_index].position
+                    for e in facet.edge_indices
+                ]
+                triangles.append(tri)
+
+                if color_by is None:
+                    if facet_colors is not None and facet.index in facet_colors:
+                        color = facet_colors[facet.index]
+                    else:
+                        color = facet.options.get("color", default_facet_color)
+                    face_colors.append(color)
+                elif color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
+                    tilt_attr = "tilt"
+                    if color_by == "tilt_in":
+                        tilt_attr = "tilt_in"
+                    elif color_by == "tilt_out":
+                        tilt_attr = "tilt_out"
+                    mags = [
+                        float(
+                            np.linalg.norm(
+                                getattr(
+                                    mesh.vertices[mesh.get_edge(e).tail_index],
+                                    tilt_attr,
+                                )
+                            )
+                        )
+                        for e in facet.edge_indices
+                    ]
+                    scalar_values.append(float(np.mean(mags)) if mags else 0.0)
+                elif color_by in {"tilt_div", "tilt_div_in", "tilt_div_out"}:
+                    tilt_attr = "tilt"
+                    if color_by == "tilt_div_in":
+                        tilt_attr = "tilt_in"
+                    elif color_by == "tilt_div_out":
+                        tilt_attr = "tilt_out"
+                    vids = [mesh.get_edge(e).tail_index for e in facet.edge_indices]
+                    if len(vids) < 3:
+                        scalar_values.append(0.0)
+                    else:
+                        v0 = mesh.vertices[int(vids[0])]
+                        total_area = 0.0
+                        weighted_div = 0.0
+                        for i in range(1, len(vids) - 1):
+                            v1 = mesh.vertices[int(vids[i])]
+                            v2 = mesh.vertices[int(vids[i + 1])]
+                            tri_pos = np.stack(
+                                [v0.position, v1.position, v2.position], axis=0
+                            )
+                            tri_tilt = np.stack(
+                                [
+                                    getattr(v0, tilt_attr),
+                                    getattr(v1, tilt_attr),
+                                    getattr(v2, tilt_attr),
+                                ],
+                                axis=0,
+                            )
+                            n = np.cross(
+                                tri_pos[1] - tri_pos[0], tri_pos[2] - tri_pos[0]
+                            )
+                            area2 = float(np.linalg.norm(n))
+                            if area2 <= 1e-12:
+                                continue
+                            area = 0.5 * area2
+                            tri_rows_local = np.array([[0, 1, 2]], dtype=np.int32)
+                            div_val = float(
+                                _triangle_divergence_from_arrays(
+                                    tri_pos, tri_tilt, tri_rows_local
+                                )[0]
+                            )
+                            weighted_div += area * div_val
+                            total_area += area
+                        scalar_values.append(
+                            weighted_div / total_area if total_area > 0 else 0.0
+                        )
+
+            if triangles:
+                if color_by is not None:
+                    values_arr = np.asarray(scalar_values, dtype=float)
+                    face_colors = list(_colors_from_scalars(color_by, values_arr))
+                alpha = 0.4 if transparent else 1.0
+                tri_collection = Poly3DCollection(
+                    triangles,
+                    alpha=alpha,
+                    edgecolor=edge_color if not draw_edges else (0.2, 0.2, 0.2),
+                    linewidths=1.0 if draw_edges else 0.0,
+                )
+                tri_collection.set_facecolor(face_colors)
+                tri_collection.set_label("_mesh_facets")
+                ax.add_collection3d(tri_collection)
+
+                if (
+                    color_by is not None
+                    and show_colorbar_flag
+                    and values_arr.size
+                    and fig is not None
+                ):
+                    prev_cbar = getattr(ax, "_membrane_colorbar", None)
+                    if prev_cbar is not None:
+                        try:
+                            prev_cbar.remove()
+                        except Exception:
+                            try:
+                                prev_cbar.ax.remove()
+                            except Exception:
+                                pass
+                    cmap, norm = _colormap_norm_for_scalars(color_by, values_arr)
+                    mappable = ScalarMappable(norm=norm, cmap=cmap)
+                    mappable.set_array(values_arr)
+                    cbar = fig.colorbar(mappable, ax=ax, shrink=0.6, pad=0.05)
+                    cbar.set_label(
+                        "|t|"
+                        if color_by
+                        in {"tilt_mag", "tilt_in", "tilt_out", "tilt_bilayer"}
+                        else "div(t)"
+                    )
+                    setattr(ax, "_membrane_colorbar", cbar)
+                    setattr(ax, "_membrane_mappable", mappable)
+                else:
+                    setattr(ax, "_membrane_colorbar", None)
+                    setattr(ax, "_membrane_mappable", None)
 
     if show_tilt_arrows:
         positions = mesh.positions_view()
@@ -831,14 +979,21 @@ def update_live_vis(
                 values[idx] = 0.0
         return values
 
+    is_bilayer = color_by == "tilt_bilayer"
     mode_matches = (
         state.get("color_by") == color_by
         and state.get("show_colorbar") == show_colorbar_flag
         and state.get("show_tilt_arrows") == show_tilt_arrows
     )
+    has_tri_collection = (
+        state.get("tri_collection") is not None
+        if not is_bilayer
+        else state.get("tri_collection_top") is not None
+        and state.get("tri_collection_bottom") is not None
+    )
     fast_update = (
         current_topo_version == last_topo_version
-        and state.get("tri_collection") is not None
+        and has_tri_collection
         and mode_matches
         and (
             (
@@ -851,60 +1006,134 @@ def update_live_vis(
 
     if fast_update:
         positions = mesh.positions_view()
-        tri_collection = state["tri_collection"]
-
         facet_row_loops = state.get("facet_row_loops")
         tri_rows = state.get("tri_rows")
 
-        if facet_row_loops is not None:
-            verts = [positions[rows] for rows in facet_row_loops]
-            tri_collection.set_verts(verts)
-        elif tri_rows is not None:
-            tri_data = positions[tri_rows]
-            tri_collection.set_verts(list(tri_data))
+        if is_bilayer:
+            tri_collection_top = state.get("tri_collection_top")
+            tri_collection_bottom = state.get("tri_collection_bottom")
+            offset = _bilayer_offset_scale(positions)
 
-        if color_by is not None:
-            tilts = _tilt_field_for_color_by(mesh, color_by)
             if facet_row_loops is not None:
-                if color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
-                    mags = np.linalg.norm(tilts, axis=1)
-                    values = np.array(
-                        [
-                            float(mags[rows].mean()) if len(rows) else 0.0
-                            for rows in facet_row_loops
-                        ],
-                        dtype=float,
-                    )
-                else:
-                    values = _tilt_divergence_for_loops(
-                        positions, tilts, facet_row_loops
-                    )
+                verts_top = []
+                verts_bottom = []
+                for rows in facet_row_loops:
+                    loop_positions = positions[rows]
+                    unit = _loop_unit_normal(loop_positions)
+                    verts_top.append(loop_positions + offset * unit)
+                    verts_bottom.append(loop_positions - offset * unit)
+                tri_collection_top.set_verts(verts_top)
+                tri_collection_bottom.set_verts(verts_bottom)
+            elif tri_rows is not None:
+                tri_data = positions[tri_rows]
+                unit = _triangle_unit_normals(tri_data)
+                offsets = unit * offset
+                tri_collection_top.set_verts(list(tri_data + offsets[:, None, :]))
+                tri_collection_bottom.set_verts(list(tri_data - offsets[:, None, :]))
+
+            tilts_in = _tilt_field_for_color_by(mesh, "tilt_in")
+            tilts_out = _tilt_field_for_color_by(mesh, "tilt_out")
+            if facet_row_loops is not None:
+                mags_in = np.linalg.norm(tilts_in, axis=1)
+                mags_out = np.linalg.norm(tilts_out, axis=1)
+                values_in = np.array(
+                    [
+                        float(mags_in[rows].mean()) if len(rows) else 0.0
+                        for rows in facet_row_loops
+                    ],
+                    dtype=float,
+                )
+                values_out = np.array(
+                    [
+                        float(mags_out[rows].mean()) if len(rows) else 0.0
+                        for rows in facet_row_loops
+                    ],
+                    dtype=float,
+                )
             else:
                 if tri_rows is None:  # pragma: no cover - defensive
-                    values = np.array([], dtype=float)
-                elif color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
-                    mags = np.linalg.norm(tilts, axis=1)
-                    values = mags[tri_rows].mean(axis=1)
+                    values_in = np.array([], dtype=float)
+                    values_out = np.array([], dtype=float)
                 else:
-                    values = _triangle_divergence_from_arrays(
-                        positions, tilts, tri_rows
-                    )
+                    mags_in = np.linalg.norm(tilts_in, axis=1)
+                    mags_out = np.linalg.norm(tilts_out, axis=1)
+                    values_in = mags_in[tri_rows].mean(axis=1)
+                    values_out = mags_out[tri_rows].mean(axis=1)
 
-            colors = _colors_from_scalars(color_by, values)
-            tri_collection.set_facecolor(colors)
+            values_all = np.concatenate([values_in, values_out])
+            cmap, norm = _colormap_norm_for_scalars("tilt_mag", values_all)
+            colors_in = cmap(norm(values_in))
+            colors_out = cmap(norm(values_out))
+            if colors_in.ndim == 2 and colors_in.shape[1] == 4:
+                colors_in[:, 3] = 1.0
+            if colors_out.ndim == 2 and colors_out.shape[1] == 4:
+                colors_out[:, 3] = 1.0
+            tri_collection_top.set_facecolor(colors_out)
+            tri_collection_bottom.set_facecolor(colors_in)
 
             if show_colorbar_flag:
                 mappable = state.get("mappable")
                 cbar = state.get("colorbar")
                 if mappable is not None and cbar is not None:
-                    cmap, norm = _colormap_norm_for_scalars(color_by, values)
-                    mappable.set_array(values)
+                    mappable.set_array(values_all)
                     mappable.cmap = cmap
                     mappable.norm = norm
                     try:
                         cbar.update_normal(mappable)
                     except Exception:
                         pass
+        else:
+            tri_collection = state["tri_collection"]
+
+            if facet_row_loops is not None:
+                verts = [positions[rows] for rows in facet_row_loops]
+                tri_collection.set_verts(verts)
+            elif tri_rows is not None:
+                tri_data = positions[tri_rows]
+                tri_collection.set_verts(list(tri_data))
+
+            if color_by is not None:
+                tilts = _tilt_field_for_color_by(mesh, color_by)
+                if facet_row_loops is not None:
+                    if color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
+                        mags = np.linalg.norm(tilts, axis=1)
+                        values = np.array(
+                            [
+                                float(mags[rows].mean()) if len(rows) else 0.0
+                                for rows in facet_row_loops
+                            ],
+                            dtype=float,
+                        )
+                    else:
+                        values = _tilt_divergence_for_loops(
+                            positions, tilts, facet_row_loops
+                        )
+                else:
+                    if tri_rows is None:  # pragma: no cover - defensive
+                        values = np.array([], dtype=float)
+                    elif color_by in {"tilt_mag", "tilt_in", "tilt_out"}:
+                        mags = np.linalg.norm(tilts, axis=1)
+                        values = mags[tri_rows].mean(axis=1)
+                    else:
+                        values = _triangle_divergence_from_arrays(
+                            positions, tilts, tri_rows
+                        )
+
+                colors = _colors_from_scalars(color_by, values)
+                tri_collection.set_facecolor(colors)
+
+                if show_colorbar_flag:
+                    mappable = state.get("mappable")
+                    cbar = state.get("colorbar")
+                    if mappable is not None and cbar is not None:
+                        cmap, norm = _colormap_norm_for_scalars(color_by, values)
+                        mappable.set_array(values)
+                        mappable.cmap = cmap
+                        mappable.norm = norm
+                        try:
+                            cbar.update_normal(mappable)
+                        except Exception:
+                            pass
 
         # Edges
         # We need cached edge indices to be fast.
@@ -1008,15 +1237,30 @@ def update_live_vis(
     # We need to be sure which is which.
     tri_col = None
     line_col = None
+    tri_col_top = None
+    tri_col_bottom = None
 
     for col in ax.collections:
         if isinstance(col, Poly3DCollection):
-            tri_col = col
+            label = col.get_label()
+            if label == "_mesh_facets_out":
+                tri_col_top = col
+            elif label == "_mesh_facets_in":
+                tri_col_bottom = col
+            else:
+                tri_col = col
         elif isinstance(col, Line3DCollection):
             if col.get_label() == "_mesh_edges":
                 line_col = col
 
-    state["tri_collection"] = tri_col
+    if color_by == "tilt_bilayer":
+        state["tri_collection"] = None
+        state["tri_collection_top"] = tri_col_top
+        state["tri_collection_bottom"] = tri_col_bottom
+    else:
+        state["tri_collection"] = tri_col
+        state["tri_collection_top"] = None
+        state["tri_collection_bottom"] = None
     state["line_collection"] = line_col
     state["topology_version"] = current_topo_version
     state["color_by"] = color_by
