@@ -84,6 +84,26 @@ class Minimizer:
             dtype=bool,
         )
 
+    def _tilt_fixed_mask_in(self) -> np.ndarray:
+        """Return a boolean mask for vertices whose inner-leaflet tilt is clamped."""
+        return np.array(
+            [
+                bool(getattr(self.mesh.vertices[int(vid)], "tilt_fixed_in", False))
+                for vid in self.mesh.vertex_ids
+            ],
+            dtype=bool,
+        )
+
+    def _tilt_fixed_mask_out(self) -> np.ndarray:
+        """Return a boolean mask for vertices whose outer-leaflet tilt is clamped."""
+        return np.array(
+            [
+                bool(getattr(self.mesh.vertices[int(vid)], "tilt_fixed_out", False))
+                for vid in self.mesh.vertex_ids
+            ],
+            dtype=bool,
+        )
+
     @staticmethod
     def _project_tilts_to_tangent_array(
         tilts: np.ndarray, normals: np.ndarray
@@ -91,6 +111,13 @@ class Minimizer:
         """Project a dense tilt array into the vertex tangent planes."""
         dot = np.einsum("ij,ij->i", tilts, normals)
         return tilts - dot[:, None] * normals
+
+    def _uses_leaflet_tilts(self) -> bool:
+        """Return True when any loaded module depends on tilt_in/tilt_out."""
+        return any(
+            getattr(module, "USES_TILT_LEAFLETS", False)
+            for module in self.energy_modules
+        )
 
     def _compute_energy_array_with_tilts(
         self,
@@ -228,6 +255,114 @@ class Minimizer:
 
         return float(total_energy)
 
+    def _compute_energy_array_with_leaflet_tilts(
+        self,
+        *,
+        positions: np.ndarray,
+        tilts_in: np.ndarray,
+        tilts_out: np.ndarray,
+    ) -> float:
+        """Compute total energy for fixed positions and leaflet tilt arrays."""
+        index_map = self.mesh.vertex_index_to_row
+        grad_dummy = np.zeros_like(positions)
+        total_energy = 0.0
+
+        for module in self.energy_modules:
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                try:
+                    E_mod = module.compute_energy_and_gradient_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                        tilt_in_grad_arr=None,
+                        tilt_out_grad_arr=None,
+                    )
+                except TypeError:
+                    E_mod = module.compute_energy_and_gradient_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                    )
+                total_energy += float(E_mod)
+                continue
+
+            try:
+                E_mod, _ = module.compute_energy_and_gradient(
+                    self.mesh,
+                    self.global_params,
+                    self.param_resolver,
+                    compute_gradient=False,
+                )
+            except TypeError:
+                E_mod, _ = module.compute_energy_and_gradient(
+                    self.mesh, self.global_params, self.param_resolver
+                )
+            total_energy += float(E_mod)
+
+        return float(total_energy)
+
+    def _compute_energy_and_leaflet_tilt_gradients_array(
+        self,
+        *,
+        positions: np.ndarray,
+        tilts_in: np.ndarray,
+        tilts_out: np.ndarray,
+        tilt_in_grad_arr: np.ndarray,
+        tilt_out_grad_arr: np.ndarray,
+    ) -> float:
+        """Compute total energy and accumulate leaflet tilt gradients."""
+        index_map = self.mesh.vertex_index_to_row
+        grad_dummy = np.zeros_like(positions)
+        tilt_in_grad_arr.fill(0.0)
+        tilt_out_grad_arr.fill(0.0)
+        total_energy = 0.0
+
+        for module in self.energy_modules:
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                try:
+                    E_mod = module.compute_energy_and_gradient_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                        tilt_in_grad_arr=tilt_in_grad_arr,
+                        tilt_out_grad_arr=tilt_out_grad_arr,
+                    )
+                except TypeError:
+                    E_mod = module.compute_energy_and_gradient_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                    )
+                total_energy += float(E_mod)
+                continue
+
+            res = module.compute_energy_and_gradient(
+                self.mesh, self.global_params, self.param_resolver
+            )
+            if not isinstance(res, tuple) or len(res) < 2:
+                raise ValueError(
+                    f"Unexpected return from energy module {module}: {res!r}"
+                )
+            total_energy += float(res[0])
+
+        return float(total_energy)
+
     def _relax_tilts(
         self,
         *,
@@ -304,6 +439,111 @@ class Minimizer:
                 break
 
         self.mesh.set_tilts_from_array(tilts)
+
+    def _relax_leaflet_tilts(
+        self,
+        *,
+        positions: np.ndarray,
+        mode: str,
+    ) -> None:
+        """Relax inner/outer leaflet tilt vectors according to solve mode."""
+        mode_norm = str(mode or "").strip().lower()
+        if mode_norm in ("", "none", "off", "false", "fixed"):
+            return
+
+        if mode_norm not in ("nested", "coupled"):
+            logger.warning("Unknown tilt_solve_mode=%r; treating as 'fixed'.", mode)
+            return
+
+        step_size = float(self.global_params.get("tilt_step_size", 0.0) or 0.0)
+        if step_size <= 0.0:
+            return
+
+        tol = float(self.global_params.get("tilt_tol", 0.0) or 0.0)
+        if tol <= 0.0:
+            tol = 0.0
+
+        if mode_norm == "nested":
+            n_inner = int(self.global_params.get("tilt_inner_steps", 0) or 0)
+        else:
+            n_inner = int(self.global_params.get("tilt_coupled_steps", 0) or 0)
+        if n_inner <= 0:
+            return
+
+        fixed_mask_in = self._tilt_fixed_mask_in()
+        fixed_mask_out = self._tilt_fixed_mask_out()
+        has_free = bool(np.any(~fixed_mask_in) or np.any(~fixed_mask_out))
+        if not has_free:
+            return
+
+        tilts_in = self.mesh.tilts_in_view().copy(order="F")
+        tilts_out = self.mesh.tilts_out_view().copy(order="F")
+        normals = self.mesh.vertex_normals(positions)
+        tilts_in = self._project_tilts_to_tangent_array(tilts_in, normals)
+        tilts_out = self._project_tilts_to_tangent_array(tilts_out, normals)
+
+        tilt_fixed_vals_in = (
+            tilts_in[fixed_mask_in].copy() if np.any(fixed_mask_in) else None
+        )
+        tilt_fixed_vals_out = (
+            tilts_out[fixed_mask_out].copy() if np.any(fixed_mask_out) else None
+        )
+
+        tilt_in_grad = np.zeros_like(tilts_in)
+        tilt_out_grad = np.zeros_like(tilts_out)
+
+        for _ in range(n_inner):
+            E0 = self._compute_energy_and_leaflet_tilt_gradients_array(
+                positions=positions,
+                tilts_in=tilts_in,
+                tilts_out=tilts_out,
+                tilt_in_grad_arr=tilt_in_grad,
+                tilt_out_grad_arr=tilt_out_grad,
+            )
+            if np.any(fixed_mask_in):
+                tilt_in_grad[fixed_mask_in] = 0.0
+            if np.any(fixed_mask_out):
+                tilt_out_grad[fixed_mask_out] = 0.0
+
+            gnorm = float(
+                np.sqrt(
+                    np.sum(tilt_in_grad[~fixed_mask_in] ** 2)
+                    + np.sum(tilt_out_grad[~fixed_mask_out] ** 2)
+                )
+            )
+            if gnorm == 0.0:
+                break
+            if tol > 0.0 and gnorm < tol:
+                break
+
+            step = step_size
+            accepted = False
+            for _bt in range(12):
+                trial_in = tilts_in - step * tilt_in_grad
+                trial_out = tilts_out - step * tilt_out_grad
+                trial_in = self._project_tilts_to_tangent_array(trial_in, normals)
+                trial_out = self._project_tilts_to_tangent_array(trial_out, normals)
+                if tilt_fixed_vals_in is not None:
+                    trial_in[fixed_mask_in] = tilt_fixed_vals_in
+                if tilt_fixed_vals_out is not None:
+                    trial_out[fixed_mask_out] = tilt_fixed_vals_out
+                E1 = self._compute_energy_array_with_leaflet_tilts(
+                    positions=positions, tilts_in=trial_in, tilts_out=trial_out
+                )
+                if E1 <= E0:
+                    tilts_in = trial_in
+                    tilts_out = trial_out
+                    accepted = True
+                    break
+                step *= 0.5
+                if step < 1e-16:
+                    break
+
+            if not accepted:
+                break
+
+        self.mesh.set_tilts_in_from_array(tilts_in)
+        self.mesh.set_tilts_out_from_array(tilts_out)
 
     def _check_gauss_bonnet(self) -> None:
         """Emit Gauss-Bonnet diagnostics if enabled."""
@@ -629,7 +869,12 @@ STEP SIZE:\t {self.step_size}
             # Tilt solve modes are evaluated before the shape convergence check so
             # that fixed-geometry runs can still relax the tilt field.
             tilt_mode = self.global_params.get("tilt_solve_mode", "fixed")
-            self._relax_tilts(positions=self.mesh.positions_view(), mode=tilt_mode)
+            if self._uses_leaflet_tilts():
+                self._relax_leaflet_tilts(
+                    positions=self.mesh.positions_view(), mode=tilt_mode
+                )
+            else:
+                self._relax_tilts(positions=self.mesh.positions_view(), mode=tilt_mode)
 
             # Use array-based path for main loop
             E, grad_arr = self.compute_energy_and_gradient_array()

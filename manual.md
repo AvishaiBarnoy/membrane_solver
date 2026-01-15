@@ -210,9 +210,18 @@ Interactive commands:
   Run `meshes/tilt_benchmarks/*.yaml` and print energy/tilt/divergence summaries
   (optionally writing JSON/CSV and plots).
 - Dual-leaflet tilt fields can be visualized via `lv tilt_in`, `lv tilt_out`,
-  `lv div_in`, and `lv div_out`, and the tilt benchmark runner supports
+  `lv div_in`, `lv div_out`, or `lv bilayer` (dual-surface overlay colored by
+  outer vs inner leaflet), and the tilt benchmark runner supports
   `--color-by tilt_in|tilt_out|tilt_div_in|tilt_div_out` when present.
 - Tilt-source decay meshes are available under `meshes/tilt_benchmarks/` (rectangle source pair, annulus with inner-rim source).
+- Bilayer tilt energies use `tilt_in`, `tilt_out`, `tilt_smoothness_in`, `tilt_smoothness_out`,
+  and optional `tilt_coupling`. Parameters: `tilt_modulus_in/out`,
+  `bending_modulus` (or `bending_modulus_in/out`), `tilt_coupling_modulus`,
+  `tilt_coupling_mode`.
+- Leaflet-aware bending-tilt coupling is available via `bending_tilt_in` and
+  `bending_tilt_out`, using `bending_modulus_in/out` (fallback to `bending_modulus`).
+- Example bilayer tilt decay meshes live under `meshes/bilayer_tilt/`, including
+  `tilt_bilayer_rect_opposite.yaml`.
 
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.

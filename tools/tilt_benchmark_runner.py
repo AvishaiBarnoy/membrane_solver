@@ -13,17 +13,15 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
-from geometry.geom_io import load_data, parse_geometry
-from geometry.tilt_operators import p1_vertex_divergence
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 def _stat_summary(values: np.ndarray) -> dict[str, float] | None:
@@ -39,6 +37,13 @@ def _stat_summary(values: np.ndarray) -> dict[str, float] | None:
 
 
 def _compute_metrics(path: Path) -> dict[str, Any]:
+    from geometry.geom_io import load_data, parse_geometry
+    from geometry.tilt_operators import p1_vertex_divergence
+    from runtime.constraint_manager import ConstraintModuleManager
+    from runtime.energy_manager import EnergyModuleManager
+    from runtime.minimizer import Minimizer
+    from runtime.steppers.gradient_descent import GradientDescent
+
     mesh = parse_geometry(load_data(path))
     minim = Minimizer(
         mesh,
@@ -156,6 +161,7 @@ def _save_plots(rows: list[dict[str, Any]], *, color_by: str, out_dir: Path) -> 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
+    from geometry.geom_io import load_data, parse_geometry
     from visualization.plotting import plot_geometry
 
     out_dir.mkdir(parents=True, exist_ok=True)

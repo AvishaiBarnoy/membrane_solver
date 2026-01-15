@@ -6,7 +6,7 @@ organized under `geometry/`, `modules/`, `runtime/` and other directories.
 ## Coding Guidelines
 - Use Python 3.10+ and follow PEP8 style.
 - Employ dataclasses for domain objects and include type hints where practical.
-- Document public functions with standard docstrings.
+- Document all functions with standard docstrings.
 - Prioritize efficient algorithms and data structures.
 - Debugging should be through logger.
 - If requirements or physics/discretization details are unclear, ask the user concise clarifying questions before implementing; if proceeding, state the assumptions in the PR description.

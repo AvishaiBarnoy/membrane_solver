@@ -110,5 +110,87 @@ def test_update_live_vis_colorbar():
     plt.close(state["fig"])
 
 
+def test_update_live_vis_bilayer():
+    mesh = Mesh()
+    mesh.vertices[0] = Vertex(
+        0,
+        np.array([0.0, 0.0, 0.0]),
+        tilt_in=np.array([0.0, 1.0, 0.0]),
+        tilt_out=np.array([0.0, 0.0, 1.0]),
+    )
+    mesh.vertices[1] = Vertex(
+        1,
+        np.array([1.0, 0.0, 0.0]),
+        tilt_in=np.array([0.0, 1.0, 0.0]),
+        tilt_out=np.array([0.0, 0.0, 1.0]),
+    )
+    mesh.vertices[2] = Vertex(
+        2,
+        np.array([0.0, 1.0, 0.0]),
+        tilt_in=np.array([0.0, 1.0, 0.0]),
+        tilt_out=np.array([0.0, 0.0, 1.0]),
+    )
+    mesh.edges[1] = Edge(1, 0, 1)
+    mesh.edges[2] = Edge(2, 1, 2)
+    mesh.edges[3] = Edge(3, 2, 0)
+    mesh.facets[0] = Facet(0, [1, 2, 3])
+    mesh.build_facet_vertex_loops()
+
+    state = update_live_vis(mesh, color_by="tilt_bilayer", show_colorbar=True)
+    assert state["tri_collection_top"] is not None
+    assert state["tri_collection_bottom"] is not None
+
+    state2 = update_live_vis(
+        mesh, state=state, color_by="tilt_bilayer", show_colorbar=True
+    )
+    assert state2["tri_collection_top"] is state["tri_collection_top"]
+    assert state2["tri_collection_bottom"] is state["tri_collection_bottom"]
+
+    plt.close(state["fig"])
+
+
+def test_plot_geometry_tilt_leaflet_fields():
+    mesh = Mesh()
+    mesh.vertices[0] = Vertex(
+        0,
+        np.array([0.0, 0.0, 0.0]),
+        tilt=np.array([1.0, 0.0, 0.0]),
+        tilt_in=np.array([0.0, 1.0, 0.0]),
+        tilt_out=np.array([0.0, 0.0, 1.0]),
+    )
+    mesh.vertices[1] = Vertex(
+        1,
+        np.array([1.0, 0.0, 0.0]),
+        tilt=np.array([1.0, 0.0, 0.0]),
+        tilt_in=np.array([0.0, 1.0, 0.0]),
+        tilt_out=np.array([0.0, 0.0, 1.0]),
+    )
+    mesh.vertices[2] = Vertex(
+        2,
+        np.array([0.0, 1.0, 0.0]),
+        tilt=np.array([1.0, 0.0, 0.0]),
+        tilt_in=np.array([0.0, 1.0, 0.0]),
+        tilt_out=np.array([0.0, 0.0, 1.0]),
+    )
+    mesh.edges[1] = Edge(1, 0, 1)
+    mesh.edges[2] = Edge(2, 1, 2)
+    mesh.edges[3] = Edge(3, 2, 0)
+    mesh.facets[0] = Facet(0, [1, 2, 3])
+    mesh.build_facet_vertex_loops()
+
+    for color_by in (
+        "tilt_in",
+        "tilt_out",
+        "tilt_div_in",
+        "tilt_div_out",
+        "tilt_bilayer",
+    ):
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection="3d")
+        plot_geometry(mesh, ax=ax, color_by=color_by, show=False)
+        fig.canvas.draw()
+        plt.close(fig)
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
