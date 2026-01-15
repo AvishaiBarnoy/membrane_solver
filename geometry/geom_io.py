@@ -284,8 +284,28 @@ def parse_geometry(data: dict) -> Mesh:
                 "y",
                 "on",
             )
+        tilt_fixed_in_val = options.get("tilt_fixed_in", False)
+        tilt_fixed_out_val = options.get("tilt_fixed_out", False)
+        if isinstance(tilt_fixed_in_val, str):
+            tilt_fixed_in_val = tilt_fixed_in_val.strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "y",
+                "on",
+            )
+        if isinstance(tilt_fixed_out_val, str):
+            tilt_fixed_out_val = tilt_fixed_out_val.strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "y",
+                "on",
+            )
         options.pop("tilt_fixed", None)
         options.pop("fixed_tilt", None)
+        options.pop("tilt_fixed_in", None)
+        options.pop("tilt_fixed_out", None)
 
         raw_tilt = options.get("tilt")
         if raw_tilt is not None:
@@ -297,12 +317,34 @@ def parse_geometry(data: dict) -> Mesh:
                 raise TypeError(
                     f"Vertex {vid} tilt must be a 2- or 3-vector of numbers; got {raw_tilt!r}"
                 )
+        raw_tilt_in = options.get("tilt_in")
+        if raw_tilt_in is not None:
+            if (
+                not isinstance(raw_tilt_in, (list, tuple))
+                or len(raw_tilt_in) not in (2, 3)
+                or not all(isinstance(val, (int, float)) for val in raw_tilt_in)
+            ):
+                raise TypeError(
+                    f"Vertex {vid} tilt_in must be a 2- or 3-vector of numbers; got {raw_tilt_in!r}"
+                )
+        raw_tilt_out = options.get("tilt_out")
+        if raw_tilt_out is not None:
+            if (
+                not isinstance(raw_tilt_out, (list, tuple))
+                or len(raw_tilt_out) not in (2, 3)
+                or not all(isinstance(val, (int, float)) for val in raw_tilt_out)
+            ):
+                raise TypeError(
+                    f"Vertex {vid} tilt_out must be a 2- or 3-vector of numbers; got {raw_tilt_out!r}"
+                )
 
         mesh.vertices[vid] = Vertex(
             index=vid,
             position=pos_array,
             options=options,
             tilt_fixed=bool(tilt_fixed_val),
+            tilt_fixed_in=bool(tilt_fixed_in_val),
+            tilt_fixed_out=bool(tilt_fixed_out_val),
         )
 
         if "energy" in options:
@@ -809,6 +851,10 @@ def parse_geometry(data: dict) -> Mesh:
                 opts.pop("tilt", None)
                 opts.pop("tilt_fixed", None)
                 opts.pop("fixed_tilt", None)
+                opts.pop("tilt_in", None)
+                opts.pop("tilt_out", None)
+                opts.pop("tilt_fixed_in", None)
+                opts.pop("tilt_fixed_out", None)
 
     mesh.build_connectivity_maps()
     mesh.build_facet_vertex_loops()
@@ -893,6 +939,14 @@ def save_geometry(
                 opts["tilt"] = entity.tilt.tolist()
             if hasattr(entity, "tilt_fixed") and entity.tilt_fixed:
                 opts["tilt_fixed"] = True
+            if hasattr(entity, "tilt_in") and np.any(entity.tilt_in):
+                opts["tilt_in"] = entity.tilt_in.tolist()
+            if hasattr(entity, "tilt_out") and np.any(entity.tilt_out):
+                opts["tilt_out"] = entity.tilt_out.tolist()
+            if hasattr(entity, "tilt_fixed_in") and entity.tilt_fixed_in:
+                opts["tilt_fixed_in"] = True
+            if hasattr(entity, "tilt_fixed_out") and entity.tilt_fixed_out:
+                opts["tilt_fixed_out"] = True
         return opts if opts else None
 
     data = {

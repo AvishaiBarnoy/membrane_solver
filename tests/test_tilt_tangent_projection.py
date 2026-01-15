@@ -37,7 +37,11 @@ def test_minimizer_projects_tilts_to_tangent_after_step():
     # Start with a tangent tilt field (initial triangle normal is +z).
     for vid in mesh.vertices:
         mesh.vertices[vid].tilt = np.array([1.0, 0.0, 0.0], dtype=float)
+        mesh.vertices[vid].tilt_in = np.array([0.5, 0.0, 0.5], dtype=float)
+        mesh.vertices[vid].tilt_out = np.array([-0.2, 0.0, -0.3], dtype=float)
     mesh.touch_tilts()
+    mesh.touch_tilts_in()
+    mesh.touch_tilts_out()
 
     minim = Minimizer(
         mesh,
@@ -57,3 +61,17 @@ def test_minimizer_projects_tilts_to_tangent_after_step():
             max_abs_dot, abs(float(np.dot(mesh.vertices[int(vid)].tilt, normals[row])))
         )
     assert max_abs_dot < 1e-12
+
+    max_abs_dot_in = 0.0
+    max_abs_dot_out = 0.0
+    for row, vid in enumerate(mesh.vertex_ids):
+        max_abs_dot_in = max(
+            max_abs_dot_in,
+            abs(float(np.dot(mesh.vertices[int(vid)].tilt_in, normals[row]))),
+        )
+        max_abs_dot_out = max(
+            max_abs_dot_out,
+            abs(float(np.dot(mesh.vertices[int(vid)].tilt_out, normals[row]))),
+        )
+    assert max_abs_dot_in < 1e-12
+    assert max_abs_dot_out < 1e-12

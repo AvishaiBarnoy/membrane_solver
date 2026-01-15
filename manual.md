@@ -209,6 +209,9 @@ Interactive commands:
 - `python tools/tilt_benchmark_runner.py`
   Run `meshes/tilt_benchmarks/*.yaml` and print energy/tilt/divergence summaries
   (optionally writing JSON/CSV and plots).
+- Dual-leaflet tilt fields can be visualized via `lv tilt_in`, `lv tilt_out`,
+  `lv div_in`, and `lv div_out`, and the tilt benchmark runner supports
+  `--color-by tilt_in|tilt_out|tilt_div_in|tilt_div_out` when present.
 - Tilt-source decay meshes are available under `meshes/tilt_benchmarks/` (rectangle source pair, annulus with inner-rim source).
 
 - `visualize` / `s`

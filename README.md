@@ -263,6 +263,7 @@ module. Use:
 - Run `pytest -q` before and after significant edits. Recent suites add coverage for the volume penalty path (`tests/test_volume_energy.py`) and low-level error handling (`tests/test_exceptions.py`).
 - Tilt benchmark runner smoke coverage ensures all tilt meshes load and emit metrics (`tests/test_tilt_benchmark_runner.py`).
 - KH-pure refinement stability tests guard tilt benchmarks under mesh refinement (`tests/test_kh_pure_benchmarks.py`).
+- Dual-leaflet tilt IO and refinement inheritance are covered in unit tests (`tests/test_geom_io_more.py`, `tests/test_tilt_validation.py`).
 - Lint via `ruff check .` (or `pre-commit run -a`) to match CI.
 - Pre-commit includes a feature-branch guard; set `ALLOW_MAIN_BRANCH=1` to bypass for emergency fixes.
 - Coverage hotspots are tracked via `pytest --cov=. --cov-report=term-missing`; focus on geometry entities, module managers, and CLI commands.
@@ -311,7 +312,7 @@ near‑term goals include:
 ## Performance benchmarks
 
 - `python tools/suite.py` is the main entry point for performance testing. It runs a set of standard scenarios (`cube_good`, `square_to_circle`, `catenoid`, `spherical_cap`, `dented_cube`, `two_disks_sphere`), tracks execution time history in `benchmarks/results.json`, and highlights regressions or improvements.
-- `python tools/tilt_benchmark_runner.py` evaluates `meshes/tilt_benchmarks/*.yaml` and prints energy/tilt/divergence summaries (optionally writing JSON/CSV and plots).
+- `python tools/tilt_benchmark_runner.py` evaluates `meshes/tilt_benchmarks/*.yaml` and prints energy/tilt/divergence summaries (optionally writing JSON/CSV and plots). Color modes include `tilt_in`, `tilt_out`, `tilt_div_in`, and `tilt_div_out` when present.
 - New tilt-source decay meshes live under `meshes/tilt_benchmarks/` (rectangle source pair, annulus with inner-rim source).
 - `python benchmarks/benchmark_cube_good.py` runs the full `cube_good_min_routine` recipe (minimization, refinement, equiangulation, vertex averaging, etc.) and reports the average wall-clock time.
 - `python benchmarks/benchmark_square_to_circle.py` runs the `square_to_circle` scenario (square sheet relaxing to a circle with line tension), serving as a stress test for mesh maintenance operations.

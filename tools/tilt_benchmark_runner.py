@@ -202,7 +202,14 @@ def main() -> int:
     parser.add_argument(
         "--color-by",
         default="tilt_mag",
-        choices=["tilt_mag", "tilt_div"],
+        choices=[
+            "tilt_mag",
+            "tilt_div",
+            "tilt_in",
+            "tilt_out",
+            "tilt_div_in",
+            "tilt_div_out",
+        ],
         help="Color scheme for plots (default: tilt_mag).",
     )
     args = parser.parse_args()

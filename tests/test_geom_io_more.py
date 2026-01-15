@@ -2,12 +2,13 @@ import math
 import os
 import sys
 
+import numpy as np
 import pytest
 import yaml
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from geometry.geom_io import load_data, parse_geometry
+from geometry.geom_io import load_data, parse_geometry, save_geometry
 
 
 def test_load_data_rejects_unknown_extension(tmp_path):
@@ -77,3 +78,37 @@ def test_parse_geometry_evaluates_defines():
     }
     mesh = parse_geometry(data)
     assert math.isclose(mesh.global_parameters.get("WALLT"), -0.5, rel_tol=1e-6)
+
+
+def test_tilt_in_out_roundtrip(tmp_path):
+    data = {
+        "vertices": [
+            [
+                0.0,
+                0.0,
+                0.0,
+                {
+                    "tilt_in": [1.0, 0.0],
+                    "tilt_out": [0.0, 1.0],
+                    "tilt_fixed_in": True,
+                    "tilt_fixed_out": True,
+                },
+            ],
+            [1.0, 0.0, 0.0],
+        ],
+        "edges": [[0, 1]],
+        "instructions": [],
+    }
+    mesh = parse_geometry(data)
+    assert mesh.vertices[0].tilt_fixed_in is True
+    assert mesh.vertices[0].tilt_fixed_out is True
+    assert np.allclose(mesh.vertices[0].tilt_in, np.array([1.0, 0.0, 0.0]))
+    assert np.allclose(mesh.vertices[0].tilt_out, np.array([0.0, 1.0, 0.0]))
+
+    out_path = tmp_path / "tilt_in_out.json"
+    save_geometry(mesh, str(out_path))
+    roundtrip = parse_geometry(load_data(out_path))
+    assert roundtrip.vertices[0].tilt_fixed_in is True
+    assert roundtrip.vertices[0].tilt_fixed_out is True
+    assert np.allclose(roundtrip.vertices[0].tilt_in, np.array([1.0, 0.0, 0.0]))
+    assert np.allclose(roundtrip.vertices[0].tilt_out, np.array([0.0, 1.0, 0.0]))

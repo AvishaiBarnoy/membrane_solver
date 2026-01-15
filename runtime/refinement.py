@@ -115,11 +115,36 @@ def refine_polygonal_facets(mesh):
             [np.asarray(mesh.vertices[v].tilt, dtype=float) for v in vertex_loop],
             dtype=float,
         )
+        loop_tilts_in = np.array(
+            [np.asarray(mesh.vertices[v].tilt_in, dtype=float) for v in vertex_loop],
+            dtype=float,
+        )
+        loop_tilts_out = np.array(
+            [np.asarray(mesh.vertices[v].tilt_out, dtype=float) for v in vertex_loop],
+            dtype=float,
+        )
         centroid_tilt = (
             loop_tilts.mean(axis=0) if loop_tilts.size else np.zeros(3, dtype=float)
         )
         centroid_tilt_fixed = all(
             bool(getattr(mesh.vertices[v], "tilt_fixed", False)) for v in vertex_loop
+        )
+        centroid_tilt_in = (
+            loop_tilts_in.mean(axis=0)
+            if loop_tilts_in.size
+            else np.zeros(3, dtype=float)
+        )
+        centroid_tilt_out = (
+            loop_tilts_out.mean(axis=0)
+            if loop_tilts_out.size
+            else np.zeros(3, dtype=float)
+        )
+        centroid_tilt_fixed_in = all(
+            bool(getattr(mesh.vertices[v], "tilt_fixed_in", False)) for v in vertex_loop
+        )
+        centroid_tilt_fixed_out = all(
+            bool(getattr(mesh.vertices[v], "tilt_fixed_out", False))
+            for v in vertex_loop
         )
         centroid_vertex = Vertex(
             index=centroid_idx,
@@ -128,6 +153,10 @@ def refine_polygonal_facets(mesh):
             options=centroid_options,
             tilt=centroid_tilt,
             tilt_fixed=centroid_tilt_fixed,
+            tilt_in=centroid_tilt_in,
+            tilt_out=centroid_tilt_out,
+            tilt_fixed_in=centroid_tilt_fixed_in,
+            tilt_fixed_out=centroid_tilt_fixed_out,
         )
         new_vertices[centroid_idx] = centroid_vertex
 
@@ -329,9 +358,25 @@ def refine_triangle_mesh(mesh):
                 np.asarray(mesh.vertices[v1].tilt, dtype=float)
                 + np.asarray(mesh.vertices[v2].tilt, dtype=float)
             )
+            midpoint_tilt_in = 0.5 * (
+                np.asarray(mesh.vertices[v1].tilt_in, dtype=float)
+                + np.asarray(mesh.vertices[v2].tilt_in, dtype=float)
+            )
+            midpoint_tilt_out = 0.5 * (
+                np.asarray(mesh.vertices[v1].tilt_out, dtype=float)
+                + np.asarray(mesh.vertices[v2].tilt_out, dtype=float)
+            )
             midpoint_tilt_fixed = bool(
                 getattr(mesh.vertices[v1], "tilt_fixed", False)
                 and getattr(mesh.vertices[v2], "tilt_fixed", False)
+            )
+            midpoint_tilt_fixed_in = bool(
+                getattr(mesh.vertices[v1], "tilt_fixed_in", False)
+                and getattr(mesh.vertices[v2], "tilt_fixed_in", False)
+            )
+            midpoint_tilt_fixed_out = bool(
+                getattr(mesh.vertices[v1], "tilt_fixed_out", False)
+                and getattr(mesh.vertices[v2], "tilt_fixed_out", False)
             )
             midpoint = Vertex(
                 midpoint_idx,
@@ -340,6 +385,10 @@ def refine_triangle_mesh(mesh):
                 options=edge.options.copy(),
                 tilt=midpoint_tilt,
                 tilt_fixed=midpoint_tilt_fixed,
+                tilt_in=midpoint_tilt_in,
+                tilt_out=midpoint_tilt_out,
+                tilt_fixed_in=midpoint_tilt_fixed_in,
+                tilt_fixed_out=midpoint_tilt_fixed_out,
             )
             new_vertices[midpoint_idx] = midpoint
             edge_midpoints[key] = midpoint

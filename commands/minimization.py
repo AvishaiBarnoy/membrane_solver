@@ -154,8 +154,16 @@ class LiveVisCommand(Command):
             tokens = [str(tok).strip().lower() for tok in args if str(tok).strip()]
             if any(tok in {"tilt", "t", "mag", "abs"} for tok in tokens):
                 context.minimizer.live_vis_color_by = "tilt_mag"
+            elif any(tok in {"tilt_in", "tin"} for tok in tokens):
+                context.minimizer.live_vis_color_by = "tilt_in"
+            elif any(tok in {"tilt_out", "tout"} for tok in tokens):
+                context.minimizer.live_vis_color_by = "tilt_out"
             elif any(tok in {"div", "divt"} for tok in tokens):
                 context.minimizer.live_vis_color_by = "tilt_div"
+            elif any(tok in {"div_in", "divt_in"} for tok in tokens):
+                context.minimizer.live_vis_color_by = "tilt_div_in"
+            elif any(tok in {"div_out", "divt_out"} for tok in tokens):
+                context.minimizer.live_vis_color_by = "tilt_div_out"
             elif any(tok in {"plain", "none", "off"} for tok in tokens):
                 context.minimizer.live_vis_color_by = None
 
@@ -171,8 +179,16 @@ class LiveVisCommand(Command):
                 "t",
                 "mag",
                 "abs",
+                "tilt_in",
+                "tin",
+                "tilt_out",
+                "tout",
                 "div",
                 "divt",
+                "div_in",
+                "divt_in",
+                "div_out",
+                "divt_out",
                 "plain",
                 "none",
                 "off",
@@ -184,7 +200,9 @@ class LiveVisCommand(Command):
             }
             unknown = [tok for tok in tokens if tok not in supported]
             if unknown:
-                print("Usage: lv [tilt|div|plain] [arrows|noarrows]")
+                print(
+                    "Usage: lv [tilt|tilt_in|tilt_out|div|div_in|div_out|plain] [arrows|noarrows]"
+                )
                 return
 
             if not context.minimizer.live_vis:
