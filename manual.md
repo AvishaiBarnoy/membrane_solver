@@ -213,6 +213,10 @@ Interactive commands:
   `lv div_in`, and `lv div_out`, and the tilt benchmark runner supports
   `--color-by tilt_in|tilt_out|tilt_div_in|tilt_div_out` when present.
 - Tilt-source decay meshes are available under `meshes/tilt_benchmarks/` (rectangle source pair, annulus with inner-rim source).
+- Bilayer tilt energies use `tilt_in`, `tilt_out`, `tilt_smoothness_in`, `tilt_smoothness_out`,
+  and optional `tilt_coupling`. Parameters: `tilt_modulus_in/out`,
+  `bending_modulus` (or `bending_modulus_in/out`), `tilt_coupling_modulus`,
+  `tilt_coupling_mode`.
 
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.

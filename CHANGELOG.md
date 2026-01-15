@@ -10,6 +10,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - KH-pure refinement stability regression coverage (`tests/test_kh_pure_benchmarks.py`).
 - Tilt source decay benchmark meshes (`meshes/tilt_benchmarks/tilt_source_rect.yaml`, `meshes/tilt_benchmarks/tilt_source_annulus.yaml`).
 - Dual-leaflet tilt plumbing: `tilt_in`/`tilt_out` fields, IO round-trip, refinement inheritance, and live-vis color modes.
+- Bilayer tilt energies (`tilt_in`, `tilt_out`, `tilt_smoothness_in/out`) with optional `tilt_coupling`, plus leaflet-aware tilt relaxation in the minimizer.
 - Feature-branch guard script and pre-commit hook (`tools/ensure_feature_branch.sh`).
 - **Kozlov–Hamm Tilt Coupling**: Implemented coupled bending+tilt energy integral $\frac{1}{2} \int \kappa (2H - c_0 + \text{div}(t))^2 dA$ in `modules/energy/bending_tilt.py`.
 - **Tilt Solve Modes**: Added `nested` and `coupled` relaxation modes in `Minimizer` to optimize the tilt field alongside surface geometry.
