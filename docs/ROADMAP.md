@@ -171,6 +171,10 @@ intended for development and planning; users should consult `README.md` and
      - [ ] Enable full shape coupling (bilayer tilt ↔ curvature) and validate
            that the far field remains approximately flat while a localized
            invagination forms near the inclusion.
+     - [ ] Extend caveolin “source” modeling from hard clamps to soft boundary
+           driving terms (Kozlov-style): replace `tilt_fixed_*` rim conditions
+           with an energy-based rim/source term so the boundary tilt is a free
+           variable minimized together with shape (and `tilt_in/out`).
      - [ ] Sign test: swapping `tilt_in`↔`tilt_out` (or flipping the leaflet
            convention) flips the preferred curvature direction.
 
