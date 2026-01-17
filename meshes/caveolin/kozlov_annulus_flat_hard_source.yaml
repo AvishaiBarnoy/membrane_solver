@@ -1,0 +1,142 @@
+global_parameters:
+  # Milestone B (Kozlov 2D) benchmark: keep the surface flat and relax only the
+  # inner-leaflet tilt field.
+  surface_tension: 0.0
+  tilt_modulus_in: 1.0
+  bending_modulus_in: 1.0
+  tilt_solve_mode: nested
+  tilt_step_size: 0.05
+  tilt_inner_steps: 200
+
+energy_modules:
+  - tilt_smoothness_in
+  - tilt_in
+
+vertices:
+  # 3 concentric 8-gons (r=1,2,3) triangulated into an annulus.
+  # Inner rim is a hard tilt source (radial), outer rim is clamped to zero tilt
+  # to represent the far field boundary condition for the flat-geometry test.
+  - [1.0, 0.0, 0.0, {tilt_fixed_in: true, tilt_in: [1.0, 0.0]}]
+  - [0.707107, 0.707107, 0.0, {tilt_fixed_in: true, tilt_in: [0.707107, 0.707107]}]
+  - [0.0, 1.0, 0.0, {tilt_fixed_in: true, tilt_in: [0.0, 1.0]}]
+  - [-0.707107, 0.707107, 0.0, {tilt_fixed_in: true, tilt_in: [-0.707107, 0.707107]}]
+  - [-1.0, 0.0, 0.0, {tilt_fixed_in: true, tilt_in: [-1.0, 0.0]}]
+  - [-0.707107, -0.707107, 0.0, {tilt_fixed_in: true, tilt_in: [-0.707107, -0.707107]}]
+  - [-0.0, -1.0, 0.0, {tilt_fixed_in: true, tilt_in: [-0.0, -1.0]}]
+  - [0.707107, -0.707107, 0.0, {tilt_fixed_in: true, tilt_in: [0.707107, -0.707107]}]
+  - [2.0, 0.0, 0.0]
+  - [1.414214, 1.414214, 0.0]
+  - [0.0, 2.0, 0.0]
+  - [-1.414214, 1.414214, 0.0]
+  - [-2.0, 0.0, 0.0]
+  - [-1.414214, -1.414214, 0.0]
+  - [-0.0, -2.0, 0.0]
+  - [1.414214, -1.414214, 0.0]
+  - [3.0, 0.0, 0.0, {tilt_fixed_in: true, tilt_in: [0.0, 0.0]}]
+  - [2.12132, 2.12132, 0.0, {tilt_fixed_in: true, tilt_in: [0.0, 0.0]}]
+  - [0.0, 3.0, 0.0, {tilt_fixed_in: true, tilt_in: [0.0, 0.0]}]
+  - [-2.12132, 2.12132, 0.0, {tilt_fixed_in: true, tilt_in: [0.0, 0.0]}]
+  - [-3.0, 0.0, 0.0, {tilt_fixed_in: true, tilt_in: [0.0, 0.0]}]
+  - [-2.12132, -2.12132, 0.0, {tilt_fixed_in: true, tilt_in: [0.0, 0.0]}]
+  - [-0.0, -3.0, 0.0, {tilt_fixed_in: true, tilt_in: [0.0, 0.0]}]
+  - [2.12132, -2.12132, 0.0, {tilt_fixed_in: true, tilt_in: [0.0, 0.0]}]
+
+edges:
+  # Ring edges (all fixed to keep the surface geometry flat).
+  - [0, 1, {fixed: true}]
+  - [1, 2, {fixed: true}]
+  - [2, 3, {fixed: true}]
+  - [3, 4, {fixed: true}]
+  - [4, 5, {fixed: true}]
+  - [5, 6, {fixed: true}]
+  - [6, 7, {fixed: true}]
+  - [7, 0, {fixed: true}]
+  - [8, 9, {fixed: true}]
+  - [9, 10, {fixed: true}]
+  - [10, 11, {fixed: true}]
+  - [11, 12, {fixed: true}]
+  - [12, 13, {fixed: true}]
+  - [13, 14, {fixed: true}]
+  - [14, 15, {fixed: true}]
+  - [15, 8, {fixed: true}]
+  - [16, 17, {fixed: true}]
+  - [17, 18, {fixed: true}]
+  - [18, 19, {fixed: true}]
+  - [19, 20, {fixed: true}]
+  - [20, 21, {fixed: true}]
+  - [21, 22, {fixed: true}]
+  - [22, 23, {fixed: true}]
+  - [23, 16, {fixed: true}]
+
+  # Radial edges (inner↔mid and mid↔outer).
+  - [0, 8, {fixed: true}]
+  - [1, 9, {fixed: true}]
+  - [2, 10, {fixed: true}]
+  - [3, 11, {fixed: true}]
+  - [4, 12, {fixed: true}]
+  - [5, 13, {fixed: true}]
+  - [6, 14, {fixed: true}]
+  - [7, 15, {fixed: true}]
+  - [8, 16, {fixed: true}]
+  - [9, 17, {fixed: true}]
+  - [10, 18, {fixed: true}]
+  - [11, 19, {fixed: true}]
+  - [12, 20, {fixed: true}]
+  - [13, 21, {fixed: true}]
+  - [14, 22, {fixed: true}]
+  - [15, 23, {fixed: true}]
+
+  # Diagonals that triangulate each ring quad into two triangles.
+  - [0, 9, {fixed: true}]
+  - [1, 10, {fixed: true}]
+  - [2, 11, {fixed: true}]
+  - [3, 12, {fixed: true}]
+  - [4, 13, {fixed: true}]
+  - [5, 14, {fixed: true}]
+  - [6, 15, {fixed: true}]
+  - [7, 8, {fixed: true}]
+  - [8, 17, {fixed: true}]
+  - [9, 18, {fixed: true}]
+  - [10, 19, {fixed: true}]
+  - [11, 20, {fixed: true}]
+  - [12, 21, {fixed: true}]
+  - [13, 22, {fixed: true}]
+  - [14, 23, {fixed: true}]
+  - [15, 16, {fixed: true}]
+
+faces:
+  # Each 8-gon segment contributes 4 triangles: 2 in (inner↔mid) and 2 in (mid↔outer).
+  - [0, 25, r40]
+  - [40, r8, r24]
+  - [8, 33, r48]
+  - [48, r16, r32]
+  - [1, 26, r41]
+  - [41, r9, r25]
+  - [9, 34, r49]
+  - [49, r17, r33]
+  - [2, 27, r42]
+  - [42, r10, r26]
+  - [10, 35, r50]
+  - [50, r18, r34]
+  - [3, 28, r43]
+  - [43, r11, r27]
+  - [11, 36, r51]
+  - [51, r19, r35]
+  - [4, 29, r44]
+  - [44, r12, r28]
+  - [12, 37, r52]
+  - [52, r20, r36]
+  - [5, 30, r45]
+  - [45, r13, r29]
+  - [13, 38, r53]
+  - [53, r21, r37]
+  - [6, 31, r46]
+  - [46, r14, r30]
+  - [14, 39, r54]
+  - [54, r22, r38]
+  - [7, 24, r47]
+  - [47, r15, r31]
+  - [15, 32, r55]
+  - [55, r23, r39]
+
+instructions: []
