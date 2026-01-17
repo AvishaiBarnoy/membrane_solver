@@ -1,0 +1,40 @@
+global_parameters:
+  surface_tension: 0.0
+  tilt_modulus_in: 1.0
+  tilt_modulus_out: 1.0
+  bending_modulus_in: 1.0
+  bending_modulus_out: 1.0
+  tilt_solve_mode: nested
+  tilt_step_size: 0.05
+  tilt_inner_steps: 25
+
+energy_modules:
+  - tilt_smoothness_in
+  - tilt_smoothness_out
+  - tilt_in
+  - tilt_out
+
+vertices:
+  # Rectangle spanning x in [0, 4] and y in [0, 1].
+  # Inner-leaflet tilt on the left edge; outer-leaflet tilt on the right edge.
+  - [0.0, 0.0, 0.0, {fixed: true, tilt_fixed_in: true, tilt_in: [1.0, 0.0]}]
+  - [2.0, 0.0, 0.0, {fixed: true}]
+  - [4.0, 0.0, 0.0, {fixed: true, tilt_fixed_out: true, tilt_out: [-1.0, 0.0]}]
+  - [4.0, 1.0, 0.0, {fixed: true, tilt_fixed_out: true, tilt_out: [-1.0, 0.0]}]
+  - [2.0, 1.0, 0.0, {fixed: true}]
+  - [0.0, 1.0, 0.0, {fixed: true, tilt_fixed_in: true, tilt_in: [1.0, 0.0]}]
+
+edges:
+  - [0, 1, {fixed: true}]
+  - [1, 2, {fixed: true}]
+  - [2, 3, {fixed: true}]
+  - [3, 4, {fixed: true}]
+  - [4, 5, {fixed: true}]
+  - [5, 0, {fixed: true}]
+  - [1, 4]
+
+faces:
+  - [0, 6, 4, 5]
+  - [1, 2, 3, -6]
+
+instructions: []

@@ -264,6 +264,10 @@ module. Use:
 - Tilt benchmark runner smoke coverage ensures all tilt meshes load and emit metrics (`tests/test_tilt_benchmark_runner.py`).
 - KH-pure refinement stability tests guard tilt benchmarks under mesh refinement (`tests/test_kh_pure_benchmarks.py`).
 - Dual-leaflet tilt IO and refinement inheritance are covered in unit tests (`tests/test_geom_io_more.py`, `tests/test_tilt_validation.py`).
+- Bilayer tilt energies (`tilt_in`/`tilt_out` + coupling) and leaflet-aware relax modes are unit-tested.
+- Leaflet bending-tilt coupling (`bending_tilt_in/out`) has dedicated gradient checks.
+- Leaflet bending-tilt E2E relaxation tests cover tilt_in/out solve behavior.
+- Example bilayer tilt decay meshes are stored under `meshes/bilayer_tilt/`.
 - Lint via `ruff check .` (or `pre-commit run -a`) to match CI.
 - Pre-commit includes a feature-branch guard; set `ALLOW_MAIN_BRANCH=1` to bypass for emergency fixes.
 - Coverage hotspots are tracked via `pytest --cov=. --cov-report=term-missing`; focus on geometry entities, module managers, and CLI commands.

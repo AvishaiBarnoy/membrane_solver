@@ -79,16 +79,16 @@ intended for development and planning; users should consult `README.md` and
            - midpoint `tilt_fixed_*` is `True` iff both parents are `tilt_fixed_*`
      - [x] Operators/metrics: expose `|t_in|`, `|t_out|`, `div(t_in)`, `div(t_out)`
            and (optionally) `t_out - t_in` for diagnostics/plots.
-     - [ ] Energies (first pass: fixed geometry):
-           - per-leaflet `tilt` magnitude term (`tilt_rigidity_in/out`)
-           - per-leaflet `tilt_smoothness` term (`tilt_smoothness_rigidity_in/out`)
-           - optional inter-leaflet coupling (e.g. penalize `|t_out - t_in|^2` or `|t_out + t_in|^2`)
-     - [ ] Energies (second pass: shape coupling):
-           - generalize `bending_tilt` to accept a selected leaflet tilt field
-             (and document sign conventions / leaflet orientation).
-           - add bilayer-thickness parameters if needed for offset-surface corrections.
-     - [ ] Minimizer: relax both tilt fields (nested/coupled) with independent fixed masks,
-           plus a combined mode for coupled leaflet relaxation.
+    - [x] Energies (first pass: fixed geometry):
+          - per-leaflet `tilt` magnitude term (`tilt_modulus_in/out`)
+          - per-leaflet `tilt_smoothness` term using `bending_modulus` (or `bending_modulus_in/out`)
+          - optional inter-leaflet coupling (e.g. penalize `|t_out - t_in|^2` or `|t_out + t_in|^2`)
+    - [x] Energies (second pass: shape coupling):
+          - add `bending_tilt_in` / `bending_tilt_out` for leaflet-specific coupling
+            (document sign conventions / leaflet orientation).
+          - add bilayer-thickness parameters if needed for offset-surface corrections.
+    - [x] Minimizer: relax both tilt fields (nested/coupled) with independent fixed masks,
+          plus a combined mode for coupled leaflet relaxation.
      - [x] Visualization: add `lv tilt_in`, `lv tilt_out`, `lv div_in`, `lv div_out`,
            plus a `--color-by` mode in `tools/tilt_benchmark_runner.py`.
      - [ ] Unit tests:
@@ -134,16 +134,16 @@ intended for development and planning; users should consult `README.md` and
    - References: `docs/caveolin_generate_curvature.pdf`,
      `docs/SI_caveolin_generate_curvature.pdf`, `docs/s41467-025-64084-9.pdf`.
 
-   - [ ] **Milestone A: bilayer tilt physics modules**
-     - [ ] Per‑leaflet tilt magnitude/smoothness energies operating on
-           `tilt_in` / `tilt_out` (vectorized `*_array` API; no per‑vertex loops).
-           - Unit tests: closed-form single triangle energies; dict/array parity.
-           - Regression: finite-difference / directional-derivative gradients.
-     - [ ] Inter‑leaflet coupling energy (e.g. `∫|tilt_out - tilt_in|^2 dA` or
-           `∫|tilt_out + tilt_in|^2 dA`) with analytic tilt gradients.
-           - Unit tests: symmetry (swap leaflets) and limiting cases (coupling→0 / →∞).
-     - [ ] Minimizer: relax both leaflets with independent fixed masks
-           (`tilt_fixed_in/out`) and a combined solve mode.
+  - [x] **Milestone A: bilayer tilt physics modules**
+    - [x] Per‑leaflet tilt magnitude/smoothness energies operating on
+          `tilt_in` / `tilt_out` (vectorized `*_array` API; no per‑vertex loops).
+      - Unit tests: closed-form single triangle energies; dict/array parity.
+      - Regression: finite-difference / directional-derivative gradients.
+    - [x] Inter‑leaflet coupling energy (e.g. `∫|tilt_out - tilt_in|^2 dA` or
+          `∫|tilt_out + tilt_in|^2 dA`) with analytic tilt gradients.
+      - Unit tests: symmetry (swap leaflets) and limiting cases (coupling→0 / →∞).
+    - [x] Minimizer: relax both leaflets with independent fixed masks
+          (`tilt_fixed_in/out`) and a combined solve mode.
 
    - [ ] **Milestone B: Kozlov 2D single caveolin on an “endless” flat membrane**
      - [ ] Benchmark geometry: planar annulus (inner rim = caveolin footprint,

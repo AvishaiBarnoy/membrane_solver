@@ -1,0 +1,54 @@
+global_parameters:
+  surface_tension: 0.0
+  tilt_modulus_in: 0.1
+  bending_modulus_in: 1.0
+  tilt_solve_mode: nested
+  tilt_step_size: 0.05
+  tilt_inner_steps: 25
+
+energy_modules:
+  - tilt_smoothness_in
+  - tilt_in
+
+vertices:
+  # Rectangle spanning x in [0, 2] (length L=2) and y in [0, 1].
+  # Opposite inner-leaflet tilt sources on left/right edges.
+  - [0.0, 0.0, 0.0, {fixed: true, tilt_fixed_in: true, tilt_in: [1.0, 0.0], tilt_fixed_out: true}]
+  - [1.0, 0.0, 0.0, {fixed: true, tilt_fixed_out: true}]
+  - [2.0, 0.0, 0.0, {fixed: true, tilt_fixed_in: true, tilt_in: [-1.0, 0.0], tilt_fixed_out: true}]
+  - [0.0, 0.5, 0.0, {fixed: true, tilt_fixed_in: true, tilt_in: [1.0, 0.0], tilt_fixed_out: true}]
+  - [1.0, 0.5, 0.0, {fixed: true, tilt_fixed_out: true}]
+  - [2.0, 0.5, 0.0, {fixed: true, tilt_fixed_in: true, tilt_in: [-1.0, 0.0], tilt_fixed_out: true}]
+  - [0.0, 1.0, 0.0, {fixed: true, tilt_fixed_in: true, tilt_in: [1.0, 0.0], tilt_fixed_out: true}]
+  - [1.0, 1.0, 0.0, {fixed: true, tilt_fixed_out: true}]
+  - [2.0, 1.0, 0.0, {fixed: true, tilt_fixed_in: true, tilt_in: [-1.0, 0.0], tilt_fixed_out: true}]
+
+faces:
+  - [0, 4, r12]
+  - [12, r8, r2]
+  - [1, 6, r13]
+  - [13, r9, r4]
+  - [8, 5, r14]
+  - [14, r10, r3]
+  - [9, 7, r15]
+  - [15, r11, r5]
+
+edges:
+  - [0, 1]
+  - [1, 2]
+  - [0, 3]
+  - [3, 6]
+  - [1, 4]
+  - [4, 7]
+  - [2, 5]
+  - [5, 8]
+  - [3, 4]
+  - [4, 5]
+  - [6, 7]
+  - [7, 8]
+  - [0, 4]
+  - [1, 5]
+  - [3, 7]
+  - [4, 8]
+
+instructions: []
