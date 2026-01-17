@@ -46,6 +46,42 @@ def _ring_mean(mags: np.ndarray, radii: np.ndarray, r0: float) -> float:
     return float(mags[idx].mean())
 
 
+def test_kozlov_annulus_refine_inherits_circle_constraints() -> None:
+    mesh = parse_geometry(
+        load_data("meshes/caveolin/kozlov_annulus_flat_hard_source.yaml")
+    )
+    mesh = refine_triangle_mesh(mesh)
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager(mesh.energy_modules),
+        ConstraintModuleManager(mesh.constraint_modules),
+        quiet=True,
+    )
+    minim.enforce_constraints_after_mesh_ops(mesh)
+    mesh.increment_version()
+    mesh._positions_cache = None
+    mesh._positions_cache_version = -1
+
+    positions = mesh.positions_view()
+    radii = np.linalg.norm(positions[:, :2], axis=1)
+    inner_rows = [
+        mesh.vertex_index_to_row[vid]
+        for vid in mesh.vertex_ids
+        if mesh.vertices[int(vid)].options.get("pin_to_circle_group") == "inner"
+    ]
+    outer_rows = [
+        mesh.vertex_index_to_row[vid]
+        for vid in mesh.vertex_ids
+        if mesh.vertices[int(vid)].options.get("pin_to_circle_group") == "outer"
+    ]
+    assert len(inner_rows) > 8
+    assert len(outer_rows) > 8
+    assert float(np.max(np.abs(radii[inner_rows] - 1.0))) < 2e-6
+    assert float(np.max(np.abs(radii[outer_rows] - 3.0))) < 2e-6
+
+
 def test_kozlov_annulus_flat_hard_source_decay() -> None:
     """Milestone-B E2E: tilt decays from an inner rim source on a flat annulus.
 
