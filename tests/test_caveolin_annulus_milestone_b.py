@@ -31,6 +31,11 @@ def _relax_leaflet_tilts(mesh, *, inner_steps: int) -> Minimizer:
         ConstraintModuleManager(mesh.constraint_modules),
         quiet=True,
     )
+    minim.enforce_constraints_after_mesh_ops(mesh)
+    mesh.increment_version()
+    mesh._positions_cache = None
+    mesh._positions_cache_version = -1
+    mesh.project_tilts_to_tangent()
     minim._relax_leaflet_tilts(positions=mesh.positions_view(), mode="nested")
     return minim
 
@@ -112,3 +117,48 @@ def test_kozlov_annulus_energy_decreases_under_refinement() -> None:
 
     assert e0 > e1 > e2
     assert 0.0 < e2 < e0
+
+
+def test_kozlov_annulus_coupling_tracking() -> None:
+    """Milestone-B: tilt_out tracks tilt_in with strong coupling."""
+    mesh = parse_geometry(
+        load_data("meshes/caveolin/kozlov_annulus_flat_hard_source.yaml")
+    )
+
+    # Enable coupling energy and relax both leaflets
+    mesh.energy_modules.append("tilt_coupling")
+    mesh.global_parameters.update(
+        {
+            "tilt_coupling_modulus": 10.0,
+            "tilt_coupling_mode": "difference",
+            "tilt_smoothness_out": 1.0,
+            "tilt_out": 1.0,
+            "tilt_solve_mode": "nested",
+            "tilt_step_size": 0.05,
+            "tilt_inner_steps": 1000,
+            "tilt_tol": 1e-12,
+        }
+    )
+
+    # Note: mesh loaded has tilt_fixed_in=True on rims, but tilt_fixed_out is False
+    # everywhere by default (unless specified). We want tilt_out to be free to track.
+
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager(mesh.energy_modules),
+        ConstraintModuleManager(mesh.constraint_modules),
+        quiet=True,
+    )
+    minim._relax_leaflet_tilts(positions=mesh.positions_view(), mode="nested")
+
+    # Check that tilt_out has tracked tilt_in (difference should be small)
+    t_in = mesh.tilts_in_view()
+    t_out = mesh.tilts_out_view()
+    diff = np.linalg.norm(t_in - t_out, axis=1)
+
+    # With strong coupling (k_c=10 vs k_s=1), difference should be small
+    assert np.mean(diff) < 0.1
+    # tilt_in max is ~1.0, so tilt_out should be significant
+    assert np.max(np.linalg.norm(t_out, axis=1)) > 0.9
