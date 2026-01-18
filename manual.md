@@ -214,6 +214,10 @@ Interactive commands:
   outer vs inner leaflet), and the tilt benchmark runner supports
   `--color-by tilt_in|tilt_out|tilt_div_in|tilt_div_out` when present.
 - Tilt-source decay meshes are available under `meshes/tilt_benchmarks/` (rectangle source pair, annulus with inner-rim source).
+- Kozlov Milestone-B annulus meshes live under `meshes/caveolin/`:
+  - `meshes/caveolin/kozlov_annulus_flat_hard_source.yaml` (hard clamped rim tilt)
+  - `meshes/caveolin/kozlov_annulus_flat_soft_source.yaml` (soft rim source via `tilt_rim_source_in`)
+  - Decay-length estimate: `python benchmarks/benchmark_kozlov_annulus_decay_length.py --mesh hard` (or `--mesh soft`)
 - Bilayer tilt energies use `tilt_in`, `tilt_out`, `tilt_smoothness_in`, `tilt_smoothness_out`,
   and optional `tilt_coupling`. Parameters: `tilt_modulus_in/out`,
   `bending_modulus` (or `bending_modulus_in/out`), `tilt_coupling_modulus`,
