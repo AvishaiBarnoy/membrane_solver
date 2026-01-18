@@ -13,6 +13,40 @@ from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
 
 
+def _relax_rect_tilt_source(
+    *, tilt_rigidity: float, inner_steps: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Relax the single-source rectangle benchmark and return (x, |t|) arrays."""
+    mesh = parse_geometry(
+        load_data("meshes/tilt_benchmarks/tilt_source_rect_single.yaml")
+    )
+    mesh.global_parameters.update(
+        {
+            "tilt_solve_mode": "nested",
+            "tilt_step_size": 0.05,
+            "tilt_inner_steps": int(inner_steps),
+            "tilt_tol": 0.0,
+            "tilt_smoothness_rigidity": 1.0,
+            "tilt_rigidity": float(tilt_rigidity),
+        }
+    )
+
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager(mesh.energy_modules),
+        ConstraintModuleManager(mesh.constraint_modules),
+        quiet=True,
+    )
+    minim._relax_tilts(positions=mesh.positions_view(), mode="nested")
+
+    positions = mesh.positions_view()
+    x = positions[:, 0].copy()
+    mags = np.linalg.norm(mesh.tilts_view(), axis=1)
+    return x, mags
+
+
 def test_single_source_tilt_decays_across_rectangle() -> None:
     """E2E: relax tilts on a fixed rectangle and assert decay away from a source edge.
 
@@ -64,3 +98,24 @@ def test_single_source_tilt_decays_across_rectangle() -> None:
     assert m0 == pytest.approx(1.0, abs=1e-12)
     assert m0 > m2 > m3 > m4
     assert m4 < 0.08
+
+
+def test_higher_tilt_modulus_shortens_decay_length() -> None:
+    """E2E regression: increasing k_t makes tilt decay more quickly."""
+
+    def mean_mag_at(x: np.ndarray, mags: np.ndarray, x0: float) -> float:
+        idx = np.where(np.isclose(x, x0))[0]
+        assert idx.size > 0
+        return float(mags[idx].mean())
+
+    x_lo, mags_lo = _relax_rect_tilt_source(tilt_rigidity=1.0, inner_steps=800)
+    x_hi, mags_hi = _relax_rect_tilt_source(tilt_rigidity=4.0, inner_steps=800)
+    assert np.allclose(x_lo, x_hi)
+
+    m2_lo = mean_mag_at(x_lo, mags_lo, 2.0)
+    m4_lo = mean_mag_at(x_lo, mags_lo, 4.0)
+    m2_hi = mean_mag_at(x_hi, mags_hi, 2.0)
+    m4_hi = mean_mag_at(x_hi, mags_hi, 4.0)
+
+    assert m2_hi < 0.15 * m2_lo
+    assert m4_hi < 0.15 * m4_lo
