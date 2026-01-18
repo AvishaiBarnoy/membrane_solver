@@ -7,41 +7,59 @@ import numpy as np
 logger = logging.getLogger("membrane_solver")
 
 
-def compute_facet_centroid(mesh, facet, vertices):
-    v_ids = set()
-    for signed_ei in facet.edge_indices:
-        edge = mesh.get_edge(signed_ei)
-        v_ids.update([edge.tail_index, edge.head_index])
-    coords = np.array([vertices[i].position for i in v_ids])
-    return np.mean(coords, axis=0)
+def _has_pin_to_circle(options: dict | None) -> bool:
+    if not options:
+        return False
+    constraints = options.get("constraints")
+    if constraints == "pin_to_circle":
+        return True
+    if isinstance(constraints, list):
+        return "pin_to_circle" in constraints
+    return False
 
 
-def compute_facet_normal(mesh, facet, vertices):
-    # Use the first 3 vertices to compute a normal
-    v_ids = []
-    for signed_ei in facet.edge_indices:
-        edge = mesh.get_edge(signed_ei)
-        v_ids.append(edge.tail_index)
-        if len(set(v_ids)) >= 3:
-            break
-    a = vertices[v_ids[1]].position - vertices[v_ids[0]].position
-    b = vertices[v_ids[2]].position - vertices[v_ids[0]].position
-    return 0.5 * np.cross(a, b)  # area-weighted normal
+def _pin_to_circle_group(options: dict | None) -> str | None:
+    if not _has_pin_to_circle(options):
+        return None
+    group = (options or {}).get("pin_to_circle_group")
+    return "default" if group is None else str(group)
 
 
 def vertex_average(mesh):
     """
-    Perform area/volume aware vertex averaging on all non-fixed vertices,
-    using the connectivity map mesh.vertex_to_facets.
+    Perform Evolver-style vertex averaging on all non-fixed vertices.
 
-    For open patches (no volume constraint) this smooths vertices toward
-    area-weighted centroids but then rescales each incident facet in-plane
-    to preserve its original (or target) area, avoiding collapse.
+    This follows the "soapfilm" averaging behavior in Surface Evolver
+    (`vertex_average` / `find_vertex_average` in `src/veravg.c`):
+
+    - For each vertex, iterate its incident edges.
+    - For each edge, compute a weight equal to the sum of incident facet areas
+      on that edge.
+    - Move the vertex along the weighted average of incident edge vectors:
+
+        x_new = x_old + 0.25 * Σ(w_e^2 * (x_neighbor - x_old)) / Σ(w_e^2)
+
+    Constraint compatibility:
+    - Surface Evolver skips edges that do not carry all constraints required by
+      the vertex. In this codebase, most geometric constraints are stored on
+      vertices (e.g. `pin_to_circle`), not edges, so we approximate this rule
+      by requiring both endpoints to share the same pin-to-circle group before
+      using that edge for averaging.
     """
-    # Cache original facet areas to enable area restoration on open patches.
+    mesh.build_connectivity_maps()
+    mesh.build_facet_vertex_loops()
+
+    # Cache facet areas once so averaging is not order-dependent.
     facet_orig_area = {
         f_id: facet.compute_area(mesh) for f_id, facet in mesh.facets.items()
     }
+
+    edge_weights: dict[int, float] = {}
+    for e_id, facet_ids in mesh.edge_to_facets.items():
+        w = 0.0
+        for f_id in facet_ids:
+            w += float(facet_orig_area.get(f_id, 0.0) or 0.0)
+        edge_weights[int(e_id)] = float(w)
 
     new_positions = {}
 
@@ -49,43 +67,53 @@ def vertex_average(mesh):
         if vertex.fixed:
             continue
 
-        facet_ids = mesh.vertex_to_facets.get(v_id, [])
-        if not facet_ids or len(facet_ids) <= 1:
+        edge_ids = mesh.vertex_to_edges.get(v_id, set())
+        if not edge_ids or len(edge_ids) <= 1:
             continue
 
-        total_area = 0.0
-        weighted_sum = np.zeros(3)
-        total_normal = np.zeros(3)
+        group = _pin_to_circle_group(getattr(vertex, "options", None))
 
-        for f_id in facet_ids:
-            facet = mesh.facets[f_id]
-            centroid = compute_facet_centroid(mesh, facet, mesh.vertices)
-            normal = compute_facet_normal(mesh, facet, mesh.vertices)
-            area = np.linalg.norm(normal)
+        total_weight = 0.0
+        xsum = np.zeros(3, dtype=float)
+        used = 0
 
-            weighted_sum += area * centroid
-            total_normal += normal
-            total_area += area
+        for e_id in edge_ids:
+            e_id_int = int(e_id)
+            edge = mesh.edges.get(e_id_int)
+            if edge is None:
+                continue
+            other = edge.head_index if edge.tail_index == v_id else edge.tail_index
 
-        if total_area < 1e-12 or np.linalg.norm(total_normal) < 1e-12:
+            if group is not None:
+                other_group = _pin_to_circle_group(mesh.vertices[int(other)].options)
+                if other_group != group:
+                    continue
+
+            weight = float(edge_weights.get(e_id_int, 0.0) or 0.0)
+            if weight <= 0.0:
+                continue
+            w2 = weight * weight
+
+            side = np.asarray(
+                mesh.vertices[int(other)].position, dtype=float
+            ) - np.asarray(vertex.position, dtype=float)
+            xsum += w2 * side
+            total_weight += w2
+            used += 1
+
+        if used <= 1 or total_weight < 1e-15:
             continue
 
-        v_avg = weighted_sum / total_area
-        v = vertex.position
-        lambda_ = (np.dot(v_avg, total_normal) - np.dot(v, total_normal)) / np.dot(
-            total_normal, total_normal
+        new_positions[v_id] = np.asarray(vertex.position, dtype=float) + 0.25 * (
+            xsum / total_weight
         )
-        v_new = v_avg - lambda_ * total_normal
-
-        new_positions[v_id] = v_new
 
     for v_id, pos in new_positions.items():
         mesh.vertices[v_id].position = pos
 
-    logger.info("Vertex averaging completed with volume conservation.")
+    logger.info("Vertex averaging completed.")
 
-    # Area restoration for cases with explicit targets; skip for unconstrained open patches
-    # to retain smoothing behavior.
+    # Area restoration for cases with explicit targets; skip for unconstrained open patches.
     any_area_target = any(
         f.options.get("target_area") is not None for f in mesh.facets.values()
     ) or any(b.options.get("target_area") is not None for b in mesh.bodies.values())
