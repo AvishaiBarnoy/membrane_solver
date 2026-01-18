@@ -31,13 +31,17 @@ def compute_facet_normal(mesh, facet, vertices):
 
 def vertex_average(mesh):
     """
-    Perform area/volume aware vertex averaging on all non-fixed vertices,
-    using the connectivity map mesh.vertex_to_facets.
+    Perform Evolver-style vertex averaging on all non-fixed vertices.
 
-    For open patches (no volume constraint) this smooths vertices toward
-    area-weighted centroids but then rescales each incident facet in-plane
-    to preserve its original (or target) area, avoiding collapse.
+    For triangle meshes this computes the area-weighted average of incident
+    facet centroids and moves each vertex to that average. Constraint modules
+    (e.g. `pin_to_circle`) should be enforced by the caller after averaging,
+    matching Surface Evolver's behavior of projecting constrained vertices
+    back to their constraints after the move.
     """
+    mesh.build_connectivity_maps()
+    mesh.build_facet_vertex_loops()
+
     # Cache original facet areas to enable area restoration on open patches.
     facet_orig_area = {
         f_id: facet.compute_area(mesh) for f_id, facet in mesh.facets.items()
@@ -55,34 +59,24 @@ def vertex_average(mesh):
 
         total_area = 0.0
         weighted_sum = np.zeros(3)
-        total_normal = np.zeros(3)
 
         for f_id in facet_ids:
             facet = mesh.facets[f_id]
             centroid = compute_facet_centroid(mesh, facet, mesh.vertices)
-            normal = compute_facet_normal(mesh, facet, mesh.vertices)
-            area = np.linalg.norm(normal)
+            area = float(facet_orig_area.get(f_id, 0.0) or 0.0)
 
             weighted_sum += area * centroid
-            total_normal += normal
             total_area += area
 
-        if total_area < 1e-12 or np.linalg.norm(total_normal) < 1e-12:
+        if total_area < 1e-12:
             continue
 
-        v_avg = weighted_sum / total_area
-        v = vertex.position
-        lambda_ = (np.dot(v_avg, total_normal) - np.dot(v, total_normal)) / np.dot(
-            total_normal, total_normal
-        )
-        v_new = v_avg - lambda_ * total_normal
-
-        new_positions[v_id] = v_new
+        new_positions[v_id] = weighted_sum / total_area
 
     for v_id, pos in new_positions.items():
         mesh.vertices[v_id].position = pos
 
-    logger.info("Vertex averaging completed with volume conservation.")
+    logger.info("Vertex averaging completed.")
 
     # Area restoration for cases with explicit targets; skip for unconstrained open patches
     # to retain smoothing behavior.
