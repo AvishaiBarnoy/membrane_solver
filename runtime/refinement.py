@@ -291,6 +291,72 @@ def refine_triangle_mesh(mesh):
     facet_to_new_facets = {}  # facet.index → [Facet, ...]
     next_facet_idx = max(mesh.facets.keys()) + 1 if mesh.facets else 0
 
+    def _maybe_inherit_pin_to_circle_options(
+        v1_options: dict, v2_options: dict
+    ) -> dict | None:
+        """Return shared pin_to_circle options when both endpoints are constrained.
+
+        Refinement creates midpoint vertices on edges. For boundary rims tagged
+        with ``pin_to_circle`` at the vertex level, midpoints must inherit the
+        same constraint metadata so subsequent constraint enforcement keeps the
+        refined boundary circular.
+        """
+
+        def has_pin_to_circle(options: dict) -> bool:
+            constraints = options.get("constraints")
+            if constraints == "pin_to_circle":
+                return True
+            if isinstance(constraints, list):
+                return "pin_to_circle" in constraints
+            return False
+
+        if not (has_pin_to_circle(v1_options) and has_pin_to_circle(v2_options)):
+            return None
+
+        def merge_equal(key: str) -> tuple[bool, object | None]:
+            a = v1_options.get(key)
+            b = v2_options.get(key)
+            if a is None and b is None:
+                return True, None
+            if a is None:
+                return True, b
+            if b is None:
+                return True, a
+            if isinstance(a, (list, tuple, np.ndarray)) or isinstance(
+                b, (list, tuple, np.ndarray)
+            ):
+                try:
+                    ok = bool(
+                        np.allclose(
+                            np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+                        )
+                    )
+                except Exception:
+                    ok = False
+                return ok, a if ok else None
+            return (a == b), (a if a == b else None)
+
+        merged: dict = {"constraints": ["pin_to_circle"]}
+        keys = (
+            "pin_to_circle_group",
+            "pin_to_circle_mode",
+            "pin_to_circle_radius",
+            "pin_to_circle_normal",
+            "pin_to_circle_point",
+        )
+        for key in keys:
+            ok, val = merge_equal(key)
+            if not ok:
+                return None
+            if val is not None:
+                merged[key] = val
+
+        preset = v1_options.get("preset")
+        if preset is not None and preset == v2_options.get("preset"):
+            merged["preset"] = preset
+
+        return merged
+
     def get_or_create_edge(v_from, v_to, parent_edge=None, parent_facet=None):
         key = (min(v_from, v_to), max(v_from, v_to))
         if key in edge_lookup:
@@ -378,11 +444,18 @@ def refine_triangle_mesh(mesh):
                 getattr(mesh.vertices[v1], "tilt_fixed_out", False)
                 and getattr(mesh.vertices[v2], "tilt_fixed_out", False)
             )
+            midpoint_options = edge.options.copy()
+            inherited_circle = _maybe_inherit_pin_to_circle_options(
+                getattr(mesh.vertices[v1], "options", {}) or {},
+                getattr(mesh.vertices[v2], "options", {}) or {},
+            )
+            if inherited_circle is not None:
+                midpoint_options.update(inherited_circle)
             midpoint = Vertex(
                 midpoint_idx,
                 np.asarray(midpoint_position, dtype=float),
                 fixed=edge.fixed,
-                options=edge.options.copy(),
+                options=midpoint_options,
                 tilt=midpoint_tilt,
                 tilt_fixed=midpoint_tilt_fixed,
                 tilt_in=midpoint_tilt_in,
