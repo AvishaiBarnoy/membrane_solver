@@ -145,41 +145,43 @@ intended for development and planning; users should consult `README.md` and
     - [x] Minimizer: relax both leaflets with independent fixed masks
           (`tilt_fixed_in/out`) and a combined solve mode.
 
-   - [ ] **Milestone B: Kozlov 2D single caveolin on an “endless” flat membrane**
+   - [x] **Milestone B: Kozlov 2D single caveolin on an “endless” flat membrane**
      - [x] Benchmark geometry: planar annulus (inner rim = caveolin footprint,
            outer rim = far field). Outer boundary constrained to remain flat
            and to remove rigid motions; inner rim carries the caveolin source.
-     - [ ] Caveolin source model (from Kozlov PDF): encode the source as
+     - [x] Caveolin source model (from Kozlov PDF): encode the source as
            leaflet‑specific boundary conditions and/or local parameters on the
            inclusion patch (document sign conventions).
-     - [ ] Expected behavior (E2E):
+           - Hard source: clamp rim tilt via `tilt_fixed_in` / `tilt_in`.
+           - Soft source: drive rim tilt via `tilt_rim_source_in/out` line-energy term.
+     - [x] Expected behavior (E2E):
            - tilt decays away from the inclusion with λ≈sqrt(k_s/k_t) in the
              small-slope / flat‑geometry limit
            - with strong inter‑leaflet coupling, `tilt_in` and `tilt_out` track
              (or anti‑track) according to the coupling definition
            - invariance: rotating the inclusion on a flat far field should not
              change energies (up to discretization error)
-     - [ ] Tests:
+     - [x] Tests:
            - [x] E2E: relax tilts (and then shape if enabled) and assert monotone
              decay + far‑field flatness tolerances.
            - [x] Regression: refinement convergence (energy decreases with refinement
              and approaches a stable limit for fixed parameters).
            - (Optional) compare radial profiles against reference curves/values
              digitized from the Kozlov PDFs once parameter sets are pinned.
-     - [ ] Implementation notes:
-           - Current benchmark uses hard rim clamps (`tilt_fixed_in`) for the
-             flat-geometry (Milestone-B) sanity checks. Milestone-C should
-             switch to a soft, energy-based rim/source term so boundary tilt is
-             minimized together with shape.
+     - [x] Implementation notes:
+           - Milestone B is flat-geometry: `fixed_plane` + `pin_to_circle` keep rims
+             circular and the far field flat; tests relax tilts without advancing
+             shape steps.
+           - A decay-length diagnostic benchmark is available via
+             `benchmarks/benchmark_kozlov_annulus_decay_length.py`.
 
    - [ ] **Milestone C: 3D single caveolin on a flat far field**
      - [ ] Enable full shape coupling (bilayer tilt ↔ curvature) and validate
            that the far field remains approximately flat while a localized
            invagination forms near the inclusion.
-     - [ ] Extend caveolin “source” modeling from hard clamps to soft boundary
-           driving terms (Kozlov-style): replace `tilt_fixed_*` rim conditions
-           with an energy-based rim/source term so the boundary tilt is a free
-           variable minimized together with shape (and `tilt_in/out`).
+     - [ ] Use the soft rim/source driving terms (`tilt_rim_source_in/out`) with
+           shape coupling enabled so the boundary tilt is a free variable minimized
+           together with shape (and `tilt_in/out`).
      - [ ] Sign test: swapping `tilt_in`↔`tilt_out` (or flipping the leaflet
            convention) flips the preferred curvature direction.
 
