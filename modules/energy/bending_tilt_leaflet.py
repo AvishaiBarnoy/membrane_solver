@@ -117,6 +117,7 @@ def _total_energy_leaflet(
     tilts: np.ndarray,
     kappa_key: str,
     cache_tag: str,
+    div_sign: float,
 ) -> float:
     """Energy-only helper for finite-difference debugging."""
     mesh.build_position_cache()
@@ -129,6 +130,7 @@ def _total_energy_leaflet(
     div_tri, _, _, _, _ = p1_triangle_divergence(
         positions=positions, tilts=tilts, tri_rows=tri_rows
     )
+    div_term = float(div_sign) * div_tri
 
     _, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
         mesh, positions, tri_rows, weights, index_map
@@ -154,7 +156,7 @@ def _total_energy_leaflet(
     base_term = (2.0 * H_vor) - c0_arr
     base_term[~is_interior] = 0.0
 
-    term_tri = base_term[tri_rows] + div_tri[:, None]
+    term_tri = base_term[tri_rows] + div_term[:, None]
     va_eff = np.stack([va0_eff, va1_eff, va2_eff], axis=1)
     kappa_tri = kappa_arr[tri_rows]
 
@@ -170,6 +172,7 @@ def _finite_difference_gradient_shape_leaflet(
     tilts: np.ndarray,
     kappa_key: str,
     cache_tag: str,
+    div_sign: float,
     eps: float,
 ) -> np.ndarray:
     """Energy-consistent shape gradient by central differences (slow)."""
@@ -191,6 +194,7 @@ def _finite_difference_gradient_shape_leaflet(
                 tilts=tilts,
                 kappa_key=kappa_key,
                 cache_tag=cache_tag,
+                div_sign=div_sign,
             )
             e_minus = _total_energy_leaflet(
                 mesh,
@@ -200,6 +204,7 @@ def _finite_difference_gradient_shape_leaflet(
                 tilts=tilts,
                 kappa_key=kappa_key,
                 cache_tag=cache_tag,
+                div_sign=div_sign,
             )
             grad[row, d] = (e_plus - e_minus) / (2.0 * eps)
     return grad
@@ -217,6 +222,7 @@ def compute_energy_and_gradient_array_leaflet(
     tilt_grad_arr: np.ndarray | None,
     kappa_key: str,
     cache_tag: str,
+    div_sign: float = 1.0,
 ) -> float:
     """Compute coupled bending+tilt energy and accumulate gradients."""
     _ = param_resolver
@@ -235,6 +241,7 @@ def compute_energy_and_gradient_array_leaflet(
     div_tri, _, g0, g1, g2 = p1_triangle_divergence(
         positions=positions, tilts=tilts, tri_rows=tri_rows
     )
+    div_term = float(div_sign) * div_tri
 
     vertex_areas_eff, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
         mesh, positions, tri_rows, weights, index_map
@@ -264,15 +271,15 @@ def compute_energy_and_gradient_array_leaflet(
     base_term = (2.0 * H_vor) - c0_arr
     base_term[~is_interior] = 0.0
 
-    term_tri = base_term[tri_rows] + div_tri[:, None]
+    term_tri = base_term[tri_rows] + div_term[:, None]
     va_eff = np.stack([va0_eff, va1_eff, va2_eff], axis=1)
     kappa_tri = kappa_arr[tri_rows]
     total_energy = float(0.5 * np.sum(kappa_tri * term_tri**2 * va_eff))
 
     div_eff_num = np.zeros_like(base_term)
-    np.add.at(div_eff_num, tri_rows[:, 0], va0_eff * div_tri)
-    np.add.at(div_eff_num, tri_rows[:, 1], va1_eff * div_tri)
-    np.add.at(div_eff_num, tri_rows[:, 2], va2_eff * div_tri)
+    np.add.at(div_eff_num, tri_rows[:, 0], va0_eff * div_term)
+    np.add.at(div_eff_num, tri_rows[:, 1], va1_eff * div_term)
+    np.add.at(div_eff_num, tri_rows[:, 2], va2_eff * div_term)
     div_eff = np.zeros_like(base_term)
     mask_eff = vertex_areas_eff > 1e-20
     div_eff[mask_eff] = div_eff_num[mask_eff] / vertex_areas_eff[mask_eff]
@@ -304,6 +311,7 @@ def compute_energy_and_gradient_array_leaflet(
             tilts=tilts,
             kappa_key=kappa_key,
             cache_tag=cache_tag,
+            div_sign=div_sign,
             eps=eps,
         )
     elif mode == "approx":
@@ -450,7 +458,7 @@ def compute_energy_and_gradient_array_leaflet(
         if tilt_grad_arr.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilt_grad_arr must have shape (N_vertices, 3)")
 
-        dE_ddiv = np.sum(kappa_tri * term_tri * va_eff, axis=1)
+        dE_ddiv = float(div_sign) * np.sum(kappa_tri * term_tri * va_eff, axis=1)
         factor = dE_ddiv[:, None]
 
         np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
@@ -468,6 +476,7 @@ def compute_energy_and_gradient_leaflet(
     tilts: np.ndarray,
     kappa_key: str,
     cache_tag: str,
+    div_sign: float = 1.0,
     compute_gradient: bool = True,
 ) -> (
     tuple[float, Dict[int, np.ndarray]]
@@ -489,6 +498,7 @@ def compute_energy_and_gradient_leaflet(
         tilt_grad_arr=tilt_grad_arr,
         kappa_key=kappa_key,
         cache_tag=cache_tag,
+        div_sign=div_sign,
     )
     if not compute_gradient:
         return float(energy), {}
