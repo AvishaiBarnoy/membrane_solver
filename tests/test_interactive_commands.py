@@ -56,6 +56,14 @@ def test_get_command_tilt_stats():
     assert isinstance(cmd, TiltStatsCommand)
     assert args == []
 
+    cmd, args = get_command("tilt_stat")
+    assert isinstance(cmd, TiltStatsCommand)
+    assert args == []
+
+    cmd, args = get_command("tstat")
+    assert isinstance(cmd, TiltStatsCommand)
+    assert args == []
+
 
 def test_tilt_stats_accepts_leaflet_args(capsys):
     ctx = _build_context()
