@@ -67,6 +67,16 @@ def test_set_edge_option():
     assert mesh.edges[1].options["line_tension"] == 5.0
 
 
+def test_set_vertex_coordinate():
+    mesh = MockMesh()
+    ctx = _get_context(mesh)
+    cmd = SetCommand()
+
+    cmd.execute(ctx, ["vertex", "1", "z", "2.0"])
+
+    assert float(mesh.vertices[1].position[2]) == 2.0
+
+
 def test_print_commands(capsys):
     mesh = MockMesh()
     ctx = _get_context(mesh)

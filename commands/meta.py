@@ -303,6 +303,15 @@ class SetCommand(Command):
                     mesh.vertices[obj.tail_index].fixed = True
                     mesh.vertices[obj.head_index].fixed = True
                 print(f"Set {entity_type} {idx} fixed={obj.fixed}")
+            elif entity_type.startswith("vert") and prop in {"x", "y", "z"}:
+                try:
+                    coord = float(val)
+                except (TypeError, ValueError):
+                    print(f"Coordinate must be numeric; got {val_str!r}")
+                    return
+                axis = {"x": 0, "y": 1, "z": 2}[prop]
+                obj.position[axis] = coord
+                print(f"Set {entity_type} {idx} position[{prop}] = {coord}")
             elif entity_type.startswith("body") and prop == "target_volume":
                 obj.target_volume = None if val is None else float(val)
                 if not obj.options:

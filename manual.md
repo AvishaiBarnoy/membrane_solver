@@ -165,6 +165,7 @@ Interactive commands:
   - `set surface_tension 1.5`
   - `set global step_size 1e-3`
   - `set vertex 0 fixed true`
+  - `set vertex 8 z 1e-3`
   - `set edge 12 fixed true`
   - `set body 0 target_volume 1.0`
 
@@ -175,6 +176,12 @@ Interactive commands:
   - `print edges len > 0.5`
   - `print facets area > 0.1`
 
+- `tilt_stats` / `tstat` (`in`/`out`)
+  Print tilt magnitude and divergence summaries, optionally per leaflet.
+  Examples:
+  - `tstat` (prints `tilt_in` and `tilt_out` when available)
+  - `tstat in`
+  - `tstat out`
 
 - `r` / `rN`
   Refine the mesh (triangle refinement + polygonal refinement). Provide a
@@ -218,6 +225,10 @@ Interactive commands:
   - `meshes/caveolin/kozlov_annulus_flat_hard_source.yaml` (hard clamped rim tilt)
   - `meshes/caveolin/kozlov_annulus_flat_soft_source.yaml` (soft rim source via `tilt_rim_source_in`)
   - Decay-length estimate: `python benchmarks/benchmark_kozlov_annulus_decay_length.py --mesh hard` (or `--mesh soft`)
+- Kozlov Milestone-C mesh (3D shape coupling) lives under `meshes/caveolin/`:
+  - `meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml` (bilayer tilt↔curvature coupling; use `break_symmetry` macro or `kick` if it stays flat)
+- Kozlov Milestone-C mesh (3D shape coupling) lives under `meshes/caveolin/`:
+  - `meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml` (bilayer tilt↔curvature coupling; use `break_symmetry` macro or `kick` if it stays flat)
 - Bilayer tilt energies use `tilt_in`, `tilt_out`, `tilt_smoothness_in`, `tilt_smoothness_out`,
   and optional `tilt_coupling`. Parameters: `tilt_modulus_in/out`,
   `bending_modulus` (or `bending_modulus_in/out`), `tilt_coupling_modulus`,

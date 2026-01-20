@@ -175,15 +175,15 @@ intended for development and planning; users should consult `README.md` and
            - A decay-length diagnostic benchmark is available via
              `benchmarks/benchmark_kozlov_annulus_decay_length.py`.
 
-   - [ ] **Milestone C: 3D single caveolin on a flat far field**
-     - [ ] Enable full shape coupling (bilayer tilt ↔ curvature) and validate
+   - [x] **Milestone C: 3D single caveolin on a flat far field**
+     - [x] Enable full shape coupling (bilayer tilt ↔ curvature) and validate
            that the far field remains approximately flat while a localized
            invagination forms near the inclusion.
-     - [ ] Use the soft rim/source driving terms (`tilt_rim_source_in/out`) with
+     - [x] Use the soft rim/source driving terms (`tilt_rim_source_in/out`) with
            shape coupling enabled so the boundary tilt is a free variable minimized
            together with shape (and `tilt_in/out`).
-     - [ ] Sign test: swapping `tilt_in`↔`tilt_out` (or flipping the leaflet
-           convention) flips the preferred curvature direction.
+     - [x] Sign test: swapping `tilt_rim_source_in`↔`tilt_rim_source_out` flips
+           the preferred curvature direction (up/down invagination).
 
    - [ ] **Milestone D: caveolin disks on a sphere (caveolae)**
      - [ ] Use `meshes/bench_two_disks_sphere.json` as scaffold; add a
