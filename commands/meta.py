@@ -422,7 +422,9 @@ class SetCommand(Command):
                     print(f"Set {entity_type} {idx} target_volume={obj.target_volume}")
                 elif entity_type.startswith("vert") and prop in {"x", "y", "z"}:
                     axis = {"x": 0, "y": 1, "z": 2}[prop]
-                    print(f"Set {entity_type} {idx} position[{prop}] = {obj.position[axis]}")
+                    print(
+                        f"Set {entity_type} {idx} position[{prop}] = {obj.position[axis]}"
+                    )
                 else:
                     print(f"Set {entity_type} {idx} options['{prop}'] = {val}")
             else:

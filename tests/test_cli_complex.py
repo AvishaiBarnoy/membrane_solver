@@ -117,6 +117,8 @@ def test_set_edges_all_where_numeric_filter():
     assert mesh.edges[1].fixed is True
     assert mesh.vertices[0].fixed is True
     assert mesh.vertices[1].fixed is True
+
+
 def test_print_commands(capsys):
     mesh = MockMesh()
     ctx = _get_context(mesh)
