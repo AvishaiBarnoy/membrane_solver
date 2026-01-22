@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 
 from commands.base import Command
@@ -242,6 +244,86 @@ class SetCommand(Command):
         mesh = context.mesh
         first = args[0].lower()
 
+        def _parse_value(text: str):
+            """Parse common CLI literals (bool/none/float) and fall back to string."""
+            raw = str(text).strip()
+            low = raw.lower()
+            if low == "true":
+                return True
+            if low == "false":
+                return False
+            if low in {"none", "null"}:
+                return None
+            try:
+                return float(raw)
+            except ValueError:
+                return raw
+
+        def _parse_filter(tokens: list[str]) -> tuple[str, str, object]:
+            """Parse a simple `where` filter like `key=value` or `key > 1.0`."""
+            if not tokens:
+                raise ValueError("Empty where clause.")
+            if len(tokens) == 1:
+                m = re.match(r"^([A-Za-z_][\w]*)(>=|<=|!=|==|=|>|<)(.+)$", tokens[0])
+                if not m:
+                    raise ValueError(f"Invalid where expression: {tokens[0]!r}")
+                key, op, raw_val = m.groups()
+                return str(key), str(op), _parse_value(raw_val)
+
+            if len(tokens) >= 3:
+                key = tokens[0]
+                op = tokens[1]
+                raw_val = " ".join(tokens[2:])
+                return str(key), str(op), _parse_value(raw_val)
+
+            raise ValueError("Invalid where clause; use `key=value` or `key op value`.")
+
+        def _get_attr_or_option(obj, key: str):
+            """Return `obj.key` if present, else `obj.options[key]` when available."""
+            if hasattr(obj, key):
+                return getattr(obj, key)
+            opts = getattr(obj, "options", None) or {}
+            if isinstance(opts, dict) and key in opts:
+                return opts[key]
+            return None
+
+        def _to_float(value):
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        def _matches_filter(obj, key: str, op: str, expected) -> bool:
+            """Return True when `obj` matches the filter condition."""
+            actual = _get_attr_or_option(obj, key)
+            if actual is None:
+                return False
+
+            op = "==" if op == "=" else op
+            if op in {"==", "!="}:
+                a_num = _to_float(actual)
+                e_num = _to_float(expected)
+                if a_num is not None and e_num is not None:
+                    hit = a_num == e_num
+                else:
+                    hit = str(actual) == str(expected)
+                return hit if op == "==" else (not hit)
+
+            a_num = _to_float(actual)
+            e_num = _to_float(expected)
+            if a_num is None or e_num is None:
+                return False
+
+            if op == ">":
+                return a_num > e_num
+            if op == "<":
+                return a_num < e_num
+            if op == ">=":
+                return a_num >= e_num
+            if op == "<=":
+                return a_num <= e_num
+            return False
+
         # Check if first token is an entity type
         if first in [
             "vertex",
@@ -258,71 +340,93 @@ class SetCommand(Command):
                 return
 
             entity_type = first
-            try:
-                idx = int(args[1])
-            except ValueError:
-                print("ID must be an integer.")
-                return
-
+            id_token = str(args[1]).strip().lower()
             prop = args[2]
             val_str = args[3]
 
-            # Helper to interpret value
-            val_lower = val_str.lower()
-            if val_lower == "true":
-                val = True
-            elif val_lower == "false":
-                val = False
-            elif val_lower in {"none", "null"}:
-                val = None
-            else:
-                try:
-                    val = float(val_str)
-                except ValueError:
-                    val = val_str
+            val = _parse_value(val_str)
 
-            # Find entity
-            obj = None
+            entities = None
             if entity_type.startswith("vert"):
-                obj = mesh.vertices.get(idx)
+                entities = mesh.vertices
             elif entity_type.startswith("edge"):
-                obj = mesh.edges.get(idx)
-            elif entity_type.startswith("facet") or entity_type.startswith("face"):
-                obj = mesh.facets.get(idx)
+                entities = mesh.edges
+            elif entity_type.startswith(("facet", "face")):
+                entities = mesh.facets
             elif entity_type.startswith("body"):
-                obj = mesh.bodies.get(idx)
-
-            if not obj:
-                print(f"Entity {idx} not found.")
-                return
-
-            # Set property
-            if prop == "fixed":
-                obj.fixed = bool(val)
-                if obj.fixed and entity_type.startswith("edge"):
-                    mesh.vertices[obj.tail_index].fixed = True
-                    mesh.vertices[obj.head_index].fixed = True
-                print(f"Set {entity_type} {idx} fixed={obj.fixed}")
-            elif entity_type.startswith("vert") and prop in {"x", "y", "z"}:
-                try:
-                    coord = float(val)
-                except (TypeError, ValueError):
-                    print(f"Coordinate must be numeric; got {val_str!r}")
-                    return
-                axis = {"x": 0, "y": 1, "z": 2}[prop]
-                obj.position[axis] = coord
-                print(f"Set {entity_type} {idx} position[{prop}] = {coord}")
-            elif entity_type.startswith("body") and prop == "target_volume":
-                obj.target_volume = None if val is None else float(val)
-                if not obj.options:
-                    obj.options = {}
-                obj.options["target_volume"] = obj.target_volume
-                print(f"Set {entity_type} {idx} target_volume={obj.target_volume}")
+                entities = mesh.bodies
             else:
-                if not obj.options:
-                    obj.options = {}
-                obj.options[prop] = val
-                print(f"Set {entity_type} {idx} options['{prop}'] = {val}")
+                entities = {}
+
+            targets = []
+            idx = None
+            if id_token in {"all", "*"}:
+                targets = list(entities.values())
+            else:
+                try:
+                    idx = int(id_token)
+                except ValueError:
+                    print("ID must be an integer or 'all'.")
+                    return
+                obj = entities.get(idx)
+                if not obj:
+                    print(f"Entity {idx} not found.")
+                    return
+                targets = [obj]
+
+            # Optional: apply filter clause
+            if len(args) > 4:
+                if args[4].lower() != "where":
+                    print("Usage: set [entity] [id|all] [prop] [value] [where ...]")
+                    return
+                try:
+                    f_key, f_op, f_val = _parse_filter([str(t) for t in args[5:]])
+                except ValueError as exc:
+                    print(f"Invalid where clause: {exc}")
+                    return
+                targets = [
+                    obj for obj in targets if _matches_filter(obj, f_key, f_op, f_val)
+                ]
+                if not targets:
+                    print("No entities matched the filter.")
+                    return
+
+            for obj in targets:
+                # Set property
+                if prop == "fixed":
+                    obj.fixed = bool(val)
+                    if obj.fixed and entity_type.startswith("edge"):
+                        mesh.vertices[obj.tail_index].fixed = True
+                        mesh.vertices[obj.head_index].fixed = True
+                elif entity_type.startswith("body") and prop == "target_volume":
+                    obj.target_volume = None if val is None else float(val)
+                    if not obj.options:
+                        obj.options = {}
+                    obj.options["target_volume"] = obj.target_volume
+                elif entity_type.startswith("vert") and prop in {"x", "y", "z"}:
+                    coord = _to_float(val)
+                    if coord is None:
+                        continue
+                    axis = {"x": 0, "y": 1, "z": 2}[prop]
+                    obj.position[axis] = coord
+                else:
+                    if not obj.options:
+                        obj.options = {}
+                    obj.options[prop] = val
+
+            if id_token not in {"all", "*"} and len(targets) == 1:
+                obj = targets[0]
+                if prop == "fixed":
+                    print(f"Set {entity_type} {idx} fixed={obj.fixed}")
+                elif entity_type.startswith("body") and prop == "target_volume":
+                    print(f"Set {entity_type} {idx} target_volume={obj.target_volume}")
+                elif entity_type.startswith("vert") and prop in {"x", "y", "z"}:
+                    axis = {"x": 0, "y": 1, "z": 2}[prop]
+                    print(f"Set {entity_type} {idx} position[{prop}] = {obj.position[axis]}")
+                else:
+                    print(f"Set {entity_type} {idx} options['{prop}'] = {val}")
+            else:
+                print(f"Updated {len(targets)} {entity_type}(s).")
 
         else:
             # Global parameter set
