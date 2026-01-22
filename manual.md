@@ -227,8 +227,6 @@ Interactive commands:
   - Decay-length estimate: `python benchmarks/benchmark_kozlov_annulus_decay_length.py --mesh hard` (or `--mesh soft`)
 - Kozlov Milestone-C mesh (3D shape coupling) lives under `meshes/caveolin/`:
   - `meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml` (bilayer tilt↔curvature coupling; use `break_symmetry` macro or `kick` if it stays flat)
-- Kozlov Milestone-C mesh (3D shape coupling) lives under `meshes/caveolin/`:
-  - `meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml` (bilayer tilt↔curvature coupling; use `break_symmetry` macro or `kick` if it stays flat)
 - Bilayer tilt energies use `tilt_in`, `tilt_out`, `tilt_smoothness_in`, `tilt_smoothness_out`,
   and optional `tilt_coupling`. Parameters: `tilt_modulus_in/out`,
   `bending_modulus` (or `bending_modulus_in/out`), `tilt_coupling_modulus`,

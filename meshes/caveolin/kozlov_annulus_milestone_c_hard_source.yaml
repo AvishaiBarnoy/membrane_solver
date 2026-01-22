@@ -1,30 +1,33 @@
 global_parameters:
-  # Milestone C (Kozlov → 3D): allow the annulus to bend while enforcing a flat far field.
-  #
-  # This benchmark uses:
-  # - soft rim driving term for the inner leaflet (`tilt_rim_source_in`)
-  # - leaflet-specific curvature coupling (`bending_tilt_in/out`)
-  # - both leaflet tilt fields (`tilt_in/out`, `tilt_smoothness_in/out`)
-  #
-  # Shape DOFs are enabled: only the rims are pinned to z=0 via `pin_to_plane`.
+  # Milestone C (Hard Source variant):
+  # Enforces a HARD CLAMP on the inner rim tilt (t_radial = 3.0).
+  # This drives very deep invagination (>0.1 depth).
   surface_tension: 0.0
   bending_energy_model: helfrich
   spontaneous_curvature: 0.0
 
-  tilt_modulus_in: 10
-  tilt_modulus_out: 10
-  bending_modulus_in: 1.0
-  bending_modulus_out: 1.0
+  # Nuclear option: 1e-4 bending modulus to allow extreme buckling.
+  bending_modulus_in: 0.0001
+  bending_modulus_out: 0.0001
 
-  tilt_rim_source_center: [0.0, 0.0, 0.0]
-  tilt_rim_source_group_in: inner
-  tilt_rim_source_strength_in: 100.0
+  # Moduli
+  tilt_modulus_in: 1.0
+  tilt_modulus_out: 1.0
+
+  # Soft source disabled
+  tilt_rim_source_strength_in: 0.0
+
   tilt_solve_mode: nested
   tilt_step_size: 0.05
-  tilt_inner_steps: 300
+  tilt_inner_steps: 120
   tilt_tol: 1e-12
-  step_size: 0.005
+
+  step_size: 0.002
+
+  # Inner rim floats (fit), Outer rim fixed
   pin_to_circle_mode: fit
+  pin_to_circle_normal: [0.0, 0.0, 1.0]
+
   pin_to_plane_normal: [0.0, 0.0, 1.0]
   pin_to_plane_point: [0.0, 0.0, 0.0]
 
@@ -34,13 +37,16 @@ constraint_modules:
 
 definitions:
   inner_rim:
-    constraints: ["pin_to_circle"]
+    constraints: ["pin_to_circle"] # No pin_to_plane
     pin_to_circle_group: "inner"
     pin_to_circle_radius: 1.0
     pin_to_circle_normal: [0.0, 0.0, 1.0]
     pin_to_circle_point: [0.0, 0.0, 0.0]
+    # Hard clamp enabled:
+    tilt_fixed_in: true
   outer_rim:
     constraints: ["pin_to_circle", "pin_to_plane"]
+    pin_to_circle_mode: "fixed"
     pin_to_circle_group: "outer"
     pin_to_circle_radius: 3.0
     pin_to_circle_normal: [0.0, 0.0, 1.0]
@@ -55,17 +61,28 @@ energy_modules:
   - tilt_smoothness_out
   - tilt_in
   - tilt_out
-  - tilt_rim_source_in
+  # No tilt_rim_source_in needed
 
 vertices:
-  - [1.0, 0.0, 0.0, {preset: "inner_rim"}]
-  - [1.0, 1.0, 0.0, {preset: "inner_rim"}]
-  - [0.0, 1.0, 0.0, {preset: "inner_rim"}]
-  - [-1.0, 1.0, 0.0, {preset: "inner_rim"}]
-  - [-1.0, 0.0, 0.0, {preset: "inner_rim"}]
-  - [-1.0, -1.0, 0.0, {preset: "inner_rim"}]
-  - [-0.0, -1.0, 0.0, {preset: "inner_rim"}]
-  - [1.0, -1.0, 0.0, {preset: "inner_rim"}]
+  # Inner rim: Pre-projected to circle (r=1) with exact radial tilt t=3.0
+  # 1. (1,0)
+  - [1.0, 0.0, 0.0, {preset: "inner_rim", tilt_in: [3.0, 0.0, 0.0]}]
+  # 2. (1,1) -> (0.70710678, 0.70710678) -> t=(2.12132, 2.12132)
+  - [0.70710678, 0.70710678, 0.0, {preset: "inner_rim", tilt_in: [2.12132034, 2.12132034, 0.0]}]
+  # 3. (0,1)
+  - [0.0, 1.0, 0.0, {preset: "inner_rim", tilt_in: [0.0, 3.0, 0.0]}]
+  # 4. (-1,1) -> (-0.70710678, 0.70710678)
+  - [-0.70710678, 0.70710678, 0.0, {preset: "inner_rim", tilt_in: [-2.12132034, 2.12132034, 0.0]}]
+  # 5. (-1,0)
+  - [-1.0, 0.0, 0.0, {preset: "inner_rim", tilt_in: [-3.0, 0.0, 0.0]}]
+  # 6. (-1,-1) -> (-0.70710678, -0.70710678)
+  - [-0.70710678, -0.70710678, 0.0, {preset: "inner_rim", tilt_in: [-2.12132034, -2.12132034, 0.0]}]
+  # 7. (0,-1)
+  - [-0.0, -1.0, 0.0, {preset: "inner_rim", tilt_in: [0.0, -3.0, 0.0]}]
+  # 8. (1,-1) -> (0.70710678, -0.70710678)
+  - [0.70710678, -0.70710678, 0.0, {preset: "inner_rim", tilt_in: [2.12132034, -2.12132034, 0.0]}]
+
+  # Bulk and Outer vertices (same as before)
   - [2.0, 0.0, 0.0]
   - [1.414214, 1.414214, 0.0]
   - [0.0, 2.0, 0.0]
@@ -74,6 +91,7 @@ vertices:
   - [-1.414214, -1.414214, 0.0]
   - [-0.0, -2.0, 0.0]
   - [1.414214, -1.414214, 0.0]
+  # Outer 8-gon starts as a "square" and is projected to the target circle (r=3).
   - [3.0, 0.0, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
   - [3.0, 3.0, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
   - [0.0, 3.0, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
@@ -184,7 +202,5 @@ faces:
 instructions: []
 
 macros:
-  # Symmetry-breaking helper: a perfectly flat annulus can remain stuck at a
-  # saddle point (no curvature, negligible tilt_out). Run this once, then
-  # minimize (e.g. `g50`), to observe bilayer tilt↔curvature coupling.
-  break_symmetry: "set vertex 8 z 1e-3"
+  break_symmetry: "set vertices all z 0.5 where pin_to_circle_group=inner"
+  run_invagination: "r; V10; break_symmetry; g 500"

@@ -49,6 +49,7 @@ outputs/*.json
 #docs/
 data/
 results/
+tex/
 
 # Benchmarks (generated outputs)
 benchmarks/results.json
