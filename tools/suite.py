@@ -34,6 +34,8 @@ _BENCHMARK_MODULES = {
     "two_disks_sphere": "benchmark_two_disks_sphere",
     "bending_analytic": "benchmark_bending",
     "volume_optimization": "benchmark_volume_optimization",
+    "tilt_relaxation": "benchmark_tilt_relaxation",
+    "kozlov_annulus_decay_length": "benchmark_kozlov_annulus_decay_length",
 }
 
 

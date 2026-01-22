@@ -40,7 +40,7 @@ jobs:
 
 
   test:
-    name: Tests (py${{ matrix.python-version }})
+    name: Unit tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -61,9 +61,53 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e .
 
-      - name: Run pytest with coverage
+      - name: Run unit tests with coverage
         run: |
-          pytest --cov=. --cov-report=xml -q
+          pytest -q -m "unit" --cov=. --cov-report=xml
+
+  regression:
+    name: Regression tests (py3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e .
+
+      - name: Run regression tests
+        run: |
+          pytest -q -m "regression"
+
+  e2e:
+    name: E2E tests (py3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e .
+
+      - name: Run E2E tests
+        run: |
+          pytest -q -m "e2e"
 
   benchmark-smoke:
     name: Smoke benchmark (non-blocking)

@@ -22,6 +22,11 @@ should extend this manual before they are merged.
   pytest -q
   ```
 
+- Test categories (mirrors CI jobs):
+  - Unit: `pytest -q -m unit`
+  - Regression: `pytest -q -m regression`
+  - E2E: `pytest -q -m e2e`
+
 - The tilt benchmark runner has smoke coverage to ensure all tilt meshes load and print metrics (`tests/test_tilt_benchmark_runner.py`).
 - KH-pure refinement stability tests cover tilt benchmarks under mesh refinement (`tests/test_kh_pure_benchmarks.py`).
 - Pre-commit includes a feature-branch guard; set `ALLOW_MAIN_BRANCH=1` to bypass if you must commit on `main`.
@@ -133,7 +138,8 @@ Instructions: ['g100', 'r', 'u', 'g100', 'V', 'g20', 'r', 'g50', 'r', 'g50']
 ```
 
 Type commands at the prompt; multiple commands can be written without spaces
-(`g10rV5`), or as separate tokens (`g10 r V5`). Use `help` at any time.
+(`g10rV5`), or as separate tokens (`g10 r V5`), or separated by semicolons
+(`g50; V3; g10`). Use `help` at any time.
 
 Command history:
 
@@ -213,6 +219,10 @@ Interactive commands:
   Profile each benchmark case and save per-case `.pstats` files (plus optional
   text summaries via `--profile-top`) under `benchmarks/outputs/profiles` by default.
 
+- `python tools/profile_tilt.py`
+  Profile the inner-loop tilt relaxation hot paths (single-field or leaflet),
+  writing `.pstats` and a text summary under `benchmarks/outputs/profiles`.
+
 - `python tools/tilt_benchmark_runner.py`
   Run `meshes/tilt_benchmarks/*.yaml` and print energy/tilt/divergence summaries
   (optionally writing JSON/CSV and plots).
@@ -238,6 +248,20 @@ Interactive commands:
 
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.
+  Examples:
+  - `s tilt arrows`
+  - `s bilayer` (dual-leaflet overlay when `tilt_in`/`tilt_out` are present)
+
+- `lv`
+  Toggle live visualization during minimization; accepts the same scalar modes
+  as `s` (including `bilayer`).
+
+- `energy`
+  Print the per-module energy breakdown. When source modules are present, also
+  prints internal energy (no sources) vs external work (sources).
+  - `energy total` prints the scalar total only.
+  - `energy ref` sets the current state as a reference; subsequent breakdowns
+    also print Δ vs that reference.
 
 - `print energy`
   Display the current total energy of the simulation.
@@ -256,6 +280,10 @@ Interactive commands:
 
 - `MACRO_NAME`
   If the input defines `macros`, typing a macro name runs its command sequence.
+
+- Tab completion
+  When running in a real terminal (TTY), pressing `TAB` completes interactive
+  command names (and macro names).
 
 ## Expression-based energy/constraints
 

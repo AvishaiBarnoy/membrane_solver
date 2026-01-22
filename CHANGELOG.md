@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ## [Unreleased]
 ### Added
+- CI now runs categorized test subsets via pytest markers: `unit`, `regression`, and `e2e`.
+- Interactive CLI:
+  - Tab completion for command/macro names (TTY only).
+  - Compound commands via semicolons (e.g. `g50; V3; g10`).
+  - `s bilayer` visualization mode (parity with `lv bilayer`).
+- Performance tooling: `tools/profile_tilt.py` to profile tilt relaxation hot-loops.
+- New benchmark case: `benchmarks/benchmark_tilt_relaxation.py` (tilt relaxation hot-loop timing).
+- Rim source energies now follow fitted pin-to-circle rims (`pin_to_circle_mode: fit`) as they translate in space.
 - KH-pure tilt benchmark variants without smoothness regularization (`meshes/tilt_benchmarks/kh_pure_*`).
 - Tilt benchmark runner script (`tools/tilt_benchmark_runner.py`) for energy/tilt/divergence summaries.
 - Tilt benchmark runner smoke test to ensure tilt meshes load and metrics print (`tests/test_tilt_benchmark_runner.py`).
@@ -33,6 +41,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Milestone C: 3D Kozlov annulus mesh with bilayer tilt↔curvature coupling (`meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml`) plus E2E regression tests (including leaflet sign flip).
 
 ### Fixed
+- `energy` breakdown output now separates internal energy vs external work terms (sources) and supports `energy ref` for reference-state deltas.
 - **Tilt Persistence**: Corrected `save_geometry` to persist `tilt` and `tilt_fixed` vertex properties to output JSON files.
 - **Live-Vis Warnings**: Silenced `plt.pause` warnings on headless CI backends.
 - **Hybrid SoA Architecture**: Refactored the minimization pipeline to use a Structure-of-Arrays pattern. Optimization now runs on dense NumPy arrays, eliminating O(N) Python dictionary overhead and resulting in a **3.5x speedup** for large meshes.

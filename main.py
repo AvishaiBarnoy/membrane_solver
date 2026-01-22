@@ -5,9 +5,10 @@ import os
 import sys
 from pathlib import Path
 
+from commands.completion import command_name_completions
 from commands.context import CommandContext
 from commands.executor import execute_command_line
-from commands.registry import get_command
+from commands.registry import COMMAND_REGISTRY, get_command
 from core.exceptions import BodyOrientationError
 from geometry.geom_io import load_data, parse_geometry, save_geometry
 from runtime.constraint_manager import ConstraintModuleManager
@@ -89,6 +90,38 @@ def _setup_interactive_history() -> None:
             pass
 
     atexit.register(_save_history)
+
+
+def _setup_interactive_completion(context: CommandContext) -> None:
+    """Enable tab-completion for interactive commands (when available)."""
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return
+
+    try:
+        import readline  # noqa: F401
+    except ImportError:
+        return
+
+    import readline
+
+    def _completer(text: str, state: int):
+        macros = getattr(context.mesh, "macros", {}) or {}
+        candidates = command_name_completions(
+            text=text,
+            line_buffer=readline.get_line_buffer(),
+            command_names=COMMAND_REGISTRY.keys(),
+            macro_names=macros.keys(),
+        )
+        if state < len(candidates):
+            return candidates[state]
+        return None
+
+    try:
+        readline.set_completer(_completer)
+        readline.parse_and_bind("tab: complete")
+    except Exception:
+        # Completion is a UX improvement; never fail program startup on it.
+        return
 
 
 def main():
@@ -487,6 +520,7 @@ def main():
 
     if not args.non_interactive:
         _setup_interactive_history()
+        _setup_interactive_completion(context)
         while not context.should_exit:
             try:
                 line = input("> ").strip()

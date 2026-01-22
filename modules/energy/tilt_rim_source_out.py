@@ -13,6 +13,7 @@ import numpy as np
 from geometry.entities import Mesh
 
 USES_TILT_LEAFLETS = True
+IS_EXTERNAL_WORK = True
 
 
 def _pin_to_circle_group(options: dict | None) -> str | None:
@@ -61,6 +62,72 @@ def _resolve_center(param_resolver) -> np.ndarray:
         center = [0.0, 0.0, 0.0]
     arr = np.asarray(center, dtype=float).reshape(3)
     return arr
+
+
+def _normalize(vec: np.ndarray) -> np.ndarray | None:
+    norm = float(np.linalg.norm(vec))
+    if norm < 1e-15:
+        return None
+    return vec / norm
+
+
+def _fit_plane_normal(points: np.ndarray) -> np.ndarray | None:
+    if points.shape[0] < 3:
+        return None
+    centroid = np.mean(points, axis=0)
+    X = points - centroid
+    try:
+        _, _, vh = np.linalg.svd(X, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return None
+    return _normalize(vh[-1, :])
+
+
+def _pin_to_circle_mode(mesh: Mesh, options: dict | None) -> str:
+    gp = getattr(mesh, "global_parameters", None)
+    raw = None
+    if options and options.get("pin_to_circle_mode") is not None:
+        raw = options.get("pin_to_circle_mode")
+    elif gp is not None and gp.get("pin_to_circle_mode") is not None:
+        raw = gp.get("pin_to_circle_mode")
+    mode = str(raw or "fixed").strip().lower()
+    return "fit" if mode == "fit" else "fixed"
+
+
+def _pin_to_circle_normal(mesh: Mesh, options: dict | None) -> np.ndarray | None:
+    gp = getattr(mesh, "global_parameters", None)
+    raw = None
+    if options and options.get("pin_to_circle_normal") is not None:
+        raw = options.get("pin_to_circle_normal")
+    elif gp is not None and gp.get("pin_to_circle_normal") is not None:
+        raw = gp.get("pin_to_circle_normal")
+    if raw is None:
+        return None
+    return _normalize(np.asarray(raw, dtype=float).reshape(3))
+
+
+def _resolve_followed_circle_frame(
+    mesh: Mesh, *, group: str, rows: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    pts = mesh.positions_view()[rows]
+    center = np.mean(pts, axis=0)
+
+    normal = None
+    for row in rows:
+        vid = int(mesh.vertex_ids[int(row)])
+        v = mesh.vertices.get(vid)
+        if v is None:
+            continue
+        if _pin_to_circle_group(getattr(v, "options", None)) != group:
+            continue
+        normal = _pin_to_circle_normal(mesh, getattr(v, "options", None))
+        if normal is not None:
+            break
+    if normal is None:
+        normal = _fit_plane_normal(pts)
+    if normal is None:
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+    return center, normal
 
 
 def compute_energy_and_gradient(
@@ -152,8 +219,29 @@ def compute_energy_and_gradient_array(
     p0 = positions[tails]
     p1 = positions[heads]
     mid = 0.5 * (p0 + p1)
+
+    follow = False
+    for row in np.unique(np.concatenate([tails, heads])):
+        vid = int(mesh.vertex_ids[int(row)])
+        v = mesh.vertices.get(vid)
+        if v is None:
+            continue
+        if _pin_to_circle_group(getattr(v, "options", None)) != group:
+            continue
+        if _pin_to_circle_mode(mesh, getattr(v, "options", None)) == "fit":
+            follow = True
+            break
+
+    if follow:
+        rim_rows = np.unique(np.concatenate([tails, heads]))
+        center, normal = _resolve_followed_circle_frame(
+            mesh, group=group, rows=rim_rows
+        )
+    else:
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
     r = mid - center[None, :]
-    r[:, 2] = 0.0
+    r = r - np.einsum("ij,j->i", r, normal)[:, None] * normal[None, :]
     rn = np.linalg.norm(r, axis=1)
     good = rn > 1e-12
     if not np.any(good):

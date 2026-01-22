@@ -27,6 +27,19 @@ def execute_command_line(
     if not line:
         return
 
+    # Compound commands: allow `cmd1; cmd2; cmd3`.
+    if ";" in line:
+        for part in (p.strip() for p in line.split(";")):
+            if part:
+                execute_command_line(
+                    context,
+                    part,
+                    get_command_fn=get_command_fn,
+                    macro_stack=macro_stack,
+                    max_macro_depth=max_macro_depth,
+                )
+        return
+
     parts = line.split()
     cmd_name = parts[0]
     cmd_args = parts[1:]
