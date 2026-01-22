@@ -77,6 +77,48 @@ def test_set_vertex_coordinate():
     assert float(mesh.vertices[1].position[2]) == 2.0
 
 
+def test_set_vertices_all_where_option_filter():
+    mesh = MockMesh()
+    mesh.vertices[0].options["pin_to_circle_group"] = "outer"
+    mesh.vertices[1].options["pin_to_circle_group"] = "inner"
+    mesh.vertices[2] = Vertex(
+        2,
+        np.array([2.0, 0.0, 0.0]),
+        options={"pin_to_circle_group": "inner"},
+    )
+
+    ctx = _get_context(mesh)
+    cmd = SetCommand()
+
+    cmd.execute(
+        ctx,
+        [
+            "vertices",
+            "all",
+            "z",
+            "3.0",
+            "where",
+            "pin_to_circle_group=inner",
+        ],
+    )
+
+    assert float(mesh.vertices[0].position[2]) == 0.0
+    assert float(mesh.vertices[1].position[2]) == 3.0
+    assert float(mesh.vertices[2].position[2]) == 3.0
+
+
+def test_set_edges_all_where_numeric_filter():
+    mesh = MockMesh()
+    ctx = _get_context(mesh)
+    cmd = SetCommand()
+
+    cmd.execute(ctx, ["edges", "all", "fixed", "true", "where", "len", ">", "0.5"])
+
+    assert mesh.edges[1].fixed is True
+    assert mesh.vertices[0].fixed is True
+    assert mesh.vertices[1].fixed is True
+
+
 def test_print_commands(capsys):
     mesh = MockMesh()
     ctx = _get_context(mesh)
