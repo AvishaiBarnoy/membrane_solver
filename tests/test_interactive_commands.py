@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from sample_meshes import cube_soft_volume_input
 
 from commands.context import CommandContext
+from commands.executor import execute_command_line
 from commands.io import PropertiesCommand
 from commands.mesh_ops import RefineCommand
 from commands.meta import TiltStatsCommand
@@ -87,3 +88,9 @@ def test_execute_refine_command():
     cmd.execute(ctx, args)
 
     assert len(ctx.mesh.facets) > facets_before
+
+
+def test_execute_compound_commands_separated_by_semicolon():
+    ctx = _build_context()
+    execute_command_line(ctx, "t1e-3; tf")
+    assert ctx.mesh.global_parameters.get("step_size_mode") == "adaptive"

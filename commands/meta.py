@@ -23,7 +23,7 @@ class HelpCommand(Command):
         print("  vertex_average Same as V")
         print("  u             Equiangulate mesh")
         print(
-            "  visualize / s [tilt|div|plain] [arrows|noarrows] Plot current geometry"
+            "  visualize / s [tilt|tilt_in|tilt_out|bilayer|div|div_in|div_out|plain] [arrows|noarrows] Plot current geometry"
         )
         print("  properties    Print physical properties (area, volume, surface Rg)")
         print(
@@ -87,10 +87,56 @@ class EnergyCommand(Command):
         if args:
             mode = str(args[0]).lower().strip()
 
+        if mode in {"ref", "reference"}:
+            breakdown = context.minimizer.compute_energy_breakdown()
+            names = getattr(context.minimizer, "energy_module_names", []) or []
+            modules = getattr(context.minimizer, "energy_modules", []) or []
+            external = set(
+                name
+                for name, mod in zip(names, modules)
+                if getattr(mod, "IS_EXTERNAL_WORK", False)
+            )
+            internal_total = sum(
+                val for name, val in breakdown.items() if name not in external
+            )
+            total = sum(breakdown.values())
+            setattr(context.minimizer, "energy_ref_total", float(total))
+            setattr(context.minimizer, "energy_ref_internal", float(internal_total))
+            print(
+                f"Energy reference set: total={total:.10f} internal={internal_total:.10f}"
+            )
+            return
+
         if mode in {"breakdown", "details", "detail"}:
             breakdown = context.minimizer.compute_energy_breakdown()
-            total = sum(breakdown.values())
+            names = getattr(context.minimizer, "energy_module_names", []) or []
+            modules = getattr(context.minimizer, "energy_modules", []) or []
+            external = set(
+                name
+                for name, mod in zip(names, modules)
+                if getattr(mod, "IS_EXTERNAL_WORK", False)
+            )
+
+            internal_total = sum(
+                val for name, val in breakdown.items() if name not in external
+            )
+            external_total = sum(
+                val for name, val in breakdown.items() if name in external
+            )
+            total = internal_total + external_total
+
             print(f"Current Total Energy: {total:.10f}")
+            if external:
+                print(f"  internal (no sources): {internal_total:.10f}")
+                print(f"  external work (sources): {external_total:.10f}")
+                ref_total = getattr(context.minimizer, "energy_ref_total", None)
+                ref_internal = getattr(context.minimizer, "energy_ref_internal", None)
+                if ref_total is not None:
+                    print(f"  Δtotal vs ref: {total - float(ref_total):.10f}")
+                if ref_internal is not None:
+                    print(
+                        f"  Δinternal vs ref: {internal_total - float(ref_internal):.10f}"
+                    )
             for name, value in breakdown.items():
                 print(f"  {name}: {value:.10f}")
             return
@@ -138,7 +184,7 @@ class EnergyCommand(Command):
             print(f"Current Total Energy: {E:.10f}")
             return
 
-        print("Usage: energy [breakdown|total]")
+        print("Usage: energy [breakdown|total|ref]")
 
 
 class RefreshModulesCommand(Command):

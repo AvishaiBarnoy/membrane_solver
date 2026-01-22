@@ -30,6 +30,8 @@ class VisualizeCommand(Command):
                 color_by = "tilt_in"
             elif any(tok in {"tilt_out", "tout"} for tok in tokens):
                 color_by = "tilt_out"
+            elif any(tok in {"bilayer", "tilt_bilayer"} for tok in tokens):
+                color_by = "tilt_bilayer"
             elif any(tok in {"div", "divt"} for tok in tokens):
                 color_by = "tilt_div"
             elif any(tok in {"div_in", "divt_in"} for tok in tokens):
@@ -53,6 +55,8 @@ class VisualizeCommand(Command):
                 "tin",
                 "tilt_out",
                 "tout",
+                "bilayer",
+                "tilt_bilayer",
                 "div",
                 "divt",
                 "div_in",
@@ -71,7 +75,7 @@ class VisualizeCommand(Command):
             unknown = [tok for tok in tokens if tok not in supported]
             if unknown:
                 print(
-                    "Usage: s [tilt|tilt_in|tilt_out|div|div_in|div_out|plain] [arrows|noarrows]"
+                    "Usage: s [tilt|tilt_in|tilt_out|bilayer|div|div_in|div_out|plain] [arrows|noarrows]"
                 )
                 return
 

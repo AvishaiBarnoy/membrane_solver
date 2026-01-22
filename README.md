@@ -10,18 +10,23 @@ the prompt.
 
 Commands:
 - `g5`: Perform five minimization steps.
+- `g50; V3; g10`: Run compound commands separated by semicolons.
 - `r` / `rN`: Refine the mesh (N times).
 - `u`: Equiangulate the mesh.
 - `V`: Vertex average.
 - `p` / `i`: Print physical properties (area, volume, surface radius of gyration, target volume).
 - `print [entity] [filter]`: Query geometry (e.g., `print vertex 0`, `print edges len > 0.5`).
 - `print energy breakdown`: Show per-module energy contributions.
+- `energy` / `energy ref`: Per-module breakdown and optional reference-state deltas.
 - `print macros`: List available macros.
 - `set [param/entity] [value]`: Set properties (e.g., `set surface_tension 1.5`, `set vertex 0 fixed true`, `set vertex 8 z 1e-3`).
 - `tilt_stats` / `tstat` (`in`/`out`): Print |tilt| and div(tilt) summaries (e.g., `tstat out`).
 - `lv` / `live_vis`: Toggle live 3D visualization during minimization.
+- `s tilt arrows` / `s bilayer`: One-shot visualization with the same scalar modes as `lv`.
 - `history`: Show commands entered in the current session.
 - `quit` / `exit`: Stop the loop and save the final mesh.
+
+When running in a real terminal (TTY), pressing `TAB` autocompletes command and macro names.
 
 The default minimization stepper is Gradient Descent; switch to Conjugate Gradient
 with the `cg` command if needed.
