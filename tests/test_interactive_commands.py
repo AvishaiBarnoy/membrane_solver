@@ -1,3 +1,8 @@
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from sample_meshes import cube_soft_volume_input
 
 from commands.context import CommandContext
@@ -50,6 +55,27 @@ def test_get_command_tilt_stats():
     cmd, args = get_command("tstats")
     assert isinstance(cmd, TiltStatsCommand)
     assert args == []
+
+    cmd, args = get_command("tilt_stat")
+    assert isinstance(cmd, TiltStatsCommand)
+    assert args == []
+
+    cmd, args = get_command("tstat")
+    assert isinstance(cmd, TiltStatsCommand)
+    assert args == []
+
+
+def test_tilt_stats_accepts_leaflet_args(capsys):
+    ctx = _build_context()
+    cmd, _args = get_command("tilt_stats")
+
+    cmd.execute(ctx, ["in"])
+    out = capsys.readouterr().out
+    assert "tilt_in" in out
+
+    cmd.execute(ctx, ["out"])
+    out = capsys.readouterr().out
+    assert "tilt_out" in out
 
 
 def test_execute_refine_command():

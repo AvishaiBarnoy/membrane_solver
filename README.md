@@ -17,7 +17,8 @@ Commands:
 - `print [entity] [filter]`: Query geometry (e.g., `print vertex 0`, `print edges len > 0.5`).
 - `print energy breakdown`: Show per-module energy contributions.
 - `print macros`: List available macros.
-- `set [param/entity] [value]`: Set properties (e.g., `set surface_tension 1.5`, `set vertex 0 fixed true`).
+- `set [param/entity] [value]`: Set properties (e.g., `set surface_tension 1.5`, `set vertex 0 fixed true`, `set vertex 8 z 1e-3`).
+- `tilt_stats` / `tstat` (`in`/`out`): Print |tilt| and div(tilt) summaries (e.g., `tstat out`).
 - `lv` / `live_vis`: Toggle live 3D visualization during minimization.
 - `history`: Show commands entered in the current session.
 - `quit` / `exit`: Stop the loop and save the final mesh.

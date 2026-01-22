@@ -30,6 +30,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Hardened CI: Python version matrix (3.11, 3.12) and packaging-based test execution.
 - Optional Fortran (f2py) surface-energy kernel (`fortran_kernels/surface_energy.f90`) with automatic runtime fallback to NumPy when not built/available.
 - Closed-body outwardness validation (signed volume check) with open-body exemption for cases like droplets on hard planes.
+- Milestone C: 3D Kozlov annulus mesh with bilayer tilt↔curvature coupling (`meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml`) plus E2E regression tests (including leaflet sign flip).
 
 ### Fixed
 - **Tilt Persistence**: Corrected `save_geometry` to persist `tilt` and `tilt_fixed` vertex properties to output JSON files.
@@ -116,6 +117,8 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Constraint projection now relies solely on KKT-style gradients; legacy apply-constraint gradient paths have been removed.
 - Added a BFGS stepper (`bfgs`/`hessian` command) for quasi-Newton-style steps on moderate-sized problems.
 - Added cached triangle-row indices and position-array reuse to reduce repeated mesh-to-array conversions during energy evaluation.
+- Interactive: `tilt_stats` now supports `in`/`out` leaflets (`tstat` alias) and no longer collides with the `tX` step-size shortcut.
+- Interactive: `set vertex ... x|y|z ...` updates vertex coordinates (not just options), enabling deterministic symmetry breaking.
 - Minimization defaults now use Gradient Descent in the CLI; Conjugate Gradient remains available via `cg`.
 - Line search acceptance is strict Armijo (no constraint-only acceptance path), improving stability at the cost of being more conservative.
 - Body-area constraint gradients now project onto the constraint manifold, and hard constraints are enforced once before minimization starts to align with target values.

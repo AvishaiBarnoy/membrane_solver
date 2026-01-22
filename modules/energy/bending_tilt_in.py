@@ -41,6 +41,7 @@ def compute_energy_and_gradient_array(
         tilt_grad_arr=tilt_in_grad_arr,
         kappa_key="bending_modulus_in",
         cache_tag="in",
+        div_sign=-1.0,
     )
 
 
@@ -63,6 +64,7 @@ def compute_energy_and_gradient(
         tilts=tilts_in,
         kappa_key="bending_modulus_in",
         cache_tag="in",
+        div_sign=-1.0,
         compute_gradient=compute_gradient,
     )
 

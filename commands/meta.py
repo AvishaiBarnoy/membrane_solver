@@ -159,19 +159,10 @@ class TiltStatsCommand(Command):
         mesh = context.mesh
         mesh.build_position_cache()
         positions = mesh.positions_view()
-        tilts = mesh.tilts_view()
         tri_rows, _ = mesh.triangle_row_cache()
-        if tilts is None or tilts.size == 0 or tri_rows is None:
-            print("Tilt diagnostics: no tilt data available.")
+        if tri_rows is None or len(tri_rows) == 0:
+            print("Tilt diagnostics: no triangles available.")
             return
-
-        mags = np.linalg.norm(tilts, axis=1)
-        div_v, _areas = p1_vertex_divergence(
-            n_vertices=len(mesh.vertex_ids),
-            positions=positions,
-            tilts=tilts,
-            tri_rows=tri_rows,
-        )
 
         boundary_vids = getattr(mesh, "boundary_vertex_ids", None) or []
         boundary_rows = np.array(
@@ -186,7 +177,8 @@ class TiltStatsCommand(Command):
         if boundary_rows.size:
             mask_interior[boundary_rows] = False
 
-        def _stats(label: str, values):
+        def _stats(label: str, values: np.ndarray) -> None:
+            values = np.asarray(values, dtype=float)
             if values.size == 0:
                 print(f"{label}: (no vertices)")
                 return
@@ -196,15 +188,46 @@ class TiltStatsCommand(Command):
                 f"p90={q[2]:.4e} p99={q[3]:.4e} max={q[4]:.4e}"
             )
 
-        print("Tilt diagnostics (|t|):")
-        _stats("  all", mags)
-        if np.any(mask_interior):
-            _stats("  interior", mags[mask_interior])
+        def _report(name: str, tilts: np.ndarray) -> None:
+            tilts = np.asarray(tilts, dtype=float)
+            if tilts.size == 0:
+                print(f"{name}: (no tilt data)")
+                return
+            mags = np.linalg.norm(tilts, axis=1)
+            div_v, _areas = p1_vertex_divergence(
+                n_vertices=len(mesh.vertex_ids),
+                positions=positions,
+                tilts=tilts,
+                tri_rows=tri_rows,
+            )
 
-        print("Tilt diagnostics (div t):")
-        _stats("  all", div_v)
-        if np.any(mask_interior):
-            _stats("  interior", div_v[mask_interior])
+            print(f"{name} (|t|):")
+            _stats("  all", mags)
+            if np.any(mask_interior):
+                _stats("  interior", mags[mask_interior])
+
+            print(f"{name} (div t):")
+            _stats("  all", div_v)
+            if np.any(mask_interior):
+                _stats("  interior", div_v[mask_interior])
+
+        mode = args[0].strip().lower() if args else "both"
+        if mode in {"tilt", "legacy", "single"}:
+            _report("tilt", mesh.tilts_view())
+            return
+        if mode in {"in", "inner", "tilt_in"}:
+            _report("tilt_in", mesh.tilts_in_view())
+            return
+        if mode in {"out", "outer", "tilt_out"}:
+            _report("tilt_out", mesh.tilts_out_view())
+            return
+
+        # Default: report all available fields.
+        if hasattr(mesh, "tilts_in_view") and hasattr(mesh, "tilts_out_view"):
+            _report("tilt_in", mesh.tilts_in_view())
+            _report("tilt_out", mesh.tilts_out_view())
+        else:
+            _report("tilt", mesh.tilts_view())
 
 
 class SetCommand(Command):
@@ -280,6 +303,15 @@ class SetCommand(Command):
                     mesh.vertices[obj.tail_index].fixed = True
                     mesh.vertices[obj.head_index].fixed = True
                 print(f"Set {entity_type} {idx} fixed={obj.fixed}")
+            elif entity_type.startswith("vert") and prop in {"x", "y", "z"}:
+                try:
+                    coord = float(val)
+                except (TypeError, ValueError):
+                    print(f"Coordinate must be numeric; got {val_str!r}")
+                    return
+                axis = {"x": 0, "y": 1, "z": 2}[prop]
+                obj.position[axis] = coord
+                print(f"Set {entity_type} {idx} position[{prop}] = {coord}")
             elif entity_type.startswith("body") and prop == "target_volume":
                 obj.target_volume = None if val is None else float(val)
                 if not obj.options:
