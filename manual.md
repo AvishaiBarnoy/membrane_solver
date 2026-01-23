@@ -235,6 +235,9 @@ Interactive commands:
   - `meshes/caveolin/kozlov_annulus_flat_hard_source.yaml` (hard clamped rim tilt)
   - `meshes/caveolin/kozlov_annulus_flat_soft_source.yaml` (soft rim source via `tilt_rim_source_in`)
   - Decay-length estimate: `python benchmarks/benchmark_kozlov_annulus_decay_length.py --mesh hard` (or `--mesh soft`)
+- For the θ_B contact-source form used in the 1-disk analytic derivation (`docs/tex/1_disk_3d.pdf`),
+  use `tilt_rim_source_bilayer` with `tilt_rim_source_group` and `tilt_rim_source_strength`
+  (equivalent to loading `tilt_rim_source_in` + `tilt_rim_source_out` with equal parameters).
 - Kozlov Milestone-C mesh (3D shape coupling) lives under `meshes/caveolin/`:
   - `meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml` (bilayer tilt↔curvature coupling; use `break_symmetry` macro or `kick` if it stays flat)
 - Bilayer tilt energies use `tilt_in`, `tilt_out`, `tilt_smoothness_in`, `tilt_smoothness_out`,

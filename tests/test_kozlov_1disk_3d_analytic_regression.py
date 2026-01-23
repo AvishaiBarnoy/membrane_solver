@@ -24,9 +24,10 @@ def _annulus_data(
 
     For the tensionless case (surface_tension=0), the analytic Euler-Lagrange
     equations imply the exact identity θ^p(r)=θ^d(r) for the outer membrane
-    (r >= R). We test this by driving the inner rim with *the same* soft
-    boundary source on both leaflets and checking that the relaxed radial tilt
-    components match.
+    (r >= R). In the Kozlov derivation the contact term couples to the bilayer
+    boundary mode θ_B ≈ θ^d(R)+θ^p(R), so we drive the inner rim via the
+    bilayer source module `tilt_rim_source_bilayer` and check that the relaxed
+    radial tilt components match.
     """
     if n_theta < 8:
         raise ValueError("n_theta must be >= 8")
@@ -141,10 +142,8 @@ def _annulus_data(
             "tilt_modulus_in": 2.0,
             "tilt_modulus_out": 2.0,
             "tilt_rim_source_center": [0.0, 0.0, 0.0],
-            "tilt_rim_source_group_in": "inner",
-            "tilt_rim_source_strength_in": float(rim_source_strength),
-            "tilt_rim_source_group_out": "inner",
-            "tilt_rim_source_strength_out": float(rim_source_strength),
+            "tilt_rim_source_group": "inner",
+            "tilt_rim_source_strength": float(rim_source_strength),
             # Relax only tilts on the flat annulus (outer rim clamps the far field).
             "tilt_solve_mode": "nested",
             "tilt_step_size": 0.05,
@@ -162,8 +161,7 @@ def _annulus_data(
             "bending_tilt_out",
             "tilt_in",
             "tilt_out",
-            "tilt_rim_source_in",
-            "tilt_rim_source_out",
+            "tilt_rim_source_bilayer",
         ],
         "vertices": vertices,
         "edges": edges,
