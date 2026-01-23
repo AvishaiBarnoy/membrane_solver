@@ -137,6 +137,6 @@ def test_tilt_rim_source_bilayer_matches_in_plus_out():
         tilt_out_grad_arr=grad_out,
     )
 
-    assert float(e_b) == float(e_in + e_out)
+    assert np.isclose(float(e_b), float(e_in + e_out), rtol=1e-12, atol=1e-12)
     assert np.allclose(grad_in_b, grad_in)
     assert np.allclose(grad_out_b, grad_out)
