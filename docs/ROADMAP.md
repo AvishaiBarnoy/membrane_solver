@@ -99,6 +99,7 @@ intended for development and planning; users should consult `README.md` and
            - finite-difference / directional-derivative checks for new energy gradients
            - refinement convergence (energy decreases under refinement for fixed-geometry decay benchmarks)
            - vectorization guardrails for hot-loop energy assembly (no per-vertex Python loops)
+           - analytic identity (tensionless): distal/proximal tilts match for the 1-disk outer membrane (`tests/test_kozlov_1disk_3d_analytic_regression.py`)
      - [ ] E2E benchmarks (expected behavior):
            - **Independent leaflets** (no inter-leaflet coupling): a source in `tilt_in`
              decays with length scale λ≈sqrt(k_s/k_t) while `tilt_out` remains ~0 if initialized at 0.

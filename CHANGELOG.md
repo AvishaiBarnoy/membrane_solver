@@ -39,6 +39,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Optional Fortran (f2py) surface-energy kernel (`fortran_kernels/surface_energy.f90`) with automatic runtime fallback to NumPy when not built/available.
 - Closed-body outwardness validation (signed volume check) with open-body exemption for cases like droplets on hard planes.
 - Milestone C: 3D Kozlov annulus mesh with bilayer tilt↔curvature coupling (`meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml`) plus E2E regression tests (including leaflet sign flip).
+- Analytic regression benchmark for the 1-disk model (tensionless: distal/proximal tilts match; `docs/tex/1_disk_3d.pdf`).
 
 ### Fixed
 - `energy` breakdown output now separates internal energy vs external work terms (sources) and supports `energy ref` for reference-state deltas.
