@@ -186,6 +186,17 @@ intended for development and planning; users should consult `README.md` and
      - [x] Sign test: swapping `tilt_rim_source_in`↔`tilt_rim_source_out` flips
            the preferred curvature direction (up/down invagination).
 
+   - [ ] **Milestone E: 1_disk_3d rim matching (disk + outer membrane)**
+     - [x] Enable rim-source selection on *internal* rims
+           (`tilt_rim_source_edge_mode: all`).
+     - [ ] Add a rim-matching energy/constraint that enforces the small-slope
+           continuity condition at the disk boundary (e.g. proximal tilt equals
+           outer slope `φ*` at `r=R`).
+     - [ ] Disk+outer benchmark mesh with internal rim drive (`θ_B`) and
+           explicit rim matching; far-field tilt clamped to zero.
+     - [ ] E2E regression: for γ=0, recover the 1_disk_3d predictions
+           (`θ^p(r)=θ^d(r)` in the outer region and `φ*≈θ_B/2`).
+
    - [ ] **Milestone D: caveolin disks on a sphere (caveolae)**
      - [ ] Use `meshes/bench_two_disks_sphere.json` as scaffold; add a
            single‑disk variant and then multi‑disk configurations.
