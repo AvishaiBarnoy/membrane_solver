@@ -389,7 +389,12 @@ class Minimizer:
         if mode_norm == "nested":
             n_inner = int(self.global_params.get("tilt_inner_steps", 0) or 0)
         else:
-            n_inner = int(self.global_params.get("tilt_coupled_steps", 0) or 0)
+            n_inner = int(
+                self.global_params.get(
+                    "tilt_coupled_steps", self.global_params.get("tilt_inner_steps", 0)
+                )
+                or 0
+            )
         if n_inner <= 0:
             return
 
@@ -466,7 +471,12 @@ class Minimizer:
         if mode_norm == "nested":
             n_inner = int(self.global_params.get("tilt_inner_steps", 0) or 0)
         else:
-            n_inner = int(self.global_params.get("tilt_coupled_steps", 0) or 0)
+            n_inner = int(
+                self.global_params.get(
+                    "tilt_coupled_steps", self.global_params.get("tilt_inner_steps", 0)
+                )
+                or 0
+            )
         if n_inner <= 0:
             return
 
