@@ -1,0 +1,194 @@
+global_parameters:
+  # Milestone D:
+  # Apply a HARD CLAMP (tilt_fixed_in) on the inner rim *only in the inner leaflet*.
+  # The opposite leaflet tilt develops indirectly via shape-mediated coupling through
+  # `bending_tilt_out` (shared midplane curvature).
+  surface_tension: 0.0
+  bending_energy_model: helfrich
+  spontaneous_curvature: 0.0
+
+  # Parameter regime chosen to make induced opposite-leaflet tilt measurable.
+  bending_modulus_in: 10.0
+  bending_modulus_out: 10.0
+  tilt_modulus_in: 1.0
+  tilt_modulus_out: 0.1
+
+  tilt_solve_mode: nested # coupled | nested
+  tilt_step_size: 0.15
+  tilt_coupled_steps: 15
+  tilt_inner_steps: 15
+  tilt_tol: 1e-10
+
+  # Allow midplane relaxation (required for the coupling mechanism in this milestone).
+  step_size: 0.006
+
+  # Inner rim floats (fit), outer rim fixed.
+  pin_to_circle_mode: fit
+  pin_to_circle_normal: [0.0, 0.0, 1.0]
+
+  pin_to_plane_normal: [0.0, 0.0, 1.0]
+  pin_to_plane_point: [0.0, 0.0, 0.0]
+
+constraint_modules:
+  - pin_to_plane
+  - pin_to_circle
+
+definitions:
+  inner_rim:
+    constraints: ["pin_to_circle"] # No pin_to_plane: allow the ring to translate/tilt in z.
+    pin_to_circle_group: "inner"
+    pin_to_circle_radius: 1.0
+    pin_to_circle_normal: [0.0, 0.0, 1.0]
+    pin_to_circle_point: [0.0, 0.0, 0.0]
+    pin_to_circle_mode: fit
+    # Hard clamp enabled for the inner leaflet only.
+    tilt_fixed_in: true
+  outer_rim:
+    constraints: ["pin_to_circle", "pin_to_plane"]
+    pin_to_circle_group: "outer"
+    pin_to_circle_radius: 4.0
+    pin_to_circle_normal: [0.0, 0.0, 1.0]
+    pin_to_circle_point: [0.0, 0.0, 0.0]
+    pin_to_circle_mode: fixed
+    # Clamp far-field tilts in both leaflets.
+    tilt_fixed_in: true
+    tilt_fixed_out: true
+
+energy_modules:
+  - bending_tilt_in
+  - bending_tilt_out
+  - tilt_in
+  - tilt_out
+
+vertices:
+  # 3 concentric 8-gons (r=1,2,4) triangulated into an annulus.
+  # Inner rim is a hard tilt source (radial) for the inner leaflet only.
+  # Outer rim is clamped to zero in both leaflets to represent the far-field boundary condition.
+  - [1.0, 0.0, 0.0, {preset: "inner_rim", tilt_in: [1.0, 0.0]}]
+  - [0.70710678, 0.70710678, 0.0, {preset: "inner_rim", tilt_in: [0.70710678, 0.70710678]}]
+  - [0.0, 1.0, 0.0, {preset: "inner_rim", tilt_in: [0.0, 1.0]}]
+  - [-0.70710678, 0.70710678, 0.0, {preset: "inner_rim", tilt_in: [-0.70710678, 0.70710678]}]
+  - [-1.0, 0.0, 0.0, {preset: "inner_rim", tilt_in: [-1.0, 0.0]}]
+  - [-0.70710678, -0.70710678, 0.0, {preset: "inner_rim", tilt_in: [-0.70710678, -0.70710678]}]
+  - [-0.0, -1.0, 0.0, {preset: "inner_rim", tilt_in: [0.0, -1.0]}]
+  - [0.70710678, -0.70710678, 0.0, {preset: "inner_rim", tilt_in: [0.70710678, -0.70710678]}]
+
+  # Break up/down symmetry with a tiny z bump (otherwise the flat configuration
+  # is a saddle point and the minimizer can stay exactly flat).
+  - [2.0, 0.0, 0.001]
+  - [1.41421356, 1.41421356, 0.0]
+  - [0.0, 2.0, 0.0]
+  - [-1.41421356, 1.41421356, 0.0]
+  - [-2.0, 0.0, 0.0]
+  - [-1.41421356, -1.41421356, 0.0]
+  - [-0.0, -2.0, 0.0]
+  - [1.41421356, -1.41421356, 0.0]
+
+  - [4.0, 0.0, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [2.82842712, 2.82842712, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [0.0, 4.0, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [-2.82842712, 2.82842712, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [-4.0, 0.0, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [-2.82842712, -2.82842712, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [-0.0, -4.0, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [2.82842712, -2.82842712, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+
+edges:
+  # Ring edges.
+  - [0, 1]
+  - [1, 2]
+  - [2, 3]
+  - [3, 4]
+  - [4, 5]
+  - [5, 6]
+  - [6, 7]
+  - [7, 0]
+  - [8, 9]
+  - [9, 10]
+  - [10, 11]
+  - [11, 12]
+  - [12, 13]
+  - [13, 14]
+  - [14, 15]
+  - [15, 8]
+  - [16, 17]
+  - [17, 18]
+  - [18, 19]
+  - [19, 20]
+  - [20, 21]
+  - [21, 22]
+  - [22, 23]
+  - [23, 16]
+
+  # Radial edges (inner↔mid and mid↔outer).
+  - [0, 8]
+  - [1, 9]
+  - [2, 10]
+  - [3, 11]
+  - [4, 12]
+  - [5, 13]
+  - [6, 14]
+  - [7, 15]
+  - [8, 16]
+  - [9, 17]
+  - [10, 18]
+  - [11, 19]
+  - [12, 20]
+  - [13, 21]
+  - [14, 22]
+  - [15, 23]
+
+  # Diagonals that triangulate each ring quad into two triangles.
+  - [0, 9]
+  - [1, 10]
+  - [2, 11]
+  - [3, 12]
+  - [4, 13]
+  - [5, 14]
+  - [6, 15]
+  - [7, 8]
+  - [8, 17]
+  - [9, 18]
+  - [10, 19]
+  - [11, 20]
+  - [12, 21]
+  - [13, 22]
+  - [14, 23]
+  - [15, 16]
+
+faces:
+  # Each 8-gon segment contributes 4 triangles: 2 in (inner↔mid) and 2 in (mid↔outer).
+  - [0, 25, r40]
+  - [40, r8, r24]
+  - [8, 33, r48]
+  - [48, r16, r32]
+  - [1, 26, r41]
+  - [41, r9, r25]
+  - [9, 34, r49]
+  - [49, r17, r33]
+  - [2, 27, r42]
+  - [42, r10, r26]
+  - [10, 35, r50]
+  - [50, r18, r34]
+  - [3, 28, r43]
+  - [43, r11, r27]
+  - [11, 36, r51]
+  - [51, r19, r35]
+  - [4, 29, r44]
+  - [44, r12, r28]
+  - [12, 37, r52]
+  - [52, r20, r36]
+  - [5, 30, r45]
+  - [45, r13, r29]
+  - [13, 38, r53]
+  - [53, r21, r37]
+  - [6, 31, r46]
+  - [46, r14, r30]
+  - [14, 39, r54]
+  - [54, r22, r38]
+  - [7, 24, r47]
+  - [47, r15, r31]
+  - [15, 32, r55]
+  - [55, r23, r39]
+
+instructions: []
