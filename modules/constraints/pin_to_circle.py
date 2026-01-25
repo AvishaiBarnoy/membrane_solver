@@ -60,7 +60,11 @@ def _mode_from_options(mesh, options: dict | None) -> str:
     elif gp is not None and gp.get("pin_to_circle_mode") is not None:
         raw = gp.get("pin_to_circle_mode")
     mode = str(raw or "fixed").lower()
-    return "fit" if mode == "fit" else "fixed"
+    if mode == "fit":
+        return "fit"
+    if mode in {"slide", "normal", "normal_only", "slide_normal"}:
+        return "slide"
+    return "fixed"
 
 
 def _group_from_options(options: dict | None):
@@ -277,14 +281,18 @@ def enforce_constraint(mesh, **_kwargs):
 
     def add_fit_vertex(vidx: int, options: dict | None):
         group = _group_from_options(options)
-        entry = fit_groups.setdefault(group, {"vertex_ids": set(), "options": []})
+        entry = fit_groups.setdefault(
+            group, {"vertex_ids": set(), "options": [], "mode": "fit"}
+        )
         entry["vertex_ids"].add(vidx)
         if options:
             entry["options"].append(options)
+            entry["mode"] = _mode_from_options(mesh, options)
 
     for vertex in tagged_vertices:
         options = getattr(vertex, "options", None)
-        if _mode_from_options(mesh, options) == "fit":
+        mode = _mode_from_options(mesh, options)
+        if mode in {"fit", "slide"}:
             add_fit_vertex(int(vertex.index), options)
             continue
         params = _resolve_circle(mesh, options)
@@ -297,7 +305,8 @@ def enforce_constraint(mesh, **_kwargs):
 
     for edge in tagged_edges:
         options = getattr(edge, "options", None)
-        if _mode_from_options(mesh, options) == "fit":
+        mode = _mode_from_options(mesh, options)
+        if mode in {"fit", "slide"}:
             add_fit_vertex(int(edge.tail_index), options)
             add_fit_vertex(int(edge.head_index), options)
             continue
@@ -329,11 +338,49 @@ def enforce_constraint(mesh, **_kwargs):
             logger.warning("pin_to_circle (fit): could not fit a plane; skipping.")
             continue
 
-        fitted = _fit_circle_in_plane(points, normal, radius_fixed)
-        if fitted is None:
-            logger.warning("pin_to_circle (fit): could not fit a circle; skipping.")
-            continue
-        center, radius = fitted
+        mode = str(spec.get("mode") or "fit").lower()
+        if mode == "slide":
+            # Slide mode: only allow translation along the fixed normal direction.
+            # This is useful for benchmarks where the disk rim can move up/down
+            # (kink depth) but should not rotate in space.
+            gp = getattr(mesh, "global_parameters", None)
+            base_point_raw = None
+            for opts in option_sources:
+                if opts and opts.get("pin_to_circle_point") is not None:
+                    base_point_raw = opts.get("pin_to_circle_point")
+                    break
+            if base_point_raw is None and gp is not None:
+                base_point_raw = gp.get("pin_to_circle_point")
+            if base_point_raw is None:
+                base_point_raw = [0.0, 0.0, 0.0]
+            base_point = np.asarray(base_point_raw, dtype=float).reshape(3)
+
+            offsets = points - base_point[None, :]
+            t = float(np.mean(offsets @ normal))
+            center = base_point + t * normal
+
+            # Fit radius in the plane if not fixed.
+            points_plane = (
+                points
+                - ((points - center[None, :]) @ normal)[:, None] * normal[None, :]
+            )
+            radial = points_plane - center[None, :]
+            radial = radial - (radial @ normal)[:, None] * normal[None, :]
+            r_vals = np.linalg.norm(radial, axis=1)
+            radius = (
+                float(np.mean(r_vals)) if radius_fixed is None else float(radius_fixed)
+            )
+            if not np.isfinite(radius) or radius <= 0.0:
+                logger.warning(
+                    "pin_to_circle (slide): invalid fitted radius; skipping."
+                )
+                continue
+        else:
+            fitted = _fit_circle_in_plane(points, normal, radius_fixed)
+            if fitted is None:
+                logger.warning("pin_to_circle (fit): could not fit a circle; skipping.")
+                continue
+            center, radius = fitted
 
         u, _ = _orthonormal_basis_from_normal(normal)
         for vidx in vertex_ids:
