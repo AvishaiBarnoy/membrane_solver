@@ -12,10 +12,11 @@ global_parameters:
   - 0.0
   tilt_rim_source_edge_mode: all
   tilt_rim_source_group: rim
-  tilt_rim_source_strength: 5.0
+  tilt_rim_source_strength: 1.0
   rim_slope_match_group: rim
   rim_slope_match_outer_group: outer
-  rim_slope_match_strength: 100.0
+  rim_slope_match_disk_group: disk
+  rim_slope_match_strength: 200.0
   rim_slope_match_center:
   - 0.0
   - 0.0
@@ -175,50 +176,62 @@ vertices:
   - 0.0
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - 0.5773502691896257
   - 0.33333333333333326
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - 0.33333333333333337
   - 0.5773502691896257
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - 4.082155997157844e-17
   - 0.6666666666666666
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - -0.3333333333333332
   - 0.5773502691896257
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - -0.5773502691896257
   - 0.33333333333333326
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - -0.6666666666666666
   - 8.164311994315688e-17
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - -0.5773502691896258
   - -0.33333333333333315
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - -0.3333333333333336
   - -0.5773502691896255
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - -1.224646799147353e-16
   - -0.6666666666666666
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - 0.33333333333333337
   - -0.5773502691896257
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - 0.5773502691896255
   - -0.3333333333333336
   - 0.0
   - preset: disk
+    rim_slope_match_group: disk
 - - 1.0
   - 0.0
   - 0.0

@@ -19,8 +19,8 @@ def _disk_outer_rim_match_data(
     n_outer_rings: int = 6,
     r_disk: float = 1.0,
     r_out: float = 6.0,
-    source_strength: float = 5.0,
-    match_strength: float = 100.0,
+    source_strength: float = 1.0,
+    match_strength: float = 200.0,
     z_bump: float = 1e-3,
 ) -> dict:
     """Return a disk+outer setup for rim-matching (γ=0)."""
@@ -90,6 +90,8 @@ def _disk_outer_rim_match_data(
 
             if ring_idx < rim_ring:
                 opts = {"preset": "disk"}
+                if ring_idx == rim_ring - 1:
+                    opts["rim_slope_match_group"] = "disk"
             elif ring_idx == rim_ring:
                 opts = {"preset": "rim"}
             elif ring_idx == rim_ring + 1:
@@ -173,6 +175,7 @@ def _disk_outer_rim_match_data(
             "tilt_rim_source_strength": float(source_strength),
             "rim_slope_match_group": "rim",
             "rim_slope_match_outer_group": "outer",
+            "rim_slope_match_disk_group": "disk",
             "rim_slope_match_strength": float(match_strength),
             "rim_slope_match_center": [0.0, 0.0, 0.0],
             "rim_slope_match_normal": [0.0, 0.0, 1.0],
@@ -211,10 +214,13 @@ def _build_minimizer(mesh) -> Minimizer:
     )
 
 
-def _rim_slope_stats(mesh, *, n_theta: int, rim_ring: int) -> tuple[float, float]:
+def _rim_slope_stats(
+    mesh, *, n_theta: int, rim_ring: int
+) -> tuple[float, float, float]:
     start = 1 + (int(rim_ring) - 1) * int(n_theta)
     rim_rows = np.arange(start, start + int(n_theta), dtype=int)
     outer_rows = rim_rows + int(n_theta)
+    disk_rows = rim_rows - int(n_theta)
     pos = mesh.positions_view()
     r_rim = np.linalg.norm(pos[rim_rows, :2], axis=1)
     r_out = np.linalg.norm(pos[outer_rows, :2], axis=1)
@@ -228,7 +234,9 @@ def _rim_slope_stats(mesh, *, n_theta: int, rim_ring: int) -> tuple[float, float
     r_hat[:, 1] = pos[rim_rows, 1] / r_rim
     t_out = mesh.tilts_out_view()[rim_rows]
     theta_out = float(np.mean(np.einsum("ij,ij->i", t_out, r_hat)))
-    return float(phi), float(theta_out)
+    t_in_disk = mesh.tilts_in_view()[disk_rows]
+    theta_disk = float(np.mean(np.einsum("ij,ij->i", t_in_disk, r_hat)))
+    return float(phi), float(theta_out), float(theta_disk)
 
 
 def test_kozlov_1disk_3d_rim_matching_drives_outer_slope() -> None:
@@ -239,6 +247,6 @@ def test_kozlov_1disk_3d_rim_matching_drives_outer_slope() -> None:
     z = mesh.positions_view()[:, 2]
     assert float(np.ptp(z)) > 1e-3
 
-    phi, theta_out = _rim_slope_stats(mesh, n_theta=12, rim_ring=3)
+    phi, theta_out, _theta_disk = _rim_slope_stats(mesh, n_theta=12, rim_ring=3)
     denom = max(abs(phi), abs(theta_out), 1e-6)
-    assert abs(phi - theta_out) / denom < 0.5
+    assert abs(phi - theta_out) / denom < 0.4

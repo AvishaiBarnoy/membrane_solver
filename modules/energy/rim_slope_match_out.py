@@ -6,11 +6,19 @@ It is intended to approximate the kinematic matching condition in
 `docs/tex/1_disk_3d.pdf` (γ=0), where the proximal leaflet tilt equals the
 outer membrane slope at the disk boundary.
 
+If an optional disk-group is supplied, the module also enforces the complementary
+relation on the distal leaflet:
+
+    (t_in · r_hat) ≈ θ_disk - φ
+
+where θ_disk is the mean radial tilt on the disk ring just inside the rim.
+
 Energy (discrete, small-slope approximation)
 --------------------------------------------
 For each paired rim/outer vertex i:
 
     E = 1/2 * k * Σ_i w_i ( (t_out · r_hat)_i - φ_i )^2
+      + 1/2 * k * Σ_i w_i ( (t_in · r_hat)_i - (θ_disk - φ_i) )^2
 
 where
     φ_i = (h_out - h_rim) / (r_out - r_rim),
@@ -28,6 +36,8 @@ Parameters
 ----------
 - `rim_slope_match_group`: rim vertex group name (string; required).
 - `rim_slope_match_outer_group`: outer ring group name (string; required).
+- `rim_slope_match_disk_group`: disk ring group name just inside the rim
+  (string; optional).
 - `rim_slope_match_strength`: k (float; default 0).
 - `rim_slope_match_center`: 3D center point (default [0,0,0]).
 - `rim_slope_match_normal`: plane normal (default [0,0,1] if fit fails).
@@ -212,6 +222,7 @@ def compute_energy_and_gradient_array(
     _ = global_params, index_map, tilts_in, tilt_in_grad_arr
     group = _resolve_group(param_resolver, "rim_slope_match_group")
     outer_group = _resolve_group(param_resolver, "rim_slope_match_outer_group")
+    disk_group = _resolve_group(param_resolver, "rim_slope_match_disk_group")
     if group is None or outer_group is None:
         return 0.0
 
@@ -232,6 +243,13 @@ def compute_energy_and_gradient_array(
         tilts_out = np.asarray(tilts_out, dtype=float)
         if tilts_out.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
+    if disk_group is not None:
+        if tilts_in is None:
+            tilts_in = mesh.tilts_in_view()
+        else:
+            tilts_in = np.asarray(tilts_in, dtype=float)
+            if tilts_in.shape != (len(mesh.vertex_ids), 3):
+                raise ValueError("tilts_in must have shape (N_vertices, 3)")
 
     center = _resolve_center(param_resolver)
     normal = _resolve_normal(param_resolver)
@@ -286,8 +304,50 @@ def compute_energy_and_gradient_array(
 
     diff = np.zeros_like(tilt_radial)
     diff[valid] = tilt_radial[valid] - phi[valid]
+    diff_in = np.zeros_like(diff)
+
+    theta_disk = None
+    disk_rows = None
+    disk_weights = None
+    disk_r_hat = None
+    if disk_group is not None:
+        disk_rows = _collect_group_rows(mesh, disk_group)
+        if disk_rows.size:
+            disk_pos = positions[disk_rows]
+            disk_order = _order_by_angle(disk_pos, center=center, normal=normal)
+            disk_rows = disk_rows[disk_order]
+            disk_pos = positions[disk_rows]
+            r_vec_disk = disk_pos - center[None, :]
+            r_vec_disk = (
+                r_vec_disk
+                - np.einsum("ij,j->i", r_vec_disk, normal)[:, None] * normal[None, :]
+            )
+            r_len_disk = np.linalg.norm(r_vec_disk, axis=1)
+            disk_r_hat = np.zeros_like(r_vec_disk)
+            good_disk = r_len_disk > 1e-12
+            disk_r_hat[good_disk] = (
+                r_vec_disk[good_disk] / r_len_disk[good_disk][:, None]
+            )
+            disk_weights = _arc_length_weights(disk_pos, np.arange(len(disk_rows)))
+            disk_weights = np.where(good_disk, disk_weights, 0.0)
+            weight_sum = float(np.sum(disk_weights))
+            if weight_sum > 0.0:
+                theta_disk = float(
+                    np.sum(
+                        disk_weights
+                        * np.einsum("ij,ij->i", tilts_in[disk_rows], disk_r_hat)
+                    )
+                    / weight_sum
+                )
+
+    if theta_disk is not None:
+        diff_in[valid] = np.einsum("ij,ij->i", tilts_in[rim_rows], r_hat)[valid] - (
+            theta_disk - phi[valid]
+        )
 
     energy = float(0.5 * k_match * np.sum(weights * diff * diff))
+    if theta_disk is not None:
+        energy += float(0.5 * k_match * np.sum(weights * diff_in * diff_in))
 
     if tilt_out_grad_arr is not None:
         tilt_out_grad_arr = np.asarray(tilt_out_grad_arr, dtype=float)
@@ -296,8 +356,26 @@ def compute_energy_and_gradient_array(
         contrib = (k_match * weights * diff)[:, None] * r_hat
         np.add.at(tilt_out_grad_arr, rim_rows, contrib)
 
+    if theta_disk is not None and tilt_in_grad_arr is not None:
+        tilt_in_grad_arr = np.asarray(tilt_in_grad_arr, dtype=float)
+        if tilt_in_grad_arr.shape != (len(mesh.vertex_ids), 3):
+            raise ValueError("tilt_in_grad_arr must have shape (N_vertices, 3)")
+        contrib_in = (k_match * weights * diff_in)[:, None] * r_hat
+        np.add.at(tilt_in_grad_arr, rim_rows, contrib_in)
+        if (
+            disk_rows is not None
+            and disk_rows.size
+            and disk_weights is not None
+            and disk_r_hat is not None
+        ):
+            weight_sum = float(np.sum(disk_weights))
+            if weight_sum > 0.0:
+                coeff_disk = -k_match * float(np.sum(weights * diff_in))
+                disk_factor = (disk_weights / weight_sum)[:, None] * disk_r_hat
+                np.add.at(tilt_in_grad_arr, disk_rows, coeff_disk * disk_factor)
+
     # Shape gradient: only along the normal (small-slope approximation).
-    grad_coeff = k_match * weights * diff
+    grad_coeff = k_match * weights * (diff - diff_in)
     grad_rim = np.zeros_like(rim_pos)
     grad_out = np.zeros_like(outer_pos)
     inv_dr = np.zeros_like(dr)
