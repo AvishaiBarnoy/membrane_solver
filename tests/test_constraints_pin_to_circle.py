@@ -101,3 +101,161 @@ def test_pin_to_circle_fit_allows_rim_to_move() -> None:
 
     distances = np.linalg.norm(pts - fitted_center[None, :], axis=1)
     assert np.allclose(distances, radius, atol=1e-6)
+
+
+def test_pin_to_circle_slide_allows_only_normal_translation() -> None:
+    """Slide mode: the rim can move along the fixed normal but not rotate."""
+    radius = 2.0
+    base_center = np.array([1.0, -2.0, 0.0], dtype=float)
+    normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
+    # Start with a circle at z=0 but shift all points up to z=3.0 (translation along normal).
+    angles = np.linspace(0.0, 2.0 * np.pi, 12, endpoint=False)
+    points = np.stack(
+        [
+            base_center[0] + radius * np.cos(angles),
+            base_center[1] + radius * np.sin(angles),
+            np.full_like(angles, 3.0),
+        ],
+        axis=1,
+    )
+    # Add noise that would normally cause a full fit to rotate/translate in-plane.
+    rng = np.random.default_rng(1)
+    points[:, :2] += 0.05 * rng.normal(size=(len(points), 2))
+
+    data = {
+        "vertices": [
+            [
+                float(p[0]),
+                float(p[1]),
+                float(p[2]),
+                {
+                    "constraints": ["pin_to_circle"],
+                    "pin_to_circle_group": "rim",
+                    "pin_to_circle_mode": "slide",
+                },
+            ]
+            for p in points
+        ],
+        "edges": [[0, 1]],
+        "faces": [],
+        "global_parameters": {
+            "pin_to_circle_normal": normal.tolist(),
+            "pin_to_circle_point": base_center.tolist(),
+            "pin_to_circle_radius": radius,
+        },
+    }
+    mesh = parse_geometry(data)
+    manager = ConstraintModuleManager(mesh.constraint_modules)
+    manager.enforce_all(mesh)
+
+    pts = np.array([v.position for v in mesh.vertices.values()], dtype=float)
+    # Slide keeps the rim planar with fixed normal.
+    assert float(np.ptp(pts[:, 2])) < 1e-10
+    # And should keep the in-plane center fixed (points lie on the circle
+    # around base_center, but can be non-uniformly distributed in angle).
+    z0 = float(np.mean(pts[:, 2]))
+    center = np.array([base_center[0], base_center[1], z0], dtype=float)
+    distances = np.linalg.norm(pts - center[None, :], axis=1)
+    assert np.allclose(distances, radius, atol=1e-6)
+
+
+def test_pin_to_circle_refine_preserves_planar_rim_z() -> None:
+    """Refinement should preserve pin_to_circle constraints on rim midpoints."""
+    from runtime.refinement import refine_triangle_mesh
+
+    radius = 1.0
+    n = 8
+    r_mid = 2.0
+    r_out = 3.0
+
+    vertices: list[list] = []
+    for i in range(n):
+        theta = 2.0 * np.pi * i / n
+        # Deliberately non-planar inner rim; constraint should re-project to z=const.
+        z = 0.2 if (i % 2 == 0) else -0.1
+        vertices.append(
+            [
+                radius * np.cos(theta),
+                radius * np.sin(theta),
+                z,
+                {
+                    "constraints": ["pin_to_circle"],
+                    "pin_to_circle_group": "inner",
+                    "pin_to_circle_mode": "slide",
+                },
+            ]
+        )
+    for i in range(n):
+        theta = 2.0 * np.pi * i / n
+        vertices.append([r_mid * np.cos(theta), r_mid * np.sin(theta), 0.0])
+    for i in range(n):
+        theta = 2.0 * np.pi * i / n
+        vertices.append([r_out * np.cos(theta), r_out * np.sin(theta), 0.0])
+
+    edges: list[list] = []
+    for base in (0, n, 2 * n):
+        for i in range(n):
+            edges.append([base + i, base + ((i + 1) % n)])
+    for i in range(n):
+        edges.append([i, n + i])
+        edges.append([n + i, 2 * n + i])
+    for i in range(n):
+        edges.append([i, n + ((i + 1) % n)])
+        edges.append([n + i, 2 * n + ((i + 1) % n)])
+
+    edge_index_by_pair: dict[tuple[int, int], int] = {}
+    for idx, (tail, head, *_rest) in enumerate(edges):
+        edge_index_by_pair[(int(tail), int(head))] = int(idx)
+
+    def edge_ref(tail: int, head: int) -> int | str:
+        forward = edge_index_by_pair.get((int(tail), int(head)))
+        if forward is not None:
+            return forward
+        reverse = edge_index_by_pair.get((int(head), int(tail)))
+        if reverse is not None:
+            return f"r{reverse}"
+        raise KeyError(f"Missing edge for face: {tail}->{head}")
+
+    faces: list[list] = []
+    for i in range(n):
+        i1 = (i + 1) % n
+        v_i, v_i1 = i, i1
+        m_i, m_i1 = n + i, n + i1
+        o_i, o_i1 = 2 * n + i, 2 * n + i1
+
+        faces.append([edge_ref(v_i, v_i1), edge_ref(v_i1, m_i1), edge_ref(m_i1, v_i)])
+        faces.append([edge_ref(v_i, m_i1), edge_ref(m_i1, m_i), edge_ref(m_i, v_i)])
+        faces.append([edge_ref(m_i, m_i1), edge_ref(m_i1, o_i1), edge_ref(o_i1, m_i)])
+        faces.append([edge_ref(m_i, o_i1), edge_ref(o_i1, o_i), edge_ref(o_i, m_i)])
+
+    data = {
+        "vertices": vertices,
+        "edges": edges,
+        "faces": faces,
+        "global_parameters": {
+            "pin_to_circle_normal": [0.0, 0.0, 1.0],
+            "pin_to_circle_point": [0.0, 0.0, 0.0],
+            "pin_to_circle_radius": radius,
+        },
+        "constraint_modules": ["pin_to_circle"],
+    }
+
+    mesh = parse_geometry(data)
+    manager = ConstraintModuleManager(mesh.constraint_modules)
+    manager.enforce_all(mesh)
+
+    def rim_z_range(m) -> float:
+        z = [
+            float(v.position[2])
+            for v in m.vertices.values()
+            if getattr(v, "options", {}).get("pin_to_circle_group") == "inner"
+        ]
+        return float(np.ptp(np.asarray(z, dtype=float)))
+
+    assert rim_z_range(mesh) < 1e-10
+
+    refined = refine_triangle_mesh(mesh)
+    manager = ConstraintModuleManager(refined.constraint_modules)
+    manager.enforce_all(refined)
+    assert rim_z_range(refined) < 1e-10
