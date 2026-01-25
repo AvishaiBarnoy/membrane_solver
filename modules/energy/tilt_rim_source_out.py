@@ -41,6 +41,33 @@ def _selected_boundary_edges(mesh: Mesh, group: str) -> list[int]:
     return selected
 
 
+def _resolve_edge_mode(param_resolver) -> str:
+    raw = param_resolver.get(None, "tilt_rim_source_edge_mode")
+    mode = str(raw or "boundary").strip().lower()
+    return "all" if mode == "all" else "boundary"
+
+
+def _selected_rim_edges(mesh: Mesh, group: str, *, mode: str) -> list[int]:
+    """Return rim edges for `group` based on edge selection mode.
+
+    Modes:
+    - "boundary": only true boundary edges (backwards compatible).
+    - "all": any edge whose endpoints are tagged with the group (allows internal rims).
+    """
+    if mode == "all":
+        selected: list[int] = []
+        for eid, edge in mesh.edges.items():
+            v0 = mesh.vertices[int(edge.tail_index)]
+            v1 = mesh.vertices[int(edge.head_index)]
+            if _pin_to_circle_group(v0.options) != group:
+                continue
+            if _pin_to_circle_group(v1.options) != group:
+                continue
+            selected.append(int(eid))
+        return selected
+    return _selected_boundary_edges(mesh, group)
+
+
 def _resolve_group(param_resolver) -> str | None:
     raw = param_resolver.get(None, "tilt_rim_source_group_out")
     if raw is None:
@@ -181,7 +208,8 @@ def compute_energy_and_gradient_array(
     if group is None:
         return 0.0
 
-    selected = _selected_boundary_edges(mesh, group)
+    mode = _resolve_edge_mode(param_resolver)
+    selected = _selected_rim_edges(mesh, group, mode=mode)
     if not selected:
         return 0.0
 
