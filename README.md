@@ -273,6 +273,7 @@ module. Use:
 - Bilayer tilt energies (`tilt_in`/`tilt_out` + coupling) and leaflet-aware relax modes are unit-tested.
 - Leaflet bending-tilt coupling (`bending_tilt_in/out`) has dedicated gradient checks.
 - Leaflet bending-tilt E2E relaxation tests cover tilt_in/out solve behavior.
+- The 1-disk analytic regression (`docs/tex/1_disk_3d.pdf`) uses the θ_B-style bilayer rim source module `tilt_rim_source_bilayer`.
 - Example bilayer tilt decay meshes are stored under `meshes/bilayer_tilt/`.
 - Lint via `ruff check .` (or `pre-commit run -a`) to match CI.
 - Pre-commit includes a feature-branch guard; set `ALLOW_MAIN_BRANCH=1` to bypass for emergency fixes.
