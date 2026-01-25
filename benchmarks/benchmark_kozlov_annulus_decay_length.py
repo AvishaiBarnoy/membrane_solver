@@ -24,6 +24,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -43,6 +44,7 @@ logger = logging.getLogger("membrane_solver")
 ROOT = Path(__file__).resolve().parent.parent
 HARD_MESH = ROOT / "meshes" / "caveolin" / "kozlov_annulus_flat_hard_source.yaml"
 SOFT_MESH = ROOT / "meshes" / "caveolin" / "kozlov_annulus_flat_soft_source.yaml"
+RUNS = 3
 
 
 def _relax_leaflet_tilts(mesh, *, inner_steps: int, tilt_step_size: float) -> Minimizer:
@@ -120,6 +122,68 @@ def _fit_decay_length(
     if slope >= 0.0:
         raise ValueError(f"Non-decaying fit (slope={slope})")
     return float(-1.0 / slope)
+
+
+def _run_once_for_benchmark(
+    *,
+    mesh_kind: str = "hard",
+    refine: int = 2,
+    inner_steps: int = 400,
+    tilt_step_size: float = 0.05,
+    bins: int = 24,
+    fit_min: float = 1.2,
+    fit_max: float = 2.7,
+) -> float:
+    """Run a single decay-length estimate and return elapsed time in seconds."""
+    mesh_path = HARD_MESH if str(mesh_kind).lower() == "hard" else SOFT_MESH
+    mesh = parse_geometry(load_data(str(mesh_path)))
+    for _ in range(max(int(refine), 0)):
+        mesh = refine_triangle_mesh(mesh)
+
+    start = time.perf_counter()
+    _relax_leaflet_tilts(
+        mesh,
+        inner_steps=int(inner_steps),
+        tilt_step_size=float(tilt_step_size),
+    )
+
+    positions = mesh.positions_view()
+    radii = np.linalg.norm(positions[:, :2], axis=1)
+    mags = np.linalg.norm(mesh.tilts_in_view(), axis=1)
+
+    try:
+        r_centers, m_centers = _bin_radial_profile(
+            radii,
+            mags,
+            r_min=float(np.min(radii)),
+            r_max=float(np.max(radii)),
+            n_bins=int(bins),
+        )
+        _ = _fit_decay_length(
+            r_centers,
+            m_centers,
+            r_in=1.0,
+            fit_r_min=float(fit_min),
+            fit_r_max=float(fit_max),
+            eps=1e-12,
+        )
+    except ValueError:
+        # Fallback for very coarse discretizations: fit on per-vertex values.
+        _ = _fit_decay_length(
+            radii,
+            mags,
+            r_in=1.0,
+            fit_r_min=float(fit_min),
+            fit_r_max=float(fit_max),
+            eps=1e-12,
+        )
+    return time.perf_counter() - start
+
+
+def benchmark(runs: int = RUNS) -> float:
+    """Return average runtime over ``runs`` executions."""
+    times = [_run_once_for_benchmark() for _ in range(int(runs))]
+    return float(sum(times) / float(runs))
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:

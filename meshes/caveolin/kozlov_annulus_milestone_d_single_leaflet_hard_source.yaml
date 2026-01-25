@@ -13,8 +13,9 @@ global_parameters:
   tilt_modulus_in: 1.0
   tilt_modulus_out: 0.1
 
-  tilt_solve_mode: nested
+  tilt_solve_mode: nested # coupled | nested
   tilt_step_size: 0.15
+  tilt_coupled_steps: 15
   tilt_inner_steps: 15
   tilt_tol: 1e-10
 
