@@ -1,32 +1,31 @@
 global_parameters:
-  # Benchmark (γ=0): single-leaflet soft (driving) rim source -> curvature -> opposite leaflet tilt.
-  #
-  # This uses a Kozlov-style driving term on the inner rim for the inner leaflet
-  # only: E_source = -∮ γ_in (t_in · r_hat) dl.
+  # Benchmark: single-leaflet rim source with curvature-mediated response.
+  # The inner leaflet is driven on the inner rim; the outer leaflet responds
+  # only via shared curvature (no explicit inter-leaflet coupling).
   surface_tension: 0.0
   bending_energy_model: helfrich
   spontaneous_curvature: 0.0
 
-  # Symmetric elastic constants (match `docs/tex/1_disk_3d.pdf` convention).
+  # Match the analytic normalization in `docs/tex/1_disk_3d.pdf`:
+  # the continuum integrand uses κ(J±Dθ)^2 + κ_t θ^2 (no 1/2 factors),
+  # while our modules include 1/2. Using 2.0 here keeps units aligned.
   bending_modulus_in: 2.0
   bending_modulus_out: 2.0
   tilt_modulus_in: 2.0
   tilt_modulus_out: 2.0
 
-  tilt_rim_source_center: [0.0, 0.0, 0.0]
+  # Drive only the inner leaflet on the inner rim.
   tilt_rim_source_group_in: inner
-  # Contact mapping (Kozlov/Barnoy): F_cont = -2π R h (Δε/a) θ_B.
-  tilt_rim_source_contact_units: solver
-  tilt_rim_source_contact_h_in: 1.0
-  tilt_rim_source_contact_delta_epsilon_over_a_in: 40.0
+  tilt_rim_source_strength_in: 50.0
+  tilt_rim_source_center: [0.0, 0.0, 0.0]
 
-  tilt_solve_mode: nested
-  tilt_step_size: 0.15
-  tilt_inner_steps: 40
+  # Relax tilt + shape to allow curvature-mediated coupling.
+  tilt_solve_mode: coupled
+  tilt_step_size: 0.05
+  tilt_inner_steps: 800
   tilt_tol: 1e-10
 
-  # Allow shape relaxation.
-  step_size: 0.006
+  step_size: 0.02
   step_size_mode: fixed
 
   pin_to_plane_normal: [0.0, 0.0, 1.0]
@@ -59,13 +58,13 @@ energy_modules:
   - bending_tilt_out
   - tilt_in
   - tilt_out
+  - tilt_smoothness_in
+  - tilt_smoothness_out
   - tilt_rim_source_in
 
 vertices:
   # 7 concentric 12-gons (r=1..6) triangulated into an annulus (84 vertices).
-  # Outer rim clamps both leaflets to zero tilt.
-  # Ring r=1.83333333 has a tiny uniform +z offset to select an up/down branch
-  # while preserving axisymmetry.
+  # Outer rim clamps both leaflets to zero tilt (far-field condition).
   - [1, 0.0, 0.0, {preset: "inner_rim"}]
   - [0.8660254, 0.5, 0.0, {preset: "inner_rim"}]
   - [0.5, 0.8660254, 0.0, {preset: "inner_rim"}]
@@ -78,18 +77,18 @@ vertices:
   - [0.0, -1, 0.0, {preset: "inner_rim"}]
   - [0.5, -0.8660254, 0.0, {preset: "inner_rim"}]
   - [0.8660254, -0.5, 0.0, {preset: "inner_rim"}]
-  - [1.83333333, 0.0, 0.001]
-  - [1.58771324, 0.91666667, 0.001]
-  - [0.91666667, 1.58771324, 0.001]
-  - [0.0, 1.83333333, 0.001]
-  - [-0.91666667, 1.58771324, 0.001]
-  - [-1.58771324, 0.91666667, 0.001]
-  - [-1.83333333, 0.0, 0.001]
-  - [-1.58771324, -0.91666667, 0.001]
-  - [-0.91666667, -1.58771324, 0.001]
-  - [0.0, -1.83333333, 0.001]
-  - [0.91666667, -1.58771324, 0.001]
-  - [1.58771324, -0.91666667, 0.001]
+  - [1.83333333, 0.0, 0.0]
+  - [1.58771324, 0.91666667, 0.0]
+  - [0.91666667, 1.58771324, 0.0]
+  - [0.0, 1.83333333, 0.0]
+  - [-0.91666667, 1.58771324, 0.0]
+  - [-1.58771324, 0.91666667, 0.0]
+  - [-1.83333333, 0.0, 0.0]
+  - [-1.58771324, -0.91666667, 0.0]
+  - [-0.91666667, -1.58771324, 0.0]
+  - [0.0, -1.83333333, 0.0]
+  - [0.91666667, -1.58771324, 0.0]
+  - [1.58771324, -0.91666667, 0.0]
   - [2.66666667, 0.0, 0.0]
   - [2.30940108, 1.33333333, 0.0]
   - [1.33333333, 2.30940108, 0.0]
@@ -530,13 +529,4 @@ faces:
 instructions: []
 
 macros:
-  run: "g 200"
-  induction_quick:
-    - "print msg Running induction_quick (small mesh regression)."
-    - "set tilt_modulus_in 2.0"
-    - "set tilt_modulus_out 2.0"
-    - "set tilt_rim_source_contact_h_in 1.0"
-    - "set tilt_rim_source_contact_delta_epsilon_over_a_in 40.0"
-    - "t0.006"
-    - "g30"
-    - "energy curvature"
+  relax_tilts: "t0; g1"

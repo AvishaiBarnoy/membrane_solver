@@ -529,4 +529,11 @@ faces:
 instructions: []
 
 macros:
-  relax_tilts: "t0; g1"
+  relax_tilts:
+    - "print msg Running relax_tilts (freeze shape, relax tilts)."
+    - "set step_size_mode fixed"
+    - "set step_size 0.0"
+    - "g200"
+    - "tstat in"
+    - "tstat out"
+    - "energy"

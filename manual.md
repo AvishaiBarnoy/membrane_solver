@@ -238,6 +238,16 @@ Interactive commands:
 - For the θ_B contact-source form used in the 1-disk analytic derivation (`docs/tex/1_disk_3d.pdf`),
   use `tilt_rim_source_bilayer` with `tilt_rim_source_group` and `tilt_rim_source_strength`
   (equivalent to loading `tilt_rim_source_in` + `tilt_rim_source_out` with equal parameters).
+  Alternatively, specify the contact term via `tilt_rim_source_contact_*` (Δε, a, h → γ) instead
+  of setting `tilt_rim_source_strength*` directly.
+- Single-leaflet disk+outer rim example (shape relaxation, outer leaflet induced via curvature):
+  `meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_source.yaml`.
+- Disk-profile single-leaflet example (analytic-style target on the disk):
+  `meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_profile.yaml`.
+- Disk-profile bilayer example (paper-style, symmetric disk forcing):
+  `meshes/caveolin/kozlov_1disk_3d_tensionless_bilayer_profile.yaml`.
+- Diagnostics helper:
+  `python tools/diagnose_1disk_3d_single_leaflet.py --steps 50`.
 - Kozlov Milestone-C mesh (3D shape coupling) lives under `meshes/caveolin/`:
   - `meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml` (bilayer tilt↔curvature coupling; use `break_symmetry` macro or `kick` if it stays flat)
 - Bilayer tilt energies use `tilt_in`, `tilt_out`, `tilt_smoothness_in`, `tilt_smoothness_out`,
@@ -248,6 +258,8 @@ Interactive commands:
   `bending_tilt_out`, using `bending_modulus_in/out` (fallback to `bending_modulus`).
 - Example bilayer tilt decay meshes live under `meshes/bilayer_tilt/`, including
   `tilt_bilayer_rect_opposite.yaml`.
+- Single-leaflet curvature-induction example: `meshes/bilayer_tilt/tilt_in_annulus_curvature_induction.yaml`
+  (outer leaflet responds only via curvature; requires shape relaxation).
 
 - `visualize` / `s`
   Plot the current geometry in a Matplotlib 3D view.
@@ -654,7 +666,27 @@ refinement and equiangulation. Small residual deviations are expected because
 refinement and equiangulation slightly change the discrete geometry; the tests
 assert improvement and proximity rather than exact equality.
 
-### 6.4 Geometric constraints: `PinToPlane`
+### 6.4 Rim-slope matching (`modules/constraints/rim_slope_match_out.py`)
+
+Use this module to enforce the tensionless rim boundary condition (γ=0) as a
+hard constraint rather than a penalty energy. It ties the outer-leaflet radial
+tilt to the local outer slope at the rim, and optionally matches the inner
+leaflet to the disk tilt just inside the rim.
+
+Activation:
+
+- Add `"rim_slope_match_out"` to `constraint_modules`.
+- Set `rim_slope_match_group`, `rim_slope_match_outer_group`, and (optionally)
+  `rim_slope_match_disk_group` in `global_parameters`.
+
+Notes:
+- The constraint uses a small-slope approximation and only differentiates
+  along the plane normal.
+- It operates per-vertex when the disk and rim rings share vertex counts;
+  otherwise it uses a weighted mean disk tilt.
+- The penalty energy module with the same name remains available as a fallback.
+
+### 6.5 Geometric constraints: `PinToPlane`
 
 `modules/constraints/pin_to_plane.py` is a geometric constraint module. Attach
 it via the `constraints` list on vertices or edges:
@@ -669,7 +701,30 @@ mesh operations. Because it does not supply constraint gradients, it does not
 participate in KKT projection and will emit a warning when gradients are
 assembled.
 
-### 6.5 Geometric constraints: `PinToCircle`
+Optional modes:
+- `pin_to_plane_mode: "slide"` keeps the normal fixed but fits the plane point
+  to the group centroid (lets the plane translate along its normal).
+- `pin_to_plane_mode: "fit"` fits both normal and point from the tagged group.
+- Use `pin_to_plane_group` to define which tagged vertices share the same plane.
+
+### 6.6 Tilt-vector rim continuity (`modules/constraints/tilt_vector_match_rim.py`)
+
+Use this module to enforce *full in-plane* tilt continuity across a disk/annulus
+rim, per leaflet. It is intended for non-axisymmetric cases (e.g. multiple
+disks on curved surfaces) where matching only the radial component is not
+enough.
+
+Tag vertices on two rings:
+- the disk-side ring just inside the rim: `tilt_vector_match_role: "disk"`
+- the rim ring at r=R: `tilt_vector_match_role: "rim"`
+and set the same `tilt_vector_match_group` string on both rings to identify the
+disk instance.
+
+The module pairs vertices by polar angle in a local disk frame (center + fitted
+plane normal) and constrains the two in-plane components (u,v) of `tilt_in` and
+`tilt_out` to match between each paired vertex.
+
+### 6.7 Geometric constraints: `PinToCircle`
 
 `modules/constraints/pin_to_circle.py` pins tagged vertices/edges to a circle.
 By default it uses a fixed plane, center, and radius. Set

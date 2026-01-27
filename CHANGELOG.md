@@ -24,6 +24,17 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Example bilayer tilt decay meshes under `meshes/bilayer_tilt/`.
 - `lv bilayer` mode to visualize outer/inner leaflet tilt magnitudes on dual surfaces.
 - Bilayer tilt example mesh with opposing leaflet sources (`meshes/bilayer_tilt/tilt_bilayer_rect_opposite.yaml`).
+- Kozlov/Barnoy contact-term parameterization for rim sources via `tilt_rim_source_contact_*` (Δε, a, h → γ), used by `tilt_rim_source_in/out/bilayer`.
+- Single-leaflet rim-source curvature-induction regression (`tests/test_single_leaflet_curvature_induction.py`) using `meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_soft_source.yaml` as a fast induction case.
+- Single-leaflet disk+outer rim example mesh with shape relaxation (`meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_source.yaml`).
+- Single-leaflet 1-disk diagnostics + regression coverage (`tools/diagnose_1disk_3d_single_leaflet.py`, `tests/test_kozlov_1disk_3d_single_leaflet_behavior.py`).
+- Disk-profile single-leaflet target module and mesh (`modules/energy/tilt_disk_target_in.py`, `meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_profile.yaml`).
+- Added outer-leaflet disk target module and bilayer profile mesh (`modules/energy/tilt_disk_target_out.py`, `meshes/caveolin/kozlov_1disk_3d_tensionless_bilayer_profile.yaml`).
+- Hard rim-slope matching constraint module with tilt projection (`modules/constraints/rim_slope_match_out.py`) and regression coverage (`tests/test_rim_slope_match_out_constraint.py`).
+- `pin_to_plane` now supports `slide`/`fit` modes with group-based plane fitting, plus regression coverage (`tests/test_pin_to_plane_slide.py`).
+- Hard per-leaflet full in-plane rim continuity constraint for multi-disk setups (`modules/constraints/tilt_vector_match_rim.py`) and regression coverage (`tests/test_tilt_vector_match_rim_constraint.py`).
+- Small-drive 1-disk tensionless regression + macro E2E coverage (`tests/test_kozlov_1disk_3d_tensionless_small_drive_regression.py`, `tests/test_e2e_kozlov_1disk_3d_small_drive_macro.py`) and benchmark-suite entry (`benchmarks/benchmark_kozlov_1disk_3d_tensionless.py`, `tools/suite.py`).
+- Added SciPy as a project dependency (`requirements.txt`, `pyproject.toml`).
 - Feature-branch guard script and pre-commit hook (`tools/ensure_feature_branch.sh`).
 - **Kozlov–Hamm Tilt Coupling**: Implemented coupled bending+tilt energy integral $\frac{1}{2} \int \kappa (2H - c_0 + \text{div}(t))^2 dA$ in `modules/energy/bending_tilt.py`.
 - **Tilt Solve Modes**: Added `nested` and `coupled` relaxation modes in `Minimizer` to optimize the tilt field alongside surface geometry.

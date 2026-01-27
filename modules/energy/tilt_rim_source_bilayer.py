@@ -24,7 +24,16 @@ Parameters
 ----------
 - `tilt_rim_source_group`: group name (string); when unset, this module is inactive.
 - `tilt_rim_source_strength`: γ_B (float; default 0).
+- Contact-parameter alternative (maps to `tilt_rim_source_strength`):
+  - `tilt_rim_source_contact_h`
+  - `tilt_rim_source_contact_delta_epsilon_over_a` or
+    (`tilt_rim_source_contact_delta_epsilon` and `tilt_rim_source_contact_a`)
+  - Optional unit conversion: `tilt_rim_source_contact_units` in
+    `{solver,physical}` with `tilt_rim_source_contact_length_unit_m` and
+    `tilt_rim_source_contact_kappa_ref_J`.
 - `tilt_rim_source_center`: 3D center point (default [0,0,0]).
+- `tilt_rim_source_edge_mode`: edge selection mode: `boundary` (default) or
+  `all` (includes internal rims where the tagged edges are not boundary).
 
 Notes
 -----
@@ -39,6 +48,7 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh
+from modules.energy.contact_mapping import resolve_contact_line_strength
 
 USES_TILT_LEAFLETS = True
 IS_EXTERNAL_WORK = True
@@ -69,6 +79,33 @@ def _selected_boundary_edges(mesh: Mesh, group: str) -> list[int]:
     return selected
 
 
+def _resolve_edge_mode(param_resolver) -> str:
+    raw = param_resolver.get(None, "tilt_rim_source_edge_mode")
+    mode = str(raw or "boundary").strip().lower()
+    return "all" if mode == "all" else "boundary"
+
+
+def _selected_rim_edges(mesh: Mesh, group: str, *, mode: str) -> list[int]:
+    """Return rim edges for `group` based on edge selection mode.
+
+    Modes:
+    - "boundary": only true boundary edges (backwards compatible).
+    - "all": any edge whose endpoints are tagged with the group (allows internal rims).
+    """
+    if mode == "all":
+        selected: list[int] = []
+        for eid, edge in mesh.edges.items():
+            v0 = mesh.vertices[int(edge.tail_index)]
+            v1 = mesh.vertices[int(edge.head_index)]
+            if _pin_to_circle_group(v0.options) != group:
+                continue
+            if _pin_to_circle_group(v1.options) != group:
+                continue
+            selected.append(int(eid))
+        return selected
+    return _selected_boundary_edges(mesh, group)
+
+
 def _resolve_group(param_resolver) -> str | None:
     raw = param_resolver.get(None, "tilt_rim_source_group")
     if raw is None:
@@ -78,10 +115,13 @@ def _resolve_group(param_resolver) -> str | None:
 
 
 def _resolve_strength(param_resolver, edge) -> float:
-    val = param_resolver.get(edge, "tilt_rim_source_strength")
-    if val is None:
-        val = param_resolver.get(None, "tilt_rim_source_strength")
-    return float(val or 0.0)
+    resolved = resolve_contact_line_strength(
+        param_resolver,
+        edge,
+        strength_key="tilt_rim_source_strength",
+        contact_suffix="",
+    )
+    return float(resolved.gamma or 0.0)
 
 
 def _resolve_center(param_resolver) -> np.ndarray:
@@ -215,7 +255,8 @@ def compute_energy_and_gradient_array(
     if group is None:
         return 0.0
 
-    selected = _selected_boundary_edges(mesh, group)
+    mode = _resolve_edge_mode(param_resolver)
+    selected = _selected_rim_edges(mesh, group, mode=mode)
     if not selected:
         return 0.0
 
