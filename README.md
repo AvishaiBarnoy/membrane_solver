@@ -238,9 +238,24 @@ during minimization and emit a warning at runtime.
 }
 ```
 
+For kinematic rim matching (γ=0) you can use the hard constraint module
+`rim_slope_match_out` in `constraint_modules`. It enforces the outer-leaflet
+tilt–slope condition (and the inner-leaflet relation when a disk group is
+provided) using a small-slope approximation. The penalty energy module with
+the same name remains available as a fallback.
+
+For non-axisymmetric disk geometries, you can additionally enforce full in-plane
+tilt continuity across the disk rim (per leaflet) with the hard constraint
+module `tilt_vector_match_rim`.
+
 `pin_to_circle` supports a `fit` mode for moving circular rims. Set
 `pin_to_circle_mode: "fit"` (plus `pin_to_circle_group` on the tagged entities)
 to keep the rim circular while letting the circle translate/rotate with the mesh.
+
+`pin_to_plane` supports `slide` and `fit` modes. Use `pin_to_plane_mode: "slide"`
+with a shared `pin_to_plane_group` to keep a group planar while allowing the
+plane to translate along its normal. Use `pin_to_plane_mode: "fit"` to let the
+group’s best-fit plane tilt/translate.
 
 The new regression tests in `tests/test_perimeter_minimization.py` load the same
 square loop (see `tests/sample_meshes.square_perimeter_input`) to verify that
@@ -274,6 +289,12 @@ module. Use:
 - Leaflet bending-tilt coupling (`bending_tilt_in/out`) has dedicated gradient checks.
 - Leaflet bending-tilt E2E relaxation tests cover tilt_in/out solve behavior.
 - The 1-disk analytic regression (`docs/tex/1_disk_3d.pdf`) uses the θ_B-style bilayer rim source module `tilt_rim_source_bilayer`.
+- Rim source strengths can be specified directly (`tilt_rim_source_strength*`) or via the Kozlov/Barnoy contact mapping `tilt_rim_source_contact_*` (Δε, a, h → γ).
+- Single-leaflet disk+outer rim example mesh with shape relaxation lives at `meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_source.yaml`.
+- Single-leaflet rim sources are covered by a curvature-induction regression (`tests/test_single_leaflet_curvature_induction.py`).
+- Single-leaflet 1-disk shape/tilt behavior is exercised by `tests/test_kozlov_1disk_3d_single_leaflet_behavior.py`.
+- Disk-profile single-leaflet variant lives at `meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_profile.yaml` and is covered by `tests/test_kozlov_1disk_3d_single_leaflet_profile.py`.
+- Disk-profile bilayer (paper-style) variant lives at `meshes/caveolin/kozlov_1disk_3d_tensionless_bilayer_profile.yaml` and is covered by `tests/test_kozlov_1disk_3d_bilayer_profile.py`.
 - Example bilayer tilt decay meshes are stored under `meshes/bilayer_tilt/`.
 - Lint via `ruff check .` (or `pre-commit run -a`) to match CI.
 - Pre-commit includes a feature-branch guard; set `ALLOW_MAIN_BRANCH=1` to bypass for emergency fixes.

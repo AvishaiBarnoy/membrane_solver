@@ -36,6 +36,10 @@ _BENCHMARK_MODULES = {
     "volume_optimization": "benchmark_volume_optimization",
     "tilt_relaxation": "benchmark_tilt_relaxation",
     "kozlov_annulus_decay_length": "benchmark_kozlov_annulus_decay_length",
+    "kozlov_1disk_tensionless": "benchmark_kozlov_1disk_3d_tensionless",
+    "kozlov_1disk_induction_quick": "benchmark_kozlov_1disk_3d_induction_quick",
+    "kozlov_1disk_profile_hard_rim": "benchmark_kozlov_1disk_3d_profile_hard_rim",
+    "kozlov_1disk_profile_hard_rim_free_disk": "benchmark_kozlov_1disk_3d_profile_hard_rim_free_disk",
 }
 
 

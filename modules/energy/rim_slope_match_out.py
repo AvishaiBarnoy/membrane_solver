@@ -11,7 +11,10 @@ relation on the distal leaflet:
 
     (t_in · r_hat) ≈ θ_disk - φ
 
-where θ_disk is the mean radial tilt on the disk ring just inside the rim.
+where θ_disk is the radial tilt on the disk ring just inside the rim. When the
+disk ring has the same vertex count as the rim, the module pairs vertices by
+angle and enforces this condition per-vertex; otherwise it falls back to the
+arc-length weighted mean tilt.
 
 Energy (discrete, small-slope approximation)
 --------------------------------------------
@@ -31,6 +34,10 @@ Notes
 - This is a *small-slope* coupling and only includes shape gradients along the
   plane normal (ignores dependence on radial distances).
 - The rim and outer rings are paired by angle about `rim_slope_match_center`.
+- The optional disk-group coupling uses an arc-length weighted *mean* radial
+  tilt on the disk ring; it is intended for axisymmetric setups where the disk
+  group is the ring just inside the rim. When the disk and rim rings match in
+  vertex count, per-vertex pairing is used.
 
 Parameters
 ----------
@@ -310,6 +317,7 @@ def compute_energy_and_gradient_array(
     disk_rows = None
     disk_weights = None
     disk_r_hat = None
+    local_disk = False
     if disk_group is not None:
         disk_rows = _collect_group_rows(mesh, disk_group)
         if disk_rows.size:
@@ -328,22 +336,30 @@ def compute_energy_and_gradient_array(
             disk_r_hat[good_disk] = (
                 r_vec_disk[good_disk] / r_len_disk[good_disk][:, None]
             )
-            disk_weights = _arc_length_weights(disk_pos, np.arange(len(disk_rows)))
-            disk_weights = np.where(good_disk, disk_weights, 0.0)
-            weight_sum = float(np.sum(disk_weights))
-            if weight_sum > 0.0:
-                theta_disk = float(
-                    np.sum(
-                        disk_weights
-                        * np.einsum("ij,ij->i", tilts_in[disk_rows], disk_r_hat)
+            if disk_rows.size == rim_rows.size:
+                local_disk = True
+                theta_disk = np.einsum(
+                    "ij,ij->i", tilts_in[disk_rows], disk_r_hat
+                ).astype(float, copy=False)
+            else:
+                disk_weights = _arc_length_weights(disk_pos, np.arange(len(disk_rows)))
+                disk_weights = np.where(good_disk, disk_weights, 0.0)
+                weight_sum = float(np.sum(disk_weights))
+                if weight_sum > 0.0:
+                    theta_disk = float(
+                        np.sum(
+                            disk_weights
+                            * np.einsum("ij,ij->i", tilts_in[disk_rows], disk_r_hat)
+                        )
+                        / weight_sum
                     )
-                    / weight_sum
-                )
 
     if theta_disk is not None:
-        diff_in[valid] = np.einsum("ij,ij->i", tilts_in[rim_rows], r_hat)[valid] - (
-            theta_disk - phi[valid]
-        )
+        tilt_in_rim = np.einsum("ij,ij->i", tilts_in[rim_rows], r_hat)
+        if local_disk:
+            diff_in[valid] = tilt_in_rim[valid] - (theta_disk[valid] - phi[valid])
+        else:
+            diff_in[valid] = tilt_in_rim[valid] - (theta_disk - phi[valid])
 
     energy = float(0.5 * k_match * np.sum(weights * diff * diff))
     if theta_disk is not None:
@@ -363,6 +379,14 @@ def compute_energy_and_gradient_array(
         contrib_in = (k_match * weights * diff_in)[:, None] * r_hat
         np.add.at(tilt_in_grad_arr, rim_rows, contrib_in)
         if (
+            disk_rows is not None
+            and disk_rows.size
+            and disk_r_hat is not None
+            and local_disk
+        ):
+            contrib_disk = (-k_match * weights * diff_in)[:, None] * disk_r_hat
+            np.add.at(tilt_in_grad_arr, disk_rows, contrib_disk)
+        elif (
             disk_rows is not None
             and disk_rows.size
             and disk_weights is not None

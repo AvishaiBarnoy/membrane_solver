@@ -252,6 +252,120 @@ class ConstraintModuleManager:
                 continue
             grad_arr -= lam_i * gCi
 
+    def apply_tilt_gradient_modifications_array(
+        self,
+        tilt_in_grad_arr: np.ndarray,
+        tilt_out_grad_arr: np.ndarray,
+        mesh,
+        global_params,
+        *,
+        positions: np.ndarray | None = None,
+        tilts_in: np.ndarray | None = None,
+        tilts_out: np.ndarray | None = None,
+    ) -> None:
+        """Project leaflet-tilt gradients onto the constraint manifold.
+
+        Constraint modules may supply ``constraint_gradients_tilt_array``, which
+        returns a list of (gC_in, gC_out) arrays. Each gC_* must match the shape
+        of the corresponding tilt gradient array.
+        """
+        if tilt_in_grad_arr.shape != tilt_out_grad_arr.shape:
+            raise ValueError("tilt gradient arrays must have matching shapes")
+
+        if positions is None:
+            mesh.build_position_cache()
+            positions = mesh.positions_view()
+        if tilts_in is None:
+            tilts_in = mesh.tilts_in_view()
+        if tilts_out is None:
+            tilts_out = mesh.tilts_out_view()
+
+        index_map = mesh.vertex_index_to_row
+        all_constraints: list[tuple[np.ndarray | None, np.ndarray | None]] = []
+
+        for module in self.modules.values():
+            if not hasattr(module, "constraint_gradients_tilt_array"):
+                continue
+            try:
+                g_list = module.constraint_gradients_tilt_array(
+                    mesh,
+                    global_params,
+                    positions=positions,
+                    index_map=index_map,
+                    tilts_in=tilts_in,
+                    tilts_out=tilts_out,
+                )
+            except TypeError:
+                g_list = module.constraint_gradients_tilt_array(mesh, global_params)
+            if g_list:
+                all_constraints.extend(g_list)
+
+        if not all_constraints:
+            return
+
+        k = len(all_constraints)
+        A = np.zeros((k, k), dtype=float)
+        b = np.zeros(k, dtype=float)
+        for i, (gC_in_i, gC_out_i) in enumerate(all_constraints):
+            g_in_i = (
+                np.zeros_like(tilt_in_grad_arr)
+                if gC_in_i is None
+                else np.asarray(gC_in_i, dtype=float)
+            )
+            g_out_i = (
+                np.zeros_like(tilt_out_grad_arr)
+                if gC_out_i is None
+                else np.asarray(gC_out_i, dtype=float)
+            )
+            b[i] = float(
+                np.sum(tilt_in_grad_arr * g_in_i) + np.sum(tilt_out_grad_arr * g_out_i)
+            )
+            for j in range(i, k):
+                gC_in_j, gC_out_j = all_constraints[j]
+                g_in_j = (
+                    np.zeros_like(tilt_in_grad_arr)
+                    if gC_in_j is None
+                    else np.asarray(gC_in_j, dtype=float)
+                )
+                g_out_j = (
+                    np.zeros_like(tilt_out_grad_arr)
+                    if gC_out_j is None
+                    else np.asarray(gC_out_j, dtype=float)
+                )
+                A[i, j] = float(np.sum(g_in_i * g_in_j) + np.sum(g_out_i * g_out_j))
+                if j != i:
+                    A[j, i] = A[i, j]
+
+        A[np.diag_indices_from(A)] += 1e-18
+        try:
+            lam = np.linalg.solve(A, b)
+        except np.linalg.LinAlgError:
+            return
+
+        for (gC_in, gC_out), lam_i in zip(all_constraints, lam):
+            if lam_i == 0.0:
+                continue
+            if gC_in is not None:
+                tilt_in_grad_arr -= lam_i * gC_in
+            if gC_out is not None:
+                tilt_out_grad_arr -= lam_i * gC_out
+
+    def enforce_tilt_constraints(self, mesh, **kwargs) -> None:
+        """Invoke tilt-only constraint projections on all loaded modules."""
+        for name, module in self.modules.items():
+            if not hasattr(module, "enforce_tilt_constraint"):
+                continue
+            logger.debug("Enforcing tilt constraint: %s", name)
+            try:
+                module.enforce_tilt_constraint(mesh, **kwargs)
+            except TypeError as exc:
+                logger.debug(
+                    "Tilt constraint module '%s' rejected kwargs (%s); retrying.",
+                    name,
+                    exc,
+                )
+                module.enforce_tilt_constraint(mesh)
+
     def enforce_all(self, mesh, **kwargs):
         """Invoke ``enforce_constraint`` on all loaded constraint modules.
 

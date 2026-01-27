@@ -510,6 +510,18 @@ class Minimizer:
                 tilt_in_grad_arr=tilt_in_grad,
                 tilt_out_grad_arr=tilt_out_grad,
             )
+            if hasattr(
+                self.constraint_manager, "apply_tilt_gradient_modifications_array"
+            ):
+                self.constraint_manager.apply_tilt_gradient_modifications_array(
+                    tilt_in_grad,
+                    tilt_out_grad,
+                    self.mesh,
+                    self.global_params,
+                    positions=positions,
+                    tilts_in=tilts_in,
+                    tilts_out=tilts_out,
+                )
             if np.any(fixed_mask_in):
                 tilt_in_grad[fixed_mask_in] = 0.0
             if np.any(fixed_mask_out):
@@ -551,6 +563,18 @@ class Minimizer:
 
             if not accepted:
                 break
+
+            if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
+                # Tilt constraints operate on the mesh state, so scatter the
+                # accepted tilt arrays, enforce, then re-load for continued
+                # relaxation steps.
+                self.mesh.set_tilts_in_from_array(tilts_in)
+                self.mesh.set_tilts_out_from_array(tilts_out)
+                self.constraint_manager.enforce_tilt_constraints(
+                    self.mesh, global_params=self.global_params
+                )
+                tilts_in = self.mesh.tilts_in_view().copy(order="F")
+                tilts_out = self.mesh.tilts_out_view().copy(order="F")
 
         self.mesh.set_tilts_in_from_array(tilts_in)
         self.mesh.set_tilts_out_from_array(tilts_out)
@@ -834,6 +858,24 @@ STEP SIZE:\t {self.step_size}
             global_params=self.global_params,
             context="minimize",
         )
+        # Some constraints act on the tilt field only (e.g., rim-matching
+        # projections). Enforce them here as well so the post-step state is
+        # consistent without needing an extra tilt-relaxation pass.
+        if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
+            self.constraint_manager.enforce_tilt_constraints(
+                target_mesh, global_params=self.global_params
+            )
+
+    def _update_scalar_params(self) -> None:
+        """Allow energy modules to update global scalar parameters."""
+        for module in self.energy_modules:
+            if hasattr(module, "update_scalar_params"):
+                try:
+                    module.update_scalar_params(
+                        self.mesh, self.global_params, self.param_resolver
+                    )
+                except TypeError:
+                    module.update_scalar_params(self.mesh, self.global_params)
 
     def enforce_constraints_after_mesh_ops(self, mesh: Mesh | None = None):
         """Enforce constraints after discrete mesh operations."""
@@ -846,6 +888,10 @@ STEP SIZE:\t {self.step_size}
             global_params=self.global_params,
             context="mesh_operation",
         )
+        if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
+            self.constraint_manager.enforce_tilt_constraints(
+                target_mesh, global_params=self.global_params
+            )
 
     def minimize(
         self, n_steps: int = 1, callback: Optional[Callable[["Mesh", int], None]] = None
@@ -876,6 +922,8 @@ STEP SIZE:\t {self.step_size}
             if callback:
                 callback(self.mesh, i)
 
+            self._update_scalar_params()
+
             # Tilt solve modes are evaluated before the shape convergence check so
             # that fixed-geometry runs can still relax the tilt field.
             tilt_mode = self.global_params.get("tilt_solve_mode", "fixed")
@@ -885,6 +933,8 @@ STEP SIZE:\t {self.step_size}
                 )
             else:
                 self._relax_tilts(positions=self.mesh.positions_view(), mode=tilt_mode)
+
+            self._update_scalar_params()
 
             # Use array-based path for main loop
             E, grad_arr = self.compute_energy_and_gradient_array()

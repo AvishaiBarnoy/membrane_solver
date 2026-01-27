@@ -501,6 +501,11 @@ class PrintEntityCommand(Command):
             print("Usage: print [vertices|edges|facets|bodies] [id|filter] ...")
             return
 
+        if args[0].lower() in {"msg", "message", "text"}:
+            msg = " ".join(str(tok) for tok in args[1:])
+            print(msg)
+            return
+
         mesh = context.mesh
         entity_type = args[0].lower()
 

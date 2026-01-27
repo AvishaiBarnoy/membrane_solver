@@ -357,6 +357,22 @@ def refine_triangle_mesh(mesh):
 
         return merged
 
+    def _maybe_inherit_disk_target_options(
+        v1_options: dict, v2_options: dict
+    ) -> dict | None:
+        """Inherit disk target tags when both endpoints share them."""
+        keys = (
+            "tilt_disk_target_group_in",
+            "tilt_disk_target_group_out",
+        )
+        merged: dict = {}
+        for key in keys:
+            a = v1_options.get(key)
+            b = v2_options.get(key)
+            if a is not None and b is not None and a == b:
+                merged[key] = a
+        return merged if merged else None
+
     def get_or_create_edge(v_from, v_to, parent_edge=None, parent_facet=None):
         key = (min(v_from, v_to), max(v_from, v_to))
         if key in edge_lookup:
@@ -451,6 +467,12 @@ def refine_triangle_mesh(mesh):
             )
             if inherited_circle is not None:
                 midpoint_options.update(inherited_circle)
+            inherited_target = _maybe_inherit_disk_target_options(
+                getattr(mesh.vertices[v1], "options", {}) or {},
+                getattr(mesh.vertices[v2], "options", {}) or {},
+            )
+            if inherited_target is not None:
+                midpoint_options.update(inherited_target)
             midpoint = Vertex(
                 midpoint_idx,
                 np.asarray(midpoint_position, dtype=float),

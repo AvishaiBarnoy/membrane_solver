@@ -42,7 +42,15 @@ def _per_vertex_params_leaflet(
 
     n = len(mesh.vertex_ids)
     kappa_default = _resolve_bending_modulus(global_params, kappa_key)
-    c0_default = _spontaneous_curvature(global_params) if model == "helfrich" else 0.0
+
+    # Resolve leaflet-specific spontaneous curvature default
+    c0_key = f"spontaneous_curvature_{cache_tag}"
+    c0_default = global_params.get(c0_key)
+    if c0_default is None:
+        c0_default = (
+            _spontaneous_curvature(global_params) if model == "helfrich" else 0.0
+        )
+    c0_default = float(c0_default or 0.0)
 
     cache_key = (
         mesh._vertex_ids_version,
@@ -82,16 +90,17 @@ def _per_vertex_params_leaflet(
                 pass
 
         if model == "helfrich":
-            if "spontaneous_curvature" in opts:
+            # Per-vertex c0 resolution: leaflet-specific -> generic
+            v_c0 = opts.get(c0_key)
+            if v_c0 is None:
+                v_c0 = opts.get("spontaneous_curvature")
+            if v_c0 is None:
+                v_c0 = opts.get("intrinsic_curvature")
+
+            if v_c0 is not None:
                 try:
                     override_rows_c0.append(row)
-                    override_vals_c0.append(float(opts["spontaneous_curvature"]))
-                except (TypeError, ValueError):
-                    pass
-            elif "intrinsic_curvature" in opts:
-                try:
-                    override_rows_c0.append(row)
-                    override_vals_c0.append(float(opts["intrinsic_curvature"]))
+                    override_vals_c0.append(float(v_c0))
                 except (TypeError, ValueError):
                     pass
 

@@ -24,6 +24,13 @@ Parameters
 ----------
 - `tilt_rim_source_group`: group name (string); when unset, this module is inactive.
 - `tilt_rim_source_strength`: γ_B (float; default 0).
+- Contact-parameter alternative (maps to `tilt_rim_source_strength`):
+  - `tilt_rim_source_contact_h`
+  - `tilt_rim_source_contact_delta_epsilon_over_a` or
+    (`tilt_rim_source_contact_delta_epsilon` and `tilt_rim_source_contact_a`)
+  - Optional unit conversion: `tilt_rim_source_contact_units` in
+    `{solver,physical}` with `tilt_rim_source_contact_length_unit_m` and
+    `tilt_rim_source_contact_kappa_ref_J`.
 - `tilt_rim_source_center`: 3D center point (default [0,0,0]).
 - `tilt_rim_source_edge_mode`: edge selection mode: `boundary` (default) or
   `all` (includes internal rims where the tagged edges are not boundary).
@@ -41,6 +48,7 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh
+from modules.energy.contact_mapping import resolve_contact_line_strength
 
 USES_TILT_LEAFLETS = True
 IS_EXTERNAL_WORK = True
@@ -107,10 +115,13 @@ def _resolve_group(param_resolver) -> str | None:
 
 
 def _resolve_strength(param_resolver, edge) -> float:
-    val = param_resolver.get(edge, "tilt_rim_source_strength")
-    if val is None:
-        val = param_resolver.get(None, "tilt_rim_source_strength")
-    return float(val or 0.0)
+    resolved = resolve_contact_line_strength(
+        param_resolver,
+        edge,
+        strength_key="tilt_rim_source_strength",
+        contact_suffix="",
+    )
+    return float(resolved.gamma or 0.0)
 
 
 def _resolve_center(param_resolver) -> np.ndarray:

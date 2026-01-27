@@ -216,7 +216,7 @@ def _build_minimizer(mesh) -> Minimizer:
 
 def _rim_slope_stats(
     mesh, *, n_theta: int, rim_ring: int
-) -> tuple[float, float, float]:
+) -> tuple[float, float, float, float]:
     start = 1 + (int(rim_ring) - 1) * int(n_theta)
     rim_rows = np.arange(start, start + int(n_theta), dtype=int)
     outer_rows = rim_rows + int(n_theta)
@@ -234,9 +234,11 @@ def _rim_slope_stats(
     r_hat[:, 1] = pos[rim_rows, 1] / r_rim
     t_out = mesh.tilts_out_view()[rim_rows]
     theta_out = float(np.mean(np.einsum("ij,ij->i", t_out, r_hat)))
+    t_in_rim = mesh.tilts_in_view()[rim_rows]
+    theta_in_rim = float(np.mean(np.einsum("ij,ij->i", t_in_rim, r_hat)))
     t_in_disk = mesh.tilts_in_view()[disk_rows]
     theta_disk = float(np.mean(np.einsum("ij,ij->i", t_in_disk, r_hat)))
-    return float(phi), float(theta_out), float(theta_disk)
+    return float(phi), float(theta_out), float(theta_disk), float(theta_in_rim)
 
 
 def test_kozlov_1disk_3d_rim_matching_drives_outer_slope() -> None:
@@ -247,6 +249,11 @@ def test_kozlov_1disk_3d_rim_matching_drives_outer_slope() -> None:
     z = mesh.positions_view()[:, 2]
     assert float(np.ptp(z)) > 1e-3
 
-    phi, theta_out, _theta_disk = _rim_slope_stats(mesh, n_theta=12, rim_ring=3)
+    phi, theta_out, theta_disk, theta_in_rim = _rim_slope_stats(
+        mesh, n_theta=12, rim_ring=3
+    )
     denom = max(abs(phi), abs(theta_out), 1e-6)
     assert abs(phi - theta_out) / denom < 0.4
+
+    denom_in = max(abs(theta_disk - phi), abs(theta_in_rim), 1e-6)
+    assert abs(theta_in_rim - (theta_disk - phi)) / denom_in < 0.4

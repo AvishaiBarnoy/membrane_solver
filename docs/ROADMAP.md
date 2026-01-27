@@ -100,6 +100,8 @@ intended for development and planning; users should consult `README.md` and
            - refinement convergence (energy decreases under refinement for fixed-geometry decay benchmarks)
            - vectorization guardrails for hot-loop energy assembly (no per-vertex Python loops)
            - analytic identity (tensionless): distal/proximal tilts match for the 1-disk outer membrane using the θ_B bilayer rim source (`tests/test_kozlov_1disk_3d_analytic_regression.py`)
+           - [x] hard rim-slope matching constraint (per-vertex pairing; tilt+shape projection)
+           - [x] small-drive 1-disk tensionless regression (κ=1, k_t≈135 for 1 unit=15nm)
      - [ ] E2E benchmarks (expected behavior):
            - **Independent leaflets** (no inter-leaflet coupling): a source in `tilt_in`
              decays with length scale λ≈sqrt(k_s/k_t) while `tilt_out` remains ~0 if initialized at 0.
@@ -108,6 +110,9 @@ intended for development and planning; users should consult `README.md` and
            - **With shape coupling** (`bending_tilt`): localized leaflet sources induce
              localized curvature; flipping `tilt_in`↔`tilt_out` should flip the sign
              of the preferred curvature if the model is implemented with correct leaflet orientation.
+             Single-leaflet rim sources should induce the opposite leaflet only when
+             shape relaxation is enabled (`tests/test_single_leaflet_curvature_induction.py`).
+           - [x] 1-disk macro smoke test for small-drive physical scaling (`tests/test_e2e_kozlov_1disk_3d_small_drive_macro.py`)
 
 10. Plane with an inner disk and outer perimeter
    - [ ] Test mixed boundary conditions and perimeter constraints.
@@ -125,6 +130,12 @@ intended for development and planning; users should consult `README.md` and
 12. Flat sheet that folds to its spontaneous curvature
    - Deferred: requires tightly coupled inextensibility constraints (edge
      lengths, facet areas, and corner-angle preservation) to stay stable.
+
+## Tech debt
+
+1. Integrate common geometric constraints into KKT solves
+   - Add KKT support for `pin_to_plane`, `pin_to_circle`, and `global_area`
+     so hard constraints participate in the same projection step as energies.
 
 ## 4. Caveolin and complex inclusions
 
@@ -155,6 +166,8 @@ intended for development and planning; users should consult `README.md` and
            inclusion patch (document sign conventions).
            - Hard source: clamp rim tilt via `tilt_fixed_in` / `tilt_in`.
            - Soft source: drive rim tilt via `tilt_rim_source_in/out` line-energy term.
+             Optionally parameterize the line strength via the Kozlov/Barnoy contact mapping
+             `tilt_rim_source_contact_*` (Δε, a, h → γ).
      - [x] Expected behavior (E2E):
            - tilt decays away from the inclusion with λ≈sqrt(k_s/k_t) in the
              small-slope / flat‑geometry limit
@@ -192,10 +205,20 @@ intended for development and planning; users should consult `README.md` and
      - [x] Add a rim-matching energy/constraint that enforces the small-slope
            continuity condition at the disk boundary (e.g. proximal tilt equals
            outer slope `φ*` at `r=R`).
-     - [x] Disk+outer benchmark mesh with internal rim drive (`θ_B`) and
-           explicit rim matching; far-field tilt clamped to zero.
-     - [ ] E2E regression: for γ=0, recover the 1_disk_3d predictions
-           (`θ^p(r)=θ^d(r)` in the outer region and `φ*≈θ_B/2`).
+    - [x] Disk+outer benchmark mesh with internal rim drive (`θ_B`) and
+          explicit rim matching; far-field tilt clamped to zero.
+    - [x] Single-leaflet rim-source variant with shape relaxation to induce the
+          opposite leaflet only via curvature (`meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_source.yaml`).
+    - [x] Diagnostics + regression for single-leaflet 1-disk behavior
+          (`tools/diagnose_1disk_3d_single_leaflet.py`,
+          `tests/test_kozlov_1disk_3d_single_leaflet_behavior.py`).
+    - [x] Disk-profile target modules and regressions for single-leaflet and bilayer
+          boundary forcing (`modules/energy/tilt_disk_target_in.py`,
+          `modules/energy/tilt_disk_target_out.py`,
+          `tests/test_kozlov_1disk_3d_single_leaflet_profile.py`,
+          `tests/test_kozlov_1disk_3d_bilayer_profile.py`).
+    - [ ] E2E regression: for γ=0, recover the 1_disk_3d predictions
+          (`θ^p(r)=θ^d(r)` in the outer region and `φ*≈θ_B/2`).
      - [ ] Future: enforce/validate that interacting tilt sources on a given
            membrane are defined on the same leaflet side (distal/top = `tilt_in`)
            to avoid mixed-side source interference.

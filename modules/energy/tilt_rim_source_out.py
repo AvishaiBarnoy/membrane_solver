@@ -11,6 +11,7 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh
+from modules.energy.contact_mapping import resolve_contact_line_strength
 
 USES_TILT_LEAFLETS = True
 IS_EXTERNAL_WORK = True
@@ -77,10 +78,13 @@ def _resolve_group(param_resolver) -> str | None:
 
 
 def _resolve_strength(param_resolver, edge) -> float:
-    val = param_resolver.get(edge, "tilt_rim_source_strength_out")
-    if val is None:
-        val = param_resolver.get(None, "tilt_rim_source_strength_out")
-    return float(val or 0.0)
+    resolved = resolve_contact_line_strength(
+        param_resolver,
+        edge,
+        strength_key="tilt_rim_source_strength_out",
+        contact_suffix="_out",
+    )
+    return float(resolved.gamma or 0.0)
 
 
 def _resolve_center(param_resolver) -> np.ndarray:
