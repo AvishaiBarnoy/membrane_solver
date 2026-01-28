@@ -96,3 +96,56 @@ def test_leaflet_tilt_relaxation_respects_fixed_masks() -> None:
     assert np.linalg.norm(mesh.vertices[0].tilt_out) < np.linalg.norm(t_out_free)
     assert np.linalg.norm(mesh.vertices[1].tilt_in) < np.linalg.norm(t_in_free)
     np.testing.assert_allclose(mesh.vertices[1].tilt_out, t_out_fixed, atol=1e-12)
+
+
+def test_leaflet_cg_zero_iters_is_noop() -> None:
+    mesh = parse_geometry(_tilt_leaflet_patch_input(solve_mode="nested"))
+    mesh.global_parameters.set("tilt_solver", "cg")
+    mesh.global_parameters.set("tilt_cg_max_iters", 0)
+    minim = _build_minimizer(mesh)
+
+    t_in0 = mesh.vertices[0].tilt_in.copy()
+    t_out0 = mesh.vertices[0].tilt_out.copy()
+    t_in1 = mesh.vertices[1].tilt_in.copy()
+    t_out1 = mesh.vertices[1].tilt_out.copy()
+
+    minim.minimize(n_steps=1)
+
+    np.testing.assert_allclose(mesh.vertices[0].tilt_in, t_in0, atol=1e-12)
+    np.testing.assert_allclose(mesh.vertices[0].tilt_out, t_out0, atol=1e-12)
+    np.testing.assert_allclose(mesh.vertices[1].tilt_in, t_in1, atol=1e-12)
+    np.testing.assert_allclose(mesh.vertices[1].tilt_out, t_out1, atol=1e-12)
+
+
+def test_leaflet_cg_reduces_energy() -> None:
+    mesh = parse_geometry(_tilt_leaflet_patch_input(solve_mode="nested"))
+    mesh.global_parameters.set("tilt_solver", "cg")
+    mesh.global_parameters.set("tilt_cg_max_iters", 12)
+    mesh.global_parameters.set("tilt_step_size", 0.2)
+    minim = _build_minimizer(mesh)
+
+    e0 = minim.compute_energy()
+    minim.minimize(n_steps=1)
+    e1 = minim.compute_energy()
+
+    assert e1 <= e0
+
+
+def test_leaflet_cg_respects_fixed_tilts() -> None:
+    mesh = parse_geometry(_tilt_leaflet_patch_input(solve_mode="nested"))
+    mesh.global_parameters.set("tilt_solver", "cg")
+    mesh.global_parameters.set("tilt_cg_max_iters", 12)
+    mesh.global_parameters.set("tilt_step_size", 0.2)
+    minim = _build_minimizer(mesh)
+
+    t0_in = mesh.vertices[0].tilt_in.copy()
+    t1_out = mesh.vertices[1].tilt_out.copy()
+    t2_in = mesh.vertices[2].tilt_in.copy()
+    t2_out = mesh.vertices[2].tilt_out.copy()
+
+    minim.minimize(n_steps=1)
+
+    np.testing.assert_allclose(mesh.vertices[0].tilt_in, t0_in, atol=1e-12)
+    np.testing.assert_allclose(mesh.vertices[1].tilt_out, t1_out, atol=1e-12)
+    np.testing.assert_allclose(mesh.vertices[2].tilt_in, t2_in, atol=1e-12)
+    np.testing.assert_allclose(mesh.vertices[2].tilt_out, t2_out, atol=1e-12)
