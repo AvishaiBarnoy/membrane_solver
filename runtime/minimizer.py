@@ -403,45 +403,46 @@ class Minimizer:
         if not has_free:
             return
 
-        tilts = self.mesh.tilts_view().copy(order="F")
-        normals = self.mesh.vertex_normals(positions)
-        tilts = self._project_tilts_to_tangent_array(tilts, normals)
-        tilt_fixed_vals = tilts[fixed_mask].copy() if np.any(fixed_mask) else None
+        with self.mesh.geometry_freeze(positions):
+            tilts = self.mesh.tilts_view().copy(order="F")
+            normals = self.mesh.vertex_normals(positions)
+            tilts = self._project_tilts_to_tangent_array(tilts, normals)
+            tilt_fixed_vals = tilts[fixed_mask].copy() if np.any(fixed_mask) else None
 
-        tilt_grad = np.zeros_like(tilts)
-        for _ in range(n_inner):
-            E0 = self._compute_energy_and_tilt_gradient_array(
-                positions=positions, tilts=tilts, tilt_grad_arr=tilt_grad
-            )
-            if np.any(fixed_mask):
-                tilt_grad[fixed_mask] = 0.0
-
-            gnorm = float(np.linalg.norm(tilt_grad[~fixed_mask]))
-            if gnorm == 0.0:
-                break
-            if tol > 0.0 and gnorm < tol:
-                break
-
-            step = step_size
-            accepted = False
-            for _bt in range(12):
-                trial = tilts - step * tilt_grad
-                trial = self._project_tilts_to_tangent_array(trial, normals)
-                if tilt_fixed_vals is not None:
-                    trial[fixed_mask] = tilt_fixed_vals
-                E1 = self._compute_energy_array_with_tilts(
-                    positions=positions, tilts=trial
+            tilt_grad = np.zeros_like(tilts)
+            for _ in range(n_inner):
+                E0 = self._compute_energy_and_tilt_gradient_array(
+                    positions=positions, tilts=tilts, tilt_grad_arr=tilt_grad
                 )
-                if E1 <= E0:
-                    tilts = trial
-                    accepted = True
+                if np.any(fixed_mask):
+                    tilt_grad[fixed_mask] = 0.0
+
+                gnorm = float(np.linalg.norm(tilt_grad[~fixed_mask]))
+                if gnorm == 0.0:
                     break
-                step *= 0.5
-                if step < 1e-16:
+                if tol > 0.0 and gnorm < tol:
                     break
 
-            if not accepted:
-                break
+                step = step_size
+                accepted = False
+                for _bt in range(12):
+                    trial = tilts - step * tilt_grad
+                    trial = self._project_tilts_to_tangent_array(trial, normals)
+                    if tilt_fixed_vals is not None:
+                        trial[fixed_mask] = tilt_fixed_vals
+                    E1 = self._compute_energy_array_with_tilts(
+                        positions=positions, tilts=trial
+                    )
+                    if E1 <= E0:
+                        tilts = trial
+                        accepted = True
+                        break
+                    step *= 0.5
+                    if step < 1e-16:
+                        break
+
+                if not accepted:
+                    break
 
         self.mesh.set_tilts_from_array(tilts)
 
@@ -486,95 +487,96 @@ class Minimizer:
         if not has_free:
             return
 
-        tilts_in = self.mesh.tilts_in_view().copy(order="F")
-        tilts_out = self.mesh.tilts_out_view().copy(order="F")
-        normals = self.mesh.vertex_normals(positions)
-        tilts_in = self._project_tilts_to_tangent_array(tilts_in, normals)
-        tilts_out = self._project_tilts_to_tangent_array(tilts_out, normals)
+        with self.mesh.geometry_freeze(positions):
+            tilts_in = self.mesh.tilts_in_view().copy(order="F")
+            tilts_out = self.mesh.tilts_out_view().copy(order="F")
+            normals = self.mesh.vertex_normals(positions)
+            tilts_in = self._project_tilts_to_tangent_array(tilts_in, normals)
+            tilts_out = self._project_tilts_to_tangent_array(tilts_out, normals)
 
-        tilt_fixed_vals_in = (
-            tilts_in[fixed_mask_in].copy() if np.any(fixed_mask_in) else None
-        )
-        tilt_fixed_vals_out = (
-            tilts_out[fixed_mask_out].copy() if np.any(fixed_mask_out) else None
-        )
-
-        tilt_in_grad = np.zeros_like(tilts_in)
-        tilt_out_grad = np.zeros_like(tilts_out)
-
-        for _ in range(n_inner):
-            E0 = self._compute_energy_and_leaflet_tilt_gradients_array(
-                positions=positions,
-                tilts_in=tilts_in,
-                tilts_out=tilts_out,
-                tilt_in_grad_arr=tilt_in_grad,
-                tilt_out_grad_arr=tilt_out_grad,
+            tilt_fixed_vals_in = (
+                tilts_in[fixed_mask_in].copy() if np.any(fixed_mask_in) else None
             )
-            if hasattr(
-                self.constraint_manager, "apply_tilt_gradient_modifications_array"
-            ):
-                self.constraint_manager.apply_tilt_gradient_modifications_array(
-                    tilt_in_grad,
-                    tilt_out_grad,
-                    self.mesh,
-                    self.global_params,
+            tilt_fixed_vals_out = (
+                tilts_out[fixed_mask_out].copy() if np.any(fixed_mask_out) else None
+            )
+
+            tilt_in_grad = np.zeros_like(tilts_in)
+            tilt_out_grad = np.zeros_like(tilts_out)
+
+            for _ in range(n_inner):
+                E0 = self._compute_energy_and_leaflet_tilt_gradients_array(
                     positions=positions,
                     tilts_in=tilts_in,
                     tilts_out=tilts_out,
+                    tilt_in_grad_arr=tilt_in_grad,
+                    tilt_out_grad_arr=tilt_out_grad,
                 )
-            if np.any(fixed_mask_in):
-                tilt_in_grad[fixed_mask_in] = 0.0
-            if np.any(fixed_mask_out):
-                tilt_out_grad[fixed_mask_out] = 0.0
+                if hasattr(
+                    self.constraint_manager, "apply_tilt_gradient_modifications_array"
+                ):
+                    self.constraint_manager.apply_tilt_gradient_modifications_array(
+                        tilt_in_grad,
+                        tilt_out_grad,
+                        self.mesh,
+                        self.global_params,
+                        positions=positions,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                    )
+                if np.any(fixed_mask_in):
+                    tilt_in_grad[fixed_mask_in] = 0.0
+                if np.any(fixed_mask_out):
+                    tilt_out_grad[fixed_mask_out] = 0.0
 
-            gnorm = float(
-                np.sqrt(
-                    np.sum(tilt_in_grad[~fixed_mask_in] ** 2)
-                    + np.sum(tilt_out_grad[~fixed_mask_out] ** 2)
+                gnorm = float(
+                    np.sqrt(
+                        np.sum(tilt_in_grad[~fixed_mask_in] ** 2)
+                        + np.sum(tilt_out_grad[~fixed_mask_out] ** 2)
+                    )
                 )
-            )
-            if gnorm == 0.0:
-                break
-            if tol > 0.0 and gnorm < tol:
-                break
-
-            step = step_size
-            accepted = False
-            for _bt in range(12):
-                trial_in = tilts_in - step * tilt_in_grad
-                trial_out = tilts_out - step * tilt_out_grad
-                trial_in = self._project_tilts_to_tangent_array(trial_in, normals)
-                trial_out = self._project_tilts_to_tangent_array(trial_out, normals)
-                if tilt_fixed_vals_in is not None:
-                    trial_in[fixed_mask_in] = tilt_fixed_vals_in
-                if tilt_fixed_vals_out is not None:
-                    trial_out[fixed_mask_out] = tilt_fixed_vals_out
-                E1 = self._compute_energy_array_with_leaflet_tilts(
-                    positions=positions, tilts_in=trial_in, tilts_out=trial_out
-                )
-                if E1 <= E0:
-                    tilts_in = trial_in
-                    tilts_out = trial_out
-                    accepted = True
+                if gnorm == 0.0:
                     break
-                step *= 0.5
-                if step < 1e-16:
+                if tol > 0.0 and gnorm < tol:
                     break
 
-            if not accepted:
-                break
+                step = step_size
+                accepted = False
+                for _bt in range(12):
+                    trial_in = tilts_in - step * tilt_in_grad
+                    trial_out = tilts_out - step * tilt_out_grad
+                    trial_in = self._project_tilts_to_tangent_array(trial_in, normals)
+                    trial_out = self._project_tilts_to_tangent_array(trial_out, normals)
+                    if tilt_fixed_vals_in is not None:
+                        trial_in[fixed_mask_in] = tilt_fixed_vals_in
+                    if tilt_fixed_vals_out is not None:
+                        trial_out[fixed_mask_out] = tilt_fixed_vals_out
+                    E1 = self._compute_energy_array_with_leaflet_tilts(
+                        positions=positions, tilts_in=trial_in, tilts_out=trial_out
+                    )
+                    if E1 <= E0:
+                        tilts_in = trial_in
+                        tilts_out = trial_out
+                        accepted = True
+                        break
+                    step *= 0.5
+                    if step < 1e-16:
+                        break
 
-            if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
-                # Tilt constraints operate on the mesh state, so scatter the
-                # accepted tilt arrays, enforce, then re-load for continued
-                # relaxation steps.
-                self.mesh.set_tilts_in_from_array(tilts_in)
-                self.mesh.set_tilts_out_from_array(tilts_out)
-                self.constraint_manager.enforce_tilt_constraints(
-                    self.mesh, global_params=self.global_params
-                )
-                tilts_in = self.mesh.tilts_in_view().copy(order="F")
-                tilts_out = self.mesh.tilts_out_view().copy(order="F")
+                if not accepted:
+                    break
+
+                if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
+                    # Tilt constraints operate on the mesh state, so scatter the
+                    # accepted tilt arrays, enforce, then re-load for continued
+                    # relaxation steps.
+                    self.mesh.set_tilts_in_from_array(tilts_in)
+                    self.mesh.set_tilts_out_from_array(tilts_out)
+                    self.constraint_manager.enforce_tilt_constraints(
+                        self.mesh, global_params=self.global_params
+                    )
+                    tilts_in = self.mesh.tilts_in_view().copy(order="F")
+                    tilts_out = self.mesh.tilts_out_view().copy(order="F")
 
         self.mesh.set_tilts_in_from_array(tilts_in)
         self.mesh.set_tilts_out_from_array(tilts_out)

@@ -1,6 +1,7 @@
 # entities.py
 
 import logging
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
@@ -911,6 +912,10 @@ class Mesh:
 
     _curvature_cache: Dict[str, Any] = field(default_factory=dict)
     _curvature_version: int = -1
+    _geometry_freeze_depth: int = 0
+    _geometry_freeze_version: int = -1
+    _geometry_freeze_loops_version: int = -1
+    _geometry_freeze_positions_id: int | None = None
 
     _cached_total_area: Optional[float] = field(init=False, default=None)
     _cached_total_area_grad: Optional[Dict[int, np.ndarray]] = field(
@@ -931,6 +936,49 @@ class Mesh:
 
     def increment_version(self):
         self._version += 1
+
+    def _geometry_cache_active(self, positions: Optional[np.ndarray]) -> bool:
+        """Return True when positions correspond to the active geometry cache."""
+        if positions is None:
+            positions = getattr(self, "_positions_cache", None)
+
+        if positions is getattr(self, "_positions_cache", None):
+            return True
+
+        if self._geometry_freeze_depth <= 0:
+            return False
+
+        if self._geometry_freeze_version != self._version:
+            return False
+
+        if self._geometry_freeze_loops_version != self._facet_loops_version:
+            return False
+
+        if self._geometry_freeze_positions_id is None:
+            return False
+
+        return id(positions) == self._geometry_freeze_positions_id
+
+    @contextmanager
+    def geometry_freeze(self, positions: Optional[np.ndarray] = None):
+        """Freeze geometry caches while positions remain fixed."""
+        if self._geometry_freeze_depth == 0:
+            if positions is None:
+                positions = self.positions_view()
+            self._geometry_freeze_version = self._version
+            self._geometry_freeze_loops_version = self._facet_loops_version
+            self._geometry_freeze_positions_id = id(positions)
+            self._curvature_version = self._version
+
+        self._geometry_freeze_depth += 1
+        try:
+            yield
+        finally:
+            self._geometry_freeze_depth -= 1
+            if self._geometry_freeze_depth == 0:
+                self._geometry_freeze_version = -1
+                self._geometry_freeze_loops_version = -1
+                self._geometry_freeze_positions_id = None
 
     def increment_topology_version(self) -> None:
         """Invalidate caches that depend on mesh connectivity."""

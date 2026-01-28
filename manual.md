@@ -977,6 +977,7 @@ degeneracy (tangling, overlapping triangles) during energy minimization.
    - Core geometry routines (cross products, volume gradients) are heavily optimized.
    - Use `geometry.entities._fast_cross` for small-array cross products instead of `numpy.cross`.
    - Prefer pre-allocating numpy arrays with `np.empty` over list comprehensions in hot loops.
+   - Tilt relaxation caches curvature/area weights while geometry is frozen to avoid recomputation.
    - See `tools/suite.py` for regression testing.
 
 8. Optional compiled kernels (Fortran / f2py):

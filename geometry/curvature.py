@@ -46,11 +46,29 @@ def compute_curvature_data(
 
     References: Meyer et al. (2003) 'Discrete Differential-Geometry Operators'
     """
+    _ = index_map
     n_verts = len(mesh.vertex_ids)
     tri_rows, _ = mesh.triangle_row_cache()
 
     if tri_rows is None:
         return np.zeros((n_verts, 3)), np.zeros(n_verts), np.array([]), np.array([])
+
+    use_cache = mesh._geometry_cache_active(positions)
+    if use_cache and mesh._curvature_version == mesh._version:
+        cached = mesh._curvature_cache
+        if (
+            cached.get("curvature_rows_version") == mesh._facet_loops_version
+            and "k_vecs" in cached
+            and "vertex_areas" in cached
+            and "weights" in cached
+            and "tri_rows" in cached
+        ):
+            return (
+                cached["k_vecs"],
+                cached["vertex_areas"],
+                cached["weights"],
+                cached["tri_rows"],
+            )
 
     v0 = positions[tri_rows[:, 0]]
     v1 = positions[tri_rows[:, 1]]
@@ -123,6 +141,13 @@ def compute_curvature_data(
     weights[:, 0] = c0
     weights[:, 1] = c1
     weights[:, 2] = c2
+    if use_cache:
+        mesh._curvature_cache["k_vecs"] = k_vecs
+        mesh._curvature_cache["vertex_areas"] = vertex_areas
+        mesh._curvature_cache["weights"] = weights
+        mesh._curvature_cache["tri_rows"] = tri_rows
+        mesh._curvature_cache["curvature_rows_version"] = mesh._facet_loops_version
+        mesh._curvature_version = mesh._version
     return k_vecs, vertex_areas, weights, tri_rows
 
 

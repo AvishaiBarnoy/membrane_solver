@@ -156,6 +156,37 @@ def test_triangle_row_cache_reused_across_position_updates():
     assert facets_2 == facets_1
 
 
+def test_curvature_cache_reused_during_geometry_freeze():
+    data = cube_soft_volume_input("lagrange")
+    mesh = parse_geometry(data)
+    mesh.build_facet_vertex_loops()
+
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    from geometry.curvature import compute_curvature_data
+
+    with mesh.geometry_freeze(positions):
+        k0, a0, w0, t0 = compute_curvature_data(mesh, positions, index_map)
+        k1, a1, w1, t1 = compute_curvature_data(mesh, positions, index_map)
+
+    assert k1 is k0
+    assert a1 is a0
+    assert w1 is w0
+    assert t1 is t0
+
+    mesh.vertices[0].position += np.array([0.1, 0.0, 0.0])
+    mesh.increment_version()
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    k2, a2, w2, t2 = compute_curvature_data(mesh, positions, index_map)
+    assert k2 is not k0
+    assert a2 is not a0
+    assert w2 is not w0
+    assert t2 is t0
+
+
 def test_vertex_average_increments_version():
     from runtime.vertex_average import vertex_average
 

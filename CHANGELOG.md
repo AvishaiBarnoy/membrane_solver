@@ -54,6 +54,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - θ_B bilayer rim source energy module `tilt_rim_source_bilayer` (single source definition; equivalent to `tilt_rim_source_in` + `tilt_rim_source_out` with equal parameters).
 
 ### Fixed
+- Geometry-freeze caching now reuses curvature/area weights during tilt relaxation when positions are fixed.
 - `energy` breakdown output now separates internal energy vs external work terms (sources) and supports `energy ref` for reference-state deltas.
 - **Tilt Persistence**: Corrected `save_geometry` to persist `tilt` and `tilt_fixed` vertex properties to output JSON files.
 - **Live-Vis Warnings**: Silenced `plt.pause` warnings on headless CI backends.

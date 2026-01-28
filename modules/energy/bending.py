@@ -133,7 +133,7 @@ def _per_vertex_params(
 def _vertex_normals(
     mesh: Mesh, positions: np.ndarray, tri_rows: np.ndarray
 ) -> np.ndarray:
-    is_cached_pos = positions is getattr(mesh, "_positions_cache", None)
+    is_cached_pos = mesh._geometry_cache_active(positions)
     if (
         is_cached_pos
         and mesh._curvature_version == mesh._version
@@ -167,7 +167,8 @@ def _compute_effective_areas(
 
     Returns (vertex_areas_eff, va0, va1, va2).
     """
-    is_cached_pos = positions is getattr(mesh, "_positions_cache", None)
+    _ = index_map
+    is_cached_pos = mesh._geometry_cache_active(positions)
     if (
         is_cached_pos
         and mesh._curvature_version == mesh._version
