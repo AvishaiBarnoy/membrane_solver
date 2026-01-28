@@ -100,3 +100,17 @@ def test_coupled_mode_makes_progress_on_tilt_field():
 
     assert e1 <= e0
     assert float(t1[0]) > float(t0[0])
+
+
+def test_cg_solver_respects_zero_iteration_limit():
+    mesh = parse_geometry(_tilt_patch_input(solve_mode="nested"))
+    mesh.global_parameters.set("tilt_solver", "cg")
+    mesh.global_parameters.set("tilt_cg_max_iters", 0)
+
+    minim = _build_minimizer(mesh)
+
+    t0 = mesh.vertices[4].tilt.copy()
+    minim.minimize(n_steps=1)
+    t1 = mesh.vertices[4].tilt.copy()
+
+    np.testing.assert_allclose(t1, t0, atol=1e-12)

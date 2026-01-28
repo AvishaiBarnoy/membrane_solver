@@ -398,6 +398,19 @@ class Minimizer:
         if n_inner <= 0:
             return
 
+        solver = (
+            str(self.global_params.get("tilt_solver", "gd") or "gd").strip().lower()
+        )
+        if solver not in ("gd", "cg"):
+            logger.warning("Unknown tilt_solver=%r; using gradient descent.", solver)
+            solver = "gd"
+        if solver == "cg":
+            max_iters = int(self.global_params.get("tilt_cg_max_iters", n_inner) or 0)
+            if max_iters <= 0:
+                return
+        else:
+            max_iters = n_inner
+
         fixed_mask = self._tilt_fixed_mask()
         has_free = bool(np.any(~fixed_mask))
         if not has_free:
@@ -410,41 +423,177 @@ class Minimizer:
             tilt_fixed_vals = tilts[fixed_mask].copy() if np.any(fixed_mask) else None
 
             tilt_grad = np.zeros_like(tilts)
-            for _ in range(n_inner):
+            preconditioner = None
+            if solver == "cg":
+                preconditioner = (
+                    str(
+                        self.global_params.get("tilt_cg_preconditioner", "jacobi")
+                        or "jacobi"
+                    )
+                    .strip()
+                    .lower()
+                )
+                if preconditioner in ("none", "off", "false"):
+                    preconditioner = None
+
+            if solver == "gd":
+                for _ in range(max_iters):
+                    E0 = self._compute_energy_and_tilt_gradient_array(
+                        positions=positions, tilts=tilts, tilt_grad_arr=tilt_grad
+                    )
+                    if np.any(fixed_mask):
+                        tilt_grad[fixed_mask] = 0.0
+
+                    gnorm = float(np.linalg.norm(tilt_grad[~fixed_mask]))
+                    if gnorm == 0.0:
+                        break
+                    if tol > 0.0 and gnorm < tol:
+                        break
+
+                    step = step_size
+                    accepted = False
+                    for _bt in range(12):
+                        trial = tilts - step * tilt_grad
+                        trial = self._project_tilts_to_tangent_array(trial, normals)
+                        if tilt_fixed_vals is not None:
+                            trial[fixed_mask] = tilt_fixed_vals
+                        E1 = self._compute_energy_array_with_tilts(
+                            positions=positions, tilts=trial
+                        )
+                        if E1 <= E0:
+                            tilts = trial
+                            accepted = True
+                            break
+                        step *= 0.5
+                        if step < 1e-16:
+                            break
+
+                    if not accepted:
+                        break
+            else:
+                M_inv = None
+                if preconditioner == "jacobi":
+                    M_inv = self._build_tilt_cg_preconditioner(
+                        positions=positions,
+                        index_map=self.mesh.vertex_index_to_row,
+                        fixed_mask=fixed_mask,
+                    )
+
                 E0 = self._compute_energy_and_tilt_gradient_array(
                     positions=positions, tilts=tilts, tilt_grad_arr=tilt_grad
                 )
                 if np.any(fixed_mask):
                     tilt_grad[fixed_mask] = 0.0
-
                 gnorm = float(np.linalg.norm(tilt_grad[~fixed_mask]))
-                if gnorm == 0.0:
-                    break
-                if tol > 0.0 and gnorm < tol:
-                    break
+                if gnorm == 0.0 or (tol > 0.0 and gnorm < tol):
+                    self.mesh.set_tilts_from_array(tilts)
+                    return
 
-                step = step_size
-                accepted = False
-                for _bt in range(12):
-                    trial = tilts - step * tilt_grad
-                    trial = self._project_tilts_to_tangent_array(trial, normals)
-                    if tilt_fixed_vals is not None:
-                        trial[fixed_mask] = tilt_fixed_vals
-                    E1 = self._compute_energy_array_with_tilts(
-                        positions=positions, tilts=trial
+                residual = -tilt_grad
+                if M_inv is not None:
+                    z_vec = residual * M_inv[:, None]
+                else:
+                    z_vec = residual
+                direction = z_vec.copy()
+                rz_old = float(np.sum(residual * z_vec))
+
+                for _ in range(max_iters):
+                    if gnorm == 0.0:
+                        break
+                    if tol > 0.0 and gnorm < tol:
+                        break
+
+                    step = step_size
+                    accepted = False
+                    for _bt in range(12):
+                        trial = tilts + step * direction
+                        trial = self._project_tilts_to_tangent_array(trial, normals)
+                        if tilt_fixed_vals is not None:
+                            trial[fixed_mask] = tilt_fixed_vals
+                        E1 = self._compute_energy_array_with_tilts(
+                            positions=positions, tilts=trial
+                        )
+                        if E1 <= E0:
+                            tilts = trial
+                            E0 = E1
+                            accepted = True
+                            break
+                        step *= 0.5
+                        if step < 1e-16:
+                            break
+
+                    if not accepted:
+                        break
+
+                    E0 = self._compute_energy_and_tilt_gradient_array(
+                        positions=positions, tilts=tilts, tilt_grad_arr=tilt_grad
                     )
-                    if E1 <= E0:
-                        tilts = trial
-                        accepted = True
-                        break
-                    step *= 0.5
-                    if step < 1e-16:
+                    if np.any(fixed_mask):
+                        tilt_grad[fixed_mask] = 0.0
+
+                    gnorm = float(np.linalg.norm(tilt_grad[~fixed_mask]))
+                    if gnorm == 0.0 or (tol > 0.0 and gnorm < tol):
                         break
 
-                if not accepted:
-                    break
+                    residual = -tilt_grad
+                    if M_inv is not None:
+                        z_vec = residual * M_inv[:, None]
+                    else:
+                        z_vec = residual
+                    rz_new = float(np.sum(residual * z_vec))
+                    if rz_old == 0.0:
+                        break
+                    beta = rz_new / rz_old
+                    direction = z_vec + beta * direction
+                    rz_old = rz_new
 
         self.mesh.set_tilts_from_array(tilts)
+
+    def _build_tilt_cg_preconditioner(
+        self,
+        *,
+        positions: np.ndarray,
+        index_map: Dict[int, int],
+        fixed_mask: np.ndarray,
+    ) -> np.ndarray:
+        """Return a Jacobi preconditioner for the single-tilt CG solve."""
+        n_vertices = len(self.mesh.vertex_ids)
+        diag = np.zeros(n_vertices, dtype=float)
+
+        k_tilt = float(self.param_resolver.get(None, "tilt_rigidity") or 0.0)
+        if k_tilt != 0.0:
+            tri_rows, _ = self.mesh.triangle_row_cache()
+            if tri_rows is not None and len(tri_rows) > 0:
+                areas = self.mesh.triangle_areas(positions)
+                if areas is not None and len(areas) == len(tri_rows):
+                    vertex_areas = np.zeros(n_vertices, dtype=float)
+                    area_thirds = areas / 3.0
+                    np.add.at(vertex_areas, tri_rows[:, 0], area_thirds)
+                    np.add.at(vertex_areas, tri_rows[:, 1], area_thirds)
+                    np.add.at(vertex_areas, tri_rows[:, 2], area_thirds)
+                    diag += k_tilt * vertex_areas
+
+        k_smooth = float(
+            self.param_resolver.get(None, "tilt_smoothness_rigidity") or 0.0
+        )
+        if k_smooth != 0.0:
+            from geometry.curvature import compute_curvature_data
+
+            _k_vecs, _areas, weights, tri_rows = compute_curvature_data(
+                self.mesh, positions, index_map
+            )
+            if weights is not None and tri_rows is not None and len(tri_rows) > 0:
+                c0 = weights[:, 0]
+                c1 = weights[:, 1]
+                c2 = weights[:, 2]
+                factor = 0.5 * k_smooth
+                np.add.at(diag, tri_rows[:, 0], factor * (c1 + c2))
+                np.add.at(diag, tri_rows[:, 1], factor * (c2 + c0))
+                np.add.at(diag, tri_rows[:, 2], factor * (c0 + c1))
+
+        diag = np.where(diag > 1e-12, diag, 1.0)
+        diag[fixed_mask] = 1.0
+        return 1.0 / diag
 
     def _relax_leaflet_tilts(
         self,
