@@ -999,8 +999,12 @@ degeneracy (tangling, overlapping triangles) during energy minimization.
    - Example manual build (bending kernels, optional):
      - `cd fortran_kernels && python -m numpy.f2py -c -m bending_kernels bending_kernels.f90`
      - This should produce `fortran_kernels/bending_kernels.*.so` (platform-specific name).
+   - Example manual build (tilt kernels, optional):
+     - `cd fortran_kernels && python -m numpy.f2py -c -m tilt_kernels tilt_kernels.f90`
+     - This should produce `fortran_kernels/tilt_kernels.*.so` (platform-specific name).
    - Runtime behaviour:
      - If `fortran_kernels.surface_energy` is importable, the `surface` energy module
        will use it automatically for pure-triangle meshes; otherwise it falls back to NumPy.
-     - Set `MEMBRANE_DISABLE_FORTRAN_SURFACE=1` to force the NumPy fallback.
-     - Set `MEMBRANE_DISABLE_FORTRAN_BENDING=1` to disable compiled bending kernels.
+   - Set `MEMBRANE_DISABLE_FORTRAN_SURFACE=1` to force the NumPy fallback.
+   - Set `MEMBRANE_DISABLE_FORTRAN_BENDING=1` to disable compiled bending kernels.
+   - Set `MEMBRANE_DISABLE_FORTRAN_TILT=1` to disable compiled tilt kernels (divergence/curvature).

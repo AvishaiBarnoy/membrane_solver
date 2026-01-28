@@ -48,6 +48,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Explicit build helper: `python -m membrane_solver.build_ext` for f2py kernels.
   - Hardened CI: Python version matrix (3.11, 3.12) and packaging-based test execution.
 - Optional Fortran (f2py) surface-energy kernel (`fortran_kernels/surface_energy.f90`) with automatic runtime fallback to NumPy when not built/available.
+- Optional Fortran (f2py) tilt kernels (`fortran_kernels/tilt_kernels.f90`) for P1 divergence and curvature accumulation with runtime fallback.
 - Closed-body outwardness validation (signed volume check) with open-body exemption for cases like droplets on hard planes.
 - Milestone C: 3D Kozlov annulus mesh with bilayer tilt↔curvature coupling (`meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml`) plus E2E regression tests (including leaflet sign flip).
 - Analytic regression benchmark for the 1-disk model (tensionless: distal/proximal tilts match; `docs/tex/1_disk_3d.pdf`).

@@ -23,6 +23,8 @@ class KernelSpec:
 _SURFACE_KERNEL: KernelSpec | None | bool = None
 _BENDING_GRAD_COTAN: KernelSpec | None | bool = None
 _BENDING_LAPLACIAN: KernelSpec | None | bool = None
+_TILT_DIVERGENCE: KernelSpec | None | bool = None
+_TILT_CURVATURE: KernelSpec | None | bool = None
 
 
 def get_surface_energy_kernel() -> KernelSpec | None:
@@ -185,4 +187,112 @@ def get_bending_laplacian_kernel() -> KernelSpec | None:
         return _BENDING_LAPLACIAN
 
     _BENDING_LAPLACIAN = False
+    return None
+
+
+def get_tilt_divergence_kernel() -> KernelSpec | None:
+    """Return the compiled tilt P1-divergence kernel, if available.
+
+    Disabled when `MEMBRANE_DISABLE_FORTRAN_TILT=1` or
+    `MEMBRANE_DISABLE_FORTRAN_TILT_DIVERGENCE=1`.
+    """
+    global _TILT_DIVERGENCE
+    if _TILT_DIVERGENCE is False:
+        return None
+    if isinstance(_TILT_DIVERGENCE, KernelSpec):
+        return _TILT_DIVERGENCE
+
+    if os.environ.get("MEMBRANE_DISABLE_FORTRAN_TILT") in {"1", "true", "TRUE"}:
+        _TILT_DIVERGENCE = False
+        return None
+    if os.environ.get("MEMBRANE_DISABLE_FORTRAN_TILT_DIVERGENCE") in {
+        "1",
+        "true",
+        "TRUE",
+    }:
+        _TILT_DIVERGENCE = False
+        return None
+
+    candidates = []
+    try:
+        import fortran_kernels.tilt_kernels as tk  # type: ignore
+
+        candidates.append(tk)
+    except Exception:
+        pass
+    try:
+        import tilt_kernels as tk  # type: ignore
+
+        candidates.append(tk)
+    except Exception:
+        pass
+
+    for mod in candidates:
+        fn = getattr(mod, "p1_triangle_divergence", None)
+        if not callable(fn):
+            submod = getattr(mod, "tilt_kernels_mod", None)
+            fn = getattr(submod, "p1_triangle_divergence", None) if submod else None
+        if not callable(fn):
+            continue
+
+        doc = getattr(fn, "__doc__", "") or ""
+        expects_transpose = "bounds (3," in doc
+        _TILT_DIVERGENCE = KernelSpec(func=fn, expects_transpose=expects_transpose)
+        return _TILT_DIVERGENCE
+
+    _TILT_DIVERGENCE = False
+    return None
+
+
+def get_tilt_curvature_kernel() -> KernelSpec | None:
+    """Return the compiled tilt curvature-data kernel, if available.
+
+    Disabled when `MEMBRANE_DISABLE_FORTRAN_TILT=1` or
+    `MEMBRANE_DISABLE_FORTRAN_TILT_CURVATURE=1`.
+    """
+    global _TILT_CURVATURE
+    if _TILT_CURVATURE is False:
+        return None
+    if isinstance(_TILT_CURVATURE, KernelSpec):
+        return _TILT_CURVATURE
+
+    if os.environ.get("MEMBRANE_DISABLE_FORTRAN_TILT") in {"1", "true", "TRUE"}:
+        _TILT_CURVATURE = False
+        return None
+    if os.environ.get("MEMBRANE_DISABLE_FORTRAN_TILT_CURVATURE") in {
+        "1",
+        "true",
+        "TRUE",
+    }:
+        _TILT_CURVATURE = False
+        return None
+
+    candidates = []
+    try:
+        import fortran_kernels.tilt_kernels as tk  # type: ignore
+
+        candidates.append(tk)
+    except Exception:
+        pass
+    try:
+        import tilt_kernels as tk  # type: ignore
+
+        candidates.append(tk)
+    except Exception:
+        pass
+
+    for mod in candidates:
+        fn = getattr(mod, "compute_curvature_data", None)
+        if not callable(fn):
+            submod = getattr(mod, "tilt_kernels_mod", None)
+            fn = getattr(submod, "compute_curvature_data", None) if submod else None
+        if not callable(fn):
+            continue
+
+        doc = getattr(fn, "__doc__", "") or ""
+        expects_transpose = "bounds (3," in doc
+        _TILT_CURVATURE = KernelSpec(func=fn, expects_transpose=expects_transpose)
+        return _TILT_CURVATURE
+
+    _TILT_CURVATURE = False
     return None
