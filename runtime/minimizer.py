@@ -741,6 +741,39 @@ class Minimizer:
             tilt_in_grad = np.zeros_like(tilts_in)
             tilt_out_grad = np.zeros_like(tilts_out)
 
+            def _leaflet_tilt_gradients() -> tuple[float, float]:
+                E0 = self._compute_energy_and_leaflet_tilt_gradients_array(
+                    positions=positions,
+                    tilts_in=tilts_in,
+                    tilts_out=tilts_out,
+                    tilt_in_grad_arr=tilt_in_grad,
+                    tilt_out_grad_arr=tilt_out_grad,
+                )
+                if hasattr(
+                    self.constraint_manager, "apply_tilt_gradient_modifications_array"
+                ):
+                    self.constraint_manager.apply_tilt_gradient_modifications_array(
+                        tilt_in_grad,
+                        tilt_out_grad,
+                        self.mesh,
+                        self.global_params,
+                        positions=positions,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                    )
+                if np.any(fixed_mask_in):
+                    tilt_in_grad[fixed_mask_in] = 0.0
+                if np.any(fixed_mask_out):
+                    tilt_out_grad[fixed_mask_out] = 0.0
+
+                gnorm = float(
+                    np.sqrt(
+                        np.sum(tilt_in_grad[~fixed_mask_in] ** 2)
+                        + np.sum(tilt_out_grad[~fixed_mask_out] ** 2)
+                    )
+                )
+                return float(E0), gnorm
+
             preconditioner = None
             if solver == "cg":
                 preconditioner = (
@@ -756,37 +789,7 @@ class Minimizer:
 
             if solver == "gd":
                 for _ in range(max_iters):
-                    E0 = self._compute_energy_and_leaflet_tilt_gradients_array(
-                        positions=positions,
-                        tilts_in=tilts_in,
-                        tilts_out=tilts_out,
-                        tilt_in_grad_arr=tilt_in_grad,
-                        tilt_out_grad_arr=tilt_out_grad,
-                    )
-                    if hasattr(
-                        self.constraint_manager,
-                        "apply_tilt_gradient_modifications_array",
-                    ):
-                        self.constraint_manager.apply_tilt_gradient_modifications_array(
-                            tilt_in_grad,
-                            tilt_out_grad,
-                            self.mesh,
-                            self.global_params,
-                            positions=positions,
-                            tilts_in=tilts_in,
-                            tilts_out=tilts_out,
-                        )
-                    if np.any(fixed_mask_in):
-                        tilt_in_grad[fixed_mask_in] = 0.0
-                    if np.any(fixed_mask_out):
-                        tilt_out_grad[fixed_mask_out] = 0.0
-
-                    gnorm = float(
-                        np.sqrt(
-                            np.sum(tilt_in_grad[~fixed_mask_in] ** 2)
-                            + np.sum(tilt_out_grad[~fixed_mask_out] ** 2)
-                        )
-                    )
+                    E0, gnorm = _leaflet_tilt_gradients()
                     if gnorm == 0.0:
                         break
                     if tol > 0.0 and gnorm < tol:
@@ -847,36 +850,7 @@ class Minimizer:
                         fixed_mask_out=fixed_mask_out,
                     )
 
-                E0 = self._compute_energy_and_leaflet_tilt_gradients_array(
-                    positions=positions,
-                    tilts_in=tilts_in,
-                    tilts_out=tilts_out,
-                    tilt_in_grad_arr=tilt_in_grad,
-                    tilt_out_grad_arr=tilt_out_grad,
-                )
-                if hasattr(
-                    self.constraint_manager, "apply_tilt_gradient_modifications_array"
-                ):
-                    self.constraint_manager.apply_tilt_gradient_modifications_array(
-                        tilt_in_grad,
-                        tilt_out_grad,
-                        self.mesh,
-                        self.global_params,
-                        positions=positions,
-                        tilts_in=tilts_in,
-                        tilts_out=tilts_out,
-                    )
-                if np.any(fixed_mask_in):
-                    tilt_in_grad[fixed_mask_in] = 0.0
-                if np.any(fixed_mask_out):
-                    tilt_out_grad[fixed_mask_out] = 0.0
-
-                gnorm = float(
-                    np.sqrt(
-                        np.sum(tilt_in_grad[~fixed_mask_in] ** 2)
-                        + np.sum(tilt_out_grad[~fixed_mask_out] ** 2)
-                    )
-                )
+                E0, gnorm = _leaflet_tilt_gradients()
                 if gnorm == 0.0 or (tol > 0.0 and gnorm < tol):
                     self.mesh.set_tilts_in_from_array(tilts_in)
                     self.mesh.set_tilts_out_from_array(tilts_out)
@@ -943,37 +917,7 @@ class Minimizer:
                         tilts_in = self.mesh.tilts_in_view().copy(order="F")
                         tilts_out = self.mesh.tilts_out_view().copy(order="F")
 
-                    E0 = self._compute_energy_and_leaflet_tilt_gradients_array(
-                        positions=positions,
-                        tilts_in=tilts_in,
-                        tilts_out=tilts_out,
-                        tilt_in_grad_arr=tilt_in_grad,
-                        tilt_out_grad_arr=tilt_out_grad,
-                    )
-                    if hasattr(
-                        self.constraint_manager,
-                        "apply_tilt_gradient_modifications_array",
-                    ):
-                        self.constraint_manager.apply_tilt_gradient_modifications_array(
-                            tilt_in_grad,
-                            tilt_out_grad,
-                            self.mesh,
-                            self.global_params,
-                            positions=positions,
-                            tilts_in=tilts_in,
-                            tilts_out=tilts_out,
-                        )
-                    if np.any(fixed_mask_in):
-                        tilt_in_grad[fixed_mask_in] = 0.0
-                    if np.any(fixed_mask_out):
-                        tilt_out_grad[fixed_mask_out] = 0.0
-
-                    gnorm = float(
-                        np.sqrt(
-                            np.sum(tilt_in_grad[~fixed_mask_in] ** 2)
-                            + np.sum(tilt_out_grad[~fixed_mask_out] ** 2)
-                        )
-                    )
+                    E0, gnorm = _leaflet_tilt_gradients()
                     if gnorm == 0.0 or (tol > 0.0 and gnorm < tol):
                         break
 
