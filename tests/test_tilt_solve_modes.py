@@ -100,3 +100,46 @@ def test_coupled_mode_makes_progress_on_tilt_field():
 
     assert e1 <= e0
     assert float(t1[0]) > float(t0[0])
+
+
+def test_cg_solver_respects_zero_iteration_limit():
+    mesh = parse_geometry(_tilt_patch_input(solve_mode="nested"))
+    mesh.global_parameters.set("tilt_solver", "cg")
+    mesh.global_parameters.set("tilt_cg_max_iters", 0)
+
+    minim = _build_minimizer(mesh)
+
+    t0 = mesh.vertices[4].tilt.copy()
+    minim.minimize(n_steps=1)
+    t1 = mesh.vertices[4].tilt.copy()
+
+    np.testing.assert_allclose(t1, t0, atol=1e-12)
+
+
+def test_cg_solver_reduces_energy_on_fixed_mesh():
+    mesh = parse_geometry(_tilt_patch_input(solve_mode="nested"))
+    mesh.global_parameters.set("tilt_solver", "cg")
+    mesh.global_parameters.set("tilt_cg_max_iters", 12)
+    mesh.global_parameters.set("tilt_step_size", 0.2)
+
+    minim = _build_minimizer(mesh)
+
+    e0 = minim.compute_energy()
+    minim.minimize(n_steps=1)
+    e1 = minim.compute_energy()
+
+    assert e1 <= e0
+
+
+def test_cg_solver_respects_fixed_tilts():
+    mesh = parse_geometry(_tilt_patch_input(solve_mode="nested"))
+    mesh.global_parameters.set("tilt_solver", "cg")
+    mesh.global_parameters.set("tilt_cg_max_iters", 12)
+    mesh.global_parameters.set("tilt_step_size", 0.2)
+
+    minim = _build_minimizer(mesh)
+
+    fixed_before = {vid: mesh.vertices[vid].tilt.copy() for vid in (0, 1, 2, 3)}
+    minim.minimize(n_steps=1)
+    for vid in (0, 1, 2, 3):
+        np.testing.assert_allclose(mesh.vertices[vid].tilt, fixed_before[vid])
