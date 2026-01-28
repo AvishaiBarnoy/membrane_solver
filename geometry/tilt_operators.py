@@ -24,10 +24,12 @@ which is constant over the triangle.
 
 from __future__ import annotations
 
+import os
 from typing import Tuple
 
 import numpy as np
 
+from fortran_kernels.loader import get_tilt_divergence_kernel
 from geometry.entities import _fast_cross
 
 
@@ -110,6 +112,68 @@ def p1_triangle_divergence(
         zeros1 = np.zeros(0, dtype=float)
         zeros3 = np.zeros((0, 3), dtype=float)
         return zeros1, zeros1, zeros3, zeros3, zeros3
+
+    kernel_spec = get_tilt_divergence_kernel()
+    if kernel_spec is not None:
+        strict = os.environ.get("MEMBRANE_FORTRAN_STRICT_NOCOPY") in {
+            "1",
+            "true",
+            "TRUE",
+        }
+        if (
+            positions.dtype != np.float64
+            or tilts.dtype != np.float64
+            or tri_rows.dtype != np.int32
+        ):
+            if strict:
+                raise TypeError(
+                    "Fortran tilt kernels require float64 positions/tilts and int32 tri_rows."
+                )
+            kernel_spec = None
+        elif not (
+            positions.flags["F_CONTIGUOUS"]
+            and tilts.flags["F_CONTIGUOUS"]
+            and tri_rows.flags["F_CONTIGUOUS"]
+        ):
+            if strict:
+                raise ValueError(
+                    "Fortran tilt kernels require F-contiguous positions/tilts/tri_rows (to avoid hidden copies)."
+                )
+            kernel_spec = None
+
+    if kernel_spec is not None:
+        nf = tri_rows.shape[0]
+        if kernel_spec.expects_transpose:
+            pos_t = positions.T
+            tilts_t = tilts.T
+            tri_t = tri_rows.T
+            div_tri = np.zeros(nf, dtype=np.float64, order="F")
+            area = np.zeros(nf, dtype=np.float64, order="F")
+            g0 = np.zeros((3, nf), dtype=np.float64, order="F")
+            g1 = np.zeros((3, nf), dtype=np.float64, order="F")
+            g2 = np.zeros((3, nf), dtype=np.float64, order="F")
+            kernel_spec.func(pos_t, tilts_t, tri_t, div_tri, area, g0, g1, g2, 1)
+            return (
+                np.asarray(div_tri),
+                np.asarray(area),
+                np.asarray(g0).T,
+                np.asarray(g1).T,
+                np.asarray(g2).T,
+            )
+
+        div_tri = np.zeros(nf, dtype=np.float64, order="F")
+        area = np.zeros(nf, dtype=np.float64, order="F")
+        g0 = np.zeros((nf, 3), dtype=np.float64, order="F")
+        g1 = np.zeros((nf, 3), dtype=np.float64, order="F")
+        g2 = np.zeros((nf, 3), dtype=np.float64, order="F")
+        kernel_spec.func(positions, tilts, tri_rows, div_tri, area, g0, g1, g2, 1)
+        return (
+            np.asarray(div_tri),
+            np.asarray(area),
+            np.asarray(g0),
+            np.asarray(g1),
+            np.asarray(g2),
+        )
 
     area, g0, g1, g2 = p1_triangle_shape_gradients(
         positions=positions, tri_rows=tri_rows

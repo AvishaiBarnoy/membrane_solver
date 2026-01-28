@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Dict, Tuple
 
@@ -69,6 +70,55 @@ def compute_curvature_data(
                 cached["weights"],
                 cached["tri_rows"],
             )
+
+    from fortran_kernels.loader import get_tilt_curvature_kernel
+
+    kernel_spec = get_tilt_curvature_kernel()
+    if kernel_spec is not None:
+        strict = os.environ.get("MEMBRANE_FORTRAN_STRICT_NOCOPY") in {
+            "1",
+            "true",
+            "TRUE",
+        }
+        if positions.dtype != np.float64 or tri_rows.dtype != np.int32:
+            if strict:
+                raise TypeError(
+                    "Fortran tilt kernels require float64 positions and int32 tri_rows."
+                )
+            kernel_spec = None
+        elif not (positions.flags["F_CONTIGUOUS"] and tri_rows.flags["F_CONTIGUOUS"]):
+            if strict:
+                raise ValueError(
+                    "Fortran tilt kernels require F-contiguous positions/tri_rows (to avoid hidden copies)."
+                )
+            kernel_spec = None
+
+    if kernel_spec is not None:
+        nf = tri_rows.shape[0]
+        if kernel_spec.expects_transpose:
+            pos_t = positions.T
+            tri_t = tri_rows.T
+            k_vecs = np.zeros((3, n_verts), dtype=np.float64, order="F")
+            vertex_areas = np.zeros(n_verts, dtype=np.float64, order="F")
+            weights = np.zeros((3, nf), dtype=np.float64, order="F")
+            kernel_spec.func(pos_t, tri_t, k_vecs, vertex_areas, weights, 1)
+            k_vecs = np.asarray(k_vecs).T
+            vertex_areas = np.asarray(vertex_areas)
+            weights = np.asarray(weights).T
+        else:
+            k_vecs = np.zeros((n_verts, 3), dtype=np.float64, order="F")
+            vertex_areas = np.zeros(n_verts, dtype=np.float64, order="F")
+            weights = np.zeros((nf, 3), dtype=np.float64, order="F")
+            kernel_spec.func(positions, tri_rows, k_vecs, vertex_areas, weights, 1)
+
+        if use_cache:
+            mesh._curvature_cache["k_vecs"] = k_vecs
+            mesh._curvature_cache["vertex_areas"] = vertex_areas
+            mesh._curvature_cache["weights"] = weights
+            mesh._curvature_cache["tri_rows"] = tri_rows
+            mesh._curvature_cache["curvature_rows_version"] = mesh._facet_loops_version
+            mesh._curvature_version = mesh._version
+        return k_vecs, vertex_areas, weights, tri_rows
 
     v0 = positions[tri_rows[:, 0]]
     v1 = positions[tri_rows[:, 1]]

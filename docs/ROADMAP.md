@@ -254,6 +254,7 @@ intended for development and planning; users should consult `README.md` and
     - [ ] **Compiled Extensions**: Port the hot-loop `compute_energy_and_gradient` to Fortran (f2py) or Rust (PyO3) for ~100x speedup.
     - [ ] **Parallelism**: Explore OpenMP for energy summation.
     - [ ] Re-evaluate Conjugate Gradient defaults once stability wins are locked in; keep GD as the conservative baseline.
+    - [ ] **Milestone C sign flip regression**: swapping rim source leaflet does not flip curvature direction (xfail in `tests/test_kozlov_annulus_milestone_c_e2e.py`).
 
 18. Code Quality
     - [ ] Refactor `fixed` constraints to be core entity properties (removing them from the constraint module list).
