@@ -594,14 +594,6 @@ class Minimizer:
         diag = np.where(diag > 1e-12, diag, 1.0)
         diag[fixed_mask] = 1.0
         return 1.0 / diag
-                factor = 0.5 * k_smooth
-                np.add.at(diag, tri_rows[:, 0], factor * (c1 + c2))
-                np.add.at(diag, tri_rows[:, 1], factor * (c2 + c0))
-                np.add.at(diag, tri_rows[:, 2], factor * (c0 + c1))
-
-        diag = np.where(diag > 1e-12, diag, 1.0)
-        diag[fixed_mask] = 1.0
-        return 1.0 / diag
 
     def _build_leaflet_tilt_cg_preconditioner(
         self,
