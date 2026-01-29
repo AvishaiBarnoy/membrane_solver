@@ -782,7 +782,25 @@ Some important tuning parameters in `global_parameters`:
 The default stepper is Gradient Descent with Armijo backtracking line search.
 You can switch to Conjugate Gradient with `cg` in interactive mode.
 
-## 7.1 Macros
+### 7.1 Tilt relaxation parameters
+
+These settings control the inner tilt relaxation loop (single-tilt or leaflet
+tilt) when `tilt_solve_mode` is `"nested"` or `"coupled"`:
+
+- `tilt_solver`
+  - `"gd"` (default): gradient descent tilt relaxation.
+  - `"cg"`: conjugate gradient tilt relaxation (opt-in).
+
+- `tilt_cg_max_iters`
+  Maximum CG iterations per tilt relaxation call. Defaults to the active
+  `tilt_inner_steps`/`tilt_coupled_steps` count when unset.
+
+- `tilt_cg_preconditioner`
+  - `"jacobi"` (default for CG): diagonal preconditioner based on tilt modulus
+    and smoothness weights.
+  - `"none"`: disable preconditioning.
+
+## 7.2 Macros
 
 Input files can define macros (Evolver-style command sequences). A macro is a
 named list of command lines; in interactive mode, typing the macro name runs
@@ -797,7 +815,7 @@ instructions:
   - gogo
 ```
 
-## 7.2 Explicit IDs (Optional)
+## 7.3 Explicit IDs (Optional)
 
 The input format supports an optional “explicit ID” mapping form for
 `vertices`, `edges`, `faces`, and `bodies`. This is useful when defining bodies
