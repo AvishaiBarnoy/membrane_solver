@@ -46,10 +46,8 @@ def compute_energy_and_gradient(
     if tri_rows is None or len(tri_rows) == 0:
         return 0.0, shape_grad, tilt_grad
 
-    tilt_sq = np.zeros(len(mesh.vertex_ids), dtype=float)
-    for row, vid in enumerate(mesh.vertex_ids):
-        tilt_vec = np.asarray(mesh.vertices[int(vid)].tilt, dtype=float)
-        tilt_sq[row] = float(np.dot(tilt_vec, tilt_vec))
+    tilts = mesh.tilts_view()
+    tilt_sq = np.einsum("ij,ij->i", tilts, tilts)
 
     tri_pos = positions[tri_rows]
     v0 = tri_pos[:, 0, :]
@@ -87,11 +85,11 @@ def compute_energy_and_gradient(
     np.add.at(vertex_areas, tri_rows[mask, 1], area_thirds)
     np.add.at(vertex_areas, tri_rows[mask, 2], area_thirds)
 
+    tilt_grad_arr = k_tilt * tilts * vertex_areas[:, None]
     for row, vid in enumerate(mesh.vertex_ids):
         vidx = int(vid)
         shape_grad[vidx] = grad_arr[row]
-        tilt_vec = np.asarray(mesh.vertices[vidx].tilt, dtype=float)
-        tilt_grad[vidx] = k_tilt * tilt_vec * vertex_areas[row]
+        tilt_grad[vidx] = tilt_grad_arr[row]
 
     return energy, shape_grad, tilt_grad
 
