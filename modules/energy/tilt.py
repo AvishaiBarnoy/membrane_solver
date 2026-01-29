@@ -39,7 +39,9 @@ def compute_energy_and_gradient(
         return 0.0, shape_grad, tilt_grad
 
     mesh.build_position_cache()
-    positions = mesh.positions_view()
+    positions = np.empty((len(mesh.vertex_ids), 3), dtype=float)
+    for row, vid in enumerate(mesh.vertex_ids):
+        positions[row] = mesh.vertices[int(vid)].position
     tri_rows, _ = mesh.triangle_row_cache()
     if tri_rows is None or len(tri_rows) == 0:
         return 0.0, shape_grad, tilt_grad
