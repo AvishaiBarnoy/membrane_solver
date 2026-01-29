@@ -46,6 +46,38 @@ class Vertex:
     tilt_out: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))
     tilt_fixed_in: bool = False
     tilt_fixed_out: bool = False
+    _mesh: "Mesh | None" = field(default=None, repr=False, compare=False)
+    _row: int = field(default=-1, repr=False, compare=False)
+
+    def __getattribute__(self, name: str) -> Any:
+        if name in ("tilt", "tilt_in", "tilt_out"):
+            mesh = object.__getattribute__(self, "_mesh")
+            row = object.__getattribute__(self, "_row")
+            if mesh is not None and row >= 0:
+                if name == "tilt":
+                    return mesh.tilts_view()[row]
+                if name == "tilt_in":
+                    return mesh.tilts_in_view()[row]
+                return mesh.tilts_out_view()[row]
+        return object.__getattribute__(self, name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in ("tilt", "tilt_in", "tilt_out"):
+            arr = np.asarray(value, dtype=float)
+            if arr.shape != (3,):
+                raise ValueError(f"{name} must be a 3-vector")
+            mesh = self.__dict__.get("_mesh")
+            row = self.__dict__.get("_row", -1)
+            if mesh is not None and row >= 0:
+                if name == "tilt":
+                    mesh.tilts_view()[row] = arr
+                elif name == "tilt_in":
+                    mesh.tilts_in_view()[row] = arr
+                else:
+                    mesh.tilts_out_view()[row] = arr
+            object.__setattr__(self, name, arr)
+            return
+        object.__setattr__(self, name, value)
 
     def copy(self):
         return Vertex(
@@ -879,14 +911,17 @@ class Mesh:
     _tilts_cache: "np.ndarray | None" = None
     _tilts_cache_version: int = -1
     _tilt_cache_counts: int = -1
+    _tilt_cache_vertex_version: int = -1
     _tilts_version: int = 0
     _tilts_in_cache: "np.ndarray | None" = None
     _tilts_in_cache_version: int = -1
     _tilts_in_cache_counts: int = -1
+    _tilts_in_cache_vertex_version: int = -1
     _tilts_in_version: int = 0
     _tilts_out_cache: "np.ndarray | None" = None
     _tilts_out_cache_version: int = -1
     _tilts_out_cache_counts: int = -1
+    _tilts_out_cache_vertex_version: int = -1
     _tilts_out_version: int = 0
     _triangle_rows_cache: "np.ndarray | None" = None
     _triangle_rows_cache_version: int = -1
@@ -1564,20 +1599,35 @@ class Mesh:
 
         self.build_position_cache()
         n_verts = len(self.vertex_ids)
-        if (
-            self._tilts_cache is not None
-            and self._tilts_cache_version == self._tilts_version
-            and self._tilt_cache_counts == n_verts
-            and self._tilts_cache.shape == (n_verts, 3)
-        ):
-            return self._tilts_cache
-
-        if self._tilts_cache is None or self._tilts_cache.shape != (n_verts, 3):
-            self._tilts_cache = np.empty((n_verts, 3), dtype=float, order="F")
-        for i, vid in enumerate(self.vertex_ids):
-            self._tilts_cache[i] = np.asarray(self.vertices[int(vid)].tilt, dtype=float)
+        needs_rebind = (
+            self._tilts_cache is None
+            or self._tilts_cache.shape != (n_verts, 3)
+            or self._tilt_cache_counts != n_verts
+            or self._tilt_cache_vertex_version != self._vertex_ids_version
+        )
+        if needs_rebind:
+            old_cache = (
+                None
+                if self._tilts_cache is None or self._tilts_cache.shape[0] != n_verts
+                else self._tilts_cache
+            )
+            new_cache = np.empty((n_verts, 3), dtype=float, order="F")
+            for i, vid in enumerate(self.vertex_ids):
+                vertex = self.vertices[int(vid)]
+                if (
+                    old_cache is not None
+                    and vertex._mesh is self
+                    and 0 <= vertex._row < old_cache.shape[0]
+                ):
+                    new_cache[i] = old_cache[vertex._row]
+                else:
+                    new_cache[i] = object.__getattribute__(vertex, "tilt")
+                vertex._mesh = self
+                vertex._row = i
+            self._tilts_cache = new_cache
+            self._tilt_cache_counts = n_verts
+            self._tilt_cache_vertex_version = self._vertex_ids_version
         self._tilts_cache_version = self._tilts_version
-        self._tilt_cache_counts = n_verts
         return self._tilts_cache
 
     def tilts_in_view(self) -> "np.ndarray":
@@ -1586,22 +1636,36 @@ class Mesh:
 
         self.build_position_cache()
         n_verts = len(self.vertex_ids)
-        if (
-            self._tilts_in_cache is not None
-            and self._tilts_in_cache_version == self._tilts_in_version
-            and self._tilts_in_cache_counts == n_verts
-            and self._tilts_in_cache.shape == (n_verts, 3)
-        ):
-            return self._tilts_in_cache
-
-        if self._tilts_in_cache is None or self._tilts_in_cache.shape != (n_verts, 3):
-            self._tilts_in_cache = np.empty((n_verts, 3), dtype=float, order="F")
-        for i, vid in enumerate(self.vertex_ids):
-            self._tilts_in_cache[i] = np.asarray(
-                self.vertices[int(vid)].tilt_in, dtype=float
+        needs_rebind = (
+            self._tilts_in_cache is None
+            or self._tilts_in_cache.shape != (n_verts, 3)
+            or self._tilts_in_cache_counts != n_verts
+            or self._tilts_in_cache_vertex_version != self._vertex_ids_version
+        )
+        if needs_rebind:
+            old_cache = (
+                None
+                if self._tilts_in_cache is None
+                or self._tilts_in_cache.shape[0] != n_verts
+                else self._tilts_in_cache
             )
+            new_cache = np.empty((n_verts, 3), dtype=float, order="F")
+            for i, vid in enumerate(self.vertex_ids):
+                vertex = self.vertices[int(vid)]
+                if (
+                    old_cache is not None
+                    and vertex._mesh is self
+                    and 0 <= vertex._row < old_cache.shape[0]
+                ):
+                    new_cache[i] = old_cache[vertex._row]
+                else:
+                    new_cache[i] = object.__getattribute__(vertex, "tilt_in")
+                vertex._mesh = self
+                vertex._row = i
+            self._tilts_in_cache = new_cache
+            self._tilts_in_cache_counts = n_verts
+            self._tilts_in_cache_vertex_version = self._vertex_ids_version
         self._tilts_in_cache_version = self._tilts_in_version
-        self._tilts_in_cache_counts = n_verts
         return self._tilts_in_cache
 
     def tilts_out_view(self) -> "np.ndarray":
@@ -1610,41 +1674,52 @@ class Mesh:
 
         self.build_position_cache()
         n_verts = len(self.vertex_ids)
-        if (
-            self._tilts_out_cache is not None
-            and self._tilts_out_cache_version == self._tilts_out_version
-            and self._tilts_out_cache_counts == n_verts
-            and self._tilts_out_cache.shape == (n_verts, 3)
-        ):
-            return self._tilts_out_cache
-
-        if self._tilts_out_cache is None or self._tilts_out_cache.shape != (
-            n_verts,
-            3,
-        ):
-            self._tilts_out_cache = np.empty((n_verts, 3), dtype=float, order="F")
-        for i, vid in enumerate(self.vertex_ids):
-            self._tilts_out_cache[i] = np.asarray(
-                self.vertices[int(vid)].tilt_out, dtype=float
+        needs_rebind = (
+            self._tilts_out_cache is None
+            or self._tilts_out_cache.shape != (n_verts, 3)
+            or self._tilts_out_cache_counts != n_verts
+            or self._tilts_out_cache_vertex_version != self._vertex_ids_version
+        )
+        if needs_rebind:
+            old_cache = (
+                None
+                if self._tilts_out_cache is None
+                or self._tilts_out_cache.shape[0] != n_verts
+                else self._tilts_out_cache
             )
+            new_cache = np.empty((n_verts, 3), dtype=float, order="F")
+            for i, vid in enumerate(self.vertex_ids):
+                vertex = self.vertices[int(vid)]
+                if (
+                    old_cache is not None
+                    and vertex._mesh is self
+                    and 0 <= vertex._row < old_cache.shape[0]
+                ):
+                    new_cache[i] = old_cache[vertex._row]
+                else:
+                    new_cache[i] = object.__getattribute__(vertex, "tilt_out")
+                vertex._mesh = self
+                vertex._row = i
+            self._tilts_out_cache = new_cache
+            self._tilts_out_cache_counts = n_verts
+            self._tilts_out_cache_vertex_version = self._vertex_ids_version
         self._tilts_out_cache_version = self._tilts_out_version
-        self._tilts_out_cache_counts = n_verts
         return self._tilts_out_cache
 
     def touch_tilts(self) -> None:
         """Invalidate cached tilt arrays after direct per-vertex updates."""
         self._tilts_version += 1
-        self._tilts_cache_version = -1
+        self._tilts_cache_version = self._tilts_version
 
     def touch_tilts_in(self) -> None:
         """Invalidate cached inner-leaflet tilt arrays after per-vertex updates."""
         self._tilts_in_version += 1
-        self._tilts_in_cache_version = -1
+        self._tilts_in_cache_version = self._tilts_in_version
 
     def touch_tilts_out(self) -> None:
         """Invalidate cached outer-leaflet tilt arrays after per-vertex updates."""
         self._tilts_out_version += 1
-        self._tilts_out_cache_version = -1
+        self._tilts_out_cache_version = self._tilts_out_version
 
     def set_tilts_from_array(self, tilts: "np.ndarray") -> None:
         """Scatter a dense tilt array back onto vertex objects."""
@@ -1656,11 +1731,15 @@ class Mesh:
             raise ValueError("tilts must have shape (N_vertices, 3)")
 
         self._tilts_version += 1
-        for row, vid in enumerate(self.vertex_ids):
-            self.vertices[int(vid)].tilt = tilts_arr[row].copy()
-        self._tilts_cache = tilts_arr.copy(order="F")
+        self._tilts_cache = np.array(tilts_arr, dtype=float, order="F", copy=True)
         self._tilts_cache_version = self._tilts_version
         self._tilt_cache_counts = len(self.vertex_ids)
+        self._tilt_cache_vertex_version = self._vertex_ids_version
+        for row, vid in enumerate(self.vertex_ids):
+            vertex = self.vertices[int(vid)]
+            vertex._mesh = self
+            vertex._row = row
+            object.__setattr__(vertex, "tilt", self._tilts_cache[row].copy())
 
     def set_tilts_in_from_array(self, tilts: "np.ndarray") -> None:
         """Scatter a dense inner-leaflet tilt array back onto vertex objects."""
@@ -1672,11 +1751,15 @@ class Mesh:
             raise ValueError("tilts_in must have shape (N_vertices, 3)")
 
         self._tilts_in_version += 1
-        for row, vid in enumerate(self.vertex_ids):
-            self.vertices[int(vid)].tilt_in = tilts_arr[row].copy()
-        self._tilts_in_cache = tilts_arr.copy(order="F")
+        self._tilts_in_cache = np.array(tilts_arr, dtype=float, order="F", copy=True)
         self._tilts_in_cache_version = self._tilts_in_version
         self._tilts_in_cache_counts = len(self.vertex_ids)
+        self._tilts_in_cache_vertex_version = self._vertex_ids_version
+        for row, vid in enumerate(self.vertex_ids):
+            vertex = self.vertices[int(vid)]
+            vertex._mesh = self
+            vertex._row = row
+            object.__setattr__(vertex, "tilt_in", self._tilts_in_cache[row].copy())
 
     def set_tilts_out_from_array(self, tilts: "np.ndarray") -> None:
         """Scatter a dense outer-leaflet tilt array back onto vertex objects."""
@@ -1688,11 +1771,15 @@ class Mesh:
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
 
         self._tilts_out_version += 1
-        for row, vid in enumerate(self.vertex_ids):
-            self.vertices[int(vid)].tilt_out = tilts_arr[row].copy()
-        self._tilts_out_cache = tilts_arr.copy(order="F")
+        self._tilts_out_cache = np.array(tilts_arr, dtype=float, order="F", copy=True)
         self._tilts_out_cache_version = self._tilts_out_version
         self._tilts_out_cache_counts = len(self.vertex_ids)
+        self._tilts_out_cache_vertex_version = self._vertex_ids_version
+        for row, vid in enumerate(self.vertex_ids):
+            vertex = self.vertices[int(vid)]
+            vertex._mesh = self
+            vertex._row = row
+            object.__setattr__(vertex, "tilt_out", self._tilts_out_cache[row].copy())
 
     def build_facet_vertex_loops(self):
         """Precompute ordered vertex loops for all facets.
