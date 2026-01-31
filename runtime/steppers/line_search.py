@@ -53,6 +53,9 @@ def backtracking_line_search(
         Whether the step succeeded and the updated step size.
     """
     original_positions = {vidx: v.position.copy() for vidx, v in mesh.vertices.items()}
+    original_tilts = mesh.tilts_view().copy(order="F")
+    original_tilts_in = mesh.tilts_in_view().copy(order="F")
+    original_tilts_out = mesh.tilts_out_view().copy(order="F")
 
     energy0 = energy_fn()
 
@@ -109,6 +112,9 @@ def backtracking_line_search(
                 # Treat as failure -> backtrack
                 for vidx, vertex in mesh.vertices.items():
                     vertex.position[:] = original_positions[vidx]
+                mesh.set_tilts_from_array(original_tilts)
+                mesh.set_tilts_in_from_array(original_tilts_in)
+                mesh.set_tilts_out_from_array(original_tilts_out)
                 mesh.increment_version()
 
                 alpha *= beta
@@ -141,6 +147,9 @@ def backtracking_line_search(
         # Reject this scale: restore and try a smaller one.
         for vidx, vertex in mesh.vertices.items():
             vertex.position[:] = original_positions[vidx]
+        mesh.set_tilts_from_array(original_tilts)
+        mesh.set_tilts_in_from_array(original_tilts_in)
+        mesh.set_tilts_out_from_array(original_tilts_out)
         mesh.increment_version()
 
         alpha *= beta
@@ -157,6 +166,9 @@ def backtracking_line_search(
     )
     for vidx, vertex in mesh.vertices.items():
         vertex.position[:] = original_positions[vidx]
+    mesh.set_tilts_from_array(original_tilts)
+    mesh.set_tilts_in_from_array(original_tilts_in)
+    mesh.set_tilts_out_from_array(original_tilts_out)
     mesh.increment_version()
 
     logger.debug(
@@ -192,6 +204,9 @@ def backtracking_line_search_array(
         if not getattr(vertex, "fixed", False):
             movable_rows.append(row)
         original_positions[vidx] = vertex.position.copy()
+    original_tilts = mesh.tilts_view().copy(order="F")
+    original_tilts_in = mesh.tilts_in_view().copy(order="F")
+    original_tilts_out = mesh.tilts_out_view().copy(order="F")
 
     energy0 = energy_fn()
 
@@ -226,6 +241,9 @@ def backtracking_line_search_array(
             if not check_max_normal_change(mesh, original_positions):
                 for vidx, pos in original_positions.items():
                     mesh.vertices[vidx].position[:] = pos
+                mesh.set_tilts_from_array(original_tilts)
+                mesh.set_tilts_in_from_array(original_tilts_in)
+                mesh.set_tilts_out_from_array(original_tilts_out)
                 mesh.increment_version()
                 alpha *= beta
                 backtracks += 1
@@ -255,6 +273,9 @@ def backtracking_line_search_array(
 
         for vidx, pos in original_positions.items():
             mesh.vertices[vidx].position[:] = pos
+        mesh.set_tilts_from_array(original_tilts)
+        mesh.set_tilts_in_from_array(original_tilts_in)
+        mesh.set_tilts_out_from_array(original_tilts_out)
         mesh.increment_version()
 
         alpha *= beta
@@ -268,6 +289,9 @@ def backtracking_line_search_array(
     )
     for vidx, pos in original_positions.items():
         mesh.vertices[vidx].position[:] = pos
+    mesh.set_tilts_from_array(original_tilts)
+    mesh.set_tilts_in_from_array(original_tilts_in)
+    mesh.set_tilts_out_from_array(original_tilts_out)
     mesh.increment_version()
 
     logger.debug(
