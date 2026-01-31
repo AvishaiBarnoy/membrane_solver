@@ -52,11 +52,7 @@ def backtracking_line_search(
     tuple[bool, float]
         Whether the step succeeded and the updated step size.
     """
-    original_positions = {
-        vidx: v.position.copy()
-        for vidx, v in mesh.vertices.items()
-        if not getattr(v, "fixed", False)
-    }
+    original_positions = {vidx: v.position.copy() for vidx, v in mesh.vertices.items()}
 
     energy0 = energy_fn()
 
@@ -72,6 +68,19 @@ def backtracking_line_search(
         max_dir_norm = max(np.linalg.norm(d) for d in direction.values())
 
     g_dot_d = sum(np.dot(gradient[vidx], direction[vidx]) for vidx in direction)
+    if logger.isEnabledFor(logging.DEBUG):
+        gnorm = float(
+            np.sqrt(sum(np.dot(gradient[vidx], gradient[vidx]) for vidx in direction))
+        )
+        dnorm = float(
+            np.sqrt(sum(np.dot(direction[vidx], direction[vidx]) for vidx in direction))
+        )
+        logger.debug(
+            "Line search stats: g_dot_d=%.6e g_norm=%.6e d_norm=%.6e",
+            g_dot_d,
+            gnorm,
+            dnorm,
+        )
 
     if g_dot_d >= 0:
         logger.debug("Non-descent direction provided; skipping step.")
@@ -99,8 +108,6 @@ def backtracking_line_search(
             if not check_max_normal_change(mesh, original_positions):
                 # Treat as failure -> backtrack
                 for vidx, vertex in mesh.vertices.items():
-                    if getattr(vertex, "fixed", False):
-                        continue
                     vertex.position[:] = original_positions[vidx]
                 mesh.increment_version()
 
@@ -133,8 +140,6 @@ def backtracking_line_search(
 
         # Reject this scale: restore and try a smaller one.
         for vidx, vertex in mesh.vertices.items():
-            if getattr(vertex, "fixed", False):
-                continue
             vertex.position[:] = original_positions[vidx]
         mesh.increment_version()
 
@@ -151,8 +156,6 @@ def backtracking_line_search(
         backtracks,
     )
     for vidx, vertex in mesh.vertices.items():
-        if getattr(vertex, "fixed", False):
-            continue
         vertex.position[:] = original_positions[vidx]
     mesh.increment_version()
 
@@ -186,9 +189,8 @@ def backtracking_line_search_array(
     original_positions = {}
     for row, vidx in enumerate(vertex_ids):
         vertex = mesh.vertices[vidx]
-        if getattr(vertex, "fixed", False):
-            continue
-        movable_rows.append(row)
+        if not getattr(vertex, "fixed", False):
+            movable_rows.append(row)
         original_positions[vidx] = vertex.position.copy()
 
     energy0 = energy_fn()
@@ -222,9 +224,8 @@ def backtracking_line_search_array(
 
         if not is_safe_small_step:
             if not check_max_normal_change(mesh, original_positions):
-                for row in movable_rows:
-                    vidx = vertex_ids[row]
-                    mesh.vertices[vidx].position[:] = original_positions[vidx]
+                for vidx, pos in original_positions.items():
+                    mesh.vertices[vidx].position[:] = pos
                 mesh.increment_version()
                 alpha *= beta
                 backtracks += 1
@@ -252,9 +253,8 @@ def backtracking_line_search_array(
             new_step = min(alpha * gamma, alpha_max)
             return True, new_step
 
-        for row in movable_rows:
-            vidx = vertex_ids[row]
-            mesh.vertices[vidx].position[:] = original_positions[vidx]
+        for vidx, pos in original_positions.items():
+            mesh.vertices[vidx].position[:] = pos
         mesh.increment_version()
 
         alpha *= beta
@@ -266,9 +266,8 @@ def backtracking_line_search_array(
         "Line search failed after %d backtracks; reverting positions and shrinking step size.",
         backtracks,
     )
-    for row in movable_rows:
-        vidx = vertex_ids[row]
-        mesh.vertices[vidx].position[:] = original_positions[vidx]
+    for vidx, pos in original_positions.items():
+        mesh.vertices[vidx].position[:] = pos
     mesh.increment_version()
 
     logger.debug(
