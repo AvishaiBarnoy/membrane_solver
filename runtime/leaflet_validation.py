@@ -23,16 +23,26 @@ def validate_leaflet_absence_topology(mesh: Mesh, global_params) -> None:
     """Validate mesh topology for leaflet absence modeling.
 
     When a leaflet is marked absent on certain vertex presets (e.g. disk),
-    the discrete model assumes a clean boundary: no triangle should contain a
-    mixture of absent and present vertices for that leaflet. If such triangles
-    exist, the effective boundary becomes ill-defined (dropping triangles
-    changes the discrete boundary conditions).
+    the discrete model can operate in two modes:
+
+    - strict (default): the absent region is treated as a separate patch that
+      should not share triangles with present vertices. In this mode, any
+      triangle containing a mix of absent/present vertices is rejected.
+    - triangles: triangles that touch an absent vertex are treated as belonging
+      to the absent region and are masked out of the corresponding leaflet
+      energies. This allows shared boundary vertices (rim) without requiring
+      duplicate vertex rings.
 
     Raises
     ------
     ValueError
         If a straddling triangle is detected.
     """
+    mode = str(global_params.get("leaflet_out_absence_mode", "strict") or "strict")
+    mode = mode.strip().lower()
+    if mode in {"triangles", "facet", "facets", "triangle"}:
+        return
+
     mesh.build_position_cache()
     tri_rows, _ = mesh.triangle_row_cache()
     if tri_rows is None or len(tri_rows) == 0:
