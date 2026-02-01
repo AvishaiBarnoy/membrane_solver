@@ -1180,6 +1180,24 @@ STEP SIZE:\t {self.step_size}
             if getattr(vertex, "fixed", False):
                 grad[vidx][:] = 0.0
 
+    @staticmethod
+    def _log_energy_phase(iteration: int, phase: str, energy: float) -> None:
+        logger.debug("Iteration %d: %s energy=%.6f", iteration, phase, energy)
+
+    @staticmethod
+    def _log_step_direction_stats(iteration: int, grad_arr: np.ndarray) -> None:
+        norm = float(np.linalg.norm(grad_arr))
+        if norm <= 0.0:
+            logger.debug("Iteration %d: grad_norm=0", iteration)
+            return
+        step_dir = -grad_arr / norm
+        logger.debug(
+            "Iteration %d: grad_norm=%.3e step_dir_norm=%.3e",
+            iteration,
+            norm,
+            float(np.linalg.norm(step_dir)),
+        )
+
     def project_constraints(self, grad: Dict[int, np.ndarray] | np.ndarray) -> None:
         """Project gradients onto the feasible set defined by constraints."""
 
@@ -1296,6 +1314,10 @@ STEP SIZE:\t {self.step_size}
             self.project_constraints_array(grad_arr)
             last_grad_arr = grad_arr
 
+            if logger.isEnabledFor(logging.DEBUG):
+                self._log_energy_phase(i, "pre_step", E)
+                self._log_step_direction_stats(i, grad_arr)
+
             # check convergence by gradient norm
             grad_norm = float(np.linalg.norm(grad_arr))
             if grad_norm < self.tol:
@@ -1335,8 +1357,14 @@ STEP SIZE:\t {self.step_size}
                 if self._has_enforceable_constraints
                 else None,
             )
+            if logger.isEnabledFor(logging.DEBUG):
+                energy_post_step = self.compute_energy()
+                self._log_energy_phase(i, "post_step", energy_post_step)
             # Keep any stored 3D tilt field tangent to the updated surface.
             self.mesh.project_tilts_to_tangent()
+            if logger.isEnabledFor(logging.DEBUG):
+                energy_post_project = self.compute_energy()
+                self._log_energy_phase(i, "post_step_tilt_project", energy_post_project)
             if step_mode == "fixed":
                 # Keep the cross-iteration step size constant, but still allow
                 # the line search to backtrack within each iteration for
@@ -1431,6 +1459,13 @@ STEP SIZE:\t {self.step_size}
                         )
                         self.enforce_constraints_after_mesh_ops(self.mesh)
                         self.mesh.project_tilts_to_tangent()
+                        if logger.isEnabledFor(logging.DEBUG):
+                            energy_post_constraints = self.compute_energy()
+                            self._log_energy_phase(
+                                i,
+                                "post_step_constraints",
+                                energy_post_constraints,
+                            )
                         reset = getattr(self.stepper, "reset", None)
                         if callable(reset):
                             reset()
