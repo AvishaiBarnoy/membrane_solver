@@ -55,7 +55,6 @@ definitions:
     tilt_thetaB_group_in: disk
   rim:
     constraints:
-    - pin_to_plane
     - pin_to_circle
     pin_to_plane_normal:
     - 0.0
@@ -75,7 +74,7 @@ definitions:
     - 0.0
     - 0.0
     - 0.0
-    pin_to_circle_mode: fixed
+    pin_to_circle_mode: slide
     rim_slope_match_group: rim
   outer_rim:
     constraints:
@@ -105,8 +104,6 @@ energy_modules:
 - bending_tilt_out
 - tilt_in
 - tilt_out
-- tilt_smoothness_in
-- tilt_smoothness_out
 - tilt_thetaB_contact_in
 vertices:
 - - 0.0
@@ -1835,4 +1832,18 @@ macros:
   - tstat in
   - tstat out
   - energy
+  - s bilayer
+  profile_relax:
+  - print msg Running profile_relax (coarse -> refine -> relax).
+  - g40
+  - r
+  - V5
+  - g100
+  - r
+  - V5
+  - g120
+  - tstat in
+  - tstat out
+  - energy
+  - energy curvature
   - s bilayer
