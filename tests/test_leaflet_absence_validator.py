@@ -55,3 +55,14 @@ def test_leaflet_absence_validator_fails_on_straddling_triangle() -> None:
     gp = GlobalParameters({"leaflet_out_absent_presets": ["disk"]})
     with pytest.raises(ValueError, match="Leaflet absence topology invalid"):
         validate_leaflet_absence_topology(mesh, gp)
+
+
+def test_leaflet_absence_validator_skips_in_triangles_mode() -> None:
+    mesh = _build_one_triangle_mesh(presets=["disk", None, None])
+    gp = GlobalParameters(
+        {
+            "leaflet_out_absent_presets": ["disk"],
+            "leaflet_out_absence_mode": "triangles",
+        }
+    )
+    validate_leaflet_absence_topology(mesh, gp)
