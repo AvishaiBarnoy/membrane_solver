@@ -13,7 +13,7 @@ global_parameters:
   tilt_thetaB_center: [0.0, 0.0, 0.0]
   tilt_thetaB_normal: [0.0, 0.0, 1.0]
   rim_slope_match_thetaB_param: tilt_thetaB_value
-  rim_slope_match_group: rim
+  rim_slope_match_group: disk
   rim_slope_match_outer_group: outer
   rim_slope_match_disk_group: disk
   rim_slope_match_strength: 0.0
@@ -35,17 +35,14 @@ definitions:
   disk:
     constraints:
     tilt_thetaB_group_in: disk
-  rim:
-    constraints:
-    - pin_to_circle
-    pin_to_plane_normal: [0.0, 0.0, 1.0]
-    pin_to_plane_point: [0.0, 0.0, 0.0]
-    pin_to_circle_group: rim
-    pin_to_circle_radius: 1.0
+    pin_to_circle_group: disk
+    pin_to_circle_radius: 0.466666666666667
     pin_to_circle_normal: [0.0, 0.0, 1.0]
     pin_to_circle_point: [0.0, 0.0, 0.0]
-    pin_to_circle_mode: slide
-    rim_slope_match_group: rim
+    pin_to_circle_mode: fixed
+  rim:
+    constraints: []
+    rim_slope_match_group: outer
   outer_rim:
     constraints:
     - pin_to_plane
@@ -65,18 +62,18 @@ energy_modules:
 - tilt_thetaB_contact_in
 vertices:
   - [0.0, 0.0, 0.0, {preset: disk, tilt_fixed_in: true, tilt_fixed_out: true, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0], fixed: true}]
-  - [-0.466666666666667, -0.0, 0.0, {preset: disk, rim_slope_match_group: disk}]
-  - [-0.40414518843273833, -0.23333333333333345, 0.0, {preset: disk, rim_slope_match_group: disk}]
-  - [-0.23333333333333353, -0.40414518843273833, 0.0, {preset: disk, rim_slope_match_group: disk}]
-  - [-2.857509198010493e-17, -0.466666666666667, 0.0, {preset: disk, rim_slope_match_group: disk}]
-  - [0.23333333333333345, -0.4041451884327384, 0.0, {preset: disk, rim_slope_match_group: disk}]
-  - [0.40414518843273833, -0.23333333333333345, 0.0, {preset: disk, rim_slope_match_group: disk}]
-  - [0.466666666666667, -5.715018396020985e-17, 0.0, {preset: disk, rim_slope_match_group: disk}]
-  - [0.4041451884327384, 0.23333333333333336, 0.0, {preset: disk, rim_slope_match_group: disk}]
-  - [0.23333333333333373, 0.4041451884327382, 0.0, {preset: disk, rim_slope_match_group: disk}]
-  - [8.572527594031477e-17, 0.466666666666667, 0.0, {preset: disk, rim_slope_match_group: disk}]
-  - [-0.23333333333333353, 0.40414518843273833, 0.0, {preset: disk, rim_slope_match_group: disk}]
-  - [-0.4041451884327382, 0.23333333333333373, 0.0, {preset: disk, rim_slope_match_group: disk}]
+  - [-0.466666666666667, -0.0, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [-0.40414518843273833, -0.23333333333333345, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [-0.23333333333333353, -0.40414518843273833, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [-2.857509198010493e-17, -0.466666666666667, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [0.23333333333333345, -0.4041451884327384, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [0.40414518843273833, -0.23333333333333345, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [0.466666666666667, -5.715018396020985e-17, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [0.4041451884327384, 0.23333333333333336, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [0.23333333333333373, 0.4041451884327382, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [8.572527594031477e-17, 0.466666666666667, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [-0.23333333333333353, 0.40414518843273833, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [-0.4041451884327382, 0.23333333333333373, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
   - [0.2666666666666665, 0.0, 0.0, {preset: disk}]
   - [0.23094010767585013, 0.13333333333333322, 0.0, {preset: disk}]
   - [0.13333333333333328, 0.23094010767585013, 0.0, {preset: disk}]
@@ -101,18 +98,18 @@ vertices:
   - [-1.8369701987210297e-16, -1.0, 0.0, {preset: rim}]
   - [0.5000000000000001, -0.8660254037844386, 0.0, {preset: rim}]
   - [0.8660254037844384, -0.5000000000000004, 0.0, {preset: rim}]
-  - [2.833333333333334, 0.0, 0.001, {rim_slope_match_group: outer}]
-  - [2.4537386440559104, 1.4166666666666667, 0.001, {rim_slope_match_group: outer}]
-  - [1.4166666666666672, 2.45373864405591, 0.001, {rim_slope_match_group: outer}]
-  - [1.7349162987920842e-16, 2.833333333333334, 0.001, {rim_slope_match_group: outer}]
-  - [-1.4166666666666663, 2.45373864405591, 0.001, {rim_slope_match_group: outer}]
-  - [-2.4537386440559104, 1.4166666666666667, 0.001, {rim_slope_match_group: outer}]
-  - [-2.833333333333334, 3.4698325975841684e-16, 0.001, {rim_slope_match_group: outer}]
-  - [-2.4537386440559104, -1.4166666666666663, 0.001, {rim_slope_match_group: outer}]
-  - [-1.416666666666668, -2.453738644055909, 0.001, {rim_slope_match_group: outer}]
-  - [-5.204748896376252e-16, -2.833333333333334, 0.001, {rim_slope_match_group: outer}]
-  - [1.4166666666666672, -2.45373864405591, 0.001, {rim_slope_match_group: outer}]
-  - [2.453738644055909, -1.416666666666668, 0.001, {rim_slope_match_group: outer}]
+  - [2.833333333333334, 0.0, 0.001]
+  - [2.4537386440559104, 1.4166666666666667, 0.001]
+  - [1.4166666666666672, 2.45373864405591, 0.001]
+  - [1.7349162987920842e-16, 2.833333333333334, 0.001]
+  - [-1.4166666666666663, 2.45373864405591, 0.001]
+  - [-2.4537386440559104, 1.4166666666666667, 0.001]
+  - [-2.833333333333334, 3.4698325975841684e-16, 0.001]
+  - [-2.4537386440559104, -1.4166666666666663, 0.001]
+  - [-1.416666666666668, -2.453738644055909, 0.001]
+  - [-5.204748896376252e-16, -2.833333333333334, 0.001]
+  - [1.4166666666666672, -2.45373864405591, 0.001]
+  - [2.453738644055909, -1.416666666666668, 0.001]
   - [4.666666666666668, 0.0, 0.0]
   - [4.0414518843273814, 2.3333333333333335, 0.0]
   - [2.3333333333333344, 4.0414518843273814, 0.0]
