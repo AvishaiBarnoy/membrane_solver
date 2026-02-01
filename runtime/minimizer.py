@@ -11,6 +11,7 @@ from geometry.entities import Mesh
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.diagnostics.gauss_bonnet import GaussBonnetMonitor
 from runtime.energy_manager import EnergyModuleManager
+from runtime.leaflet_validation import validate_leaflet_absence_topology
 from runtime.steppers.base import BaseStepper
 
 logger = logging.getLogger("membrane_solver")
@@ -1313,6 +1314,7 @@ STEP SIZE:\t {self.step_size}
         self, n_steps: int = 1, callback: Optional[Callable[["Mesh", int], None]] = None
     ):
         """Run the optimization loop for ``n_steps`` iterations."""
+        validate_leaflet_absence_topology(self.mesh, self.global_params)
         zero_step_counter = 0
         step_success = True
 
