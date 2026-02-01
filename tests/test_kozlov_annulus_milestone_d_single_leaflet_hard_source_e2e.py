@@ -2,6 +2,7 @@ import os
 import sys
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -10,6 +11,8 @@ from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
+
+pytestmark = pytest.mark.e2e
 
 
 def _milestone_d_single_leaflet_hard_source_data(

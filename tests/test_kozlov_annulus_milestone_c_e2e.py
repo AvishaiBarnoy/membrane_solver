@@ -12,6 +12,8 @@ from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
 
+pytestmark = pytest.mark.e2e
+
 
 def _milestone_c_soft_source_data(*, rim_source_strength: float = 25.0) -> dict:
     """Return a self-contained Milestone-C annulus benchmark geometry dict.
