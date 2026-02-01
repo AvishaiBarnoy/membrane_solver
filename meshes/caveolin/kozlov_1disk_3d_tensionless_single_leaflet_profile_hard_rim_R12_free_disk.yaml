@@ -2,6 +2,8 @@ global_parameters:
   surface_tension: 0.0
   bending_energy_model: helfrich
   spontaneous_curvature: 0.0
+  leaflet_out_absent_presets: ["disk"]
+  leaflet_out_absence_mode: triangles
   bending_modulus_in: 1.0
   bending_modulus_out: 1.0
   tilt_modulus_in: 225.0
