@@ -13,6 +13,8 @@ from runtime.minimizer import Minimizer
 from runtime.refinement import refine_triangle_mesh
 from runtime.steppers.gradient_descent import GradientDescent
 
+pytestmark = pytest.mark.e2e
+
 
 def _relax(mesh, *, inner_steps: int) -> Minimizer:
     mesh.global_parameters.update(

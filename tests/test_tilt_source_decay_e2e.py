@@ -12,6 +12,8 @@ from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
 
+pytestmark = pytest.mark.e2e
+
 
 def _relax_rect_tilt_source(
     *, tilt_rigidity: float, inner_steps: int
