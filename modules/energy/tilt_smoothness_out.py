@@ -16,6 +16,10 @@ import numpy as np
 
 from geometry.entities import Mesh
 from modules.energy import tilt_smoothness as _base
+from modules.energy.leaflet_presence import (
+    leaflet_absent_vertex_mask,
+    leaflet_present_triangle_mask,
+)
 
 USES_TILT_LEAFLETS = True
 
@@ -78,7 +82,7 @@ def compute_energy_and_gradient_array(
     tilt_out_grad_arr: np.ndarray | None = None,
 ) -> float:
     """Dense-array outer-leaflet smoothness energy accumulation."""
-    _ = global_params, index_map, tilts_in, tilt_in_grad_arr, grad_arr
+    _ = index_map, tilts_in, tilt_in_grad_arr, grad_arr
     k_smooth = _resolve_bending_modulus(param_resolver)
     if k_smooth == 0.0:
         return 0.0
@@ -89,12 +93,23 @@ def compute_energy_and_gradient_array(
     if tri_rows is None:
         return 0.0
 
+    absent_mask = leaflet_absent_vertex_mask(mesh, global_params, leaflet="out")
+    tri_keep = leaflet_present_triangle_mask(
+        mesh, tri_rows, absent_vertex_mask=absent_mask
+    )
+    if tri_keep.size and not np.any(tri_keep):
+        return 0.0
+
     if tilts_out is None:
         tilts_out = mesh.tilts_out_view()
     else:
         tilts_out = np.asarray(tilts_out, dtype=float)
         if tilts_out.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
+
+    if tri_keep.size:
+        weights = weights[tri_keep]
+        tri_rows = tri_rows[tri_keep]
 
     c0 = weights[:, 0]
     c1 = weights[:, 1]

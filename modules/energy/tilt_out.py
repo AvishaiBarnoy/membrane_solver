@@ -15,6 +15,10 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh, _fast_cross
+from modules.energy.leaflet_presence import (
+    leaflet_absent_vertex_mask,
+    leaflet_present_triangle_mask,
+)
 
 USES_TILT_LEAFLETS = True
 
@@ -102,7 +106,7 @@ def compute_energy_and_gradient_array(
     tilt_out_grad_arr: np.ndarray | None = None,
 ) -> float:
     """Dense-array outer-leaflet tilt energy accumulation."""
-    _ = global_params, index_map, tilts_in, tilt_in_grad_arr
+    _ = index_map, tilts_in, tilt_in_grad_arr
     k_tilt = _resolve_tilt_modulus(param_resolver)
     if k_tilt == 0.0:
         return 0.0
@@ -112,6 +116,13 @@ def compute_energy_and_gradient_array(
         return 0.0
 
     mesh.build_position_cache()
+    absent_mask = leaflet_absent_vertex_mask(mesh, global_params, leaflet="out")
+    tri_keep = leaflet_present_triangle_mask(
+        mesh, tri_rows, absent_vertex_mask=absent_mask
+    )
+    if tri_keep.size and not np.any(tri_keep):
+        return 0.0
+
     if tilts_out is None:
         tilts_out = mesh.tilts_out_view()
     else:
@@ -121,7 +132,8 @@ def compute_energy_and_gradient_array(
 
     tilt_sq = np.einsum("ij,ij->i", tilts_out, tilts_out)
 
-    tri_pos = positions[tri_rows]
+    tri_rows_eff = tri_rows[tri_keep] if tri_keep.size else tri_rows
+    tri_pos = positions[tri_rows_eff]
     v0 = tri_pos[:, 0, :]
     v1 = tri_pos[:, 1, :]
     v2 = tri_pos[:, 2, :]
@@ -133,7 +145,7 @@ def compute_energy_and_gradient_array(
         return 0.0
 
     areas = 0.5 * n_norm[mask]
-    tri_tilt_sq_sum = tilt_sq[tri_rows[mask]].sum(axis=1)
+    tri_tilt_sq_sum = tilt_sq[tri_rows_eff[mask]].sum(axis=1)
     coeff = 0.5 * k_tilt * (tri_tilt_sq_sum / 3.0)
 
     energy = float(np.dot(coeff, areas))
@@ -144,9 +156,9 @@ def compute_energy_and_gradient_array(
     g2 = 0.5 * _fast_cross(n_hat, (v1[mask] - v0[mask]))
 
     c = coeff[:, None]
-    np.add.at(grad_arr, tri_rows[mask, 0], c * g0)
-    np.add.at(grad_arr, tri_rows[mask, 1], c * g1)
-    np.add.at(grad_arr, tri_rows[mask, 2], c * g2)
+    np.add.at(grad_arr, tri_rows_eff[mask, 0], c * g0)
+    np.add.at(grad_arr, tri_rows_eff[mask, 1], c * g1)
+    np.add.at(grad_arr, tri_rows_eff[mask, 2], c * g2)
 
     if tilt_out_grad_arr is not None:
         tilt_out_grad_arr = np.asarray(tilt_out_grad_arr, dtype=float)
@@ -155,9 +167,9 @@ def compute_energy_and_gradient_array(
 
         vertex_areas = np.zeros(len(mesh.vertex_ids), dtype=float)
         area_thirds = areas / 3.0
-        np.add.at(vertex_areas, tri_rows[mask, 0], area_thirds)
-        np.add.at(vertex_areas, tri_rows[mask, 1], area_thirds)
-        np.add.at(vertex_areas, tri_rows[mask, 2], area_thirds)
+        np.add.at(vertex_areas, tri_rows_eff[mask, 0], area_thirds)
+        np.add.at(vertex_areas, tri_rows_eff[mask, 1], area_thirds)
+        np.add.at(vertex_areas, tri_rows_eff[mask, 2], area_thirds)
 
         tilt_out_grad_arr += k_tilt * tilts_out * vertex_areas[:, None]
 

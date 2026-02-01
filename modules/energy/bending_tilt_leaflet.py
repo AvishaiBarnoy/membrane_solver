@@ -19,6 +19,10 @@ from modules.energy.bending import (  # noqa: PLC0415
     _spontaneous_curvature,
     _vertex_normals,
 )
+from modules.energy.leaflet_presence import (
+    leaflet_absent_vertex_mask,
+    leaflet_present_triangle_mask,
+)
 
 
 def _resolve_bending_modulus(global_params, kappa_key: str) -> float:
@@ -242,6 +246,17 @@ def compute_energy_and_gradient_array_leaflet(
 
     if tri_rows.size == 0:
         return 0.0
+
+    if cache_tag == "out":
+        absent_mask = leaflet_absent_vertex_mask(mesh, global_params, leaflet="out")
+        tri_keep = leaflet_present_triangle_mask(
+            mesh, tri_rows, absent_vertex_mask=absent_mask
+        )
+        if tri_keep.size:
+            tri_rows = tri_rows[tri_keep]
+            weights = weights[tri_keep]
+            if tri_rows.size == 0:
+                return 0.0
 
     tilts = np.asarray(tilts, dtype=float)
     if tilts.shape != (len(mesh.vertex_ids), 3):
