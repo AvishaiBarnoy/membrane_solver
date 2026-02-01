@@ -215,3 +215,24 @@ def test_minimize_logs_energy_consistency_mismatch(caplog, monkeypatch):
 
     assert "Energy consistency mismatch" in caplog.text
     assert "mod_a=3.000000" in caplog.text
+
+
+def test_minimize_energy_consistency_logs_are_debug_only(caplog, monkeypatch):
+    mesh = build_min_mesh()
+    gp = GlobalParameters()
+    energy = DummyEnergyModule(energy=1.0, grad_value=0.0)
+    cm = DummyConstraintManager()
+    stepper = DummyStepper(results=[])
+    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
+
+    monkeypatch.setattr(minim, "compute_energy", lambda: 2.0)
+    monkeypatch.setattr(
+        minim,
+        "compute_energy_and_gradient_array",
+        lambda: (2.0, np.zeros((len(mesh.vertices), 3))),
+    )
+
+    with caplog.at_level(logging.INFO, logger="membrane_solver"):
+        minim.minimize(n_steps=0)
+
+    assert "Energy consistency" not in caplog.text
