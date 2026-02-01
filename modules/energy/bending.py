@@ -175,12 +175,16 @@ def _compute_effective_areas(
         and "vertex_areas_eff" in mesh._curvature_cache
     ):
         c = mesh._curvature_cache
-        return (
-            c["vertex_areas_eff"],
-            c["va0_eff"],
-            c["va1_eff"],
-            c["va2_eff"],
-        )
+        # The cache is keyed to the full triangle set. Leaflet masking can
+        # request effective areas on a triangle subset, so only reuse the cache
+        # when the triangle count matches.
+        if len(c.get("va0_eff", ())) == int(tri_rows.shape[0]):
+            return (
+                c["vertex_areas_eff"],
+                c["va0_eff"],
+                c["va1_eff"],
+                c["va2_eff"],
+            )
 
     n_verts = len(mesh.vertex_ids)
     if tri_rows.size == 0:
@@ -205,10 +209,12 @@ def _compute_effective_areas(
 
     c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
 
-    # Triangle area (doubled)
-    area_doubled = 2.0 * mesh.triangle_areas(positions)
-    area_doubled = np.maximum(area_doubled, 1e-12)
-    tri_areas = 0.5 * area_doubled
+    # Triangle areas for the provided tri_rows subset.
+    # (Do not call mesh.triangle_areas here: that routine operates on the full
+    # triangle cache, while leaflet masking may pass a subset of tri_rows.)
+    n = np.cross(v1 - v0, v2 - v0)
+    tri_areas = 0.5 * np.linalg.norm(n, axis=1)
+    tri_areas = np.maximum(tri_areas, 1e-12)
 
     # Check for obtuse angles
     is_obtuse_v0 = c0 < 0
