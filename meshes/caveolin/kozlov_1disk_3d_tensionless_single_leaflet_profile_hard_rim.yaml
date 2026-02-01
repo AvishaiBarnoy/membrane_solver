@@ -11,41 +11,23 @@ global_parameters:
   tilt_thetaB_strength_in: 50.0
   tilt_thetaB_contact_strength_in: 1.0
   tilt_thetaB_value: 0.0
-  tilt_thetaB_center:
-  - 0.0
-  - 0.0
-  - 0.0
-  tilt_thetaB_normal:
-  - 0.0
-  - 0.0
-  - 1.0
+  tilt_thetaB_center: [0.0, 0.0, 0.0]
+  tilt_thetaB_normal: [0.0, 0.0, 1.0]
   rim_slope_match_thetaB_param: tilt_thetaB_value
   rim_slope_match_group: rim
   rim_slope_match_outer_group: outer
   rim_slope_match_disk_group: disk
   rim_slope_match_strength: 0.0
-  rim_slope_match_center:
-  - 0.0
-  - 0.0
-  - 0.0
-  rim_slope_match_normal:
-  - 0.0
-  - 0.0
-  - 1.0
+  rim_slope_match_center: [0.0, 0.0, 0.0]
+  rim_slope_match_normal: [0.0, 0.0, 1.0]
   tilt_solve_mode: coupled
   tilt_step_size: 0.15
   tilt_inner_steps: 40
   tilt_tol: 1.0e-10
   step_size: 0.01
   step_size_mode: fixed
-  pin_to_plane_normal:
-  - 0.0
-  - 0.0
-  - 1.0
-  pin_to_plane_point:
-  - 0.0
-  - 0.0
-  - 0.0
+  pin_to_plane_normal: [0.0, 0.0, 1.0]
+  pin_to_plane_point: [0.0, 0.0, 0.0]
 constraint_modules:
 - pin_to_plane
 - pin_to_circle
@@ -55,60 +37,30 @@ definitions:
     constraints:
     - pin_to_plane
     tilt_thetaB_group_in: disk
-    pin_to_plane_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_plane_point:
-    - 0.0
-    - 0.0
-    - 0.0
+    pin_to_plane_normal: [0.0, 0.0, 1.0]
+    pin_to_plane_point: [0.0, 0.0, 0.0]
   rim:
     constraints:
     - pin_to_plane
     - pin_to_circle
-    pin_to_plane_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_plane_point:
-    - 0.0
-    - 0.0
-    - 0.0
+    pin_to_plane_normal: [0.0, 0.0, 1.0]
+    pin_to_plane_point: [0.0, 0.0, 0.0]
     pin_to_circle_group: rim
     pin_to_circle_radius: 1.0
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
+    pin_to_circle_normal: [0.0, 0.0, 1.0]
+    pin_to_circle_point: [0.0, 0.0, 0.0]
     pin_to_circle_mode: fixed
     rim_slope_match_group: rim
   outer_rim:
     constraints:
     - pin_to_plane
     - pin_to_circle
-    pin_to_plane_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_plane_point:
-    - 0.0
-    - 0.0
-    - 0.0
+    pin_to_plane_normal: [0.0, 0.0, 1.0]
+    pin_to_plane_point: [0.0, 0.0, 0.0]
     pin_to_circle_group: outer
     pin_to_circle_radius: 6.0
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
+    pin_to_circle_normal: [0.0, 0.0, 1.0]
+    pin_to_circle_point: [0.0, 0.0, 0.0]
     pin_to_circle_mode: fixed
     tilt_fixed_in: true
     tilt_fixed_out: true

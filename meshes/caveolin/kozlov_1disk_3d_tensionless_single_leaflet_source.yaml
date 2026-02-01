@@ -7,10 +7,7 @@ global_parameters:
   bending_modulus_out: 1.0
   tilt_modulus_in: 10.0
   tilt_modulus_out: 10.0
-  tilt_rim_source_center:
-  - 0.0
-  - 0.0
-  - 0.0
+  tilt_rim_source_center: [0.0, 0.0, 0.0]
   tilt_rim_source_edge_mode: all
   tilt_rim_source_group_in: rim
   # Contact mapping (Kozlov/Barnoy): F_cont = -2π R h (Δε/a) θ_B.
@@ -23,28 +20,16 @@ global_parameters:
   rim_slope_match_disk_group: disk
   # Penalty fallback (set >0 to use energy instead of the hard constraint).
   rim_slope_match_strength: 0.0
-  rim_slope_match_center:
-  - 0.0
-  - 0.0
-  - 0.0
-  rim_slope_match_normal:
-  - 0.0
-  - 0.0
-  - 1.0
+  rim_slope_match_center: [0.0, 0.0, 0.0]
+  rim_slope_match_normal: [0.0, 0.0, 1.0]
   tilt_solve_mode: coupled
   tilt_step_size: 0.15
   tilt_inner_steps: 40
   tilt_tol: 1.0e-10
   step_size: 0.01
   step_size_mode: fixed
-  pin_to_plane_normal:
-  - 0.0
-  - 0.0
-  - 1.0
-  pin_to_plane_point:
-  - 0.0
-  - 0.0
-  - 0.0
+  pin_to_plane_normal: [0.0, 0.0, 1.0]
+  pin_to_plane_point: [0.0, 0.0, 0.0]
 constraint_modules:
 - pin_to_plane
 - pin_to_circle
@@ -55,38 +40,20 @@ definitions:
     - pin_to_plane
     pin_to_plane_mode: slide
     pin_to_plane_group: disk_plane
-    pin_to_plane_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_plane_point:
-    - 0.0
-    - 0.0
-    - 0.0
+    pin_to_plane_normal: [0.0, 0.0, 1.0]
+    pin_to_plane_point: [0.0, 0.0, 0.0]
   rim:
     constraints:
     - pin_to_plane
     - pin_to_circle
     pin_to_plane_mode: slide
     pin_to_plane_group: disk_plane
-    pin_to_plane_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_plane_point:
-    - 0.0
-    - 0.0
-    - 0.0
+    pin_to_plane_normal: [0.0, 0.0, 1.0]
+    pin_to_plane_point: [0.0, 0.0, 0.0]
     pin_to_circle_group: rim
     pin_to_circle_radius: 1.0
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
+    pin_to_circle_normal: [0.0, 0.0, 1.0]
+    pin_to_circle_point: [0.0, 0.0, 0.0]
     pin_to_circle_mode: fixed
     rim_slope_match_group: rim
     tilt_vector_match_group: cav1
@@ -96,24 +63,12 @@ definitions:
     constraints:
     - pin_to_plane
     - pin_to_circle
-    pin_to_plane_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_plane_point:
-    - 0.0
-    - 0.0
-    - 0.0
+    pin_to_plane_normal: [0.0, 0.0, 1.0]
+    pin_to_plane_point: [0.0, 0.0, 0.0]
     pin_to_circle_group: outer
     pin_to_circle_radius: 6.0
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
+    pin_to_circle_normal: [0.0, 0.0, 1.0]
+    pin_to_circle_point: [0.0, 0.0, 0.0]
     pin_to_circle_mode: fixed
     tilt_fixed_in: true
     tilt_fixed_out: true
