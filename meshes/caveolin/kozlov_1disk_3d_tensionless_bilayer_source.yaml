@@ -65,18 +65,18 @@ energy_modules:
 vertices:
   # 7 concentric 12-gons (r=1..6) triangulated into an annulus (84 vertices).
   # Outer rim clamps both leaflets to zero tilt (far-field condition).
-  - [1, 0.0, 0.0, {preset: "inner_rim"}]
-  - [0.8660254, 0.5, 0.0, {preset: "inner_rim"}]
-  - [0.5, 0.8660254, 0.0, {preset: "inner_rim"}]
-  - [0.0, 1, 0.0, {preset: "inner_rim"}]
-  - [-0.5, 0.8660254, 0.0, {preset: "inner_rim"}]
-  - [-0.8660254, 0.5, 0.0, {preset: "inner_rim"}]
-  - [-1, 0.0, 0.0, {preset: "inner_rim"}]
-  - [-0.8660254, -0.5, 0.0, {preset: "inner_rim"}]
-  - [-0.5, -0.8660254, 0.0, {preset: "inner_rim"}]
-  - [0.0, -1, 0.0, {preset: "inner_rim"}]
-  - [0.5, -0.8660254, 0.0, {preset: "inner_rim"}]
-  - [0.8660254, -0.5, 0.0, {preset: "inner_rim"}]
+  - [1, 0.0, 0.0, {preset: inner_rim}]
+  - [0.8660254, 0.5, 0.0, {preset: inner_rim}]
+  - [0.5, 0.8660254, 0.0, {preset: inner_rim}]
+  - [0.0, 1, 0.0, {preset: inner_rim}]
+  - [-0.5, 0.8660254, 0.0, {preset: inner_rim}]
+  - [-0.8660254, 0.5, 0.0, {preset: inner_rim}]
+  - [-1, 0.0, 0.0, {preset: inner_rim}]
+  - [-0.8660254, -0.5, 0.0, {preset: inner_rim}]
+  - [-0.5, -0.8660254, 0.0, {preset: inner_rim}]
+  - [0.0, -1, 0.0, {preset: inner_rim}]
+  - [0.5, -0.8660254, 0.0, {preset: inner_rim}]
+  - [0.8660254, -0.5, 0.0, {preset: inner_rim}]
   - [1.83333333, 0.0, 0.0]
   - [1.58771324, 0.91666667, 0.0]
   - [0.91666667, 1.58771324, 0.0]
@@ -137,19 +137,18 @@ vertices:
   - [0.0, -5.16666667, 0.0]
   - [2.58333333, -4.47446459, 0.0]
   - [4.47446459, -2.58333333, 0.0]
-  - [6, 0.0, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-  - [5.19615242, 3, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-  - [3, 5.19615242, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-  - [0.0, 6, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-  - [-3, 5.19615242, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-  - [-5.19615242, 3, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-  - [-6, 0.0, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-  - [-5.19615242, -3, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-  - [-3, -5.19615242, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-  - [0.0, -6, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-  - [3, -5.19615242, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-  - [5.19615242, -3, 0.0, {preset: "outer_rim", tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
-
+  - [6, 0.0, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [5.19615242, 3, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [3, 5.19615242, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [0.0, 6, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [-3, 5.19615242, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [-5.19615242, 3, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [-6, 0.0, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [-5.19615242, -3, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [-3, -5.19615242, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [0.0, -6, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [3, -5.19615242, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [5.19615242, -3, 0.0, {preset: outer_rim, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
 edges:
   - [0, 1]
   - [1, 2]
@@ -379,7 +378,6 @@ edges:
   - [69, 82]
   - [70, 83]
   - [71, 72]
-
 faces:
   - [0, 85, r156]
   - [156, r12, r84]
@@ -525,9 +523,6 @@ faces:
   - [226, r82, r154]
   - [71, 144, r227]
   - [227, r83, r155]
-
-instructions: []
-
 macros:
   relax_tilts:
     - "print msg Running relax_tilts (freeze shape, relax tilts)."
