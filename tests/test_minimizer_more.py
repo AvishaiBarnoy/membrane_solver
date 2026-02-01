@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from types import SimpleNamespace
@@ -71,6 +72,7 @@ def build_min_mesh(with_body=False):
     mesh.facets[0] = Facet(0, [1, 2, 3])
     mesh.build_connectivity_maps()
     mesh.build_facet_vertex_loops()
+    mesh.build_position_cache()
     if with_body:
         # Minimal body object with target volume + compute_volume
         body = SimpleNamespace(
@@ -162,3 +164,54 @@ def test_minimize_volume_drift_triggers_mesh_op_enforcement_and_stepper_reset():
     # Second: enforcement due to drift uses mesh_operation context
     assert "mesh_operation" in cm.calls
     assert stepper.reset_calls >= 1
+
+
+def test_minimize_logs_energy_consistency_in_debug(caplog, monkeypatch):
+    mesh = build_min_mesh()
+    gp = GlobalParameters()
+    energy = DummyEnergyModule(energy=1.0, grad_value=0.0)
+    cm = DummyConstraintManager()
+    stepper = DummyStepper(results=[])
+    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
+
+    monkeypatch.setattr(minim, "compute_energy", lambda: 2.0)
+    monkeypatch.setattr(
+        minim,
+        "compute_energy_and_gradient_array",
+        lambda: (2.0, np.zeros((len(mesh.vertices), 3))),
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="membrane_solver"):
+        minim.minimize(n_steps=0)
+
+    assert "Energy consistency" in caplog.text
+    assert "scalar=2.000000" in caplog.text
+    assert "array=2.000000" in caplog.text
+    assert "Energy consistency mismatch" not in caplog.text
+
+
+def test_minimize_logs_energy_consistency_mismatch(caplog, monkeypatch):
+    mesh = build_min_mesh()
+    gp = GlobalParameters()
+    energy = DummyEnergyModule(energy=1.0, grad_value=0.0)
+    cm = DummyConstraintManager()
+    stepper = DummyStepper(results=[])
+    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
+
+    monkeypatch.setattr(minim, "compute_energy", lambda: 1.5)
+    monkeypatch.setattr(
+        minim,
+        "compute_energy_and_gradient_array",
+        lambda: (2.5, np.zeros((len(mesh.vertices), 3))),
+    )
+    monkeypatch.setattr(
+        minim,
+        "compute_energy_breakdown",
+        lambda: {"mod_a": 3.0, "mod_b": -1.0},
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="membrane_solver"):
+        minim.minimize(n_steps=0)
+
+    assert "Energy consistency mismatch" in caplog.text
+    assert "mod_a=3.000000" in caplog.text

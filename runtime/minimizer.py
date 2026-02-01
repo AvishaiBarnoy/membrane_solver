@@ -1198,6 +1198,49 @@ STEP SIZE:\t {self.step_size}
             float(np.linalg.norm(step_dir)),
         )
 
+    def _log_energy_consistency(self, label: str) -> None:
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+        try:
+            energy_scalar = float(self.compute_energy())
+            energy_array, _ = self.compute_energy_and_gradient_array()
+            energy_array = float(energy_array)
+        except Exception as exc:
+            logger.debug("Energy consistency check (%s) skipped: %s", label, exc)
+            return
+
+        logger.debug(
+            "Energy consistency (%s): scalar=%.6f array=%.6f",
+            label,
+            energy_scalar,
+            energy_array,
+        )
+
+        diff = abs(energy_scalar - energy_array)
+        tol = 1e-8 * max(1.0, abs(energy_scalar), abs(energy_array))
+        if diff <= tol:
+            return
+
+        try:
+            breakdown = self.compute_energy_breakdown()
+        except Exception as exc:
+            logger.debug("Energy breakdown failed during consistency check: %s", exc)
+            return
+
+        top_terms = sorted(
+            breakdown.items(), key=lambda item: abs(item[1]), reverse=True
+        )[:5]
+        summary = ", ".join(f"{name}={value:.6f}" for name, value in top_terms)
+        logger.warning(
+            "Energy consistency mismatch (%s): |Δ|=%.6e (scalar=%.6f array=%.6f). "
+            "Top terms: %s",
+            label,
+            diff,
+            energy_scalar,
+            energy_array,
+            summary,
+        )
+
     def project_constraints(self, grad: Dict[int, np.ndarray] | np.ndarray) -> None:
         """Project gradients onto the feasible set defined by constraints."""
 
@@ -1276,6 +1319,7 @@ STEP SIZE:\t {self.step_size}
         if n_steps <= 0:
             E, grad = self.compute_energy_and_gradient()
             self._enforce_constraints()
+            self._log_energy_consistency("no_steps")
             return {
                 "energy": E,
                 "gradient": grad,
@@ -1323,6 +1367,7 @@ STEP SIZE:\t {self.step_size}
             if grad_norm < self.tol:
                 logger.debug("Converged: gradient norm below tolerance.")
                 logger.info(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
+                self._log_energy_consistency("converged")
                 return {
                     "energy": E,
                     "gradient": self._grad_arr_to_dict(grad_arr),
@@ -1382,6 +1427,7 @@ STEP SIZE:\t {self.step_size}
                             zero_step_counter,
                             self.step_size_floor,
                         )
+                        self._log_energy_consistency("terminated_early")
                         return {
                             "energy": E,
                             "gradient": self._grad_arr_to_dict(last_grad_arr)
@@ -1481,6 +1527,7 @@ STEP SIZE:\t {self.step_size}
             )
             self.mesh.project_tilts_to_tangent()
 
+        self._log_energy_consistency("finalize")
         return {
             "energy": E,
             "gradient": self._grad_arr_to_dict(last_grad_arr)
