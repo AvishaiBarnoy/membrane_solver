@@ -59,6 +59,12 @@ def test_outer_leaflet_absent_on_disk_masks_out_energies() -> None:
     # sensitivity checks to explicit tilt_out edits.
     gp.set("tilt_solve_mode", "fixed")
 
+    # The Kozlov free-disk YAML may enable outer-leaflet absence by default for
+    # theory parity. For this regression test we first explicitly disable it so
+    # we can demonstrate that disk tilt_out affects energies when the leaflet is
+    # present, and then re-enable it to confirm masking works.
+    gp.set("leaflet_out_absent_presets", [])
+
     disk_row = _find_row_by_preset(mesh, "disk", require_free=True)
     rim_row = _find_row_by_preset(mesh, "rim", require_free=False)
 
