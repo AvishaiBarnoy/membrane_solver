@@ -1285,7 +1285,13 @@ STEP SIZE:\t {self.step_size}
 
     def _update_scalar_params(self) -> None:
         """Allow energy modules to update global scalar parameters."""
-        for module in self.energy_modules:
+        thetaB_opt = bool(self.global_params.get("tilt_thetaB_optimize", False))
+        for name, module in zip(self.energy_module_names, self.energy_modules):
+            # When optimizing thetaB as a global scalar DOF, skip the local
+            # thetaB closed-form update (it only minimizes the contact+penalty
+            # term, not the full reduced energy after tilt relaxation).
+            if thetaB_opt and name == "tilt_thetaB_contact_in":
+                continue
             if hasattr(module, "update_scalar_params"):
                 try:
                     module.update_scalar_params(
@@ -1293,6 +1299,93 @@ STEP SIZE:\t {self.step_size}
                     )
                 except TypeError:
                     module.update_scalar_params(self.mesh, self.global_params)
+
+    def _optimize_thetaB_scalar(self, *, tilt_mode: str, iteration: int) -> None:
+        """Optionally optimize the scalar thetaB by sampling reduced energies.
+
+        This treats thetaB as a global scalar degree of freedom and updates it
+        by comparing the total energy after a partial tilt relaxation for a few
+        candidate thetaB values.
+        """
+        if not bool(self.global_params.get("tilt_thetaB_optimize", False)):
+            return
+
+        every = int(self.global_params.get("tilt_thetaB_optimize_every", 10) or 10)
+        if every <= 0:
+            every = 1
+        if int(iteration) % every != 0:
+            return
+
+        delta = float(self.global_params.get("tilt_thetaB_optimize_delta", 0.02) or 0.0)
+        if delta <= 0.0:
+            return
+
+        # Warm-start from the current relaxed state.
+        base_thetaB = float(self.global_params.get("tilt_thetaB_value") or 0.0)
+        base_tin = self.mesh.tilts_in_view().copy(order="F")
+        base_tout = self.mesh.tilts_out_view().copy(order="F")
+
+        # Use a smaller inner relaxation budget for the thetaB scan to keep the
+        # optimization cheap, but still responsive.
+        orig_inner_steps = self.global_params.get("tilt_inner_steps", None)
+        scan_steps = int(
+            self.global_params.get("tilt_thetaB_optimize_inner_steps", 20) or 20
+        )
+        if scan_steps < 1:
+            scan_steps = 1
+        self.global_params.set("tilt_inner_steps", scan_steps)
+
+        def eval_candidate(thetaB_val: float) -> tuple[float, np.ndarray, np.ndarray]:
+            self.global_params.set("tilt_thetaB_value", float(thetaB_val))
+            self.mesh.set_tilts_in_from_array(base_tin)
+            self.mesh.set_tilts_out_from_array(base_tout)
+            # Relax tilts only; shape is handled by the main loop.
+            self._relax_leaflet_tilts(
+                positions=self.mesh.positions_view(), mode=tilt_mode
+            )
+            e = float(self.compute_energy())
+            return (
+                e,
+                self.mesh.tilts_in_view().copy(order="F"),
+                self.mesh.tilts_out_view().copy(order="F"),
+            )
+
+        try:
+            e0 = float(self.compute_energy())
+            e_minus, tin_minus, tout_minus = eval_candidate(base_thetaB - delta)
+            e_plus, tin_plus, tout_plus = eval_candidate(base_thetaB + delta)
+        finally:
+            # Restore the user's configured inner step budget.
+            if orig_inner_steps is None:
+                self.global_params.unset("tilt_inner_steps")
+            else:
+                self.global_params.set("tilt_inner_steps", orig_inner_steps)
+
+        # Pick the best among the sampled points (cheap coordinate descent).
+        best = min(
+            [
+                (e0, base_thetaB, base_tin, base_tout),
+                (e_minus, base_thetaB - delta, tin_minus, tout_minus),
+                (e_plus, base_thetaB + delta, tin_plus, tout_plus),
+            ],
+            key=lambda x: x[0],
+        )
+
+        best_e, best_thetaB, best_tin, best_tout = best
+        # Always restore the chosen candidate state (including "no change").
+        self.global_params.set("tilt_thetaB_value", float(best_thetaB))
+        self.mesh.set_tilts_in_from_array(best_tin)
+        self.mesh.set_tilts_out_from_array(best_tout)
+
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "thetaB optimize: i=%d thetaB %.6g -> %.6g (E %.6g -> %.6g)",
+                int(iteration),
+                base_thetaB,
+                best_thetaB,
+                e0,
+                best_e,
+            )
 
     def enforce_constraints_after_mesh_ops(self, mesh: Mesh | None = None):
         """Enforce constraints after discrete mesh operations."""
@@ -1354,6 +1447,8 @@ STEP SIZE:\t {self.step_size}
                 self._relax_tilts(positions=self.mesh.positions_view(), mode=tilt_mode)
 
             self._update_scalar_params()
+            if self._uses_leaflet_tilts():
+                self._optimize_thetaB_scalar(tilt_mode=str(tilt_mode), iteration=i)
 
             # Use array-based path for main loop
             E, grad_arr = self.compute_energy_and_gradient_array()

@@ -86,6 +86,15 @@ class GlobalParameters:
         """Update multiple parameters at once."""
         self._params.update(params)
 
+    def unset(self, key: str) -> None:
+        """Remove a parameter key if present.
+
+        This is useful for temporary overrides in algorithms that want to
+        restore "parameter not specified" semantics rather than forcing a
+        default value.
+        """
+        self._params.pop(key, None)
+
     def __contains__(self, key):
         """Check if a parameter exists."""
         return key in self._params
