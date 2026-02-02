@@ -25,6 +25,7 @@ from geometry.curvature import (  # noqa: E402
     compute_curvature_data,
 )
 from geometry.geom_io import load_data, parse_geometry  # noqa: E402
+from runtime.constraint_manager import ConstraintModuleManager  # noqa: E402
 from runtime.interface_validation import validate_disk_interface_topology  # noqa: E402
 from runtime.refinement import refine_triangle_mesh  # noqa: E402
 from runtime.vertex_average import vertex_average  # noqa: E402
@@ -42,6 +43,15 @@ def _rows_for_group(mesh, group: str) -> np.ndarray:
             if row is not None:
                 rows.append(int(row))
     return np.asarray(rows, dtype=int)
+
+
+def _estimate_ring_radius(mesh, group: str, *, center: np.ndarray) -> float:
+    rows = _rows_for_group(mesh, group)
+    if rows.size == 0:
+        return 0.0
+    pos = mesh.positions_view()[rows]
+    r = np.linalg.norm((pos - center[None, :])[:, :2], axis=1)
+    return float(np.median(r)) if r.size else 0.0
 
 
 def _summarize_kvec(mesh) -> dict[str, float]:
@@ -76,12 +86,12 @@ def _summarize_angle_defects(mesh) -> dict[str, float]:
     }
 
 
-def _summarize_ring(mesh, group: str) -> dict[str, float]:
+def _summarize_ring(mesh, group: str, *, center: np.ndarray) -> dict[str, float]:
     rows = _rows_for_group(mesh, group)
     if rows.size == 0:
         return {"ring_rows": 0.0}
     pos = mesh.positions_view()[rows]
-    r = np.linalg.norm(pos[:, :2], axis=1)
+    r = np.linalg.norm((pos - center[None, :])[:, :2], axis=1)
     return {
         "ring_rows": float(rows.size),
         "ring_r_min": float(np.min(r)),
@@ -126,6 +136,11 @@ def main(argv: Iterable[str] | None = None) -> int:
         help="Skip disk interface validation (still prints diagnostics).",
     )
     ap.add_argument(
+        "--no-enforce",
+        action="store_true",
+        help="Do not enforce geometric constraints after refine/avg operations.",
+    )
+    ap.add_argument(
         "--group",
         default="disk",
         help="Disk boundary group name (default: disk)",
@@ -134,6 +149,18 @@ def main(argv: Iterable[str] | None = None) -> int:
 
     mesh = parse_geometry(load_data(args.input))
     mesh.global_parameters.set("disk_interface_validate", True)
+    gp = mesh.global_parameters
+
+    center_raw = (
+        gp.get("rim_slope_match_center")
+        or gp.get("tilt_thetaB_center")
+        or [
+            0.0,
+            0.0,
+            0.0,
+        ]
+    )
+    center = np.asarray(center_raw, dtype=float).reshape(3)
 
     if args.flat:
         _force_flat(mesh)
@@ -143,12 +170,30 @@ def main(argv: Iterable[str] | None = None) -> int:
     if args.avg:
         _iter_avg(mesh, args.avg)
 
+    out: dict[str, float] = {}
+
+    # Report drift introduced by refinement/averaging before constraint enforcement.
+    pre_ring = _summarize_ring(mesh, str(args.group), center=center)
+    for k, v in pre_ring.items():
+        out[f"{k}_pre_enforce"] = float(v)
+    out["disk_interface_R_est_pre_enforce"] = float(
+        _estimate_ring_radius(mesh, str(args.group), center=center)
+    )
+
+    if not args.no_enforce:
+        cm = ConstraintModuleManager(getattr(mesh, "constraint_modules", []) or [])
+        cm.enforce_all(mesh, context="mesh_ops", global_params=mesh.global_parameters)
+        # Constraints mutate vertex positions; bump version to avoid stale caches.
+        mesh.increment_version()
+
     # Validation (optional)
     if not args.no_validate:
         validate_disk_interface_topology(mesh, mesh.global_parameters)
 
-    out: dict[str, float] = {}
-    out.update(_summarize_ring(mesh, str(args.group)))
+    out["disk_interface_R_est"] = float(
+        _estimate_ring_radius(mesh, str(args.group), center=center)
+    )
+    out.update(_summarize_ring(mesh, str(args.group), center=center))
     out.update(_summarize_kvec(mesh))
     out.update(_summarize_angle_defects(mesh))
 
