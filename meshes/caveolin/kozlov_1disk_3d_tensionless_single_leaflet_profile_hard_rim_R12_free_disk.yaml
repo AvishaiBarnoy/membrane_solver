@@ -4,12 +4,17 @@ global_parameters:
   spontaneous_curvature: 0.0
   leaflet_out_absent_presets: ["disk"]
   leaflet_out_absence_mode: triangles
-  bending_modulus_in: 1.0
-  bending_modulus_out: 1.0
-  tilt_modulus_in: 225.0
-  tilt_modulus_out: 225.0
+  # Theory-parity scaling: most energy modules use 1/2 prefactors while the
+  # benchmark formulas in docs/tex/1_disk_3d.tex are written without them.
+  # Doubling moduli makes code energies comparable to the tex convention while
+  # keeping lambda = sqrt(kappa_t/kappa) unchanged.
+  bending_modulus_in: 2.0
+  bending_modulus_out: 2.0
+  tilt_modulus_in: 450.0
+  tilt_modulus_out: 450.0
   tilt_thetaB_group_in: disk
-  tilt_thetaB_strength_in: 100.0
+  # Large penalty approximates thetaB elimination at the boundary.
+  tilt_thetaB_strength_in: 1.0e8
   tilt_thetaB_contact_strength_in: 4.286
   tilt_thetaB_value: 0.0
   tilt_thetaB_center: [0.0, 0.0, 0.0]
