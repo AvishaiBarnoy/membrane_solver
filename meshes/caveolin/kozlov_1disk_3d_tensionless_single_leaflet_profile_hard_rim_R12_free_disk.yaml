@@ -36,6 +36,7 @@ constraint_modules:
 definitions:
   disk:
     constraints:
+    - pin_to_plane
     tilt_thetaB_group_in: disk
     pin_to_circle_group: disk
     pin_to_circle_radius: 0.466666666666667
