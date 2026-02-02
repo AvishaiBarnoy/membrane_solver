@@ -1403,6 +1403,10 @@ STEP SIZE:\t {self.step_size}
             self.constraint_manager.enforce_tilt_constraints(
                 target_mesh, global_params=self.global_params
             )
+        # Constraint modules mutate vertex positions/tilts in-place; bump the
+        # mesh version so cached SoA views (positions/tilts/curvature) are not
+        # stale after mesh operations like refinement/averaging.
+        target_mesh.increment_version()
 
     def minimize(
         self, n_steps: int = 1, callback: Optional[Callable[["Mesh", int], None]] = None
