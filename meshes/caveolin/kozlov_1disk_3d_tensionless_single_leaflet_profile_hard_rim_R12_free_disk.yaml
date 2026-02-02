@@ -37,6 +37,9 @@ definitions:
   disk:
     constraints:
     - pin_to_plane
+    # Allow rigid translation of the whole disk patch along the plane normal.
+    pin_to_plane_mode: slide
+    pin_to_plane_group: disk
     tilt_thetaB_group_in: disk
     pin_to_circle_group: disk
     pin_to_circle_radius: 0.466666666666667
@@ -64,19 +67,19 @@ energy_modules:
 - tilt_out
 - tilt_thetaB_contact_in
 vertices:
-  - [0.0, 0.0, 0.0, {preset: disk, tilt_fixed_in: true, tilt_fixed_out: true, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0], fixed: true}]
-  - [-0.466666666666667, -0.0, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
-  - [-0.40414518843273833, -0.23333333333333345, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
-  - [-0.23333333333333353, -0.40414518843273833, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
-  - [-2.857509198010493e-17, -0.466666666666667, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
-  - [0.23333333333333345, -0.4041451884327384, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
-  - [0.40414518843273833, -0.23333333333333345, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
-  - [0.466666666666667, -5.715018396020985e-17, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
-  - [0.4041451884327384, 0.23333333333333336, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
-  - [0.23333333333333373, 0.4041451884327382, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
-  - [8.572527594031477e-17, 0.466666666666667, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
-  - [-0.23333333333333353, 0.40414518843273833, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
-  - [-0.4041451884327382, 0.23333333333333373, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_circle]}]
+  - [0.0, 0.0, 0.0, {preset: disk, tilt_fixed_in: true, tilt_fixed_out: true, tilt_in: [0.0, 0.0], tilt_out: [0.0, 0.0]}]
+  - [-0.466666666666667, -0.0, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
+  - [-0.40414518843273833, -0.23333333333333345, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
+  - [-0.23333333333333353, -0.40414518843273833, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
+  - [-2.857509198010493e-17, -0.466666666666667, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
+  - [0.23333333333333345, -0.4041451884327384, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
+  - [0.40414518843273833, -0.23333333333333345, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
+  - [0.466666666666667, -5.715018396020985e-17, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
+  - [0.4041451884327384, 0.23333333333333336, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
+  - [0.23333333333333373, 0.4041451884327382, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
+  - [8.572527594031477e-17, 0.466666666666667, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
+  - [-0.23333333333333353, 0.40414518843273833, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
+  - [-0.4041451884327382, 0.23333333333333373, 0.0, {preset: disk, rim_slope_match_group: disk, constraints: [pin_to_plane, pin_to_circle]}]
   - [0.2666666666666665, 0.0, 0.0, {preset: disk}]
   - [0.23094010767585013, 0.13333333333333322, 0.0, {preset: disk}]
   - [0.13333333333333328, 0.23094010767585013, 0.0, {preset: disk}]
