@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
+
 from geometry.entities import Mesh
 
 
@@ -64,10 +66,6 @@ def validate_disk_interface_topology(mesh: Mesh, global_params) -> None:
     if not disk_boundary_vids:
         return
 
-    def preset_of(vid: int) -> str:
-        opts = getattr(mesh.vertices[vid], "options", None) or {}
-        return str(opts.get("preset") or "")
-
     issues: list[DiskInterfaceIssue] = []
     for vid in disk_boundary_vids:
         incident = mesh.vertex_to_facets.get(int(vid)) or set()
@@ -77,13 +75,59 @@ def validate_disk_interface_topology(mesh: Mesh, global_params) -> None:
             if loop is None or len(loop) != 3:
                 continue
             for v2 in loop:
-                presets.add(preset_of(int(v2)))
+                opts = getattr(mesh.vertices[int(v2)], "options", None) or {}
+                presets.add(str(opts.get("preset") or ""))
+
+        # Geometry-based straddle check: refinement introduces midpoint vertices that
+        # may not inherit 'preset' tags. For Kozlov-style setups we can robustly
+        # classify disk-side vs membrane-side by radial distance relative to the
+        # disk boundary ring.
+        try:
+            mesh.build_position_cache()
+            center_raw = (
+                global_params.get("rim_slope_match_center")
+                or global_params.get("tilt_thetaB_center")
+                or [0.0, 0.0, 0.0]
+            )
+            center = np.asarray(center_raw, dtype=float).reshape(3)
+        except Exception:  # pragma: no cover - defensive
+            center = np.zeros(3, dtype=float)
+
+        # Estimate disk radius R from the tagged ring itself.
+        ring_r: list[float] = []
+        for rid in disk_boundary_vids:
+            try:
+                p = mesh.vertices[int(rid)].position
+                ring_r.append(float(np.linalg.norm((p - center)[:2])))
+            except Exception:
+                continue
+        R = float(np.median(ring_r)) if ring_r else 0.0
+        tol = max(1e-8, 1e-6 * max(1.0, abs(R)))
+
+        r_vals: list[float] = []
+        for fid in incident:
+            loop = mesh.facet_vertex_loops.get(int(fid))
+            if loop is None or len(loop) != 3:
+                continue
+            for v2 in loop:
+                try:
+                    p = mesh.vertices[int(v2)].position
+                except Exception:
+                    continue
+                r_vals.append(float(np.linalg.norm((p - center)[:2])))
+
+        has_inner = any(r < R - tol for r in r_vals) if R > 0.0 else False
+        has_outer = any(r > R + tol for r in r_vals) if R > 0.0 else False
 
         # Must include at least one disk-side preset and one non-disk preset.
         # We treat any preset starting with "disk" as disk-side (e.g. "disk_edge").
         has_disk = any(p.startswith("disk") for p in presets if p)
         has_other = any(p and not p.startswith("disk") for p in presets)
-        if not (has_disk and has_other):
+
+        # Accept either explicit tag straddling (has_disk & has_other) or geometric
+        # straddling (has_inner & has_outer). The latter keeps the validator stable
+        # under refinement where mid-edge vertices may lack presets.
+        if not ((has_disk and has_other) or (has_inner and has_outer)):
             issues.append(
                 DiskInterfaceIssue(
                     vertex_id=int(vid),
