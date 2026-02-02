@@ -133,25 +133,28 @@ def _per_vertex_params(
 def _vertex_normals(
     mesh: Mesh, positions: np.ndarray, tri_rows: np.ndarray
 ) -> np.ndarray:
-    is_cached_pos = mesh._geometry_cache_active(positions)
-    if (
-        is_cached_pos
-        and mesh._curvature_version == mesh._version
-        and "vertex_normals" in mesh._curvature_cache
-    ):
-        return mesh._curvature_cache["vertex_normals"]
-
     normals = np.zeros((len(mesh.vertex_ids), 3), dtype=float)
-    tri_normals = mesh.triangle_normals(positions)
+
+    # Important: callers may pass a masked subset of triangles (e.g. when a
+    # leaflet is absent on some presets). In that case, using
+    # mesh.triangle_normals(positions) (which returns normals for the full
+    # triangle set) will mismatch tri_rows and crash. Compute normals from the
+    # provided tri_rows instead.
+    if tri_rows.size == 0:
+        return normals
+
+    tri_pos = positions[tri_rows]
+    v0 = tri_pos[:, 0, :]
+    v1 = tri_pos[:, 1, :]
+    v2 = tri_pos[:, 2, :]
+    tri_normals = np.cross(v1 - v0, v2 - v0)
+
     np.add.at(normals, tri_rows[:, 0], tri_normals)
     np.add.at(normals, tri_rows[:, 1], tri_normals)
     np.add.at(normals, tri_rows[:, 2], tri_normals)
     nrm = np.linalg.norm(normals, axis=1)
     mask = nrm > 1e-15
     normals[mask] /= nrm[mask, None]
-
-    if mesh._curvature_version == mesh._version:
-        mesh._curvature_cache["vertex_normals"] = normals
 
     return normals
 
