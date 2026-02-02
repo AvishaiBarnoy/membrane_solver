@@ -79,9 +79,10 @@ def validate_disk_interface_topology(mesh: Mesh, global_params) -> None:
             for v2 in loop:
                 presets.add(preset_of(int(v2)))
 
-        # Must include at least one disk and one non-disk preset.
-        has_disk = "disk" in presets
-        has_other = any(p != "disk" and p != "" for p in presets)
+        # Must include at least one disk-side preset and one non-disk preset.
+        # We treat any preset starting with "disk" as disk-side (e.g. "disk_edge").
+        has_disk = any(p.startswith("disk") for p in presets if p)
+        has_other = any(p and not p.startswith("disk") for p in presets)
         if not (has_disk and has_other):
             issues.append(
                 DiskInterfaceIssue(
@@ -97,6 +98,8 @@ def validate_disk_interface_topology(mesh: Mesh, global_params) -> None:
             "but the tagged disk boundary vertices do not straddle disk↔membrane "
             "triangles. This usually means the 'disk boundary ring' is an internal "
             "ring inside the disk patch (not the disk↔membrane interface). "
+            "The validator expects incident triangles to include both disk-side "
+            "presets (prefix 'disk') and non-disk presets (e.g. 'rim'). "
             f"bad_vertices={len(issues)} examples={examples}"
         )
         raise ValueError(msg)
