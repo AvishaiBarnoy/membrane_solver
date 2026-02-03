@@ -118,3 +118,33 @@ def test_tilt_thetaB_boundary_in_respects_tilt_fixed_in() -> None:
 
     after_fixed = mesh.tilts_in_view()[fixed_row].copy()
     assert np.allclose(after_fixed, before_fixed, atol=0.0, rtol=0.0)
+
+
+def test_tilt_thetaB_boundary_in_noops_when_group_missing_or_empty() -> None:
+    mesh = parse_geometry(
+        load_data("meshes/caveolin/kozlov_free_disk_coarse_refinable.yaml")
+    )
+    gp = mesh.global_parameters
+
+    # Make the tilts non-zero so a buggy constraint that touches everything would be detected.
+    positions = mesh.positions_view()
+    normals = mesh.vertex_normals(positions=positions)
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_in[:] = 0.0
+    tilts_in[:, 0] = 1e-3
+    tilts_in = tilts_in - np.einsum("ij,ij->i", tilts_in, normals)[:, None] * normals
+    mesh.set_tilts_in_from_array(tilts_in)
+    before = mesh.tilts_in_view().copy(order="F")
+
+    cm = ConstraintModuleManager(["tilt_thetaB_boundary_in"])
+
+    # Case 1: group resolves to None -> no-op
+    gp.set("tilt_thetaB_group_in", None)
+    gp.set("rim_slope_match_disk_group", None)
+    cm.enforce_tilt_constraints(mesh, global_params=gp)
+    assert np.allclose(mesh.tilts_in_view(), before, atol=0.0, rtol=0.0)
+
+    # Case 2: group resolves but matches no vertices -> no-op
+    gp.set("rim_slope_match_disk_group", "does_not_exist")
+    cm.enforce_tilt_constraints(mesh, global_params=gp)
+    assert np.allclose(mesh.tilts_in_view(), before, atol=0.0, rtol=0.0)
