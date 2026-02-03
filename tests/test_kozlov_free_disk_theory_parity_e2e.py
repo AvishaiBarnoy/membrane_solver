@@ -214,6 +214,9 @@ def test_kozlov_free_disk_thetaB_matches_tensionless_theory() -> None:
 )
 def test_kozlov_free_disk_elastic_energy_matches_tensionless_theory_xfail() -> None:
     """Diagnostic parity check for elastic energy vs theory (expected to fail currently)."""
+    from geometry.curvature import compute_curvature_fields
+    from geometry.tilt_operators import p1_vertex_divergence
+
     path = os.path.join(
         os.path.dirname(__file__),
         "fixtures",
@@ -268,6 +271,66 @@ def test_kozlov_free_disk_elastic_energy_matches_tensionless_theory_xfail() -> N
     )
     fel_star = float(fin_star + fout_star)
 
-    assert thetaB == pytest.approx(theta_star, rel=0.40, abs=0.03)
-    assert fel_meas == pytest.approx(fel_star, rel=2.0, abs=0.2)
-    assert ftot_meas == pytest.approx(ftot_star, rel=2.0, abs=0.2)
+    # Extra diagnostics to make the remaining gap actionable.
+    positions = mesh.positions_view()
+    r_all = np.linalg.norm(positions[:, :2], axis=1)
+    z_all = positions[:, 2]
+    z_max = float(np.max(np.abs(z_all)))
+
+    tri_rows, _ = mesh.triangle_row_cache()
+    div_in = None
+    div_out = None
+    if tri_rows is not None and len(tri_rows) > 0:
+        div_in, _ = p1_vertex_divergence(
+            n_vertices=len(mesh.vertex_ids),
+            positions=positions,
+            tilts=mesh.tilts_in_view(),
+            tri_rows=tri_rows,
+        )
+        div_out, _ = p1_vertex_divergence(
+            n_vertices=len(mesh.vertex_ids),
+            positions=positions,
+            tilts=mesh.tilts_out_view(),
+            tri_rows=tri_rows,
+        )
+
+    fields = compute_curvature_fields(mesh, positions, mesh.vertex_index_to_row)
+    H = np.asarray(fields.mean_curvature, dtype=float)
+    absH = np.abs(H)
+    # Exclude the disk boundary itself to avoid counting interface singularities.
+    mask_mem = (r_all >= 0.55) & (r_all <= 11.5)
+    absH_mem = absH[mask_mem] if np.any(mask_mem) else absH
+
+    def qstats(arr: np.ndarray) -> str:
+        if arr.size == 0:
+            return "empty"
+        q = np.quantile(arr, [0.5, 0.9, 0.99, 1.0])
+        return f"med={q[0]:.3e} p90={q[1]:.3e} p99={q[2]:.3e} max={q[3]:.3e}"
+
+    report = "\n".join(
+        [
+            "Elastic-energy parity gap diagnostics (expected xfail):",
+            f"  thetaB_meas={thetaB:.6g} thetaB_star={theta_star:.6g}",
+            f"  fel_meas={fel_meas:.6g} fel_star={fel_star:.6g} (ratio {fel_meas / max(fel_star, 1e-12):.3e})",
+            f"  ftot_meas={ftot_meas:.6g} ftot_star={ftot_star:.6g}",
+            "  breakdown:",
+            "    "
+            + ", ".join(f"{k}={float(v):.6g}" for k, v in sorted(breakdown.items())),
+            f"  |z|_max={z_max:.3e}",
+            f"  |H| (membrane band) stats: {qstats(absH_mem)}",
+            f"  |div t_in| stats: {qstats(np.abs(div_in)) if div_in is not None else 'n/a'}",
+            f"  |div t_out| stats: {qstats(np.abs(div_out)) if div_out is not None else 'n/a'}",
+        ]
+    )
+
+    theta_ok = thetaB == pytest.approx(theta_star, rel=0.40, abs=0.03)
+    fel_ok = fel_meas == pytest.approx(fel_star, rel=2.0, abs=0.2)
+    ftot_ok = ftot_meas == pytest.approx(ftot_star, rel=2.0, abs=0.2)
+    if not (theta_ok and fel_ok and ftot_ok):
+        pytest.xfail(report)
+
+    # If we ever close the gap, keep these assertions so the test becomes a
+    # normal pass without edits.
+    assert theta_ok
+    assert fel_ok
+    assert ftot_ok
