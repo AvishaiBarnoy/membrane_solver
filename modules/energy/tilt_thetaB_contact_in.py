@@ -1,13 +1,31 @@
-"""Inner-leaflet θ_B contact term with a scalar boundary mode.
+"""Inner-leaflet θ_B contact work term (Kozlov-style scalar boundary mode).
 
-This module introduces a scalar boundary tilt mode θ_B and couples it to the
-disk boundary tilts via a quadratic penalty plus the linear contact term:
+Continuum theory (`docs/tex/1_disk_3d.tex`) treats the boundary condition
 
-    E = 1/2 * k_B * Σ w_i (θ_i - θ_B)^2  -  2π R_eff γ θ_B
+    t_in · r_hat (r=R) = θ_B
 
-where θ_i = t_in · r_hat at disk boundary vertices and w_i are arc-length
-weights. The scalar θ_B is stored in ``global_params['tilt_thetaB_value']`` and
-updated each outer iteration by minimizing E with respect to θ_B.
+as a Dirichlet constraint rather than an energy penalty. Accordingly, the
+default behavior of this module is to report *only* the linear contact work:
+
+    E_contact = -2π R_eff γ θ_B
+
+where R_eff is the arc-length-weighted effective boundary radius and γ is the
+contact strength.
+
+Legacy penalty mode
+-------------------
+Historically this module also included a large quadratic penalty
+
+    E_penalty = 1/2 * k_B * Σ w_i (θ_i - θ_B)^2
+
+to enforce the boundary condition approximately. This penalty is not part of
+the continuum energy breakdown; it is kept behind an explicit flag for
+backwards compatibility:
+
+    global_parameters.tilt_thetaB_contact_penalty_mode: "legacy"
+
+When penalty mode is "legacy", the module also returns the corresponding tilt
+gradient contribution.
 """
 
 from __future__ import annotations
@@ -126,6 +144,20 @@ def _resolve_thetaB(global_params) -> float:
     return float(val or 0.0)
 
 
+def _penalty_mode(global_params) -> str:
+    raw = (
+        None
+        if global_params is None
+        else global_params.get("tilt_thetaB_contact_penalty_mode")
+    )
+    if raw is None:
+        return "off"
+    mode = str(raw).strip().lower()
+    if mode in {"legacy", "on", "true", "1"}:
+        return "legacy"
+    return "off"
+
+
 def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
     rows: list[int] = []
     for vid in mesh.vertex_ids:
@@ -142,6 +174,12 @@ def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
 
 def update_scalar_params(mesh: Mesh, global_params, param_resolver) -> None:
     """Update global θ_B by minimizing the local quadratic energy."""
+    if _penalty_mode(global_params) != "legacy":
+        # In the theory-aligned formulation θ_B is handled either as an explicit
+        # global DOF (reduced-energy sampling) or by the calling script. This
+        # legacy closed-form update only applies when using the penalty energy.
+        return
+
     group = _resolve_group(param_resolver)
     if group is None:
         return
@@ -232,7 +270,7 @@ def compute_energy_and_gradient_array(
     tilt_out_grad_arr: np.ndarray | None = None,
 ) -> float:
     """Dense-array inner-leaflet θ_B contact energy."""
-    _ = global_params, index_map, grad_arr, tilts_out, tilt_out_grad_arr
+    _ = index_map, grad_arr, tilts_out, tilt_out_grad_arr
     group = _resolve_group(param_resolver)
     if group is None:
         return 0.0
@@ -278,17 +316,21 @@ def compute_energy_and_gradient_array(
         return 0.0
 
     R_eff = float(np.sum(weights * r_len) / wsum)
-    diff = theta_vals - theta_B
-    energy = float(0.5 * k * np.sum(weights * diff * diff))
+    energy = 0.0
     if gamma != 0.0:
+        # Pure contact work (theory-aligned default).
         energy += float(-2.0 * np.pi * R_eff * gamma * theta_B)
 
-    if tilt_in_grad_arr is not None and k != 0.0:
-        tilt_in_grad_arr = np.asarray(tilt_in_grad_arr, dtype=float)
-        if tilt_in_grad_arr.shape != (len(mesh.vertex_ids), 3):
-            raise ValueError("tilt_in_grad_arr must have shape (N_vertices, 3)")
-        coeff = (k * weights * diff)[:, None]
-        np.add.at(tilt_in_grad_arr, rows, coeff * r_hat)
+    if _penalty_mode(global_params) == "legacy" and k != 0.0:
+        diff = theta_vals - theta_B
+        energy += float(0.5 * k * np.sum(weights * diff * diff))
+
+        if tilt_in_grad_arr is not None:
+            tilt_in_grad_arr = np.asarray(tilt_in_grad_arr, dtype=float)
+            if tilt_in_grad_arr.shape != (len(mesh.vertex_ids), 3):
+                raise ValueError("tilt_in_grad_arr must have shape (N_vertices, 3)")
+            coeff = (k * weights * diff)[:, None]
+            np.add.at(tilt_in_grad_arr, rows, coeff * r_hat)
 
     return energy
 
