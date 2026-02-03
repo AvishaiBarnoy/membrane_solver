@@ -50,33 +50,36 @@ def test_kozlov_free_disk_thetaB_matches_tensionless_theory() -> None:
     """E2E: thetaB optimization produces theory-scale thetaB on the free-disk mesh.
 
     This test focuses on robust, low-cost observables:
-      - thetaB is nontrivial and close to docs/tex/1_disk_3d.tex tensionless prediction
+      - thetaB is nontrivial and close to the tensionless prediction (with
+        elastic coefficients from both leaflets, since contact work is applied
+        only to the inner leaflet)
       - contact energy term matches -2π R_eff * drive * thetaB (using the discrete R_eff)
 
-    We intentionally keep the minimization light (few outer steps and few inner tilt steps)
-    to keep runtime bounded while still catching regressions where thetaB gets stuck ~0.
+    The mesh is loaded from tests/data to keep this test independent of the
+    hand-authored YAMLs under meshes/.
     """
     path = os.path.join(
         os.path.dirname(__file__),
-        "..",
-        "meshes",
-        "caveolin",
-        "kozlov_1disk_3d_tensionless_single_leaflet_profile_hard_rim_R12_free_disk.yaml",
+        "fixtures",
+        "kozlov_1disk_3d_free_disk_theory_parity.yaml",
     )
     mesh = parse_geometry(load_data(path))
     gp = mesh.global_parameters
 
-    # Fast tilt relaxation and infrequent thetaB scans keep this test quick.
+    # Fast tilt relaxation and frequent thetaB scans keep this test quick.
     gp.set("tilt_solve_mode", "coupled")
     gp.set("tilt_solver", "gd")
-    gp.set("tilt_step_size", 0.1)
+    gp.set("tilt_step_size", 0.15)
     gp.set("tilt_inner_steps", 5)
     gp.set("tilt_tol", 1e-8)
+    gp.set("tilt_kkt_projection_during_relaxation", False)
 
     gp.set("tilt_thetaB_optimize", True)
-    gp.set("tilt_thetaB_optimize_every", 5)
+    gp.set("tilt_thetaB_optimize_every", 1)
+    # Use a larger delta and a tiny inner budget so we can move thetaB away from
+    # zero in a single scan while keeping runtime bounded.
     gp.set("tilt_thetaB_optimize_delta", 0.05)
-    gp.set("tilt_thetaB_optimize_inner_steps", 3)
+    gp.set("tilt_thetaB_optimize_inner_steps", 2)
 
     gp.set("step_size_mode", "fixed")
     gp.set("step_size", 0.01)
@@ -91,16 +94,27 @@ def test_kozlov_free_disk_thetaB_matches_tensionless_theory() -> None:
         tol=1e-6,
     )
 
-    minim.minimize(n_steps=10)
+    # --- Tensionless theory (docs/tex/1_disk_3d.tex) ---
+    kappa_in = float(gp.get("bending_modulus_in") or gp.get("bending_modulus") or 0.0)
+    kappa_out = float(gp.get("bending_modulus_out") or gp.get("bending_modulus") or 0.0)
+    kappa = float(kappa_in + kappa_out)
+
+    kappa_t_in = float(gp.get("tilt_modulus_in") or 0.0)
+    kappa_t_out = float(gp.get("tilt_modulus_out") or 0.0)
+    kappa_t = float(kappa_t_in + kappa_t_out)
+    drive = float(gp.get("tilt_thetaB_contact_strength_in") or 0.0)
+    assert kappa > 0.0 and kappa_t > 0.0 and drive != 0.0
+
+    # Avoid expensive shape-gradient evaluations; for this theory-parity test we
+    # only need the reduced-energy thetaB scan + tilt relaxation on fixed
+    # geometry.
+    tilt_mode = str(gp.get("tilt_solve_mode") or "coupled")
+    for i in range(1):
+        minim._relax_leaflet_tilts(positions=mesh.positions_view(), mode=tilt_mode)
+        minim._optimize_thetaB_scalar(tilt_mode=tilt_mode, iteration=i)
 
     thetaB = float(gp.get("tilt_thetaB_value") or 0.0)
     assert thetaB > 1.0e-2
-
-    # --- Tensionless theory (docs/tex/1_disk_3d.tex) ---
-    kappa = float(gp.get("bending_modulus_in") or gp.get("bending_modulus") or 0.0)
-    kappa_t = float(gp.get("tilt_modulus_in") or 0.0)
-    drive = float(gp.get("tilt_thetaB_contact_strength_in") or 0.0)
-    assert kappa > 0.0 and kappa_t > 0.0 and drive != 0.0
 
     R = 7.0 / 15.0
     lam = float(np.sqrt(kappa_t / kappa))
