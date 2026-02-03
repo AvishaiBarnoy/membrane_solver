@@ -13,12 +13,22 @@ global_parameters:
   tilt_modulus_in: 450.0
   tilt_modulus_out: 450.0
   tilt_thetaB_group_in: disk
-  # Large penalty approximates thetaB elimination at the boundary.
+  # Theory-aligned thetaB modeling:
+  # - boundary condition t_in · r_hat = thetaB is enforced by constraint (no penalty energy)
+  # - contact energy reports only the linear work term
+  tilt_thetaB_contact_penalty_mode: "off"
+  # Keep the strength parameter for legacy configs, but it is ignored unless
+  # tilt_thetaB_contact_penalty_mode is set to "legacy".
   tilt_thetaB_strength_in: 1.0e8
   tilt_thetaB_contact_strength_in: 4.286
   tilt_thetaB_value: 0.0
   tilt_thetaB_center: [0.0, 0.0, 0.0]
   tilt_thetaB_normal: [0.0, 0.0, 1.0]
+  # Optimize thetaB as a scalar DOF via reduced-energy sampling (see runtime/minimizer.py).
+  tilt_thetaB_optimize: true
+  tilt_thetaB_optimize_every: 1
+  tilt_thetaB_optimize_delta: 0.01
+  tilt_thetaB_optimize_inner_steps: 60
   rim_slope_match_thetaB_param: tilt_thetaB_value
   rim_slope_match_group: disk
   rim_slope_match_outer_group: outer
@@ -38,6 +48,7 @@ constraint_modules:
 - pin_to_plane
 - pin_to_circle
 - rim_slope_match_out
+- tilt_thetaB_boundary_in
 definitions:
   disk:
     constraints:
