@@ -76,3 +76,45 @@ def test_tilt_thetaB_boundary_in_enforces_radial_component_on_group_ring() -> No
     theta_vals = np.einsum("ij,ij->i", tilts_in[rows], r_dir)
     # Use a loose tol; this is an exact projection, but r_dir is discrete/tangent-projected.
     assert float(np.median(np.abs(theta_vals - 0.07))) < 1e-10
+
+
+def test_tilt_thetaB_boundary_in_respects_tilt_fixed_in() -> None:
+    mesh = parse_geometry(
+        load_data("meshes/caveolin/kozlov_free_disk_coarse_refinable.yaml")
+    )
+    gp = mesh.global_parameters
+
+    gp.set("tilt_thetaB_value", 0.03)
+    gp.set("tilt_thetaB_center", [0.0, 0.0, 0.0])
+    gp.set("tilt_thetaB_normal", [0.0, 0.0, 1.0])
+    # Exercise the fallback path (group resolved from rim_slope_match_disk_group).
+    gp.set("tilt_thetaB_group_in", None)
+    gp.set("rim_slope_match_disk_group", "disk")
+
+    rows = []
+    for vid in mesh.vertex_ids:
+        opts = mesh.vertices[int(vid)].options or {}
+        if opts.get("rim_slope_match_group") == "disk":
+            rows.append(mesh.vertex_index_to_row[int(vid)])
+    rows = np.asarray(rows, dtype=int)
+    assert rows.size > 0
+
+    # Fix one boundary vertex's inner tilt and ensure the constraint leaves it unchanged.
+    fixed_row = int(rows[0])
+    fixed_vid = int(mesh.vertex_ids[fixed_row])
+    mesh.vertices[fixed_vid].tilt_fixed_in = True
+
+    positions = mesh.positions_view()
+    normals = mesh.vertex_normals(positions=positions)
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_in[:] = 0.0
+    tilts_in[:, 1] = 2e-3
+    tilts_in = tilts_in - np.einsum("ij,ij->i", tilts_in, normals)[:, None] * normals
+    mesh.set_tilts_in_from_array(tilts_in)
+    before_fixed = mesh.tilts_in_view()[fixed_row].copy()
+
+    cm = ConstraintModuleManager(["tilt_thetaB_boundary_in"])
+    cm.enforce_tilt_constraints(mesh, global_params=gp)
+
+    after_fixed = mesh.tilts_in_view()[fixed_row].copy()
+    assert np.allclose(after_fixed, before_fixed, atol=0.0, rtol=0.0)
