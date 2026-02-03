@@ -373,6 +373,47 @@ def refine_triangle_mesh(mesh):
                 merged[key] = a
         return merged if merged else None
 
+    def _maybe_inherit_disk_interface_vertex_tags(
+        v1_options: dict, v2_options: dict
+    ) -> dict | None:
+        """Inherit disk-interface tags for mid-edge vertices on the pinned disk ring.
+
+        For Kozlov-style one-disk setups the disk boundary ring is defined by
+        per-vertex `pin_to_circle` metadata (group "disk") plus additional tags
+        used by rim matching and thetaB coupling:
+          - rim_slope_match_group
+          - tilt_thetaB_group_in
+
+        Refinement introduces mid-edge vertices that must inherit these tags so
+        interface constraints/energies act on the full refined ring, not only
+        on the original coarse vertices.
+        """
+
+        def has_disk_pin(options: dict) -> bool:
+            constraints = options.get("constraints")
+            if constraints is None:
+                return False
+            if isinstance(constraints, str):
+                ok = constraints == "pin_to_circle"
+            elif isinstance(constraints, list):
+                ok = "pin_to_circle" in constraints
+            else:
+                ok = False
+            if not ok:
+                return False
+            return str(options.get("pin_to_circle_group") or "") == "disk"
+
+        if not (has_disk_pin(v1_options) and has_disk_pin(v2_options)):
+            return None
+
+        merged: dict = {}
+        for key in ("rim_slope_match_group", "tilt_thetaB_group_in"):
+            a = v1_options.get(key)
+            b = v2_options.get(key)
+            if a is not None and b is not None and a == b:
+                merged[key] = a
+        return merged if merged else None
+
     def get_or_create_edge(v_from, v_to, parent_edge=None, parent_facet=None):
         key = (min(v_from, v_to), max(v_from, v_to))
         if key in edge_lookup:
@@ -473,6 +514,12 @@ def refine_triangle_mesh(mesh):
             )
             if inherited_target is not None:
                 midpoint_options.update(inherited_target)
+            inherited_interface = _maybe_inherit_disk_interface_vertex_tags(
+                getattr(mesh.vertices[v1], "options", {}) or {},
+                getattr(mesh.vertices[v2], "options", {}) or {},
+            )
+            if inherited_interface is not None:
+                midpoint_options.update(inherited_interface)
             midpoint = Vertex(
                 midpoint_idx,
                 np.asarray(midpoint_position, dtype=float),
