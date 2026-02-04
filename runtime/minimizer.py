@@ -125,6 +125,71 @@ class Minimizer:
             for module in self.energy_modules
         )
 
+    def _line_search_energy_fn(self) -> Callable[[], float]:
+        """Return an energy callback for steppers (optionally reduced over tilts).
+
+        When ``global_parameters.line_search_reduced_energy`` is enabled, the
+        callback performs a short inner tilt relaxation (positions frozen) prior
+        to evaluating the energy, and then restores the pre-call state so
+        rejected trial steps do not leak state into the outer loop.
+        """
+        if not bool(self.global_params.get("line_search_reduced_energy", False)):
+            return self.compute_energy
+
+        reduced_steps = int(
+            self.global_params.get("line_search_reduced_tilt_inner_steps", 0) or 0
+        )
+        if reduced_steps <= 0:
+            return self.compute_energy
+
+        uses_leaflet = self._uses_leaflet_tilts()
+        gp = self.global_params
+
+        override_keys = ("tilt_inner_steps", "tilt_coupled_steps", "tilt_cg_max_iters")
+        override_present = {key: (key in gp) for key in override_keys}
+        override_old = {key: gp.get(key) for key in override_keys}
+
+        def _restore_overrides() -> None:
+            for key in override_keys:
+                if override_present.get(key, False):
+                    gp.set(key, override_old[key])
+                else:
+                    gp.unset(key)
+
+        def energy_fn() -> float:
+            tilt_mode = str(gp.get("tilt_solve_mode", "fixed") or "fixed")
+            mode_norm = tilt_mode.strip().lower()
+            if mode_norm in ("", "none", "off", "false", "fixed"):
+                return float(self.compute_energy())
+
+            positions = self.mesh.positions_view()
+            if uses_leaflet:
+                tilts_in0 = self.mesh.tilts_in_view().copy(order="F")
+                tilts_out0 = self.mesh.tilts_out_view().copy(order="F")
+            else:
+                tilts0 = self.mesh.tilts_view().copy(order="F")
+
+            try:
+                gp.set("tilt_inner_steps", reduced_steps)
+                gp.set("tilt_coupled_steps", reduced_steps)
+                gp.set("tilt_cg_max_iters", reduced_steps)
+
+                if uses_leaflet:
+                    self._relax_leaflet_tilts(positions=positions, mode=tilt_mode)
+                else:
+                    self._relax_tilts(positions=positions, mode=tilt_mode)
+
+                return float(self.compute_energy())
+            finally:
+                if uses_leaflet:
+                    self.mesh.set_tilts_in_from_array(tilts_in0)
+                    self.mesh.set_tilts_out_from_array(tilts_out0)
+                else:
+                    self.mesh.set_tilts_from_array(tilts0)
+                _restore_overrides()
+
+        return energy_fn
+
     def _compute_energy_array_with_tilts(
         self,
         *,
@@ -1697,12 +1762,13 @@ STEP SIZE:\t {self.step_size}
                 self.global_params.get("step_size", self.step_size) or self.step_size
             )
             step_size_in = fixed_step if step_mode == "fixed" else self.step_size
+            energy_fn = self._line_search_energy_fn()
 
             step_success, self.step_size, accepted_energy = self.stepper.step(
                 self.mesh,
                 grad_arr,
                 step_size_in,
-                self.compute_energy,
+                energy_fn,
                 constraint_enforcer=self._enforce_constraints
                 if self._has_enforceable_constraints
                 else None,
