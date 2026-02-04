@@ -26,6 +26,10 @@ global_parameters:
   tilt_thetaB_optimize_every: 1
   tilt_thetaB_optimize_delta: 0.01
   tilt_thetaB_optimize_inner_steps: 60
+  # Treat the disk interface ring as a base-term boundary for bending_tilt_in,
+  # so the internal hard interface does not pick up a spurious bulk curvature
+  # penalty on planar configurations.
+  bending_tilt_base_term_boundary_group_in: disk
   rim_slope_match_thetaB_param: tilt_thetaB_value
   rim_slope_match_group: disk
   rim_slope_match_outer_group: outer
