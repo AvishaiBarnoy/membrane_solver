@@ -53,11 +53,15 @@ def backtracking_line_search(
         Whether the step succeeded and the updated step size.
     """
     original_positions = {vidx: v.position.copy() for vidx, v in mesh.vertices.items()}
+    energy0 = energy_fn()
+    reduced_tilts = bool(getattr(mesh, "_line_search_reduced_energy", False))
+    # If reduced-energy is enabled, energy_fn may relax tilts as part of the
+    # baseline evaluation. Snapshot tilts *after* energy0 so all subsequent
+    # rejects restore the same state used for Armijo comparisons.
     original_tilts = mesh.tilts_view().copy(order="F")
     original_tilts_in = mesh.tilts_in_view().copy(order="F")
     original_tilts_out = mesh.tilts_out_view().copy(order="F")
-
-    energy0 = energy_fn()
+    _ = reduced_tilts
 
     # Pre-compute stability threshold
     min_edge_len = get_min_edge_length(mesh)
@@ -204,11 +208,12 @@ def backtracking_line_search_array(
         if not getattr(vertex, "fixed", False):
             movable_rows.append(row)
         original_positions[vidx] = vertex.position.copy()
+    energy0 = energy_fn()
+    reduced_tilts = bool(getattr(mesh, "_line_search_reduced_energy", False))
     original_tilts = mesh.tilts_view().copy(order="F")
     original_tilts_in = mesh.tilts_in_view().copy(order="F")
     original_tilts_out = mesh.tilts_out_view().copy(order="F")
-
-    energy0 = energy_fn()
+    _ = reduced_tilts
 
     min_edge_len = get_min_edge_length(mesh)
     safe_step_limit = 0.3 * min_edge_len if min_edge_len > 0 else float("inf")

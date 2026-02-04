@@ -40,7 +40,9 @@ def _build_minimizer(mesh: Mesh, gp: GlobalParameters) -> Minimizer:
     )
 
 
-def test_line_search_reduced_energy_relaxes_tilts_but_restores_state() -> None:
+def test_line_search_reduced_energy_relaxes_tilts_and_restores_param_overrides() -> (
+    None
+):
     mesh = _build_single_triangle_leaflet_mesh()
     rng = np.random.default_rng(0)
     tin0 = rng.normal(size=(len(mesh.vertex_ids), 3))
@@ -71,11 +73,12 @@ def test_line_search_reduced_energy_relaxes_tilts_but_restores_state() -> None:
     energy_fn = minim._line_search_energy_fn()
     E_reduced = float(energy_fn())
 
-    # Reduced evaluation should not be higher than the raw energy and must not
-    # mutate the mesh state.
+    # Reduced evaluation should not be higher than the raw energy.
     assert E_reduced <= E_raw + 1e-10
-    assert np.allclose(mesh.tilts_in_view(), tin0)
-    assert np.allclose(mesh.tilts_out_view(), tout0)
+    # Reduced evaluation relaxes tilts in-place; line search is responsible for
+    # restoring tilts on rejected trial steps.
+    assert not np.allclose(mesh.tilts_in_view(), tin0)
+    assert not np.allclose(mesh.tilts_out_view(), tout0)
 
     # Parameter overrides must be restored (no state leakage into outer loop).
     assert int(gp.get("tilt_inner_steps")) == 10
