@@ -77,6 +77,73 @@ class Minimizer:
         self.param_resolver = ParameterResolver(global_params)
         self._gauss_bonnet_monitor: GaussBonnetMonitor | None = None
 
+        # Scratch buffers for the inner tilt-relaxation loop. These are safe to
+        # reuse across iterations because they are overwritten (filled) before
+        # each use, and are resized when the vertex count changes.
+        self._tilt_relax_scratch_n_vertices: int | None = None
+        self._tilt_relax_grad_dummy: np.ndarray | None = None
+        self._tilt_relax_tilt_in_grad: np.ndarray | None = None
+        self._tilt_relax_tilt_out_grad: np.ndarray | None = None
+
+        # Cache leaflet-absence topology masks for the "out" leaflet. These masks
+        # depend on mesh topology (mesh._version), triangle count, and the active
+        # leaflet-out absent presets list.
+        self._leaflet_out_absence_cache_key: tuple[int, int, tuple[str, ...]] | None = (
+            None
+        )
+        self._leaflet_out_absence_absent_mask: np.ndarray | None = None
+        self._leaflet_out_absence_tri_keep: np.ndarray | None = None
+
+    def _tilt_relax_scratch(
+        self, *, n_vertices: int
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Return reusable scratch arrays for tilt relaxation.
+
+        The arrays are sized to ``(n_vertices, 3)`` and are not guaranteed to be
+        zeroed on return; callers must fill/overwrite before use.
+        """
+        if self._tilt_relax_scratch_n_vertices != int(n_vertices):
+            self._tilt_relax_scratch_n_vertices = int(n_vertices)
+            self._tilt_relax_grad_dummy = np.zeros((n_vertices, 3), dtype=float)
+            self._tilt_relax_tilt_in_grad = np.zeros((n_vertices, 3), dtype=float)
+            self._tilt_relax_tilt_out_grad = np.zeros((n_vertices, 3), dtype=float)
+
+        assert self._tilt_relax_grad_dummy is not None
+        assert self._tilt_relax_tilt_in_grad is not None
+        assert self._tilt_relax_tilt_out_grad is not None
+        return (
+            self._tilt_relax_grad_dummy,
+            self._tilt_relax_tilt_in_grad,
+            self._tilt_relax_tilt_out_grad,
+        )
+
+    def _leaflet_out_absence_masks(
+        self, *, tri_rows: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return cached (absent_vertex_mask, tri_keep_mask) for the outer leaflet."""
+        absent_presets = tuple(
+            self.global_params.get("leaflet_out_absent_presets", []) or []
+        )
+        key = (
+            int(getattr(self.mesh, "_version", 0)),
+            int(len(tri_rows)),
+            absent_presets,
+        )
+        if key != self._leaflet_out_absence_cache_key:
+            absent_mask = leaflet_absent_vertex_mask(
+                self.mesh, self.global_params, leaflet="out"
+            )
+            tri_keep = leaflet_present_triangle_mask(
+                self.mesh, tri_rows, absent_vertex_mask=absent_mask
+            )
+            self._leaflet_out_absence_cache_key = key
+            self._leaflet_out_absence_absent_mask = absent_mask
+            self._leaflet_out_absence_tri_keep = tri_keep
+
+        assert self._leaflet_out_absence_absent_mask is not None
+        assert self._leaflet_out_absence_tri_keep is not None
+        return self._leaflet_out_absence_absent_mask, self._leaflet_out_absence_tri_keep
+
     def _tilt_fixed_mask(self) -> np.ndarray:
         """Return a boolean mask for vertices whose tilt is clamped.
 
@@ -884,7 +951,10 @@ class Minimizer:
             normals = self.mesh.vertex_normals(positions)
             tilts_in = self._project_tilts_to_tangent_array(tilts_in, normals)
             tilts_out = self._project_tilts_to_tangent_array(tilts_out, normals)
-            grad_dummy = np.zeros_like(positions)
+            grad_dummy, tilt_in_grad, tilt_out_grad = self._tilt_relax_scratch(
+                n_vertices=len(self.mesh.vertex_ids)
+            )
+            grad_dummy.fill(0.0)
 
             tri_rows, _ = self.mesh.triangle_row_cache()
             if tri_rows is None or len(tri_rows) == 0:
@@ -897,11 +967,8 @@ class Minimizer:
                 tri_rows=tri_rows,
                 positions=positions,
             )
-            absent_mask_out = leaflet_absent_vertex_mask(
-                self.mesh, self.global_params, leaflet="out"
-            )
-            tri_keep_out = leaflet_present_triangle_mask(
-                self.mesh, tri_rows, absent_vertex_mask=absent_mask_out
+            _absent_mask_out, tri_keep_out = self._leaflet_out_absence_masks(
+                tri_rows=tri_rows
             )
             tri_rows_out = tri_rows[tri_keep_out] if tri_keep_out.size else tri_rows
             tilt_vertex_areas_out = (
@@ -913,7 +980,6 @@ class Minimizer:
                     positions=positions,
                 )
             )
-            grad_dummy = np.zeros_like(positions)
 
             tilt_fixed_vals_in = (
                 tilts_in[fixed_mask_in].copy() if np.any(fixed_mask_in) else None
@@ -921,9 +987,8 @@ class Minimizer:
             tilt_fixed_vals_out = (
                 tilts_out[fixed_mask_out].copy() if np.any(fixed_mask_out) else None
             )
-
-            tilt_in_grad = np.zeros_like(tilts_in)
-            tilt_out_grad = np.zeros_like(tilts_out)
+            tilt_in_grad.fill(0.0)
+            tilt_out_grad.fill(0.0)
 
             def _leaflet_tilt_gradients() -> tuple[float, float]:
                 E0 = self._compute_energy_and_leaflet_tilt_gradients_array(
