@@ -112,7 +112,7 @@ class HessianCommand(Command):
                     f"Energy = {energy:.5f}, "
                     f"Step Size  = {context.minimizer.step_size:.2e}"
                 )
-            step_success, context.minimizer.step_size = stepper.step(
+            step_success, context.minimizer.step_size, _accepted_energy = stepper.step(
                 context.mesh,
                 grad_arr,
                 context.minimizer.step_size,

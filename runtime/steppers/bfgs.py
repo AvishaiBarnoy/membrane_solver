@@ -65,7 +65,7 @@ class BFGS(BaseStepper):
         step_size: float,
         energy_fn: Callable[[], float],
         constraint_enforcer: Callable[[Mesh], None] | None = None,
-    ) -> tuple[bool, float]:
+    ) -> tuple[bool, float, float]:
         """Take one BFGS step with line search."""
 
         if isinstance(grad, np.ndarray):
@@ -107,7 +107,7 @@ class BFGS(BaseStepper):
             for i, vid in enumerate(vids):
                 row = mesh.vertex_index_to_row[vid]
                 direction_arr[row] = direction_vec[3 * i : 3 * i + 3]
-            success, new_step = backtracking_line_search_array(
+            success, new_step, accepted_energy = backtracking_line_search_array(
                 mesh,
                 direction_arr,
                 grad,
@@ -126,7 +126,7 @@ class BFGS(BaseStepper):
             for i, vid in enumerate(vids):
                 direction[vid] = direction_vec[3 * i : 3 * i + 3]
 
-            success, new_step = backtracking_line_search(
+            success, new_step, accepted_energy = backtracking_line_search(
                 mesh,
                 direction,
                 grad,
@@ -145,4 +145,4 @@ class BFGS(BaseStepper):
             self._prev_grad = g
             self._prev_vids = vids
 
-        return success, new_step
+        return success, new_step, float(accepted_energy)

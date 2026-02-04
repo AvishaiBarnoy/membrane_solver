@@ -21,7 +21,7 @@ def backtracking_line_search(
     gamma: float = 1.5,
     alpha_max_factor: float = 10.0,
     constraint_enforcer: Callable[[Mesh], None] | None = None,
-) -> tuple[bool, float]:
+) -> tuple[bool, float, float]:
     """Armijo backtracking line search with optional volume guard.
 
     Parameters
@@ -142,7 +142,7 @@ def backtracking_line_search(
                 armijo_pass,
             )
             new_step = min(alpha * gamma, alpha_max)
-            return True, new_step
+            return True, new_step, float(trial_energy)
 
         # Reject this scale: restore and try a smaller one.
         for vidx, vertex in mesh.vertices.items():
@@ -176,7 +176,7 @@ def backtracking_line_search(
         alpha,
     )
     reduced_step = max(alpha * beta, 0.0)
-    return False, max(reduced_step, step_size * beta)
+    return False, max(reduced_step, step_size * beta), float(energy0)
 
 
 def backtracking_line_search_array(
@@ -192,7 +192,7 @@ def backtracking_line_search_array(
     gamma: float = 1.5,
     alpha_max_factor: float = 10.0,
     constraint_enforcer: Callable[[Mesh], None] | None = None,
-) -> tuple[bool, float]:
+) -> tuple[bool, float, float]:
     """Armijo backtracking line search for dense array gradients."""
     if direction.shape != gradient.shape:
         raise ValueError("direction and gradient must have matching shapes")
@@ -269,7 +269,7 @@ def backtracking_line_search_array(
                 armijo_pass,
             )
             new_step = min(alpha * gamma, alpha_max)
-            return True, new_step
+            return True, new_step, float(trial_energy)
 
         for vidx, pos in original_positions.items():
             mesh.vertices[vidx].position[:] = pos
@@ -299,4 +299,4 @@ def backtracking_line_search_array(
         alpha,
     )
     reduced_step = max(alpha * beta, 0.0)
-    return False, max(reduced_step, step_size * beta)
+    return False, max(reduced_step, step_size * beta), float(energy0)

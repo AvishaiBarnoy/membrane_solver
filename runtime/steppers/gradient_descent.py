@@ -39,7 +39,7 @@ class GradientDescent(BaseStepper):
         step_size: float,
         energy_fn: Callable[[], float],
         constraint_enforcer: Callable[[Mesh], None] | None = None,
-    ) -> tuple[bool, float]:
+    ) -> tuple[bool, float, float]:
         """Apply one gradient descent step with backtracking line search."""
 
         if isinstance(grad, np.ndarray):
