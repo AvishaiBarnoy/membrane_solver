@@ -263,10 +263,14 @@ class Minimizer:
         positions: np.ndarray,
         tilts_in: np.ndarray,
         tilts_out: np.ndarray,
+        grad_dummy: np.ndarray | None = None,
     ) -> float:
         """Compute total energy for fixed positions and leaflet tilt arrays."""
         index_map = self.mesh.vertex_index_to_row
-        grad_dummy = np.zeros_like(positions)
+        if grad_dummy is None:
+            grad_dummy = np.zeros_like(positions)
+        else:
+            grad_dummy.fill(0.0)
         total_energy = 0.0
 
         for module in self.energy_modules:
@@ -317,6 +321,7 @@ class Minimizer:
         positions: np.ndarray,
         tilts_in: np.ndarray,
         tilts_out: np.ndarray,
+        grad_dummy: np.ndarray | None = None,
     ) -> float:
         """Compute energy of tilt-dependent modules only (positions frozen).
 
@@ -325,7 +330,10 @@ class Minimizer:
         backtracking accept/reject decisions while avoiding extra work.
         """
         index_map = self.mesh.vertex_index_to_row
-        grad_dummy = np.zeros_like(positions)
+        if grad_dummy is None:
+            grad_dummy = np.zeros_like(positions)
+        else:
+            grad_dummy.fill(0.0)
         total_energy = 0.0
 
         for module in self.energy_modules:
@@ -361,7 +369,10 @@ class Minimizer:
             # Legacy dict modules are rare here; fall back to full energy.
             # (Inner-loop performance comes from the array modules.)
             E_full = self._compute_energy_array_with_leaflet_tilts(
-                positions=positions, tilts_in=tilts_in, tilts_out=tilts_out
+                positions=positions,
+                tilts_in=tilts_in,
+                tilts_out=tilts_out,
+                grad_dummy=grad_dummy,
             )
             return float(E_full)
 
@@ -790,6 +801,7 @@ class Minimizer:
             normals = self.mesh.vertex_normals(positions)
             tilts_in = self._project_tilts_to_tangent_array(tilts_in, normals)
             tilts_out = self._project_tilts_to_tangent_array(tilts_out, normals)
+            grad_dummy = np.zeros_like(positions)
 
             tilt_fixed_vals_in = (
                 tilts_in[fixed_mask_in].copy() if np.any(fixed_mask_in) else None
@@ -871,7 +883,10 @@ class Minimizer:
                         if tilt_fixed_vals_out is not None:
                             trial_out[fixed_mask_out] = tilt_fixed_vals_out
                         E1 = self._compute_tilt_dependent_energy_with_leaflet_tilts(
-                            positions=positions, tilts_in=trial_in, tilts_out=trial_out
+                            positions=positions,
+                            tilts_in=trial_in,
+                            tilts_out=trial_out,
+                            grad_dummy=grad_dummy,
                         )
                         if E1 <= E0:
                             tilts_in = trial_in
@@ -953,7 +968,10 @@ class Minimizer:
                         if tilt_fixed_vals_out is not None:
                             trial_out[fixed_mask_out] = tilt_fixed_vals_out
                         E1 = self._compute_tilt_dependent_energy_with_leaflet_tilts(
-                            positions=positions, tilts_in=trial_in, tilts_out=trial_out
+                            positions=positions,
+                            tilts_in=trial_in,
+                            tilts_out=trial_out,
+                            grad_dummy=grad_dummy,
                         )
                         if E1 <= E0:
                             tilts_in = trial_in
