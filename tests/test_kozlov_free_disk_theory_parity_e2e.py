@@ -280,6 +280,8 @@ def test_kozlov_free_disk_elastic_energy_matches_tensionless_theory_xfail() -> N
     tri_rows, _ = mesh.triangle_row_cache()
     div_in = None
     div_out = None
+    div_tri_in = None
+    div_tri_out = None
     if tri_rows is not None and len(tri_rows) > 0:
         div_in, _ = p1_vertex_divergence(
             n_vertices=len(mesh.vertex_ids),
@@ -293,6 +295,16 @@ def test_kozlov_free_disk_elastic_energy_matches_tensionless_theory_xfail() -> N
             tilts=mesh.tilts_out_view(),
             tri_rows=tri_rows,
         )
+        # Triangle divergence stats help detect whether large vertex divergence
+        # is a per-triangle effect or an accumulation/normalization artifact.
+        from geometry.tilt_operators import p1_triangle_divergence  # noqa: PLC0415
+
+        div_tri_in, *_ = p1_triangle_divergence(
+            positions=positions, tilts=mesh.tilts_in_view(), tri_rows=tri_rows
+        )
+        div_tri_out, *_ = p1_triangle_divergence(
+            positions=positions, tilts=mesh.tilts_out_view(), tri_rows=tri_rows
+        )
 
     fields = compute_curvature_fields(mesh, positions, mesh.vertex_index_to_row)
     H = np.asarray(fields.mean_curvature, dtype=float)
@@ -301,11 +313,22 @@ def test_kozlov_free_disk_elastic_energy_matches_tensionless_theory_xfail() -> N
     mask_mem = (r_all >= 0.55) & (r_all <= 11.5)
     absH_mem = absH[mask_mem] if np.any(mask_mem) else absH
 
+    # Region masks: near-disk ring, mid membrane, far field. These are used for
+    # stats only (not for energy partitioning yet).
+    mask_near = (r_all >= 0.55) & (r_all < 1.5)
+    mask_mid = (r_all >= 1.5) & (r_all < 6.0)
+    mask_far = (r_all >= 6.0) & (r_all <= 11.5)
+
     def qstats(arr: np.ndarray) -> str:
         if arr.size == 0:
             return "empty"
         q = np.quantile(arr, [0.5, 0.9, 0.99, 1.0])
         return f"med={q[0]:.3e} p90={q[1]:.3e} p99={q[2]:.3e} max={q[3]:.3e}"
+
+    def _masked(arr: np.ndarray | None, mask: np.ndarray) -> np.ndarray:
+        if arr is None:
+            return np.zeros(0, dtype=float)
+        return np.asarray(arr, dtype=float)[mask]
 
     report = "\n".join(
         [
@@ -318,8 +341,22 @@ def test_kozlov_free_disk_elastic_energy_matches_tensionless_theory_xfail() -> N
             + ", ".join(f"{k}={float(v):.6g}" for k, v in sorted(breakdown.items())),
             f"  |z|_max={z_max:.3e}",
             f"  |H| (membrane band) stats: {qstats(absH_mem)}",
+            "  |H| by region:",
+            f"    near [0.55,1.5): {qstats(absH[mask_near])}",
+            f"    mid  [1.5,6.0): {qstats(absH[mask_mid])}",
+            f"    far  [6.0,11.5]: {qstats(absH[mask_far])}",
             f"  |div t_in| stats: {qstats(np.abs(div_in)) if div_in is not None else 'n/a'}",
             f"  |div t_out| stats: {qstats(np.abs(div_out)) if div_out is not None else 'n/a'}",
+            f"  |div_tri t_in| stats: {qstats(np.abs(np.asarray(div_tri_in, dtype=float))) if div_tri_in is not None else 'n/a'}",
+            f"  |div_tri t_out| stats: {qstats(np.abs(np.asarray(div_tri_out, dtype=float))) if div_tri_out is not None else 'n/a'}",
+            "  |div t_in| by region:",
+            f"    near [0.55,1.5): {qstats(np.abs(_masked(div_in, mask_near)))}",
+            f"    mid  [1.5,6.0): {qstats(np.abs(_masked(div_in, mask_mid)))}",
+            f"    far  [6.0,11.5]: {qstats(np.abs(_masked(div_in, mask_far)))}",
+            "  |div t_out| by region:",
+            f"    near [0.55,1.5): {qstats(np.abs(_masked(div_out, mask_near)))}",
+            f"    mid  [1.5,6.0): {qstats(np.abs(_masked(div_out, mask_mid)))}",
+            f"    far  [6.0,11.5]: {qstats(np.abs(_masked(div_out, mask_far)))}",
         ]
     )
 
