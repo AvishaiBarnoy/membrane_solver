@@ -719,6 +719,16 @@ class Minimizer:
             return
 
         with self.mesh.geometry_freeze(positions):
+            # Ensure tilt-only constraints (e.g. thetaB boundary projection) are
+            # applied before the first tilt-gradient evaluation. Otherwise a
+            # change in a scalar tilt parameter (like thetaB) can leave the tilt
+            # field in a stale state (often all zeros), making the relaxation
+            # no-op even though constraints require a non-zero boundary tilt.
+            if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
+                self.constraint_manager.enforce_tilt_constraints(
+                    self.mesh, global_params=self.global_params
+                )
+
             tilts_in = self.mesh.tilts_in_view().copy(order="F")
             tilts_out = self.mesh.tilts_out_view().copy(order="F")
             normals = self.mesh.vertex_normals(positions)
@@ -935,6 +945,10 @@ class Minimizer:
 
         self.mesh.set_tilts_in_from_array(tilts_in)
         self.mesh.set_tilts_out_from_array(tilts_out)
+        if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
+            self.constraint_manager.enforce_tilt_constraints(
+                self.mesh, global_params=self.global_params
+            )
 
     def _check_gauss_bonnet(self) -> None:
         """Emit Gauss-Bonnet diagnostics if enabled."""
