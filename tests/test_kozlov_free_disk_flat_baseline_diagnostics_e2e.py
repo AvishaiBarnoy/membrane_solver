@@ -16,15 +16,16 @@ from runtime.steppers.gradient_descent import GradientDescent  # noqa: E402
 
 @pytest.mark.e2e
 def test_kozlov_free_disk_flat_state_has_large_boundary_curvature_baseline() -> None:
-    """Diagnostic regression for the flat-reference energy gap vs docs/tex/1_disk_3d.tex.
+    """Diagnostic regression for the flat-reference state vs docs/tex/1_disk_3d.tex.
 
     In the continuum theory, a perfectly flat membrane patch with zero tilt has
     zero elastic energy. On the current discrete free-disk mesh, the curvature
     operator assigns a nonzero mean-curvature proxy on the *open boundary* even
-    when all vertices are coplanar. This baseline then feeds into bending_tilt_*.
+    when all vertices are coplanar.
 
     This test pins down the diagnostic facts (boundary dominance) so the follow-up
-    physics PR can remove or subtract the correct reference contribution.
+    physics work can stay honest about what the discrete operators do in a flat
+    state.
     """
     path = os.path.join(
         os.path.dirname(__file__),
@@ -55,9 +56,11 @@ def test_kozlov_free_disk_flat_state_has_large_boundary_curvature_baseline() -> 
     )
     breakdown = minim.compute_energy_breakdown()
 
-    # Baseline: bending_tilt_in is large even when the surface is perfectly flat.
-    # (We use a loose threshold; the point is "nontrivial and not numerical noise".)
-    assert float(breakdown.get("bending_tilt_in") or 0.0) > 10.0
+    # In the continuum theory, flat + zero tilt must have ~0 elastic energy.
+    # If this ever becomes nontrivial again, it is a regression in the
+    # flat-reference behavior we aim to match.
+    assert float(breakdown.get("bending_tilt_in") or 0.0) < 1.0e-8
+    assert float(breakdown.get("bending_tilt_out") or 0.0) < 1.0e-8
 
     positions = mesh.positions_view()
     index_map = mesh.vertex_index_to_row
