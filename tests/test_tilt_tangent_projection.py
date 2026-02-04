@@ -21,7 +21,7 @@ class _VertexLiftStepper:
     def step(self, mesh, grad, step_size, energy_fn, constraint_enforcer=None):
         mesh.vertices[self.vertex_id].position += self.delta
         mesh.increment_version()
-        return True, float(step_size)
+        return True, float(step_size), float(energy_fn())
 
 
 def test_minimizer_projects_tilts_to_tangent_after_step():

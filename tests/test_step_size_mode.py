@@ -20,7 +20,7 @@ class FakeStepper:
         energy_fn,
         constraint_enforcer=None,
     ):
-        return True, float(step_size) * 2.0
+        return True, float(step_size) * 2.0, float(energy_fn())
 
 
 def test_fixed_step_size_mode_disables_cross_iteration_adaptation():

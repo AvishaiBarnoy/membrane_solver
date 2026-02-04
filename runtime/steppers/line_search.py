@@ -87,7 +87,7 @@ def backtracking_line_search(
 
     if g_dot_d >= 0:
         logger.debug("Non-descent direction provided; skipping step.")
-        return False, step_size
+        return False, step_size, float(energy0)
 
     alpha = step_size
     alpha_max = alpha_max_factor * step_size
@@ -220,7 +220,7 @@ def backtracking_line_search_array(
     g_dot_d = float(np.sum(gradient * direction))
     if g_dot_d >= 0.0:
         logger.debug("Non-descent direction provided; skipping step.")
-        return False, step_size
+        return False, step_size, float(energy0)
 
     alpha = step_size
     alpha_max = alpha_max_factor * step_size
