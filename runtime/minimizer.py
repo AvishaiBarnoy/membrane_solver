@@ -1765,8 +1765,16 @@ STEP SIZE:\t {self.step_size}
                 > 0
             )
             # Signal to the line-search routine that energy_fn may mutate tilts
-            # during trial evaluations (reduced objective).
+            # during trial evaluations (reduced objective), and optionally
+            # switch to an accept/reject rule that uses post-relax reduced
+            # energies (rather than Armijo using the partial gradient).
             setattr(self.mesh, "_line_search_reduced_energy", reduced_flag)
+            if reduced_flag:
+                accept_rule = str(
+                    self.global_params.get("line_search_reduced_accept_rule", "armijo")
+                    or "armijo"
+                )
+                setattr(self.mesh, "_line_search_reduced_accept_rule", accept_rule)
 
             try:
                 step_success, self.step_size, accepted_energy = self.stepper.step(
@@ -1781,6 +1789,8 @@ STEP SIZE:\t {self.step_size}
             finally:
                 if hasattr(self.mesh, "_line_search_reduced_energy"):
                     delattr(self.mesh, "_line_search_reduced_energy")
+                if hasattr(self.mesh, "_line_search_reduced_accept_rule"):
+                    delattr(self.mesh, "_line_search_reduced_accept_rule")
             last_state_energy = float(accepted_energy)
             if not self.quiet:
                 # Compute total area only when needed for diagnostics.

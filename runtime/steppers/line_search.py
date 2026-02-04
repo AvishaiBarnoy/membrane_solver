@@ -55,13 +55,18 @@ def backtracking_line_search(
     original_positions = {vidx: v.position.copy() for vidx, v in mesh.vertices.items()}
     energy0 = energy_fn()
     reduced_tilts = bool(getattr(mesh, "_line_search_reduced_energy", False))
+    accept_rule = (
+        str(getattr(mesh, "_line_search_reduced_accept_rule", "armijo") or "armijo")
+        .strip()
+        .lower()
+    )
     # If reduced-energy is enabled, energy_fn may relax tilts as part of the
     # baseline evaluation. Snapshot tilts *after* energy0 so all subsequent
     # rejects restore the same state used for Armijo comparisons.
     original_tilts = mesh.tilts_view().copy(order="F")
     original_tilts_in = mesh.tilts_in_view().copy(order="F")
     original_tilts_out = mesh.tilts_out_view().copy(order="F")
-    _ = reduced_tilts
+    _ = (reduced_tilts, accept_rule)
 
     # Pre-compute stability threshold
     min_edge_len = get_min_edge_length(mesh)
@@ -89,9 +94,13 @@ def backtracking_line_search(
             dnorm,
         )
 
-    if g_dot_d >= 0:
-        logger.debug("Non-descent direction provided; skipping step.")
-        return False, step_size, float(energy0)
+    if reduced_tilts and accept_rule not in ("armijo", "decrease_only"):
+        raise ValueError(f"Unknown reduced-energy accept rule: {accept_rule!r}")
+
+    if (not reduced_tilts) or accept_rule == "armijo":
+        if g_dot_d >= 0:
+            logger.debug("Non-descent direction provided; skipping step.")
+            return False, step_size, float(energy0)
 
     alpha = step_size
     alpha_max = alpha_max_factor * step_size
@@ -133,9 +142,12 @@ def backtracking_line_search(
             mesh.increment_version()
 
         trial_energy = energy_fn()
-        armijo_pass = trial_energy <= energy0 + c * alpha * g_dot_d
+        if reduced_tilts and accept_rule == "decrease_only":
+            accept = trial_energy <= energy0
+        else:
+            accept = trial_energy <= energy0 + c * alpha * g_dot_d
 
-        if armijo_pass:
+        if accept:
             logger.debug(
                 "Line search success: alpha=%.3e, backtracks=%d, "
                 "E0=%.6f, Etrial=%.6f, armijo=%s",
@@ -143,7 +155,7 @@ def backtracking_line_search(
                 backtracks,
                 energy0,
                 trial_energy,
-                armijo_pass,
+                accept,
             )
             new_step = min(alpha * gamma, alpha_max)
             return True, new_step, float(trial_energy)
@@ -210,10 +222,15 @@ def backtracking_line_search_array(
         original_positions[vidx] = vertex.position.copy()
     energy0 = energy_fn()
     reduced_tilts = bool(getattr(mesh, "_line_search_reduced_energy", False))
+    accept_rule = (
+        str(getattr(mesh, "_line_search_reduced_accept_rule", "armijo") or "armijo")
+        .strip()
+        .lower()
+    )
     original_tilts = mesh.tilts_view().copy(order="F")
     original_tilts_in = mesh.tilts_in_view().copy(order="F")
     original_tilts_out = mesh.tilts_out_view().copy(order="F")
-    _ = reduced_tilts
+    _ = (reduced_tilts, accept_rule)
 
     min_edge_len = get_min_edge_length(mesh)
     safe_step_limit = 0.3 * min_edge_len if min_edge_len > 0 else float("inf")
@@ -223,9 +240,13 @@ def backtracking_line_search_array(
         max_dir_norm = float(np.max(np.linalg.norm(direction[movable_rows], axis=1)))
 
     g_dot_d = float(np.sum(gradient * direction))
-    if g_dot_d >= 0.0:
-        logger.debug("Non-descent direction provided; skipping step.")
-        return False, step_size, float(energy0)
+    if reduced_tilts and accept_rule not in ("armijo", "decrease_only"):
+        raise ValueError(f"Unknown reduced-energy accept rule: {accept_rule!r}")
+
+    if (not reduced_tilts) or accept_rule == "armijo":
+        if g_dot_d >= 0.0:
+            logger.debug("Non-descent direction provided; skipping step.")
+            return False, step_size, float(energy0)
 
     alpha = step_size
     alpha_max = alpha_max_factor * step_size
@@ -261,9 +282,12 @@ def backtracking_line_search_array(
             mesh.increment_version()
 
         trial_energy = energy_fn()
-        armijo_pass = trial_energy <= energy0 + c * alpha * g_dot_d
+        if reduced_tilts and accept_rule == "decrease_only":
+            accept = trial_energy <= energy0
+        else:
+            accept = trial_energy <= energy0 + c * alpha * g_dot_d
 
-        if armijo_pass:
+        if accept:
             logger.debug(
                 "Line search success: alpha=%.3e, backtracks=%d, "
                 "E0=%.6f, Etrial=%.6f, armijo=%s",
@@ -271,7 +295,7 @@ def backtracking_line_search_array(
                 backtracks,
                 energy0,
                 trial_energy,
-                armijo_pass,
+                accept,
             )
             new_step = min(alpha * gamma, alpha_max)
             return True, new_step, float(trial_energy)
