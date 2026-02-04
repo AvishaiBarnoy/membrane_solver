@@ -7,7 +7,11 @@ import numpy as np
 
 from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
-from geometry.entities import Mesh
+from geometry.entities import Mesh, _fast_cross
+from modules.energy.leaflet_presence import (
+    leaflet_absent_vertex_mask,
+    leaflet_present_triangle_mask,
+)
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.diagnostics.gauss_bonnet import GaussBonnetMonitor
 from runtime.energy_manager import EnergyModuleManager
@@ -322,6 +326,8 @@ class Minimizer:
         tilts_in: np.ndarray,
         tilts_out: np.ndarray,
         grad_dummy: np.ndarray | None = None,
+        tilt_vertex_areas_in: np.ndarray | None = None,
+        tilt_vertex_areas_out: np.ndarray | None = None,
     ) -> float:
         """Compute energy of tilt-dependent modules only (positions frozen).
 
@@ -336,9 +342,28 @@ class Minimizer:
             grad_dummy.fill(0.0)
         total_energy = 0.0
 
-        for module in self.energy_modules:
+        for name, module in zip(self.energy_module_names, self.energy_modules):
             if not getattr(module, "USES_TILT_LEAFLETS", False):
                 continue
+
+            # Fast path for pure tilt magnitude penalties.
+            if name == "tilt_in" and tilt_vertex_areas_in is not None:
+                k_tilt = float(self.param_resolver.get(None, "tilt_modulus_in") or 0.0)
+                if k_tilt != 0.0:
+                    sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
+                    total_energy += float(
+                        0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_in)
+                    )
+                continue
+            if name == "tilt_out" and tilt_vertex_areas_out is not None:
+                k_tilt = float(self.param_resolver.get(None, "tilt_modulus_out") or 0.0)
+                if k_tilt != 0.0:
+                    sq = np.einsum("ij,ij->i", tilts_out, tilts_out)
+                    total_energy += float(
+                        0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_out)
+                    )
+                continue
+
             if hasattr(module, "compute_energy_and_gradient_array"):
                 try:
                     E_mod = module.compute_energy_and_gradient_array(
@@ -378,6 +403,23 @@ class Minimizer:
 
         return float(total_energy)
 
+    @staticmethod
+    def _tilt_vertex_areas_from_triangles(
+        *, n_vertices: int, tri_rows: np.ndarray, positions: np.ndarray
+    ) -> np.ndarray:
+        """Return barycentric per-vertex areas based on triangle areas."""
+        tri_pos = positions[tri_rows]
+        v0 = tri_pos[:, 0, :]
+        v1 = tri_pos[:, 1, :]
+        v2 = tri_pos[:, 2, :]
+        areas = 0.5 * np.linalg.norm(_fast_cross(v1 - v0, v2 - v0), axis=1)
+        vertex_areas = np.zeros(n_vertices, dtype=float)
+        a3 = areas / 3.0
+        np.add.at(vertex_areas, tri_rows[:, 0], a3)
+        np.add.at(vertex_areas, tri_rows[:, 1], a3)
+        np.add.at(vertex_areas, tri_rows[:, 2], a3)
+        return vertex_areas
+
     def _compute_energy_and_leaflet_tilt_gradients_array(
         self,
         *,
@@ -386,15 +428,56 @@ class Minimizer:
         tilts_out: np.ndarray,
         tilt_in_grad_arr: np.ndarray,
         tilt_out_grad_arr: np.ndarray,
+        tilt_vertex_areas_in: np.ndarray | None = None,
+        tilt_vertex_areas_out: np.ndarray | None = None,
+        grad_dummy: np.ndarray | None = None,
     ) -> float:
         """Compute total energy and accumulate leaflet tilt gradients."""
         index_map = self.mesh.vertex_index_to_row
-        grad_dummy = np.zeros_like(positions)
+        if grad_dummy is None:
+            grad_dummy = np.zeros_like(positions)
+        else:
+            grad_dummy.fill(0.0)
         tilt_in_grad_arr.fill(0.0)
         tilt_out_grad_arr.fill(0.0)
         total_energy = 0.0
 
-        for module in self.energy_modules:
+        for name, module in zip(self.energy_module_names, self.energy_modules):
+            # Fast path for the pure tilt magnitude penalties: when positions
+            # are frozen (tilt relaxation inner loop), precomputed vertex areas
+            # avoid repeated triangle cross-products.
+            if (
+                name == "tilt_in"
+                and tilt_vertex_areas_in is not None
+                and getattr(module, "USES_TILT_LEAFLETS", False)
+            ):
+                k_tilt = float(self.param_resolver.get(None, "tilt_modulus_in") or 0.0)
+                if k_tilt != 0.0:
+                    sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
+                    total_energy += float(
+                        0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_in)
+                    )
+                    tilt_in_grad_arr += (
+                        k_tilt * tilts_in * tilt_vertex_areas_in[:, None]
+                    )
+                continue
+
+            if (
+                name == "tilt_out"
+                and tilt_vertex_areas_out is not None
+                and getattr(module, "USES_TILT_LEAFLETS", False)
+            ):
+                k_tilt = float(self.param_resolver.get(None, "tilt_modulus_out") or 0.0)
+                if k_tilt != 0.0:
+                    sq = np.einsum("ij,ij->i", tilts_out, tilts_out)
+                    total_energy += float(
+                        0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_out)
+                    )
+                    tilt_out_grad_arr += (
+                        k_tilt * tilts_out * tilt_vertex_areas_out[:, None]
+                    )
+                continue
+
             if hasattr(module, "compute_energy_and_gradient_array"):
                 try:
                     E_mod = module.compute_energy_and_gradient_array(
@@ -803,6 +886,35 @@ class Minimizer:
             tilts_out = self._project_tilts_to_tangent_array(tilts_out, normals)
             grad_dummy = np.zeros_like(positions)
 
+            tri_rows, _ = self.mesh.triangle_row_cache()
+            if tri_rows is None or len(tri_rows) == 0:
+                return
+
+            # Cache barycentric per-vertex areas once; positions are frozen for
+            # the inner loop, so pure-tilt energies/gradients can reuse these.
+            tilt_vertex_areas_in = self._tilt_vertex_areas_from_triangles(
+                n_vertices=len(self.mesh.vertex_ids),
+                tri_rows=tri_rows,
+                positions=positions,
+            )
+            absent_mask_out = leaflet_absent_vertex_mask(
+                self.mesh, self.global_params, leaflet="out"
+            )
+            tri_keep_out = leaflet_present_triangle_mask(
+                self.mesh, tri_rows, absent_vertex_mask=absent_mask_out
+            )
+            tri_rows_out = tri_rows[tri_keep_out] if tri_keep_out.size else tri_rows
+            tilt_vertex_areas_out = (
+                np.zeros(len(self.mesh.vertex_ids), dtype=float)
+                if tri_rows_out.size == 0
+                else self._tilt_vertex_areas_from_triangles(
+                    n_vertices=len(self.mesh.vertex_ids),
+                    tri_rows=tri_rows_out,
+                    positions=positions,
+                )
+            )
+            grad_dummy = np.zeros_like(positions)
+
             tilt_fixed_vals_in = (
                 tilts_in[fixed_mask_in].copy() if np.any(fixed_mask_in) else None
             )
@@ -820,6 +932,9 @@ class Minimizer:
                     tilts_out=tilts_out,
                     tilt_in_grad_arr=tilt_in_grad,
                     tilt_out_grad_arr=tilt_out_grad,
+                    tilt_vertex_areas_in=tilt_vertex_areas_in,
+                    tilt_vertex_areas_out=tilt_vertex_areas_out,
+                    grad_dummy=grad_dummy,
                 )
                 if hasattr(
                     self.constraint_manager, "apply_tilt_gradient_modifications_array"
@@ -887,6 +1002,8 @@ class Minimizer:
                             tilts_in=trial_in,
                             tilts_out=trial_out,
                             grad_dummy=grad_dummy,
+                            tilt_vertex_areas_in=tilt_vertex_areas_in,
+                            tilt_vertex_areas_out=tilt_vertex_areas_out,
                         )
                         if E1 <= E0:
                             tilts_in = trial_in
@@ -972,6 +1089,8 @@ class Minimizer:
                             tilts_in=trial_in,
                             tilts_out=trial_out,
                             grad_dummy=grad_dummy,
+                            tilt_vertex_areas_in=tilt_vertex_areas_in,
+                            tilt_vertex_areas_out=tilt_vertex_areas_out,
                         )
                         if E1 <= E0:
                             tilts_in = trial_in
