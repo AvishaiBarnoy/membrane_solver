@@ -24,6 +24,40 @@ from modules.energy.leaflet_presence import (
     leaflet_present_triangle_mask,
 )
 
+_BASE_TERM_BOUNDARY_OPTION_KEYS = (
+    # Most configs tag the disk interface ring via the rim-slope match group.
+    "rim_slope_match_group",
+    # Some configs use explicit thetaB group tags.
+    "tilt_thetaB_group",
+    "tilt_thetaB_group_in",
+    "tilt_thetaB_group_out",
+)
+
+
+def _collect_group_rows(
+    mesh: Mesh, *, group: str, index_map: Dict[int, int]
+) -> np.ndarray:
+    """Return vertex-row indices whose options tag them as members of ``group``."""
+    rows: list[int] = []
+    for vid in mesh.vertex_ids:
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if any(opts.get(key) == group for key in _BASE_TERM_BOUNDARY_OPTION_KEYS):
+            row = index_map.get(int(vid))
+            if row is not None:
+                rows.append(int(row))
+    return np.asarray(rows, dtype=int)
+
+
+def _base_term_boundary_group(global_params, *, cache_tag: str) -> str | None:
+    """Optional config: treat a tagged interface ring as a base-term boundary."""
+    if global_params is None:
+        return None
+    raw = global_params.get(f"bending_tilt_base_term_boundary_group_{cache_tag}")
+    if raw is None:
+        return None
+    group = str(raw).strip()
+    return group if group else None
+
 
 def _resolve_bending_modulus(global_params, kappa_key: str) -> float:
     """Return the leaflet-specific bending modulus or the global default."""
@@ -165,6 +199,11 @@ def _total_energy_leaflet(
     if boundary_vids:
         boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
         is_interior[boundary_rows] = False
+    group = _base_term_boundary_group(global_params, cache_tag=cache_tag)
+    if group:
+        rows = _collect_group_rows(mesh, group=group, index_map=index_map)
+        if rows.size:
+            is_interior[rows] = False
 
     base_term = (2.0 * H_vor) - c0_arr
     base_term[~is_interior] = 0.0
@@ -287,6 +326,14 @@ def compute_energy_and_gradient_array_leaflet(
     if boundary_vids:
         boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
         is_interior[boundary_rows] = False
+    group = _base_term_boundary_group(global_params, cache_tag=cache_tag)
+    if group:
+        # Treat this tagged interface ring like a boundary for the curvature
+        # (base) term. This avoids spuriously assigning a bulk Helfrich penalty
+        # to an internal ring that exists only to represent a hard interface.
+        rows = _collect_group_rows(mesh, group=group, index_map=index_map)
+        if rows.size:
+            is_interior[rows] = False
 
     ratio = np.zeros_like(vertex_areas_eff)
     mask_vor = safe_areas_vor > 1e-15
