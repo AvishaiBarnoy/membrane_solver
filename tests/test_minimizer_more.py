@@ -106,7 +106,7 @@ def test_minimize_converges_when_grad_norm_below_tol():
     gp = GlobalParameters()
     energy = DummyEnergyModule(energy=2.0, grad_value=0.0)
     cm = DummyConstraintManager()
-    stepper = DummyStepper(results=[(True, 1e-3)])
+    stepper = DummyStepper(results=[(True, 1e-3, 2.0)])
     minim = Minimizer(
         mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True, tol=1e-6
     )
@@ -122,7 +122,7 @@ def test_minimize_terminates_after_max_zero_steps_without_reset():
     energy = DummyEnergyModule(energy=2.0, grad_value=1.0)
     cm = DummyConstraintManager()
     # Fail step with step_size <= floor
-    stepper = DummyStepper(results=[(False, 1e-4)])
+    stepper = DummyStepper(results=[(False, 1e-4, 2.0)])
     minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
 
     out = minim.minimize(n_steps=3)
@@ -137,7 +137,7 @@ def test_minimize_resets_stepper_on_failed_step_that_does_not_terminate():
     gp = GlobalParameters({"max_zero_steps": 10, "step_size_floor": 1e-12})
     energy = DummyEnergyModule(energy=2.0, grad_value=1.0)
     cm = DummyConstraintManager()
-    stepper = DummyStepper(results=[(False, 1e-3), (True, 1e-3)])
+    stepper = DummyStepper(results=[(False, 1e-3, 2.0), (True, 1e-3, 2.0)])
     minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
 
     out = minim.minimize(n_steps=2)
@@ -156,7 +156,7 @@ def test_minimize_volume_drift_triggers_mesh_op_enforcement_and_stepper_reset():
     )
     energy = DummyEnergyModule(energy=1.0, grad_value=1.0)
     cm = DummyConstraintManager()
-    stepper = DummyStepper(results=[(True, 1e-3)])
+    stepper = DummyStepper(results=[(True, 1e-3, 1.0)])
     minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
 
     minim.minimize(n_steps=1)

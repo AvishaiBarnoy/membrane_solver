@@ -25,7 +25,9 @@ def test_line_search_success_and_history_update():
 
     grad = {0: v.position.copy()}
 
-    success, step_size = stepper.step(mesh, grad, 1.0, lambda: quadratic_energy(v))
+    success, step_size, _accepted_energy = stepper.step(
+        mesh, grad, 1.0, lambda: quadratic_energy(v)
+    )
 
     assert success
     assert step_size > 1.0  # grew by gamma
@@ -43,7 +45,9 @@ def test_line_search_failure_preserves_history():
     stepper = ConjugateGradient()
 
     grad = {0: v.position.copy()}
-    success, step_size = stepper.step(mesh, grad, 1.0, lambda: quadratic_energy(v))
+    success, step_size, _accepted_energy = stepper.step(
+        mesh, grad, 1.0, lambda: quadratic_energy(v)
+    )
     assert success
 
     # Reset vertex position to attempt another step
@@ -54,7 +58,9 @@ def test_line_search_failure_preserves_history():
     old_iter = stepper.iter_count
 
     grad2 = {0: v.position.copy()}
-    success2, step_size2 = stepper.step(mesh, grad2, step_size, constant_energy)
+    success2, step_size2, _accepted_energy2 = stepper.step(
+        mesh, grad2, step_size, constant_energy
+    )
 
     assert not success2
     assert step_size2 <= step_size

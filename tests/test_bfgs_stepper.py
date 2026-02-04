@@ -20,10 +20,10 @@ def test_bfgs_stepper_moves_toward_minimum():
     stepper = BFGS()
     grad = {0: np.array([-2.0, 0.0, 0.0])}
 
-    success, _ = stepper.step(mesh, grad, 0.1, energy_fn)
+    success, _, _accepted_energy = stepper.step(mesh, grad, 0.1, energy_fn)
     assert success
     assert mesh.vertices[0].position[0] > 0.0
 
     grad2 = {0: np.array([2.0 * (mesh.vertices[0].position[0] - 1.0), 0.0, 0.0])}
-    success2, _ = stepper.step(mesh, grad2, 0.1, energy_fn)
+    success2, _, _accepted_energy2 = stepper.step(mesh, grad2, 0.1, energy_fn)
     assert success2

@@ -1421,6 +1421,7 @@ STEP SIZE:\t {self.step_size}
             E, grad = self.compute_energy_and_gradient()
             self._enforce_constraints()
             self._log_energy_consistency("no_steps")
+            E = float(self.compute_energy())
             return {
                 "energy": E,
                 "gradient": grad,
@@ -1436,6 +1437,7 @@ STEP SIZE:\t {self.step_size}
 
         self._check_gauss_bonnet()
         last_grad_arr = None
+        last_state_energy: float | None = None
         for i in range(n_steps):
             if callback:
                 callback(self.mesh, i)
@@ -1481,13 +1483,6 @@ STEP SIZE:\t {self.step_size}
                 }
             logger.debug("Iteration %d: |∇E|=%.3e", i, grad_norm)
 
-            if not self.quiet:
-                # Compute total area only when needed for diagnostics
-                total_area = self.mesh.compute_total_surface_area()
-                print(
-                    f"Step {i:4d}: Area = {total_area:.5f}, Energy = {E:.5f}, Step Size  = {self.step_size:.2e}"
-                )
-
             step_mode = str(
                 self.global_params.get("step_size_mode", "adaptive") or "adaptive"
             ).lower()
@@ -1496,7 +1491,7 @@ STEP SIZE:\t {self.step_size}
             )
             step_size_in = fixed_step if step_mode == "fixed" else self.step_size
 
-            step_success, self.step_size = self.stepper.step(
+            step_success, self.step_size, accepted_energy = self.stepper.step(
                 self.mesh,
                 grad_arr,
                 step_size_in,
@@ -1505,6 +1500,13 @@ STEP SIZE:\t {self.step_size}
                 if self._has_enforceable_constraints
                 else None,
             )
+            last_state_energy = float(accepted_energy)
+            if not self.quiet:
+                # Compute total area only when needed for diagnostics.
+                total_area = self.mesh.compute_total_surface_area()
+                print(
+                    f"Step {i:4d}: Area = {total_area:.5f}, Energy = {last_state_energy:.5f}, Step Size  = {step_size_in:.2e}"
+                )
             if logger.isEnabledFor(logging.DEBUG):
                 energy_post_step = self.compute_energy()
                 self._log_energy_phase(i, "post_step", energy_post_step)
@@ -1532,7 +1534,7 @@ STEP SIZE:\t {self.step_size}
                         )
                         self._log_energy_consistency("terminated_early")
                         return {
-                            "energy": E,
+                            "energy": float(self.compute_energy()),
                             "gradient": self._grad_arr_to_dict(last_grad_arr)
                             if last_grad_arr is not None
                             else {},
@@ -1631,8 +1633,9 @@ STEP SIZE:\t {self.step_size}
             self.mesh.project_tilts_to_tangent()
 
         self._log_energy_consistency("finalize")
+        final_energy = float(self.compute_energy())
         return {
-            "energy": E,
+            "energy": final_energy,
             "gradient": self._grad_arr_to_dict(last_grad_arr)
             if last_grad_arr is not None
             else {},

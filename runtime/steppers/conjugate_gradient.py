@@ -56,7 +56,7 @@ class ConjugateGradient(BaseStepper):
         step_size: float,
         energy_fn: Callable[[], float],
         constraint_enforcer: Callable[[Mesh], None] | None = None,
-    ) -> tuple[bool, float]:
+    ) -> tuple[bool, float, float]:
         """Take one conjugate gradient step with line search."""
 
         if isinstance(grad, np.ndarray):
@@ -92,7 +92,7 @@ class ConjugateGradient(BaseStepper):
 
                 direction_arr[row] = d
 
-            success, new_step = backtracking_line_search_array(
+            success, new_step, accepted_energy = backtracking_line_search_array(
                 mesh,
                 direction_arr,
                 grad,
@@ -112,7 +112,7 @@ class ConjugateGradient(BaseStepper):
                 self.prev_dir_arr = direction_arr.copy()
                 self.iter_count += 1
 
-            return success, new_step
+            return success, new_step, float(accepted_energy)
 
         direction: Dict[int, np.ndarray] = {}
 
@@ -141,7 +141,7 @@ class ConjugateGradient(BaseStepper):
 
             direction[vidx] = d
 
-        success, new_step = backtracking_line_search(
+        success, new_step, accepted_energy = backtracking_line_search(
             mesh,
             direction,
             grad,
@@ -163,4 +163,4 @@ class ConjugateGradient(BaseStepper):
 
         # Return the step size suggested by the line search, even on failure,
         # so callers can shrink toward a zero-step cutoff if needed.
-        return success, new_step
+        return success, new_step, float(accepted_energy)

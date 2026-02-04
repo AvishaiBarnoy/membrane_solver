@@ -2,6 +2,7 @@ import os
 import sys
 
 import numpy as np
+import pytest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Facet, Mesh, Vertex
@@ -131,11 +132,12 @@ def test_stepper_increments_version():
 
     # Run line search
     # This should succeed and modify the mesh
-    success, _ = backtracking_line_search(
+    success, _, accepted_energy = backtracking_line_search(
         mesh, direction, gradient, step_size=0.1, energy_fn=energy_fn
     )
 
     assert success
+    assert accepted_energy == pytest.approx(energy_fn())
     # Version should have incremented (at least once)
     assert mesh._version > initial_version
 

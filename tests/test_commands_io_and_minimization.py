@@ -145,7 +145,7 @@ def test_hessian_command_runs_without_switching_stepper(monkeypatch):
 
     class DummyBFGS:
         def step(self, mesh, grad, step_size, energy_fn, constraint_enforcer=None):
-            return True, step_size
+            return True, step_size, float(energy_fn())
 
     monkeypatch.setattr("commands.minimization.BFGS", DummyBFGS)
 

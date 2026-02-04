@@ -22,7 +22,7 @@ class BaseStepper(ABC):
         step_size: float,
         energy_fn: Callable[[], float],
         constraint_enforcer: Callable[[Mesh], None] | None = None,
-    ) -> tuple[bool, float]:
+    ) -> tuple[bool, float, float]:
         """Advance ``mesh`` along ``grad`` with a given ``step_size``.
 
         Parameters
@@ -41,9 +41,10 @@ class BaseStepper(ABC):
 
         Returns
         -------
-        tuple[bool, float]
+        tuple[bool, float, float]
             A flag indicating if the step was accepted and the updated step
-            size to use on the next iteration.
+            size to use on the next iteration, plus the accepted energy of the
+            resulting mesh state (or the pre-step energy if the step fails).
         """
 
     def __repr__(self) -> str:  # pragma: no cover - simple utility
