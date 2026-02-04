@@ -130,8 +130,12 @@ class Minimizer:
 
         When ``global_parameters.line_search_reduced_energy`` is enabled, the
         callback performs a short inner tilt relaxation (positions frozen) prior
-        to evaluating the energy, and then restores the pre-call state so
-        rejected trial steps do not leak state into the outer loop.
+        to evaluating the energy.
+
+        IMPORTANT: When reduced-energy is enabled, the line-search routine must
+        snapshot tilts *after* evaluating the baseline energy and restore them
+        on rejected trial steps. Otherwise, accepted trial positions can end up
+        paired with stale tilts.
         """
         if not bool(self.global_params.get("line_search_reduced_energy", False)):
             return self.compute_energy
@@ -163,12 +167,6 @@ class Minimizer:
                 return float(self.compute_energy())
 
             positions = self.mesh.positions_view()
-            if uses_leaflet:
-                tilts_in0 = self.mesh.tilts_in_view().copy(order="F")
-                tilts_out0 = self.mesh.tilts_out_view().copy(order="F")
-            else:
-                tilts0 = self.mesh.tilts_view().copy(order="F")
-
             try:
                 gp.set("tilt_inner_steps", reduced_steps)
                 gp.set("tilt_coupled_steps", reduced_steps)
@@ -181,11 +179,6 @@ class Minimizer:
 
                 return float(self.compute_energy())
             finally:
-                if uses_leaflet:
-                    self.mesh.set_tilts_in_from_array(tilts_in0)
-                    self.mesh.set_tilts_out_from_array(tilts_out0)
-                else:
-                    self.mesh.set_tilts_from_array(tilts0)
                 _restore_overrides()
 
         return energy_fn
@@ -1763,16 +1756,31 @@ STEP SIZE:\t {self.step_size}
             )
             step_size_in = fixed_step if step_mode == "fixed" else self.step_size
             energy_fn = self._line_search_energy_fn()
-
-            step_success, self.step_size, accepted_energy = self.stepper.step(
-                self.mesh,
-                grad_arr,
-                step_size_in,
-                energy_fn,
-                constraint_enforcer=self._enforce_constraints
-                if self._has_enforceable_constraints
-                else None,
+            reduced_flag = (
+                bool(self.global_params.get("line_search_reduced_energy", False))
+                and int(
+                    self.global_params.get("line_search_reduced_tilt_inner_steps", 0)
+                    or 0
+                )
+                > 0
             )
+            # Signal to the line-search routine that energy_fn may mutate tilts
+            # during trial evaluations (reduced objective).
+            setattr(self.mesh, "_line_search_reduced_energy", reduced_flag)
+
+            try:
+                step_success, self.step_size, accepted_energy = self.stepper.step(
+                    self.mesh,
+                    grad_arr,
+                    step_size_in,
+                    energy_fn,
+                    constraint_enforcer=self._enforce_constraints
+                    if self._has_enforceable_constraints
+                    else None,
+                )
+            finally:
+                if hasattr(self.mesh, "_line_search_reduced_energy"):
+                    delattr(self.mesh, "_line_search_reduced_energy")
             last_state_energy = float(accepted_energy)
             if not self.quiet:
                 # Compute total area only when needed for diagnostics.
