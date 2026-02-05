@@ -480,6 +480,99 @@ def _grad_cotan(u: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         return np.asarray(gu), np.asarray(gv)
 
 
+def _cached_cotan_gradients(
+    mesh: Mesh, *, positions: np.ndarray, tri_rows: np.ndarray
+) -> (
+    tuple[
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+        np.ndarray,
+    ]
+    | None
+):
+    """Return cached cotan gradient arrays for triangles in ``tri_rows``.
+
+    This is an internal performance helper for analytic bending gradients.
+    The returned arrays are:
+
+    - Corner cotan gradients: (g_c0_u, g_c0_v, g_c1_u, g_c1_v, g_c2_u, g_c2_v)
+      where c0 is the angle at v0 (u=v1-v0, v=v2-v0), etc.
+    - Edge-based cotan gradients used in area redistribution:
+      (gc0u, gc0v, gc1u, gc1v, gc2u, gc2v) corresponding to
+      cotan(e2, -e1), cotan(e0, -e2), cotan(e1, -e0).
+
+    The cache is only used when geometry caching is active (positions come from
+    ``positions_view`` or are protected by ``geometry_freeze``).
+    """
+    if not mesh._geometry_cache_active(positions):
+        return None
+
+    cache = mesh._curvature_cache
+    key = (mesh._version, mesh._facet_loops_version, id(positions))
+    cached = cache.get("cotan_gradients", None)
+    if (
+        isinstance(cached, dict)
+        and cached.get("key") == key
+        and cached.get("rows_version") == mesh._facet_loops_version
+        and cached.get("n_tris") == int(tri_rows.shape[0])
+    ):
+        return cached["data"]
+
+    v0 = positions[tri_rows[:, 0]]
+    v1 = positions[tri_rows[:, 1]]
+    v2 = positions[tri_rows[:, 2]]
+
+    u0 = np.asfortranarray(v1 - v0)
+    v0_vec = np.asfortranarray(v2 - v0)
+    g_c0_u, g_c0_v = _grad_cotan(u0, v0_vec)
+
+    u1 = np.asfortranarray(v2 - v1)
+    v1_vec = np.asfortranarray(v0 - v1)
+    g_c1_u, g_c1_v = _grad_cotan(u1, v1_vec)
+
+    u2 = np.asfortranarray(v0 - v2)
+    v2_vec = np.asfortranarray(v1 - v2)
+    g_c2_u, g_c2_v = _grad_cotan(u2, v2_vec)
+
+    e0 = np.asfortranarray(v2 - v1)
+    e1 = np.asfortranarray(v0 - v2)
+    e2 = np.asfortranarray(v1 - v0)
+    gc0u, gc0v = _grad_cotan(e2, -e1)
+    gc1u, gc1v = _grad_cotan(e0, -e2)
+    gc2u, gc2v = _grad_cotan(e1, -e0)
+
+    data = (
+        g_c0_u,
+        g_c0_v,
+        g_c1_u,
+        g_c1_v,
+        g_c2_u,
+        g_c2_v,
+        gc0u,
+        gc0v,
+        gc1u,
+        gc1v,
+        gc2u,
+        gc2v,
+    )
+    cache["cotan_gradients"] = {
+        "key": key,
+        "rows_version": mesh._facet_loops_version,
+        "n_tris": int(tri_rows.shape[0]),
+        "data": data,
+    }
+    return data
+
+
 def _finite_difference_gradient(
     mesh: Mesh,
     global_params,

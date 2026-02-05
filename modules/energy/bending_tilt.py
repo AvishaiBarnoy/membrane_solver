@@ -39,6 +39,7 @@ from geometry.tilt_operators import (
 # Reuse the validated bending implementation helpers.
 from modules.energy.bending import (  # noqa: PLC0415
     _apply_beltrami_laplacian,
+    _cached_cotan_gradients,
     _compute_effective_areas,
     _energy_model,
     _grad_cotan,
@@ -277,12 +278,29 @@ def compute_energy_and_gradient_array(
         dE_dc1 = -0.5 * np.einsum("ij,ij->i", fK[v2_idxs] - fK[v0_idxs], v2 - v0)
         dE_dc2 = -0.5 * np.einsum("ij,ij->i", fK[v0_idxs] - fK[v1_idxs], v0 - v1)
 
-        u0, v0_vec = v1 - v0, v2 - v0
-        g_c0_u, g_c0_v = _grad_cotan(u0, v0_vec)
-        u1, v1_vec = v2 - v1, v0 - v1
-        g_c1_u, g_c1_v = _grad_cotan(u1, v1_vec)
-        u2, v2_vec = v0 - v2, v1 - v2
-        g_c2_u, g_c2_v = _grad_cotan(u2, v2_vec)
+        cached = _cached_cotan_gradients(mesh, positions=positions, tri_rows=tri_rows)
+        if cached is not None:
+            (
+                g_c0_u,
+                g_c0_v,
+                g_c1_u,
+                g_c1_v,
+                g_c2_u,
+                g_c2_v,
+                gc0u,
+                gc0v,
+                gc1u,
+                gc1v,
+                gc2u,
+                gc2v,
+            ) = cached
+        else:
+            u0, v0_vec = v1 - v0, v2 - v0
+            g_c0_u, g_c0_v = _grad_cotan(u0, v0_vec)
+            u1, v1_vec = v2 - v1, v0 - v1
+            g_c1_u, g_c1_v = _grad_cotan(u1, v1_vec)
+            u2, v2_vec = v0 - v2, v1 - v2
+            g_c2_u, g_c2_v = _grad_cotan(u2, v2_vec)
 
         grad_cot = np.zeros_like(positions)
         val0, val1, val2 = dE_dc0[:, None], dE_dc1[:, None], dE_dc2[:, None]
@@ -366,9 +384,15 @@ def compute_energy_and_gradient_array(
             coeff_c1 = 0.125 * l1sq * (C0s + C2s)
             coeff_c2 = 0.125 * l2sq * (C0s + C1s)
 
-            gc0u, gc0v = _grad_cotan(e2s, -e1s)
-            gc1u, gc1v = _grad_cotan(e0s, -e2s)
-            gc2u, gc2v = _grad_cotan(e1s, -e0s)
+            if cached is None:
+                gc0u, gc0v = _grad_cotan(e2s, -e1s)
+                gc1u, gc1v = _grad_cotan(e0s, -e2s)
+                gc2u, gc2v = _grad_cotan(e1s, -e0s)
+            else:
+                # Cached arrays are in full-triangle order; slice for the std mask.
+                gc0u, gc0v = gc0u[m_std], gc0v[m_std]
+                gc1u, gc1v = gc1u[m_std], gc1v[m_std]
+                gc2u, gc2v = gc2u[m_std], gc2v[m_std]
 
             v_c0, v_c1, v_c2 = (
                 coeff_c0[:, None],
