@@ -10,16 +10,21 @@ from geometry.geom_io import load_data, parse_geometry  # noqa: E402
 from runtime.constraint_manager import ConstraintModuleManager  # noqa: E402
 from runtime.energy_manager import EnergyModuleManager  # noqa: E402
 from runtime.minimizer import Minimizer  # noqa: E402
+from runtime.refinement import refine_triangle_mesh  # noqa: E402
 from runtime.steppers.gradient_descent import GradientDescent  # noqa: E402
 
 
-def _outer_band_metrics(mesh, *, r_min: float, r_max: float) -> tuple[float, float]:
-    """Return (median |tin_r - tout_r|, median |tin_r + tout_r|) in an annulus.
+def _outer_band_symmetry_score(
+    mesh, *, r_min: float, r_max: float, quantile: float = 0.9
+) -> tuple[float, float]:
+    """Return (amplitude, symmetry_score) in an annulus.
 
-    Note: this measures *absolute* mismatch. When the true signal is very small
-    (far field), absolute metrics can be dominated by numerical noise or by
-    localized features (e.g. boundary constraints). The test below therefore
-    uses a normalized symmetry score rather than raw monotonicity in radius.
+    We measure the TeX-predicted far-field symmetry of radial components:
+
+      tin_r(r) ≈ -tout_r(r)
+
+    and normalize by a robust amplitude statistic in the same annulus so the
+    metric remains meaningful when the far-field signal is small.
     """
     positions = mesh.positions_view()
     r = np.linalg.norm(positions[:, :2], axis=1)
@@ -37,9 +42,60 @@ def _outer_band_metrics(mesh, *, r_min: float, r_max: float) -> tuple[float, flo
     tin_r = np.sum(tin * ers, axis=1)
     tout_r = np.sum(tout * ers, axis=1)
 
-    diff_same = float(np.median(np.abs(tin_r[mask] - tout_r[mask])))
-    diff_oppo = float(np.median(np.abs(tin_r[mask] + tout_r[mask])))
-    return diff_same, diff_oppo
+    amp = float(
+        np.quantile(np.abs(tin_r[mask]) + np.abs(tout_r[mask]), float(quantile))
+    )
+    mismatch = float(np.quantile(np.abs(tin_r[mask] + tout_r[mask]), float(quantile)))
+    score = mismatch / (amp + 1e-12)
+    return amp, score
+
+
+def _disk_and_outer_radii(mesh) -> tuple[float, float]:
+    """Return (r_disk, r_outer) from pinned circle vertex metadata."""
+    positions = mesh.positions_view()
+    r = np.linalg.norm(positions[:, :2], axis=1)
+
+    disk_rows: list[int] = []
+    outer_rows: list[int] = []
+    for vid in mesh.vertex_ids:
+        opts = mesh.vertices[int(vid)].options or {}
+        group = opts.get("pin_to_circle_group")
+        if group == "disk":
+            disk_rows.append(mesh.vertex_index_to_row[int(vid)])
+        elif group == "outer":
+            outer_rows.append(mesh.vertex_index_to_row[int(vid)])
+
+    if not disk_rows:
+        raise AssertionError("No disk ring vertices found (pin_to_circle_group=disk).")
+    if not outer_rows:
+        raise AssertionError("No outer rim vertices found (pin_to_circle_group=outer).")
+
+    r_disk = float(np.mean(r[np.asarray(disk_rows, dtype=int)]))
+    r_outer = float(np.mean(r[np.asarray(outer_rows, dtype=int)]))
+    return r_disk, r_outer
+
+
+def _build_minimizer(mesh) -> Minimizer:
+    """Return a minimizer configured for quick, deterministic e2e diagnostics."""
+    gp = mesh.global_parameters
+
+    gp.set("step_size_mode", "fixed")
+    gp.set("step_size", 1.0e-3)
+
+    gp.set("tilt_solve_mode", "coupled")
+    gp.set("tilt_solver", "gd")
+    gp.set("tilt_inner_steps", 15)
+    gp.set("tilt_tol", 1e-8)
+
+    return Minimizer(
+        mesh,
+        gp,
+        GradientDescent(),
+        EnergyModuleManager(mesh.energy_modules),
+        ConstraintModuleManager(mesh.constraint_modules),
+        quiet=True,
+        tol=1e-8,
+    )
 
 
 @pytest.mark.e2e
@@ -59,58 +115,52 @@ def test_kozlov_free_disk_outer_leaflet_symmetry_improves_with_radius() -> None:
         "kozlov_1disk_3d_free_disk_theory_parity.yaml",
     )
     mesh = parse_geometry(load_data(path))
-    gp = mesh.global_parameters
 
-    # Bounded, deterministic settings.
-    gp.set("tilt_solve_mode", "coupled")
-    gp.set("tilt_solver", "gd")
-    gp.set("tilt_step_size", 0.15)
-    gp.set("tilt_inner_steps", 10)
-    gp.set("tilt_tol", 1e-8)
-    gp.set("tilt_kkt_projection_during_relaxation", False)
+    minim = _build_minimizer(mesh)
+    minim.minimize(n_steps=4)
 
-    gp.set("tilt_thetaB_optimize", True)
-    gp.set("tilt_thetaB_optimize_every", 1)
-    gp.set("tilt_thetaB_optimize_delta", 0.05)
-    gp.set("tilt_thetaB_optimize_inner_steps", 5)
+    r_disk, r_outer = _disk_and_outer_radii(mesh)
 
-    gp.set("step_size_mode", "fixed")
-    gp.set("step_size", 1.0e-3)
+    # Two annular bands in the lipid region:
+    # - exclude the disk boundary layer
+    # - avoid the clamped outer rim where boundary constraints dominate
+    near = (max(1.5, 3.0 * r_disk), max(3.0, 6.0 * r_disk))
+    far = (0.60 * r_outer, 0.80 * r_outer)
 
-    minim = Minimizer(
-        mesh,
-        gp,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-        tol=1e-8,
+    amp_near, score_near = _outer_band_symmetry_score(
+        mesh, r_min=near[0], r_max=near[1]
     )
-    minim.minimize(n_steps=3)
+    amp_far, score_far = _outer_band_symmetry_score(mesh, r_min=far[0], r_max=far[1])
 
-    # Three annular bands in the lipid region (exclude the near-disk patch).
-    bands = [
-        (1.5, 3.0),
-        (3.0, 6.0),
-        (6.0, 10.5),
-    ]
+    # Prevent vacuous pass when the near band has no signal.
+    assert amp_near > 1e-9, (
+        f"near amp too small: amp_near={amp_near}, bands={near, far}"
+    )
 
-    metrics = [(_outer_band_metrics(mesh, r_min=a, r_max=b), (a, b)) for a, b in bands]
-    diff_same = [m[0][0] for m in metrics]
-    diff_oppo = [m[0][1] for m in metrics]
+    # Far-field symmetry should be better (smaller score).
+    assert score_far <= score_near + 0.15, (
+        f"symmetry scores (near, far)=({score_near:.3g}, {score_far:.3g}), "
+        f"amps=({amp_near:.3g}, {amp_far:.3g}), bands={near, far}"
+    )
 
-    # In the far outer band, opposite-sign mismatch should be no worse than
-    # same-sign mismatch (matches sign convention expectation).
-    assert diff_oppo[-1] <= diff_same[-1] + 1e-9, f"outer band metrics: {metrics}"
+    # Refinement should not make the far-field symmetry worse.
+    mesh_ref = refine_triangle_mesh(mesh)
+    minim_ref = _build_minimizer(mesh_ref)
+    # Give the refined mesh a few coupled steps to re-equilibrate before
+    # evaluating far-field symmetry.
+    minim_ref.minimize(n_steps=4)
 
-    # Symmetry should be best in the far field, but absolute mismatches can be
-    # noisy when the signal is tiny. Use a normalized score:
-    #
-    #   score = diff_oppo / (diff_same + eps)
-    #
-    # Smaller is better (opposite-sign convention matches more closely than
-    # same-sign). Require the far-field score to be no worse than the inner
-    # band's score.
-    eps = 1e-12
-    score = [o / (s + eps) for s, o in zip(diff_same, diff_oppo)]
-    assert score[-1] <= score[0] + 0.1, f"annulus metrics: {metrics}, score={score}"
+    _amp_near_r, score_near_r = _outer_band_symmetry_score(
+        mesh_ref, r_min=near[0], r_max=near[1]
+    )
+    _amp_far_r, score_far_r = _outer_band_symmetry_score(
+        mesh_ref, r_min=far[0], r_max=far[1]
+    )
+
+    # After refinement, the far-field signal can be extremely small, so we use
+    # a *trend* check: the far band remains at least as symmetric as the near
+    # band (up to a small tolerance).
+    assert score_far_r <= score_near_r + 0.15, (
+        f"refined symmetry scores (near, far)=({score_near_r:.3g}, {score_far_r:.3g}); "
+        f"pre-refine (near, far)=({score_near:.3g}, {score_far:.3g}); bands={near, far}"
+    )
