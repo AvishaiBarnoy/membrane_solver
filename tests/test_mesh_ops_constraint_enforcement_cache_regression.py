@@ -14,6 +14,11 @@ from runtime.refinement import refine_triangle_mesh
 from runtime.steppers.gradient_descent import GradientDescent
 
 
+def _fixture_path(name: str) -> str:
+    here = os.path.dirname(__file__)
+    return os.path.join(here, "fixtures", name)
+
+
 def _is_pin_to_circle(opts: dict) -> bool:
     constraints = opts.get("constraints")
     if constraints is None:
@@ -35,7 +40,7 @@ def test_mesh_ops_constraint_enforcement_invalidates_positions_cache():
     pre-enforcement geometry.
     """
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_free_disk_coarse_refinable.yaml")
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
     )
     refined = refine_triangle_mesh(mesh)
 

@@ -4,6 +4,13 @@ from geometry.geom_io import load_data, parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
 
 
+def _fixture_path(name: str) -> str:
+    import os
+
+    here = os.path.dirname(__file__)
+    return os.path.join(here, "fixtures", name)
+
+
 def _tangent_radial_directions(mesh, rows: np.ndarray) -> np.ndarray:
     """Return per-row radial directions projected to the local tangent plane."""
     positions = mesh.positions_view()
@@ -38,7 +45,7 @@ def _tangent_radial_directions(mesh, rows: np.ndarray) -> np.ndarray:
 def test_tilt_thetaB_boundary_in_enforces_radial_component_on_group_ring() -> None:
     # Use a stable, hand-authored coarse disk mesh intended for refinement.
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_free_disk_coarse_refinable.yaml")
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
     )
     gp = mesh.global_parameters
 
@@ -80,7 +87,7 @@ def test_tilt_thetaB_boundary_in_enforces_radial_component_on_group_ring() -> No
 
 def test_tilt_thetaB_boundary_in_respects_tilt_fixed_in() -> None:
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_free_disk_coarse_refinable.yaml")
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
     )
     gp = mesh.global_parameters
 
@@ -122,7 +129,7 @@ def test_tilt_thetaB_boundary_in_respects_tilt_fixed_in() -> None:
 
 def test_tilt_thetaB_boundary_in_noops_when_group_missing_or_empty() -> None:
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_free_disk_coarse_refinable.yaml")
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
     )
     gp = mesh.global_parameters
 

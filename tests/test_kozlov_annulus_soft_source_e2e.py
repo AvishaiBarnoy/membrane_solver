@@ -16,6 +16,11 @@ from runtime.steppers.gradient_descent import GradientDescent
 pytestmark = pytest.mark.e2e
 
 
+def _fixture_path(name: str) -> str:
+    here = os.path.dirname(__file__)
+    return os.path.join(here, "fixtures", name)
+
+
 def _relax(mesh, *, inner_steps: int) -> Minimizer:
     mesh.global_parameters.update(
         {
@@ -51,7 +56,7 @@ def _ring_mean(mags: np.ndarray, radii: np.ndarray, r0: float) -> float:
 def test_kozlov_annulus_soft_source_drives_tilt_decay() -> None:
     """E2E: soft rim source generates nonzero boundary tilt and decay to far field."""
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_annulus_flat_soft_source.yaml")
+        load_data(_fixture_path("kozlov_annulus_flat_soft_source.yaml"))
     )
     _relax(mesh, inner_steps=1200)
 
@@ -71,7 +76,7 @@ def test_kozlov_annulus_soft_source_drives_tilt_decay() -> None:
 def test_kozlov_annulus_soft_source_rotation_invariance() -> None:
     """Regression: rotation about z preserves the relaxed energy."""
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_annulus_flat_soft_source.yaml")
+        load_data(_fixture_path("kozlov_annulus_flat_soft_source.yaml"))
     )
     mesh_rot = mesh.copy()
 
@@ -97,7 +102,7 @@ def test_kozlov_annulus_soft_source_rotation_invariance() -> None:
 def test_kozlov_annulus_soft_source_energy_decreases_under_refinement() -> None:
     """Regression: as we refine, the relaxed energy should decrease."""
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_annulus_flat_soft_source.yaml")
+        load_data(_fixture_path("kozlov_annulus_flat_soft_source.yaml"))
     )
     e0 = float(_relax(mesh, inner_steps=1600).compute_energy())
     mesh = refine_triangle_mesh(mesh)

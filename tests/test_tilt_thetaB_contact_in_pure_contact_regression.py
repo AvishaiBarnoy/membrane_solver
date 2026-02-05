@@ -7,6 +7,13 @@ from geometry.geom_io import load_data, parse_geometry
 from modules.energy import tilt_thetaB_contact_in
 
 
+def _fixture_path(name: str) -> str:
+    import os
+
+    here = os.path.dirname(__file__)
+    return os.path.join(here, "fixtures", name)
+
+
 def _disk_rows(mesh, group: str) -> np.ndarray:
     rows = []
     for vid in mesh.vertex_ids:
@@ -81,7 +88,7 @@ def _make_circle_ring_mesh(*, n: int, radius: float, group: str) -> Mesh:
 
 def test_tilt_thetaB_contact_in_off_mode_ignores_nonzero_tilts() -> None:
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_free_disk_coarse_refinable.yaml")
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
     )
     gp = mesh.global_parameters
     resolver = ParameterResolver(gp)
@@ -162,7 +169,7 @@ def test_tilt_thetaB_contact_in_off_mode_invariant_to_vertex_count_for_circle() 
 
 def test_tilt_thetaB_contact_in_reports_pure_contact_work_by_default() -> None:
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_free_disk_coarse_refinable.yaml")
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
     )
     gp = mesh.global_parameters
     resolver = ParameterResolver(gp)
@@ -203,7 +210,7 @@ def test_tilt_thetaB_contact_in_contact_energy_independent_of_penalty_strength()
     None
 ):
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_free_disk_coarse_refinable.yaml")
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
     )
     gp = mesh.global_parameters
     resolver = ParameterResolver(gp)
@@ -244,7 +251,7 @@ def test_tilt_thetaB_contact_in_contact_energy_independent_of_penalty_strength()
 
 def test_tilt_thetaB_contact_in_legacy_mode_includes_penalty_and_gradient() -> None:
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_free_disk_coarse_refinable.yaml")
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
     )
     gp = mesh.global_parameters
     resolver = ParameterResolver(gp)
