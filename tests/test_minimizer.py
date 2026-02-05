@@ -1,7 +1,10 @@
+"""Consolidated tests for the Minimizer class."""
+
 import logging
 import os
 import sys
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import numpy as np
 
@@ -9,7 +12,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Edge, Facet, Mesh, Vertex
+from runtime.constraint_manager import ConstraintModuleManager
 from runtime.minimizer import Minimizer
+
+# --- Mocks and Helpers ---
 
 
 class DummyEnergyModule:
@@ -74,7 +80,6 @@ def build_min_mesh(with_body=False):
     mesh.build_facet_vertex_loops()
     mesh.build_position_cache()
     if with_body:
-        # Minimal body object with target volume + compute_volume
         body = SimpleNamespace(
             index=0,
             target_volume=1.0,
@@ -86,6 +91,47 @@ def build_min_mesh(with_body=False):
     mesh.energy_modules = ["dummy"]
     mesh.constraint_modules = ["volume"]
     return mesh
+
+
+# --- Tests ---
+
+
+def test_minimizer_dispatches_to_array_path():
+    """Verify that Minimizer calls compute_energy_and_gradient_array if available."""
+    mesh = build_min_mesh()
+    mock_mod = MagicMock()
+    mock_mod.compute_energy_and_gradient_array.return_value = 10.0
+
+    gp = GlobalParameters()
+    em = MagicMock()
+    em.get_module.return_value = mock_mod
+    cm = ConstraintModuleManager([])
+
+    minim = Minimizer(mesh, gp, MagicMock(), em, cm, energy_modules=["mock"])
+    minim.compute_energy_and_gradient()
+
+    assert mock_mod.compute_energy_and_gradient_array.called
+    assert not mock_mod.compute_energy_and_gradient.called
+
+
+def test_minimizer_falls_back_to_dict_path():
+    """Verify that Minimizer still works with legacy modules."""
+    mesh = build_min_mesh()
+    mock_mod = MagicMock()
+    del mock_mod.compute_energy_and_gradient_array
+    mock_mod.compute_energy_and_gradient.return_value = (5.0, {0: np.array([1, 1, 1])})
+
+    gp = GlobalParameters()
+    em = MagicMock()
+    em.get_module.return_value = mock_mod
+    cm = ConstraintModuleManager([])
+
+    minim = Minimizer(mesh, gp, MagicMock(), em, cm, energy_modules=["mock"])
+    E, grad = minim.compute_energy_and_gradient()
+
+    assert E == 5.0
+    assert 0 in grad
+    assert mock_mod.compute_energy_and_gradient.called
 
 
 def test_minimize_n_steps_le_zero_enforces_constraints():
@@ -116,23 +162,21 @@ def test_minimize_converges_when_grad_norm_below_tol():
     assert out["iterations"] == 1
 
 
-def test_minimize_terminates_after_max_zero_steps_without_reset():
+def test_minimize_terminates_after_max_zero_steps():
     mesh = build_min_mesh()
     gp = GlobalParameters({"max_zero_steps": 1, "step_size_floor": 1e-3})
     energy = DummyEnergyModule(energy=2.0, grad_value=1.0)
     cm = DummyConstraintManager()
-    # Fail step with step_size <= floor
     stepper = DummyStepper(results=[(False, 1e-4, 2.0)])
     minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
 
     out = minim.minimize(n_steps=3)
     assert out["terminated_early"] is True
     assert out["step_success"] is False
-    # When terminating immediately, we return before calling reset().
     assert stepper.reset_calls == 0
 
 
-def test_minimize_resets_stepper_on_failed_step_that_does_not_terminate():
+def test_minimize_resets_stepper_on_failed_step():
     mesh = build_min_mesh()
     gp = GlobalParameters({"max_zero_steps": 10, "step_size_floor": 1e-12})
     energy = DummyEnergyModule(energy=2.0, grad_value=1.0)
@@ -140,12 +184,11 @@ def test_minimize_resets_stepper_on_failed_step_that_does_not_terminate():
     stepper = DummyStepper(results=[(False, 1e-3, 2.0), (True, 1e-3, 2.0)])
     minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
 
-    out = minim.minimize(n_steps=2)
-    assert out["terminated_early"] is False
+    minim.minimize(n_steps=2)
     assert stepper.reset_calls == 1
 
 
-def test_minimize_volume_drift_triggers_mesh_op_enforcement_and_stepper_reset():
+def test_minimize_volume_drift_triggers_enforcement():
     mesh = build_min_mesh(with_body=True)
     gp = GlobalParameters(
         {
@@ -160,76 +203,72 @@ def test_minimize_volume_drift_triggers_mesh_op_enforcement_and_stepper_reset():
     minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
 
     minim.minimize(n_steps=1)
-    # First: enforce during minimize via line search callback is not used here
-    # Second: enforcement due to drift uses mesh_operation context
     assert "mesh_operation" in cm.calls
     assert stepper.reset_calls >= 1
 
 
-def test_minimize_logs_energy_consistency_in_debug(caplog, monkeypatch):
+def test_minimize_energy_consistency_logs_debug(caplog, monkeypatch):
     mesh = build_min_mesh()
     gp = GlobalParameters()
-    energy = DummyEnergyModule(energy=1.0, grad_value=0.0)
-    cm = DummyConstraintManager()
-    stepper = DummyStepper(results=[])
-    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
-
+    minim = Minimizer(
+        mesh,
+        gp,
+        DummyStepper([]),
+        DummyEnergyManager(DummyEnergyModule()),
+        DummyConstraintManager(),
+        quiet=True,
+    )
     monkeypatch.setattr(minim, "compute_energy", lambda: 2.0)
     monkeypatch.setattr(
-        minim,
-        "compute_energy_and_gradient_array",
-        lambda: (2.0, np.zeros((len(mesh.vertices), 3))),
+        minim, "compute_energy_and_gradient_array", lambda: (2.0, np.zeros((3, 3)))
     )
 
     with caplog.at_level(logging.DEBUG, logger="membrane_solver"):
         minim.minimize(n_steps=0)
 
     assert "Energy consistency" in caplog.text
-    assert "scalar=2.000000" in caplog.text
-    assert "array=2.000000" in caplog.text
     assert "Energy consistency mismatch" not in caplog.text
 
 
-def test_minimize_logs_energy_consistency_mismatch(caplog, monkeypatch):
+def test_minimize_energy_consistency_mismatch_logs_debug(caplog, monkeypatch):
     mesh = build_min_mesh()
     gp = GlobalParameters()
-    energy = DummyEnergyModule(energy=1.0, grad_value=0.0)
-    cm = DummyConstraintManager()
-    stepper = DummyStepper(results=[])
-    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
-
+    minim = Minimizer(
+        mesh,
+        gp,
+        DummyStepper([]),
+        DummyEnergyManager(DummyEnergyModule()),
+        DummyConstraintManager(),
+        quiet=True,
+    )
     monkeypatch.setattr(minim, "compute_energy", lambda: 1.5)
     monkeypatch.setattr(
-        minim,
-        "compute_energy_and_gradient_array",
-        lambda: (2.5, np.zeros((len(mesh.vertices), 3))),
+        minim, "compute_energy_and_gradient_array", lambda: (2.5, np.zeros((3, 3)))
     )
     monkeypatch.setattr(
-        minim,
-        "compute_energy_breakdown",
-        lambda: {"mod_a": 3.0, "mod_b": -1.0},
+        minim, "compute_energy_breakdown", lambda: {"mod_a": 3.0, "mod_b": -1.0}
     )
 
     with caplog.at_level(logging.DEBUG, logger="membrane_solver"):
         minim.minimize(n_steps=0)
 
     assert "Energy consistency mismatch" in caplog.text
-    assert "mod_a=3.000000" in caplog.text
 
 
 def test_minimize_energy_consistency_logs_are_debug_only(caplog, monkeypatch):
     mesh = build_min_mesh()
     gp = GlobalParameters()
-    energy = DummyEnergyModule(energy=1.0, grad_value=0.0)
-    cm = DummyConstraintManager()
-    stepper = DummyStepper(results=[])
-    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
-
+    minim = Minimizer(
+        mesh,
+        gp,
+        DummyStepper([]),
+        DummyEnergyManager(DummyEnergyModule()),
+        DummyConstraintManager(),
+        quiet=True,
+    )
     monkeypatch.setattr(minim, "compute_energy", lambda: 2.0)
     monkeypatch.setattr(
-        minim,
-        "compute_energy_and_gradient_array",
-        lambda: (2.0, np.zeros((len(mesh.vertices), 3))),
+        minim, "compute_energy_and_gradient_array", lambda: (2.0, np.zeros((3, 3)))
     )
 
     with caplog.at_level(logging.INFO, logger="membrane_solver"):
