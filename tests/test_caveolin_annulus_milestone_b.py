@@ -6,12 +6,128 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from geometry.geom_io import load_data, parse_geometry
+from geometry.geom_io import parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.refinement import refine_triangle_mesh
 from runtime.steppers.gradient_descent import GradientDescent
+
+
+def _build_annulus_flat_hard_source_mesh_dict() -> dict:
+    """Build the Milestone-B Kozlov annulus input as an inline mesh dict.
+
+    This intentionally avoids loading from `meshes/` so the test remains stable
+    when users edit repository YAML inputs.
+    """
+
+    def ring_vertices(r: float, *, n: int) -> list[list[float]]:
+        out: list[list[float]] = []
+        for k in range(n):
+            ang = 2.0 * np.pi * k / n
+            out.append(
+                [float(r) * float(np.cos(ang)), float(r) * float(np.sin(ang)), 0.0]
+            )
+        return out
+
+    n = 8
+    verts: list[list] = []
+
+    inner = list(range(0, n))
+    mid = list(range(n, 2 * n))
+    outer = list(range(2 * n, 3 * n))
+
+    # Inner rim: hard tilt source (radial), pinned to r=1.
+    for k, (x, y, z) in enumerate(ring_vertices(1.0, n=n)):
+        ang = 2.0 * np.pi * k / n
+        verts.append(
+            [
+                x,
+                y,
+                z,
+                {
+                    "preset": "inner_rim",
+                    "tilt_in": [float(np.cos(ang)), float(np.sin(ang)), 0.0],
+                },
+            ]
+        )
+
+    # Middle ring at r=2, unconstrained.
+    for x, y, z in ring_vertices(2.0, n=n):
+        verts.append([x, y, z])
+
+    # Outer rim: clamped to zero tilt, pinned to r=3.
+    for x, y, z in ring_vertices(3.0, n=n):
+        verts.append([x, y, z, {"preset": "outer_rim", "tilt_in": [0.0, 0.0, 0.0]}])
+
+    triangles: list[tuple[int, int, int]] = []
+    for k in range(n):
+        k1 = (k + 1) % n
+        # inner <-> mid
+        triangles.append((inner[k], inner[k1], mid[k]))
+        triangles.append((mid[k], inner[k1], mid[k1]))
+        # mid <-> outer
+        triangles.append((mid[k], mid[k1], outer[k]))
+        triangles.append((outer[k], mid[k1], outer[k1]))
+
+    edges: list[list[int]] = []
+    edge_map: dict[tuple[int, int], int] = {}
+
+    def get_edge(u: int, v: int) -> tuple[int, bool]:
+        a, b = (u, v) if u < v else (v, u)
+        key = (a, b)
+        idx = edge_map.get(key)
+        if idx is None:
+            idx = len(edges)
+            edges.append([a, b])
+            edge_map[key] = idx
+        tail, head = edges[idx]
+        return idx, (tail == u and head == v)
+
+    def face_edges(v0: int, v1: int, v2: int) -> list:
+        out: list = []
+        for u, v in ((v0, v1), (v1, v2), (v2, v0)):
+            ei, ok = get_edge(u, v)
+            out.append(ei if ok else f"r{ei}")
+        return out
+
+    faces = [face_edges(*tri) for tri in triangles]
+
+    return {
+        "global_parameters": {
+            # Flat annulus; relax only inner-leaflet tilt.
+            "surface_tension": 0.0,
+            "tilt_modulus_in": 1.0,
+            "bending_modulus_in": 1.0,
+            "tilt_solve_mode": "nested",
+            "tilt_step_size": 0.05,
+            "tilt_inner_steps": 200,
+            "pin_to_circle_mode": "fixed",
+        },
+        "constraint_modules": ["fixed_plane", "pin_to_circle"],
+        "definitions": {
+            "inner_rim": {
+                "constraints": ["pin_to_circle"],
+                "pin_to_circle_group": "inner",
+                "pin_to_circle_radius": 1.0,
+                "pin_to_circle_normal": [0.0, 0.0, 1.0],
+                "pin_to_circle_point": [0.0, 0.0, 0.0],
+                "tilt_fixed_in": True,
+            },
+            "outer_rim": {
+                "constraints": ["pin_to_circle"],
+                "pin_to_circle_group": "outer",
+                "pin_to_circle_radius": 3.0,
+                "pin_to_circle_normal": [0.0, 0.0, 1.0],
+                "pin_to_circle_point": [0.0, 0.0, 0.0],
+                "tilt_fixed_in": True,
+            },
+        },
+        "energy_modules": ["tilt_smoothness_in", "tilt_in"],
+        "vertices": verts,
+        "edges": edges,
+        "faces": faces,
+    }
 
 
 def _relax_leaflet_tilts(mesh, *, inner_steps: int) -> Minimizer:
@@ -47,9 +163,7 @@ def _ring_mean(mags: np.ndarray, radii: np.ndarray, r0: float) -> float:
 
 
 def test_kozlov_annulus_refine_inherits_circle_constraints() -> None:
-    mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_annulus_flat_hard_source.yaml")
-    )
+    mesh = parse_geometry(_build_annulus_flat_hard_source_mesh_dict())
     mesh = refine_triangle_mesh(mesh)
     minim = Minimizer(
         mesh,
@@ -91,9 +205,7 @@ def test_kozlov_annulus_flat_hard_source_decay() -> None:
     between rings.
     """
 
-    mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_annulus_flat_hard_source.yaml")
-    )
+    mesh = parse_geometry(_build_annulus_flat_hard_source_mesh_dict())
     _relax_leaflet_tilts(mesh, inner_steps=800)
 
     positions = mesh.positions_view()
@@ -113,9 +225,7 @@ def test_kozlov_annulus_flat_hard_source_decay() -> None:
 def test_kozlov_annulus_rotation_invariance() -> None:
     """Milestone-B regression: rotating the annulus does not change energy."""
 
-    mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_annulus_flat_hard_source.yaml")
-    )
+    mesh = parse_geometry(_build_annulus_flat_hard_source_mesh_dict())
     mesh_rot = mesh.copy()
 
     theta = np.deg2rad(22.5)
@@ -142,9 +252,7 @@ def test_kozlov_annulus_rotation_invariance() -> None:
 def test_kozlov_annulus_energy_decreases_under_refinement() -> None:
     """Milestone-B regression: refined annulus relaxes to a lower energy."""
 
-    mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_annulus_flat_hard_source.yaml")
-    )
+    mesh = parse_geometry(_build_annulus_flat_hard_source_mesh_dict())
     e0 = float(_relax_leaflet_tilts(mesh, inner_steps=1200).compute_energy())
     mesh = refine_triangle_mesh(mesh)
     e1 = float(_relax_leaflet_tilts(mesh, inner_steps=1200).compute_energy())
@@ -157,9 +265,7 @@ def test_kozlov_annulus_energy_decreases_under_refinement() -> None:
 
 def test_kozlov_annulus_coupling_tracking() -> None:
     """Milestone-B: tilt_out tracks tilt_in with strong coupling."""
-    mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_annulus_flat_hard_source.yaml")
-    )
+    mesh = parse_geometry(_build_annulus_flat_hard_source_mesh_dict())
 
     # Enable coupling energy and relax both leaflets
     mesh.energy_modules.append("tilt_coupling")
