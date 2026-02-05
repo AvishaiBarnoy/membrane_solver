@@ -191,6 +191,45 @@ def p1_triangle_divergence(
     return div_tri, area, g0, g1, g2
 
 
+def p1_triangle_divergence_from_shape_gradients(
+    *,
+    tilts: np.ndarray,
+    tri_rows: np.ndarray,
+    g0: np.ndarray,
+    g1: np.ndarray,
+    g2: np.ndarray,
+) -> np.ndarray:
+    """Compute triangle-wise P1 divergence using precomputed basis gradients.
+
+    Parameters
+    ----------
+    tilts:
+        Dense vertex vector array of shape ``(N_vertices, 3)``.
+    tri_rows:
+        Integer array of shape ``(N_triangles, 3)`` with vertex-row indices.
+    g0, g1, g2:
+        Arrays of shape ``(N_triangles, 3)`` with P1 basis gradients.
+
+    Returns
+    -------
+    div_tri:
+        Array of shape ``(N_triangles,)`` with constant divergence per triangle.
+    """
+    tri_rows = np.asarray(tri_rows, dtype=np.int32)
+    if tri_rows.size == 0:
+        return np.zeros(0, dtype=float)
+
+    t0 = tilts[tri_rows[:, 0]]
+    t1 = tilts[tri_rows[:, 1]]
+    t2 = tilts[tri_rows[:, 2]]
+
+    return (
+        np.einsum("ij,ij->i", t0, g0)
+        + np.einsum("ij,ij->i", t1, g1)
+        + np.einsum("ij,ij->i", t2, g2)
+    )
+
+
 def p1_vertex_divergence(
     *,
     n_vertices: int,
@@ -240,5 +279,6 @@ def p1_vertex_divergence(
 __all__ = [
     "p1_triangle_divergence",
     "p1_triangle_shape_gradients",
+    "p1_triangle_divergence_from_shape_gradients",
     "p1_vertex_divergence",
 ]
