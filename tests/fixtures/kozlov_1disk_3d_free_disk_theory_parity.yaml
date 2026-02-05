@@ -40,6 +40,10 @@ global_parameters:
   tilt_step_size: 0.15
   tilt_inner_steps: 40
   tilt_tol: 1.0e-10
+  # Use reduced-energy evaluations in the shape line search so accepted steps
+  # reflect the TeX reduced objective (tilt relaxed at fixed positions).
+  line_search_reduced_energy: true
+  line_search_reduced_tilt_inner_steps: 10
   step_size: 0.01
   step_size_mode: fixed
   pin_to_plane_normal: [0.0, 0.0, 1.0]
