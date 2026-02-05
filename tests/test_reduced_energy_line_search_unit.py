@@ -2,6 +2,7 @@ import os
 import sys
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -82,3 +83,44 @@ def test_line_search_reduced_energy_relaxes_tilts_and_restores_param_overrides()
 
     # Parameter overrides must be restored (no state leakage into outer loop).
     assert int(gp.get("tilt_inner_steps")) == 10
+
+
+def test_line_search_energy_fn_projects_leaflet_tilts_to_tangent() -> None:
+    mesh = _build_single_triangle_leaflet_mesh()
+
+    # Deliberately give both leaflets a non-tangent component on the z=0 plane.
+    tin0 = np.zeros((len(mesh.vertex_ids), 3))
+    tout0 = np.zeros((len(mesh.vertex_ids), 3))
+    tin0[:, 2] = 1.0
+    tout0[:, 2] = -2.0
+    mesh.set_tilts_in_from_array(tin0)
+    mesh.set_tilts_out_from_array(tout0)
+
+    gp = GlobalParameters(
+        {
+            "tilt_modulus_in": 1.0,
+            "tilt_modulus_out": 1.0,
+            "tilt_solve_mode": "fixed",
+            "line_search_reduced_energy": False,
+        }
+    )
+    minim = _build_minimizer(mesh, gp)
+
+    # Baseline energy includes out-of-plane components if not projected.
+    E_unprojected = float(minim.compute_energy())
+
+    # Compute the expected projected energy by projecting explicitly.
+    mesh.project_tilts_to_tangent()
+    E_projected_expected = float(minim.compute_energy())
+
+    # Restore the original (non-tangent) tilts and let the line-search callback
+    # apply the projection internally.
+    mesh.set_tilts_in_from_array(tin0)
+    mesh.set_tilts_out_from_array(tout0)
+    energy_fn = minim._line_search_energy_fn()
+    E_projected = float(energy_fn())
+
+    assert E_projected == pytest.approx(E_projected_expected, abs=1e-12)
+    assert E_projected <= E_unprojected + 1e-12
+    assert np.allclose(mesh.tilts_in_view()[:, 2], 0.0, atol=1e-12)
+    assert np.allclose(mesh.tilts_out_view()[:, 2], 0.0, atol=1e-12)

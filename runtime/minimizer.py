@@ -137,14 +137,24 @@ class Minimizer:
         on rejected trial steps. Otherwise, accepted trial positions can end up
         paired with stale tilts.
         """
+
+        def _projected_energy() -> float:
+            # Keep objective evaluations consistent with the post-step state:
+            # the minimizer always projects stored tilts to the local tangent
+            # plane after accepting a step. Without this, the per-step energy
+            # printed from the accepted line-search trial can differ wildly
+            # from the energy reported after the iteration completes.
+            self.mesh.project_tilts_to_tangent()
+            return float(self.compute_energy())
+
         if not bool(self.global_params.get("line_search_reduced_energy", False)):
-            return self.compute_energy
+            return _projected_energy
 
         reduced_steps = int(
             self.global_params.get("line_search_reduced_tilt_inner_steps", 0) or 0
         )
         if reduced_steps <= 0:
-            return self.compute_energy
+            return _projected_energy
 
         uses_leaflet = self._uses_leaflet_tilts()
         gp = self.global_params
@@ -164,7 +174,7 @@ class Minimizer:
             tilt_mode = str(gp.get("tilt_solve_mode", "fixed") or "fixed")
             mode_norm = tilt_mode.strip().lower()
             if mode_norm in ("", "none", "off", "false", "fixed"):
-                return float(self.compute_energy())
+                return float(_projected_energy())
 
             positions = self.mesh.positions_view()
             try:
@@ -177,7 +187,7 @@ class Minimizer:
                 else:
                     self._relax_tilts(positions=positions, mode=tilt_mode)
 
-                return float(self.compute_energy())
+                return float(_projected_energy())
             finally:
                 _restore_overrides()
 
