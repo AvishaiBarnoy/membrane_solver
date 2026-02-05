@@ -1861,6 +1861,13 @@ STEP SIZE:\t {self.step_size}
 
                 if logger.isEnabledFor(logging.DEBUG):
                     E_after = self.compute_energy()
+                    accepted = (
+                        float(last_state_energy)
+                        if last_state_energy is not None
+                        else float("nan")
+                    )
+                    diff_acc = abs(float(E_after) - accepted)
+                    tol_acc = 1e-8 * max(1.0, abs(float(E_after)), abs(accepted))
                     max_rel_violation_dbg = 0.0
                     vol_msgs: list[str] = []
                     if self.mesh.bodies:
@@ -1880,15 +1887,45 @@ STEP SIZE:\t {self.step_size}
                             )
                     logger.debug(
                         "Accepted step %d: E_before=%.6f, E_after=%.6f, "
+                        "E_accepted=%.6f, |E_after-E_accepted|=%.3e (tol %.3e), "
                         "step_size=%.3e, max_relΔV=%.3e",
                         i,
                         E,
                         E_after,
+                        accepted,
+                        diff_acc,
+                        tol_acc,
                         self.step_size,
                         max_rel_violation_dbg,
                     )
                     if vol_msgs:
                         logger.debug("Volume diagnostics: %s", "; ".join(vol_msgs))
+                    if diff_acc > tol_acc:
+                        try:
+                            breakdown = self.compute_energy_breakdown()
+                            top_terms = sorted(
+                                breakdown.items(),
+                                key=lambda item: abs(item[1]),
+                                reverse=True,
+                            )[:5]
+                            summary = ", ".join(
+                                f"{name}={value:.6f}" for name, value in top_terms
+                            )
+                            logger.warning(
+                                "Accepted energy mismatch at step %d: "
+                                "E_accepted=%.6f E_after=%.6f |Δ|=%.6e. Top terms: %s",
+                                i,
+                                accepted,
+                                float(E_after),
+                                diff_acc,
+                                summary,
+                            )
+                        except Exception as exc:
+                            logger.debug(
+                                "Accepted energy breakdown failed at step %d: %s",
+                                i,
+                                exc,
+                            )
 
                 mode = self.global_params.get("volume_constraint_mode", "lagrange")
                 proj_flag = self.global_params.get(
