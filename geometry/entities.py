@@ -966,6 +966,14 @@ class Mesh:
     _cached_vertex_normals_version: int = field(init=False, default=-1)
     _cached_vertex_normals_loops_version: int = field(init=False, default=-1)
 
+    # Cached P1 triangle shape gradients (for divergence operators).
+    _cached_p1_tri_areas: Optional[np.ndarray] = field(init=False, default=None)
+    _cached_p1_tri_g0: Optional[np.ndarray] = field(init=False, default=None)
+    _cached_p1_tri_g1: Optional[np.ndarray] = field(init=False, default=None)
+    _cached_p1_tri_g2: Optional[np.ndarray] = field(init=False, default=None)
+    _cached_p1_tri_grads_version: int = field(init=False, default=-1)
+    _cached_p1_tri_grads_rows_version: int = field(init=False, default=-1)
+
     _version: int = 0
     _vertex_ids_version: int = 0
 
@@ -1960,6 +1968,73 @@ class Mesh:
             self._cached_vertex_normals_version = self._version
             self._cached_vertex_normals_loops_version = self._facet_loops_version
         return normals
+
+    def p1_triangle_shape_gradient_cache(
+        self, positions: Optional[np.ndarray] = None
+    ) -> tuple["np.ndarray", "np.ndarray", "np.ndarray", "np.ndarray", "np.ndarray"]:
+        """Return cached P1 triangle shape gradients for ``triangle_row_cache``.
+
+        The returned arrays are aligned with ``triangle_row_cache()`` ordering.
+        When geometry caching is active (via ``positions_view`` or
+        ``geometry_freeze``), this avoids recomputing triangle cross products
+        and basis gradients across repeated divergence evaluations.
+        """
+        import numpy as np
+
+        tri_rows, _ = self.triangle_row_cache()
+        if tri_rows is None or tri_rows.size == 0:
+            zeros1 = np.zeros(0, dtype=float)
+            zeros3 = np.zeros((0, 3), dtype=float)
+            tri_empty = np.zeros((0, 3), dtype=np.int32)
+            return zeros1, zeros3, zeros3, zeros3, tri_empty
+
+        if positions is None:
+            positions = self.positions_view()
+
+        use_cache = self._geometry_cache_active(positions)
+        if (
+            use_cache
+            and self._cached_p1_tri_grads_version == self._version
+            and self._cached_p1_tri_grads_rows_version == self._facet_loops_version
+            and self._cached_p1_tri_areas is not None
+            and self._cached_p1_tri_g0 is not None
+            and self._cached_p1_tri_g1 is not None
+            and self._cached_p1_tri_g2 is not None
+        ):
+            return (
+                self._cached_p1_tri_areas,
+                self._cached_p1_tri_g0,
+                self._cached_p1_tri_g1,
+                self._cached_p1_tri_g2,
+                tri_rows,
+            )
+
+        v0 = positions[tri_rows[:, 0]]
+        v1 = positions[tri_rows[:, 1]]
+        v2 = positions[tri_rows[:, 2]]
+
+        n = _fast_cross(v1 - v0, v2 - v0)
+        n2 = np.einsum("ij,ij->i", n, n)
+        denom = np.maximum(n2, 1e-20)
+
+        e0 = v2 - v1
+        e1 = v0 - v2
+        e2 = v1 - v0
+
+        g0 = _fast_cross(n, e0) / denom[:, None]
+        g1 = _fast_cross(n, e1) / denom[:, None]
+        g2 = _fast_cross(n, e2) / denom[:, None]
+        area = 0.5 * np.sqrt(np.maximum(n2, 0.0))
+
+        if use_cache:
+            self._cached_p1_tri_areas = area
+            self._cached_p1_tri_g0 = g0
+            self._cached_p1_tri_g1 = g1
+            self._cached_p1_tri_g2 = g2
+            self._cached_p1_tri_grads_version = self._version
+            self._cached_p1_tri_grads_rows_version = self._facet_loops_version
+
+        return area, g0, g1, g2, tri_rows
 
     def project_tilts_to_tangent(self) -> None:
         """Project all vertex tilt vectors into their local tangent planes."""

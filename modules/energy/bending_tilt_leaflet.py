@@ -9,7 +9,10 @@ import numpy as np
 from geometry.bending_derivatives import grad_triangle_area
 from geometry.curvature import compute_curvature_data
 from geometry.entities import Mesh
-from geometry.tilt_operators import p1_triangle_divergence
+from geometry.tilt_operators import (
+    p1_triangle_divergence,
+    p1_triangle_divergence_from_shape_gradients,
+)
 from modules.energy.bending import (  # noqa: PLC0415
     _apply_beltrami_laplacian,
     _compute_effective_areas,
@@ -286,14 +289,17 @@ def compute_energy_and_gradient_array_leaflet(
     if tri_rows.size == 0:
         return 0.0
 
+    tri_rows_full = tri_rows
+    weights_full = weights
+    tri_keep = np.array([], dtype=bool)
     if cache_tag == "out":
         absent_mask = leaflet_absent_vertex_mask(mesh, global_params, leaflet="out")
         tri_keep = leaflet_present_triangle_mask(
-            mesh, tri_rows, absent_vertex_mask=absent_mask
+            mesh, tri_rows_full, absent_vertex_mask=absent_mask
         )
         if tri_keep.size:
-            tri_rows = tri_rows[tri_keep]
-            weights = weights[tri_keep]
+            tri_rows = tri_rows_full[tri_keep]
+            weights = weights_full[tri_keep]
             if tri_rows.size == 0:
                 return 0.0
 
@@ -301,9 +307,29 @@ def compute_energy_and_gradient_array_leaflet(
     if tilts.shape != (len(mesh.vertex_ids), 3):
         raise ValueError("tilts must have shape (N_vertices, 3)")
 
-    div_tri, _, g0, g1, g2 = p1_triangle_divergence(
-        positions=positions, tilts=tilts, tri_rows=tri_rows
+    # Use cached triangle P1 basis gradients when geometry is frozen/cached.
+    area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
+        mesh.p1_triangle_shape_gradient_cache(positions)
     )
+    if tri_rows_cache.size and tri_rows_cache.shape[0] == tri_rows_full.shape[0]:
+        g0_use = g0_cache
+        g1_use = g1_cache
+        g2_use = g2_cache
+        if cache_tag == "out" and tri_keep.size:
+            g0_use = g0_use[tri_keep]
+            g1_use = g1_use[tri_keep]
+            g2_use = g2_use[tri_keep]
+        div_tri = p1_triangle_divergence_from_shape_gradients(
+            tilts=tilts, tri_rows=tri_rows, g0=g0_use, g1=g1_use, g2=g2_use
+        )
+        # Keep using the standard divergence routine for gradients (g0,g1,g2)
+        # which we already have in cached form.
+        g0, g1, g2 = g0_use, g1_use, g2_use
+        _ = area_cache
+    else:
+        div_tri, _, g0, g1, g2 = p1_triangle_divergence(
+            positions=positions, tilts=tilts, tri_rows=tri_rows
+        )
     div_term = float(div_sign) * div_tri
 
     vertex_areas_eff, va0_eff, va1_eff, va2_eff = _compute_effective_areas(

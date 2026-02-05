@@ -31,7 +31,10 @@ import numpy as np
 from geometry.bending_derivatives import grad_triangle_area
 from geometry.curvature import compute_curvature_data
 from geometry.entities import Mesh
-from geometry.tilt_operators import p1_triangle_divergence
+from geometry.tilt_operators import (
+    p1_triangle_divergence,
+    p1_triangle_divergence_from_shape_gradients,
+)
 
 # Reuse the validated bending implementation helpers.
 from modules.energy.bending import (  # noqa: PLC0415
@@ -169,9 +172,19 @@ def compute_energy_and_gradient_array(
         if tilts.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts must have shape (N_vertices, 3)")
 
-    div_tri, _, g0, g1, g2 = p1_triangle_divergence(
-        positions=positions, tilts=tilts, tri_rows=tri_rows
+    area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
+        mesh.p1_triangle_shape_gradient_cache(positions)
     )
+    if tri_rows_cache.size and tri_rows_cache.shape[0] == tri_rows.shape[0]:
+        div_tri = p1_triangle_divergence_from_shape_gradients(
+            tilts=tilts, tri_rows=tri_rows, g0=g0_cache, g1=g1_cache, g2=g2_cache
+        )
+        g0, g1, g2 = g0_cache, g1_cache, g2_cache
+        _ = area_cache
+    else:
+        div_tri, _, g0, g1, g2 = p1_triangle_divergence(
+            positions=positions, tilts=tilts, tri_rows=tri_rows
+        )
 
     # Step 1: Boundary area reassignment (integration weight)
     vertex_areas_eff, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
