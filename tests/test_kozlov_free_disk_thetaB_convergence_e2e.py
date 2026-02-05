@@ -71,7 +71,7 @@ def test_kozlov_free_disk_thetaB_converges_toward_tex_prediction() -> None:
     )
     assert theta_star > 0.0
 
-    hist0 = _run_thetaB_history(mesh=mesh0, n_steps=6)
+    hist0 = _run_thetaB_history(mesh=mesh0, n_steps=12)
     theta_final0 = float(hist0[-1])
 
     # Convergence toward the predicted value (not necessarily monotone).
@@ -88,3 +88,28 @@ def test_kozlov_free_disk_thetaB_converges_toward_tex_prediction() -> None:
     # reduced-energy optimum for thetaB under refinement. Once that physics gap
     # is closed, we should tighten this diagnostic by adding a refinement-level
     # stability assertion here.
+
+
+@pytest.mark.e2e
+def test_kozlov_free_disk_thetaB_updates_are_bounded_by_scan_delta() -> None:
+    path = os.path.join(
+        os.path.dirname(__file__),
+        "fixtures",
+        "kozlov_1disk_3d_free_disk_theory_parity.yaml",
+    )
+    mesh = parse_geometry(load_data(path))
+    gp = mesh.global_parameters
+
+    n_steps = 25
+    hist = _run_thetaB_history(mesh=mesh, n_steps=n_steps)
+    deltas = np.abs(np.diff(np.asarray(hist, dtype=float)))
+
+    # The thetaB scalar scan only considers base +/- delta (or base), so
+    # consecutive updates should never exceed delta. This helps prevent
+    # ping-ponging between distant thetaB values as the shape evolves.
+    scan_delta = float(gp.get("tilt_thetaB_optimize_delta") or 0.0)
+    assert scan_delta > 0.0
+    assert float(np.max(deltas) if deltas.size else 0.0) <= scan_delta + 1e-12, (
+        f"delta={scan_delta}, max_step={float(np.max(deltas) if deltas.size else 0.0)}, "
+        f"hist={np.array(hist)}"
+    )
