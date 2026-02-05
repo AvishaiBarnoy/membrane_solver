@@ -148,7 +148,7 @@ def compute_energy_and_gradient_array(
     *,
     positions: np.ndarray,
     index_map: Dict[int, int],
-    grad_arr: np.ndarray,
+    grad_arr: np.ndarray | None,
     tilts: np.ndarray | None = None,
     tilt_grad_arr: np.ndarray | None = None,
 ) -> float:
@@ -232,6 +232,20 @@ def compute_energy_and_gradient_array(
 
     term = base_term + div_eff
     term[~is_interior] = 0.0
+
+    if grad_arr is None:
+        if tilt_grad_arr is not None:
+            tilt_grad_arr = np.asarray(tilt_grad_arr, dtype=float)
+            if tilt_grad_arr.shape != (len(mesh.vertex_ids), 3):
+                raise ValueError("tilt_grad_arr must have shape (N_vertices, 3)")
+
+            dE_ddiv = np.sum(kappa_tri * term_tri * va_eff, axis=1)
+            factor = dE_ddiv[:, None]
+
+            np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
+            np.add.at(tilt_grad_arr, tri_rows[:, 1], factor * g1)
+            np.add.at(tilt_grad_arr, tri_rows[:, 2], factor * g2)
+        return float(total_energy)
 
     mode = _gradient_mode(global_params)
     normals = _vertex_normals(mesh, positions, tri_rows)

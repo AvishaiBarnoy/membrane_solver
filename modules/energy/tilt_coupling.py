@@ -118,7 +118,7 @@ def compute_energy_and_gradient_array(
     *,
     positions: np.ndarray,
     index_map: Dict[int, int],
-    grad_arr: np.ndarray,
+    grad_arr: np.ndarray | None,
     tilts_in: np.ndarray | None = None,
     tilts_out: np.ndarray | None = None,
     tilt_in_grad_arr: np.ndarray | None = None,
@@ -176,9 +176,10 @@ def compute_energy_and_gradient_array(
     g2 = 0.5 * _fast_cross(n_hat, (v1[mask] - v0[mask]))
 
     c = coeff[:, None]
-    np.add.at(grad_arr, tri_rows[mask, 0], c * g0)
-    np.add.at(grad_arr, tri_rows[mask, 1], c * g1)
-    np.add.at(grad_arr, tri_rows[mask, 2], c * g2)
+    if grad_arr is not None:
+        np.add.at(grad_arr, tri_rows[mask, 0], c * g0)
+        np.add.at(grad_arr, tri_rows[mask, 1], c * g1)
+        np.add.at(grad_arr, tri_rows[mask, 2], c * g2)
 
     if tilt_in_grad_arr is not None or tilt_out_grad_arr is not None:
         vertex_areas = np.zeros(len(mesh.vertex_ids), dtype=float)

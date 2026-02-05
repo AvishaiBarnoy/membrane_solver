@@ -430,7 +430,7 @@ class Minimizer:
                         self.param_resolver,
                         positions=positions,
                         index_map=index_map,
-                        grad_arr=grad_dummy,
+                        grad_arr=None,
                         tilts_in=tilts_in,
                         tilts_out=tilts_out,
                         tilt_in_grad_arr=None,
@@ -444,7 +444,7 @@ class Minimizer:
                         self.param_resolver,
                         positions=positions,
                         index_map=index_map,
-                        grad_arr=grad_dummy,
+                        grad_arr=None,
                     )
                 total_energy += float(E_mod)
                 continue
@@ -489,6 +489,7 @@ class Minimizer:
         tilt_vertex_areas_in: np.ndarray | None = None,
         tilt_vertex_areas_out: np.ndarray | None = None,
         grad_dummy: np.ndarray | None = None,
+        tilt_only: bool = False,
     ) -> float:
         """Compute total energy and accumulate leaflet tilt gradients."""
         index_map = self.mesh.vertex_index_to_row
@@ -537,6 +538,11 @@ class Minimizer:
                 continue
 
             if hasattr(module, "compute_energy_and_gradient_array"):
+                grad_arg = (
+                    None
+                    if tilt_only and getattr(module, "USES_TILT_LEAFLETS", False)
+                    else grad_dummy
+                )
                 try:
                     E_mod = module.compute_energy_and_gradient_array(
                         self.mesh,
@@ -544,7 +550,7 @@ class Minimizer:
                         self.param_resolver,
                         positions=positions,
                         index_map=index_map,
-                        grad_arr=grad_dummy,
+                        grad_arr=grad_arg,
                         tilts_in=tilts_in,
                         tilts_out=tilts_out,
                         tilt_in_grad_arr=tilt_in_grad_arr,
@@ -557,7 +563,7 @@ class Minimizer:
                         self.param_resolver,
                         positions=positions,
                         index_map=index_map,
-                        grad_arr=grad_dummy,
+                        grad_arr=grad_arg,
                     )
                 total_energy += float(E_mod)
                 continue
@@ -993,6 +999,7 @@ class Minimizer:
                     tilt_vertex_areas_in=tilt_vertex_areas_in,
                     tilt_vertex_areas_out=tilt_vertex_areas_out,
                     grad_dummy=grad_dummy,
+                    tilt_only=True,
                 )
                 if hasattr(
                     self.constraint_manager, "apply_tilt_gradient_modifications_array"

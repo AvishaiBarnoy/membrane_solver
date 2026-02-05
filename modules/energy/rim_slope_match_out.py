@@ -219,7 +219,7 @@ def compute_energy_and_gradient_array(
     *,
     positions: np.ndarray,
     index_map: Dict[int, int],
-    grad_arr: np.ndarray,
+    grad_arr: np.ndarray | None,
     tilts_in: np.ndarray | None = None,
     tilts_out: np.ndarray | None = None,
     tilt_in_grad_arr: np.ndarray | None = None,
@@ -399,15 +399,19 @@ def compute_energy_and_gradient_array(
                 np.add.at(tilt_in_grad_arr, disk_rows, coeff_disk * disk_factor)
 
     # Shape gradient: only along the normal (small-slope approximation).
-    grad_coeff = k_match * weights * (diff - diff_in)
-    grad_rim = np.zeros_like(rim_pos)
-    grad_out = np.zeros_like(outer_pos)
-    inv_dr = np.zeros_like(dr)
-    inv_dr[valid] = 1.0 / dr[valid]
-    grad_rim += (grad_coeff * inv_dr)[:, None] * normal[None, :]
-    grad_out += (-grad_coeff * inv_dr)[:, None] * normal[None, :]
-    np.add.at(grad_arr, rim_rows, grad_rim)
-    np.add.at(grad_arr, outer_rows, grad_out)
+    #
+    # During tilt-only relaxation, callers may pass grad_arr=None to skip
+    # expensive (and unused) shape-gradient work.
+    if grad_arr is not None:
+        grad_coeff = k_match * weights * (diff - diff_in)
+        grad_rim = np.zeros_like(rim_pos)
+        grad_out = np.zeros_like(outer_pos)
+        inv_dr = np.zeros_like(dr)
+        inv_dr[valid] = 1.0 / dr[valid]
+        grad_rim += (grad_coeff * inv_dr)[:, None] * normal[None, :]
+        grad_out += (-grad_coeff * inv_dr)[:, None] * normal[None, :]
+        np.add.at(grad_arr, rim_rows, grad_rim)
+        np.add.at(grad_arr, outer_rows, grad_out)
 
     return energy
 

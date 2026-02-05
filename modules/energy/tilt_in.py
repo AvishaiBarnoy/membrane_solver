@@ -95,7 +95,7 @@ def compute_energy_and_gradient_array(
     *,
     positions: np.ndarray,
     index_map: Dict[int, int],
-    grad_arr: np.ndarray,
+    grad_arr: np.ndarray | None,
     tilts_in: np.ndarray | None = None,
     tilts_out: np.ndarray | None = None,
     tilt_in_grad_arr: np.ndarray | None = None,
@@ -138,15 +138,16 @@ def compute_energy_and_gradient_array(
 
     energy = float(np.dot(coeff, areas))
 
-    n_hat = n[mask] / n_norm[mask][:, None]
-    g0 = 0.5 * _fast_cross(n_hat, (v2[mask] - v1[mask]))
-    g1 = 0.5 * _fast_cross(n_hat, (v0[mask] - v2[mask]))
-    g2 = 0.5 * _fast_cross(n_hat, (v1[mask] - v0[mask]))
+    if grad_arr is not None:
+        n_hat = n[mask] / n_norm[mask][:, None]
+        g0 = 0.5 * _fast_cross(n_hat, (v2[mask] - v1[mask]))
+        g1 = 0.5 * _fast_cross(n_hat, (v0[mask] - v2[mask]))
+        g2 = 0.5 * _fast_cross(n_hat, (v1[mask] - v0[mask]))
 
-    c = coeff[:, None]
-    np.add.at(grad_arr, tri_rows[mask, 0], c * g0)
-    np.add.at(grad_arr, tri_rows[mask, 1], c * g1)
-    np.add.at(grad_arr, tri_rows[mask, 2], c * g2)
+        c = coeff[:, None]
+        np.add.at(grad_arr, tri_rows[mask, 0], c * g0)
+        np.add.at(grad_arr, tri_rows[mask, 1], c * g1)
+        np.add.at(grad_arr, tri_rows[mask, 2], c * g2)
 
     if tilt_in_grad_arr is not None:
         tilt_in_grad_arr = np.asarray(tilt_in_grad_arr, dtype=float)
