@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 
 from geometry.geom_io import load_data, parse_geometry
@@ -35,7 +37,11 @@ def _outer_radial_tilt_symmetry_metric(
 def test_kozlov_free_disk_thetaB_theory_mode_smoke_and_symmetry() -> None:
     mesh = parse_geometry(
         load_data(
-            "meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_profile_hard_rim_R12_free_disk.yaml"
+            str(
+                Path(__file__).resolve().parent
+                / "fixtures"
+                / "kozlov_1disk_3d_free_disk_theory_parity.yaml"
+            )
         )
     )
 
