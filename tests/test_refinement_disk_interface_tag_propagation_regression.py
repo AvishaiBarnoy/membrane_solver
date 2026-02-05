@@ -9,11 +9,16 @@ from geometry.geom_io import load_data, parse_geometry
 from runtime.refinement import refine_triangle_mesh
 
 
+def _fixture_path(name: str) -> str:
+    here = os.path.dirname(__file__)
+    return os.path.join(here, "fixtures", name)
+
+
 @pytest.mark.regression
 def test_refine_propagates_disk_interface_tags_to_midpoints():
     """Disk boundary tags must survive refinement so interface constraints act on all ring vertices."""
     mesh = parse_geometry(
-        load_data("meshes/caveolin/kozlov_free_disk_coarse_refinable.yaml")
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
     )
     refined = refine_triangle_mesh(mesh)
 
