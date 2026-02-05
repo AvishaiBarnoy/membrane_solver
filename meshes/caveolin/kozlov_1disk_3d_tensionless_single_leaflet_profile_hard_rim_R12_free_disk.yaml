@@ -67,7 +67,7 @@ definitions:
     constraints:
     - pin_to_plane
     pin_to_plane_mode: slide
-    pin_to_plane_group: disk
+    pin_to_plane_group: disk_patch
     tilt_thetaB_group_in: disk
     pin_to_circle_group: disk
     pin_to_circle_radius: 0.466666666666667
