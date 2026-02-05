@@ -26,8 +26,9 @@ global_parameters:
   tilt_thetaB_normal: [0.0, 0.0, 1.0]
   # Optimize thetaB as a scalar DOF via reduced-energy sampling (see runtime/minimizer.py).
   tilt_thetaB_optimize: true
-  tilt_thetaB_optimize_every: 1
-  tilt_thetaB_optimize_delta: 0.01
+  # Stabilize thetaB updates by scanning less frequently and with smaller steps.
+  tilt_thetaB_optimize_every: 2
+  tilt_thetaB_optimize_delta: 0.005
   tilt_thetaB_optimize_inner_steps: 60
   rim_slope_match_thetaB_param: tilt_thetaB_value
   rim_slope_match_group: disk
