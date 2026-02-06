@@ -19,7 +19,10 @@ def _fan_mesh(*, straddles: bool) -> Mesh:
     """
     mesh = Mesh()
     mesh.global_parameters = GlobalParameters(
-        {"rim_slope_match_disk_group": "disk", "disk_interface_validate": True}
+        {
+            "rim_slope_match_disk_group": "disk",
+            "disk_interface_validate": True,
+        }
     )
 
     # Disk center and a 3-vertex boundary ring.
@@ -82,3 +85,24 @@ def test_disk_interface_validator_fails_for_internal_disk_ring() -> None:
 def test_disk_interface_validator_passes_for_straddling_ring() -> None:
     mesh = _fan_mesh(straddles=True)
     validate_disk_interface_topology(mesh, mesh.global_parameters)
+
+
+@pytest.mark.regression
+def test_disk_interface_validator_fails_when_rim_group_equals_disk_group() -> None:
+    mesh = _fan_mesh(straddles=True)
+    mesh.global_parameters.set("rim_slope_match_group", "disk")
+    with pytest.raises(ValueError, match="rim_slope_match_group matches"):
+        validate_disk_interface_topology(mesh, mesh.global_parameters)
+
+
+@pytest.mark.regression
+def test_disk_interface_validator_fails_on_rim_outer_count_mismatch() -> None:
+    mesh = _fan_mesh(straddles=True)
+    # Tag only two ring vertices as rim, and none as outer.
+    mesh.global_parameters.set("rim_slope_match_group", "rim")
+    mesh.global_parameters.set("rim_slope_match_outer_group", "outer")
+    mesh.vertices[1].options["rim_slope_match_group"] = "rim"
+    mesh.vertices[2].options["rim_slope_match_group"] = "rim"
+    mesh.vertices[3].options["rim_slope_match_group"] = "outer"
+    with pytest.raises(ValueError, match="rim_slope_match_group.*vertex counts"):
+        validate_disk_interface_topology(mesh, mesh.global_parameters)

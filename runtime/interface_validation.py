@@ -52,6 +52,38 @@ def validate_disk_interface_topology(mesh: Mesh, global_params) -> None:
     if not group:
         return
 
+    rim_group = global_params.get("rim_slope_match_group")
+    if rim_group is not None:
+        rim_group = str(rim_group).strip()
+    outer_group = global_params.get("rim_slope_match_outer_group")
+    if outer_group is not None:
+        outer_group = str(outer_group).strip()
+
+    if rim_group and rim_group == group:
+        raise ValueError(
+            "rim_slope_match_group matches rim_slope_match_disk_group; "
+            "this self-couples the rim slope constraint on the disk ring. "
+            "Use a distinct rim group on the membrane-side ring."
+        )
+
+    if rim_group and outer_group:
+
+        def _count_group_rows(target: str) -> int:
+            rows = 0
+            for vid, vertex in mesh.vertices.items():
+                opts = getattr(vertex, "options", None) or {}
+                if opts.get("rim_slope_match_group") == target:
+                    rows += 1
+            return rows
+
+        rim_count = _count_group_rows(rim_group)
+        outer_count = _count_group_rows(outer_group)
+        if rim_count and outer_count and rim_count != outer_count:
+            raise ValueError(
+                "rim_slope_match_group and rim_slope_match_outer_group must have "
+                f"matching vertex counts; got rim={rim_count} outer={outer_count}."
+            )
+
     mesh.build_facet_vertex_loops()
 
     disk_boundary_vids: list[int] = []

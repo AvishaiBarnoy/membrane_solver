@@ -19,7 +19,7 @@ global_parameters:
   tilt_thetaB_optimize_inner_steps: 5
   disk_interface_validate: true
   rim_slope_match_thetaB_param: tilt_thetaB_value
-  rim_slope_match_group: disk
+  rim_slope_match_group: rim
   rim_slope_match_disk_group: disk
   rim_slope_match_outer_group: outer
   rim_slope_match_strength: 0.0
@@ -50,9 +50,10 @@ definitions:
     pin_to_circle_mode: fixed
   rim:
     constraints: []
-    rim_slope_match_group: outer
+    rim_slope_match_group: rim
   outer_rim:
     constraints: [pin_to_plane, pin_to_circle]
+    rim_slope_match_group: outer
     pin_to_circle_group: outer
     pin_to_circle_radius: 4.0
     pin_to_circle_normal: [0.0, 0.0, 1.0]
