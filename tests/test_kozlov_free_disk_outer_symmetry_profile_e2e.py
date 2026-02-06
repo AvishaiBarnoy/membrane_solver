@@ -44,14 +44,13 @@ def _outer_band_metrics(mesh, *, r_min: float, r_max: float) -> tuple[float, flo
 
 @pytest.mark.e2e
 def test_kozlov_free_disk_outer_leaflet_symmetry_improves_with_radius() -> None:
-    """E2E diagnostic: in the outer membrane, leaflets match up to sign convention.
+    """E2E diagnostic: in the outer membrane, leaflets share the same tilt sign.
 
     The TeX model predicts that far from the disk, the two leaflets share the
-    same decaying tilt profile (up to a sign convention). We avoid absolute
-    targets (elastic parity gap still tracked elsewhere) and check robust
-    *trends*:
-      - In the far outer band, opposite-sign mismatch is no worse than same-sign.
-      - Opposite-sign mismatch improves with radius.
+    same decaying tilt profile. We avoid absolute targets (elastic parity gap
+    still tracked elsewhere) and check robust *trends*:
+      - In the far outer band, same-sign mismatch is no worse than opposite-sign.
+      - Same-sign symmetry improves with radius.
     """
     path = os.path.join(
         os.path.dirname(__file__),
@@ -99,18 +98,18 @@ def test_kozlov_free_disk_outer_leaflet_symmetry_improves_with_radius() -> None:
     diff_same = [m[0][0] for m in metrics]
     diff_oppo = [m[0][1] for m in metrics]
 
-    # In the far outer band, opposite-sign mismatch should be no worse than
-    # same-sign mismatch (matches sign convention expectation).
-    assert diff_oppo[-1] <= diff_same[-1] + 1e-9, f"outer band metrics: {metrics}"
+    # In the far outer band, same-sign mismatch should be no worse than
+    # opposite-sign mismatch (matches TeX sign convention).
+    assert diff_same[-1] <= diff_oppo[-1] + 1e-9, f"outer band metrics: {metrics}"
 
     # Symmetry should be best in the far field, but absolute mismatches can be
     # noisy when the signal is tiny. Use a normalized score:
     #
-    #   score = diff_oppo / (diff_same + eps)
+    #   score = diff_same / (diff_oppo + eps)
     #
-    # Smaller is better (opposite-sign convention matches more closely than
-    # same-sign). Require the far-field score to be no worse than the inner
+    # Smaller is better (same-sign convention matches more closely than
+    # opposite-sign). Require the far-field score to be no worse than the inner
     # band's score.
     eps = 1e-12
-    score = [o / (s + eps) for s, o in zip(diff_same, diff_oppo)]
+    score = [s / (o + eps) for s, o in zip(diff_same, diff_oppo)]
     assert score[-1] <= score[0] + 0.1, f"annulus metrics: {metrics}, score={score}"
