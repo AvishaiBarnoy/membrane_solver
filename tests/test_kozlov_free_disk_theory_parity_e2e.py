@@ -121,7 +121,10 @@ def test_kozlov_free_disk_thetaB_matches_tensionless_theory() -> None:
     gp.set("tilt_thetaB_optimize_every", 1)
     # Use a larger delta and a tiny inner budget so we can move thetaB away from
     # zero in a single scan while keeping runtime bounded.
-    gp.set("tilt_thetaB_optimize_delta", 0.05)
+    # With the theory-mode J=0-on-disk knob enabled, the reduced energy can be
+    # positive at thetaB=delta even though the true minimum is non-zero. Use a
+    # smaller step and allow a couple of outer scans to walk toward thetaB*.
+    gp.set("tilt_thetaB_optimize_delta", 0.02)
     gp.set("tilt_thetaB_optimize_inner_steps", 2)
 
     gp.set("step_size_mode", "fixed")
@@ -152,7 +155,7 @@ def test_kozlov_free_disk_thetaB_matches_tensionless_theory() -> None:
     # only need the reduced-energy thetaB scan + tilt relaxation on fixed
     # geometry.
     tilt_mode = str(gp.get("tilt_solve_mode") or "coupled")
-    for i in range(1):
+    for i in range(4):
         minim._relax_leaflet_tilts(positions=mesh.positions_view(), mode=tilt_mode)
         minim._optimize_thetaB_scalar(tilt_mode=tilt_mode, iteration=i)
 
@@ -204,16 +207,13 @@ def test_kozlov_free_disk_thetaB_matches_tensionless_theory() -> None:
 
 
 @pytest.mark.e2e
-@pytest.mark.xfail(
-    reason=(
-        "Elastic energy magnitude does not yet match the continuum tensionless "
-        "prediction; thetaB/contact parity is validated separately. This xfail "
-        "tracks the remaining physics/discretization gap."
-    ),
-    strict=False,
-)
-def test_kozlov_free_disk_elastic_energy_matches_tensionless_theory_xfail() -> None:
-    """Diagnostic parity check for elastic energy vs theory (expected to fail currently)."""
+def test_kozlov_free_disk_elastic_energy_matches_tensionless_theory() -> None:
+    """E2E: elastic-energy breakdown matches the tensionless theory scale.
+
+    This is a parity check against `docs/tex/1_disk_3d.tex` on the independent
+    free-disk fixture under theory-mode knobs (thetaB as scalar DOF, reduced
+    energy evaluation, and J=0 on the disk patch).
+    """
     from geometry.curvature import compute_curvature_fields
     from geometry.tilt_operators import p1_vertex_divergence
 
@@ -234,7 +234,7 @@ def test_kozlov_free_disk_elastic_energy_matches_tensionless_theory_xfail() -> N
 
     gp.set("tilt_thetaB_optimize", True)
     gp.set("tilt_thetaB_optimize_every", 1)
-    gp.set("tilt_thetaB_optimize_delta", 0.05)
+    gp.set("tilt_thetaB_optimize_delta", 0.02)
     gp.set("tilt_thetaB_optimize_inner_steps", 2)
 
     minim = Minimizer(
@@ -257,7 +257,8 @@ def test_kozlov_free_disk_elastic_energy_matches_tensionless_theory_xfail() -> N
 
     tilt_mode = str(gp.get("tilt_solve_mode") or "coupled")
     minim._relax_leaflet_tilts(positions=mesh.positions_view(), mode=tilt_mode)
-    minim._optimize_thetaB_scalar(tilt_mode=tilt_mode, iteration=0)
+    for i in range(4):
+        minim._optimize_thetaB_scalar(tilt_mode=tilt_mode, iteration=i)
 
     thetaB = float(gp.get("tilt_thetaB_value") or 0.0)
     breakdown = minim.compute_energy_breakdown()
@@ -363,11 +364,6 @@ def test_kozlov_free_disk_elastic_energy_matches_tensionless_theory_xfail() -> N
     theta_ok = thetaB == pytest.approx(theta_star, rel=0.40, abs=0.03)
     fel_ok = fel_meas == pytest.approx(fel_star, rel=2.0, abs=0.2)
     ftot_ok = ftot_meas == pytest.approx(ftot_star, rel=2.0, abs=0.2)
-    if not (theta_ok and fel_ok and ftot_ok):
-        pytest.xfail(report)
-
-    # If we ever close the gap, keep these assertions so the test becomes a
-    # normal pass without edits.
-    assert theta_ok
-    assert fel_ok
-    assert ftot_ok
+    assert theta_ok, report
+    assert fel_ok, report
+    assert ftot_ok, report

@@ -12,6 +12,8 @@ global_parameters:
   bending_modulus_out: 2.0
   tilt_modulus_in: 450.0
   tilt_modulus_out: 450.0
+  # Theory-mode: assume the geometric curvature contribution J vanishes on the disk.
+  bending_tilt_assume_J0_presets_in: ["disk"]
   tilt_thetaB_group_in: disk
   # Theory-aligned thetaB modeling:
   # - boundary condition t_in · r_hat = thetaB is enforced by constraint (no penalty energy)
@@ -60,7 +62,6 @@ definitions:
     # Allow rigid translation of the whole disk patch along the plane normal.
     pin_to_plane_mode: slide
     pin_to_plane_group: disk
-    tilt_thetaB_group_in: disk
     pin_to_circle_group: disk
     pin_to_circle_radius: 0.466666666666667
     pin_to_circle_normal: [0.0, 0.0, 1.0]

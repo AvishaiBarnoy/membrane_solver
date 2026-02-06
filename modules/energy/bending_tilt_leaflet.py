@@ -37,6 +37,78 @@ _BASE_TERM_BOUNDARY_OPTION_KEYS = (
     "tilt_thetaB_group_out",
 )
 
+_ASSUME_J0_PRESETS_KEY = "bending_tilt_assume_J0_presets"
+
+
+def _assume_J0_presets(global_params, *, cache_tag: str) -> tuple[str, ...]:
+    """Optional config: presets for which the Helfrich base term is set to zero.
+
+    This is a theory-mode knob used to match formulations that assume the
+    geometric curvature contribution J (i.e. 2H - c0) vanishes on a tagged
+    patch such as a rigid disk. It is off by default.
+    """
+    if global_params is None:
+        return ()
+    raw = global_params.get(f"{_ASSUME_J0_PRESETS_KEY}_{cache_tag}")
+    if raw is None:
+        raw = global_params.get(_ASSUME_J0_PRESETS_KEY)
+    if raw is None:
+        return ()
+    if isinstance(raw, str):
+        items = [raw]
+    else:
+        try:
+            items = list(raw)
+        except TypeError:
+            items = [raw]
+
+    presets: list[str] = []
+    for item in items:
+        name = str(item).strip()
+        if name:
+            presets.append(name)
+    return tuple(presets)
+
+
+def _collect_preset_rows(
+    mesh: Mesh,
+    *,
+    presets: tuple[str, ...],
+    cache_tag: str,
+    index_map: Dict[int, int],
+) -> np.ndarray:
+    """Return vertex-row indices whose ``preset`` option is in ``presets``."""
+    if not presets:
+        return np.zeros(0, dtype=int)
+    cache_key = (mesh._vertex_ids_version, presets)
+    cache_attr = f"_bending_tilt_assume_J0_rows_cache_{cache_tag}"
+    cached = getattr(mesh, cache_attr, None)
+    if cached is not None and cached.get("key") == cache_key:
+        return cached["rows"]
+    presets_set = set(presets)
+    present: set[str] = set()
+
+    rows: list[int] = []
+    for vid in mesh.vertex_ids:
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        preset = str(opts.get("preset") or "")
+        present.add(preset)
+        if preset in presets_set:
+            row = index_map.get(int(vid))
+            if row is not None:
+                rows.append(int(row))
+
+    unknown = presets_set - present
+    if unknown:
+        raise ValueError(
+            "Unknown presets in bending_tilt_assume_J0_presets: "
+            + ", ".join(sorted(unknown))
+        )
+
+    out = np.asarray(rows, dtype=int)
+    setattr(mesh, cache_attr, {"key": cache_key, "rows": out})
+    return out
+
 
 def _collect_group_rows(
     mesh: Mesh, *, group: str, index_map: Dict[int, int]
@@ -211,6 +283,13 @@ def _total_energy_leaflet(
 
     base_term = (2.0 * H_vor) - c0_arr
     base_term[~is_interior] = 0.0
+    presets = _assume_J0_presets(global_params, cache_tag=cache_tag)
+    if presets:
+        rows = _collect_preset_rows(
+            mesh, presets=presets, cache_tag=cache_tag, index_map=index_map
+        )
+        if rows.size:
+            base_term[rows] = 0.0
 
     term_tri = base_term[tri_rows] + div_term[:, None]
     va_eff = np.stack([va0_eff, va1_eff, va2_eff], axis=1)
@@ -368,6 +447,13 @@ def compute_energy_and_gradient_array_leaflet(
 
     base_term = (2.0 * H_vor) - c0_arr
     base_term[~is_interior] = 0.0
+    presets = _assume_J0_presets(global_params, cache_tag=cache_tag)
+    if presets:
+        rows = _collect_preset_rows(
+            mesh, presets=presets, cache_tag=cache_tag, index_map=index_map
+        )
+        if rows.size:
+            base_term[rows] = 0.0
 
     term_tri = base_term[tri_rows] + div_term[:, None]
     va_eff = np.stack([va0_eff, va1_eff, va2_eff], axis=1)
