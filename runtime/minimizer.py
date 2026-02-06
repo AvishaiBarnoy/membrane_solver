@@ -118,6 +118,57 @@ class Minimizer:
         dot = np.einsum("ij,ij->i", tilts, normals)
         return tilts - dot[:, None] * normals
 
+    @staticmethod
+    def _project_tilts_axisymmetric_about_center(
+        *,
+        positions: np.ndarray,
+        tilts: np.ndarray,
+        normals: np.ndarray,
+        center: np.ndarray,
+        axis: np.ndarray,
+        fixed_mask: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Project a tilt field into the axisymmetric (radial) subspace.
+
+        This is a theory-mode helper used to compare against the axisymmetric
+        continuum model in `docs/tex/1_disk_3d.tex`.
+
+        The projection keeps only the tangent-plane radial component about
+        `center`, where the in-plane radial direction is defined by removing
+        the component along `axis`.
+        """
+        center = np.asarray(center, dtype=float).reshape(3)
+        axis = np.asarray(axis, dtype=float).reshape(3)
+        axis_norm = float(np.linalg.norm(axis))
+        if axis_norm < 1e-15:
+            axis = np.array([0.0, 0.0, 1.0], dtype=float)
+        else:
+            axis = axis / axis_norm
+
+        r_vec = positions - center[None, :]
+        r_vec = r_vec - np.einsum("ij,j->i", r_vec, axis)[:, None] * axis[None, :]
+        r_len = np.linalg.norm(r_vec, axis=1)
+        good = r_len > 1e-12
+
+        r_hat = np.zeros_like(r_vec)
+        r_hat[good] = r_vec[good] / r_len[good][:, None]
+
+        # Use the radial direction projected into each vertex tangent plane.
+        r_dir = r_hat - np.einsum("ij,ij->i", r_hat, normals)[:, None] * normals
+        r_norm = np.linalg.norm(r_dir, axis=1)
+        good &= r_norm > 1e-12
+
+        r_dir_unit = np.zeros_like(r_dir)
+        r_dir_unit[good] = r_dir[good] / r_norm[good][:, None]
+
+        proj = np.zeros_like(tilts)
+        amp = np.einsum("ij,ij->i", tilts, r_dir_unit)
+        proj[good] = amp[good][:, None] * r_dir_unit[good]
+
+        if fixed_mask is not None and np.any(fixed_mask):
+            proj[fixed_mask] = tilts[fixed_mask]
+        return proj
+
     def _uses_leaflet_tilts(self) -> bool:
         """Return True when any loaded module depends on tilt_in/tilt_out."""
         return any(
@@ -958,6 +1009,34 @@ class Minimizer:
             normals = self.mesh.vertex_normals(positions)
             tilts_in = self._project_tilts_to_tangent_array(tilts_in, normals)
             tilts_out = self._project_tilts_to_tangent_array(tilts_out, normals)
+
+            if bool(
+                self.global_params.get("tilt_axisymmetric_about_thetaB_center", False)
+            ):
+                center = np.asarray(
+                    self.global_params.get("tilt_thetaB_center") or [0.0, 0.0, 0.0],
+                    dtype=float,
+                ).reshape(3)
+                axis = np.asarray(
+                    self.global_params.get("tilt_thetaB_normal") or [0.0, 0.0, 1.0],
+                    dtype=float,
+                ).reshape(3)
+                tilts_in = self._project_tilts_axisymmetric_about_center(
+                    positions=positions,
+                    tilts=tilts_in,
+                    normals=normals,
+                    center=center,
+                    axis=axis,
+                    fixed_mask=fixed_mask_in,
+                )
+                tilts_out = self._project_tilts_axisymmetric_about_center(
+                    positions=positions,
+                    tilts=tilts_out,
+                    normals=normals,
+                    center=center,
+                    axis=axis,
+                    fixed_mask=fixed_mask_out,
+                )
             grad_dummy = np.zeros_like(positions)
 
             tri_rows, _ = self.mesh.triangle_row_cache()
@@ -1103,6 +1182,33 @@ class Minimizer:
                         )
                         tilts_in = self.mesh.tilts_in_view().copy(order="F")
                         tilts_out = self.mesh.tilts_out_view().copy(order="F")
+                        tilts_in = self._project_tilts_to_tangent_array(
+                            tilts_in, normals
+                        )
+                        tilts_out = self._project_tilts_to_tangent_array(
+                            tilts_out, normals
+                        )
+                        if bool(
+                            self.global_params.get(
+                                "tilt_axisymmetric_about_thetaB_center", False
+                            )
+                        ):
+                            tilts_in = self._project_tilts_axisymmetric_about_center(
+                                positions=positions,
+                                tilts=tilts_in,
+                                normals=normals,
+                                center=center,
+                                axis=axis,
+                                fixed_mask=fixed_mask_in,
+                            )
+                            tilts_out = self._project_tilts_axisymmetric_about_center(
+                                positions=positions,
+                                tilts=tilts_out,
+                                normals=normals,
+                                center=center,
+                                axis=axis,
+                                fixed_mask=fixed_mask_out,
+                            )
             else:
                 M_inv_in = None
                 M_inv_out = None
@@ -1188,6 +1294,33 @@ class Minimizer:
                         )
                         tilts_in = self.mesh.tilts_in_view().copy(order="F")
                         tilts_out = self.mesh.tilts_out_view().copy(order="F")
+                        tilts_in = self._project_tilts_to_tangent_array(
+                            tilts_in, normals
+                        )
+                        tilts_out = self._project_tilts_to_tangent_array(
+                            tilts_out, normals
+                        )
+                        if bool(
+                            self.global_params.get(
+                                "tilt_axisymmetric_about_thetaB_center", False
+                            )
+                        ):
+                            tilts_in = self._project_tilts_axisymmetric_about_center(
+                                positions=positions,
+                                tilts=tilts_in,
+                                normals=normals,
+                                center=center,
+                                axis=axis,
+                                fixed_mask=fixed_mask_in,
+                            )
+                            tilts_out = self._project_tilts_axisymmetric_about_center(
+                                positions=positions,
+                                tilts=tilts_out,
+                                normals=normals,
+                                center=center,
+                                axis=axis,
+                                fixed_mask=fixed_mask_out,
+                            )
 
                     E0, gnorm = _leaflet_tilt_gradients()
                     if gnorm == 0.0 or (tol > 0.0 and gnorm < tol):
