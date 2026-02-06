@@ -35,7 +35,7 @@ global_parameters:
   bending_tilt_assume_J0_presets_in:
   - disk
   rim_slope_match_thetaB_param: tilt_thetaB_value
-  rim_slope_match_group: disk
+  rim_slope_match_group: rim
   rim_slope_match_outer_group: outer
   rim_slope_match_disk_group: disk
   rim_slope_match_strength: 0.0
@@ -51,6 +51,10 @@ global_parameters:
   tilt_step_size: 0.15
   tilt_inner_steps: 40
   tilt_tol: 1.0e-10
+  # Use reduced-energy evaluations in the shape line search so accepted steps
+  # reflect the TeX reduced objective (tilt relaxed at fixed positions).
+  line_search_reduced_energy: true
+  line_search_reduced_tilt_inner_steps: 10
   step_size: 0.01
   step_size_mode: fixed
   pin_to_plane_normal:
@@ -71,7 +75,7 @@ definitions:
     constraints:
     - pin_to_plane
     pin_to_plane_mode: slide
-    pin_to_plane_group: disk_patch
+    pin_to_plane_group: disk
     tilt_thetaB_group_in: disk
     pin_to_circle_group: disk
     pin_to_circle_radius: 0.466666666666667
@@ -86,7 +90,7 @@ definitions:
     pin_to_circle_mode: fixed
   rim:
     constraints: []
-    rim_slope_match_group: outer
+    rim_slope_match_group: rim
   outer_rim:
     constraints:
     - pin_to_plane
