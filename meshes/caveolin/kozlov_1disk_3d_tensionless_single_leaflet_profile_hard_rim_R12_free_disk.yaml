@@ -30,6 +30,10 @@ global_parameters:
   # so the internal hard interface does not pick up a spurious bulk curvature
   # penalty on planar configurations.
   bending_tilt_base_term_boundary_group_in: disk
+  # Theory-mode: on the rigid disk patch, assume J = (2H - c0) = 0 so
+  # bending_tilt_in reduces to a div(t)^2-only penalty, matching docs/tex/1_disk_3d.tex.
+  bending_tilt_assume_J0_presets_in:
+  - disk
   rim_slope_match_thetaB_param: tilt_thetaB_value
   rim_slope_match_group: disk
   rim_slope_match_outer_group: outer
