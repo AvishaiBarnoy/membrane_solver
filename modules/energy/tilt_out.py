@@ -166,11 +166,14 @@ def compute_energy_and_gradient_array(
         if tilt_out_grad_arr.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilt_out_grad_arr must have shape (N_vertices, 3)")
 
-        vertex_areas = np.zeros(len(mesh.vertex_ids), dtype=float)
-        area_thirds = areas / 3.0
-        np.add.at(vertex_areas, tri_rows_eff[mask, 0], area_thirds)
-        np.add.at(vertex_areas, tri_rows_eff[mask, 1], area_thirds)
-        np.add.at(vertex_areas, tri_rows_eff[mask, 2], area_thirds)
+        cache_ok = tri_keep.size == 0 or np.all(tri_keep)
+        vertex_areas = mesh.barycentric_vertex_areas(
+            positions,
+            tri_rows=tri_rows_eff,
+            areas=areas,
+            mask=mask,
+            cache=cache_ok,
+        )
 
         tilt_out_grad_arr += k_tilt * tilts_out * vertex_areas[:, None]
 

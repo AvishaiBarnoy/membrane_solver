@@ -1923,26 +1923,37 @@ class Mesh:
         return _fast_cross(v1 - v0, v2 - v0)
 
     def barycentric_vertex_areas(
-        self, positions: Optional[np.ndarray] = None
+        self,
+        positions: Optional[np.ndarray] = None,
+        *,
+        tri_rows: Optional[np.ndarray] = None,
+        areas: Optional[np.ndarray] = None,
+        mask: Optional[np.ndarray] = None,
+        cache: Optional[bool] = None,
     ) -> np.ndarray:
         """Return cached barycentric vertex areas from triangle areas.
 
         The barycentric area at a vertex is one third of the areas of its
         incident triangles. Degenerate triangles (area < 1e-12) are ignored.
+        When ``areas`` is provided, it must align with ``tri_rows``.
         """
         import numpy as np
 
         self.build_position_cache()
         n_verts = len(self.vertex_ids)
 
-        tri_rows, _ = self.triangle_row_cache()
+        if tri_rows is None:
+            tri_rows, _ = self.triangle_row_cache()
         if tri_rows is None or tri_rows.size == 0:
             return np.zeros(n_verts, dtype=float)
 
         if positions is None:
             positions = self.positions_view()
 
-        use_cache = self._geometry_cache_active(positions)
+        if cache is None:
+            cache = areas is None
+
+        use_cache = cache and self._geometry_cache_active(positions)
         if (
             use_cache
             and self._cached_barycentric_vertex_areas_version == self._version
@@ -1953,21 +1964,28 @@ class Mesh:
         ):
             return self._cached_barycentric_vertex_areas
 
-        v0 = positions[tri_rows[:, 0]]
-        v1 = positions[tri_rows[:, 1]]
-        v2 = positions[tri_rows[:, 2]]
+        if areas is None:
+            v0 = positions[tri_rows[:, 0]]
+            v1 = positions[tri_rows[:, 1]]
+            v2 = positions[tri_rows[:, 2]]
 
-        n = _fast_cross(v1 - v0, v2 - v0)
-        n_norm = np.linalg.norm(n, axis=1)
-        mask = n_norm >= 1e-12
+            n = _fast_cross(v1 - v0, v2 - v0)
+            n_norm = np.linalg.norm(n, axis=1)
+            mask = n_norm >= 1e-12
+            areas = 0.5 * n_norm[mask]
+            tri_rows = tri_rows[mask]
+        else:
+            areas = np.asarray(areas, dtype=float)
+            if mask is not None:
+                tri_rows = tri_rows[mask]
+                areas = areas[mask]
 
         vertex_areas = np.zeros(n_verts, dtype=float)
-        if np.any(mask):
-            areas = 0.5 * n_norm[mask]
+        if areas.size:
             area_thirds = areas / 3.0
-            np.add.at(vertex_areas, tri_rows[mask, 0], area_thirds)
-            np.add.at(vertex_areas, tri_rows[mask, 1], area_thirds)
-            np.add.at(vertex_areas, tri_rows[mask, 2], area_thirds)
+            np.add.at(vertex_areas, tri_rows[:, 0], area_thirds)
+            np.add.at(vertex_areas, tri_rows[:, 1], area_thirds)
+            np.add.at(vertex_areas, tri_rows[:, 2], area_thirds)
 
         if use_cache:
             self._cached_barycentric_vertex_areas = vertex_areas

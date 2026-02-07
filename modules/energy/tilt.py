@@ -159,11 +159,13 @@ def compute_energy_and_gradient_array(
         if tilt_grad_arr.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilt_grad_arr must have shape (N_vertices, 3)")
 
-        vertex_areas = np.zeros(len(mesh.vertex_ids), dtype=float)
-        area_thirds = areas / 3.0
-        np.add.at(vertex_areas, tri_rows[mask, 0], area_thirds)
-        np.add.at(vertex_areas, tri_rows[mask, 1], area_thirds)
-        np.add.at(vertex_areas, tri_rows[mask, 2], area_thirds)
+        vertex_areas = mesh.barycentric_vertex_areas(
+            positions,
+            tri_rows=tri_rows,
+            areas=areas,
+            mask=mask,
+            cache=True,
+        )
 
         tilt_grad_arr += k_tilt * tilts * vertex_areas[:, None]
 
