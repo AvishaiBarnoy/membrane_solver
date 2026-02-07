@@ -33,6 +33,8 @@ import numpy as np
 from geometry.curvature import compute_curvature_data
 from geometry.entities import Mesh
 
+USES_TILT = True
+
 
 def _cache_key(mesh: Mesh) -> tuple[int, int, int]:
     vertex_ids = getattr(mesh, "vertex_ids", None)

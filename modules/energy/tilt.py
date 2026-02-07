@@ -24,6 +24,8 @@ import numpy as np
 
 from geometry.entities import Mesh, _fast_cross
 
+USES_TILT = True
+
 
 def compute_energy_and_gradient(
     mesh: Mesh, global_params, param_resolver
