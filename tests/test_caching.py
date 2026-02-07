@@ -189,6 +189,27 @@ def test_curvature_cache_reused_during_geometry_freeze():
     assert t2 is t0
 
 
+def test_barycentric_vertex_area_cache_reused_during_geometry_freeze():
+    data = cube_soft_volume_input("lagrange")
+    mesh = parse_geometry(data)
+    mesh.build_facet_vertex_loops()
+
+    positions = mesh.positions_view()
+
+    with mesh.geometry_freeze(positions):
+        areas0 = mesh.barycentric_vertex_areas(positions)
+        areas1 = mesh.barycentric_vertex_areas(positions)
+
+    assert areas1 is areas0
+
+    mesh.vertices[0].position += np.array([0.1, 0.0, 0.0])
+    mesh.increment_version()
+    positions = mesh.positions_view()
+
+    areas2 = mesh.barycentric_vertex_areas(positions)
+    assert areas2 is not areas0
+
+
 def test_vertex_average_increments_version():
     from runtime.vertex_average import vertex_average
 

@@ -182,11 +182,13 @@ def compute_energy_and_gradient_array(
         np.add.at(grad_arr, tri_rows[mask, 2], c * g2)
 
     if tilt_in_grad_arr is not None or tilt_out_grad_arr is not None:
-        vertex_areas = np.zeros(len(mesh.vertex_ids), dtype=float)
-        area_thirds = areas / 3.0
-        np.add.at(vertex_areas, tri_rows[mask, 0], area_thirds)
-        np.add.at(vertex_areas, tri_rows[mask, 1], area_thirds)
-        np.add.at(vertex_areas, tri_rows[mask, 2], area_thirds)
+        vertex_areas = mesh.barycentric_vertex_areas(
+            positions,
+            tri_rows=tri_rows,
+            areas=areas,
+            mask=mask,
+            cache=True,
+        )
 
         if tilt_out_grad_arr is not None:
             tilt_out_grad_arr = np.asarray(tilt_out_grad_arr, dtype=float)
