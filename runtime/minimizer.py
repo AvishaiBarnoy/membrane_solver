@@ -250,7 +250,7 @@ class Minimizer:
         positions: np.ndarray,
         tilts: np.ndarray,
     ) -> float:
-        """Compute total energy for a fixed ``positions``/``tilts`` state.
+        """Compute tilt-dependent energy for fixed ``positions``/``tilts``.
 
         Uses the array API when available and passes ``tilts`` opportunistically
         (falling back when a module does not accept tilt arguments).
@@ -260,6 +260,8 @@ class Minimizer:
         total_energy = 0.0
 
         for module in self.energy_modules:
+            if not getattr(module, "USES_TILT", False):
+                continue
             if hasattr(module, "compute_energy_and_gradient_array"):
                 try:
                     E_mod = module.compute_energy_and_gradient_array(
@@ -318,13 +320,15 @@ class Minimizer:
         tilts: np.ndarray,
         tilt_grad_arr: np.ndarray,
     ) -> float:
-        """Compute total energy and accumulate dense tilt gradient."""
+        """Compute tilt-dependent energy and accumulate dense tilt gradient."""
         index_map = self.mesh.vertex_index_to_row
         grad_dummy = np.zeros_like(positions)
         tilt_grad_arr.fill(0.0)
         total_energy = 0.0
 
         for module in self.energy_modules:
+            if not getattr(module, "USES_TILT", False):
+                continue
             if hasattr(module, "compute_energy_and_gradient_array"):
                 try:
                     E_mod = module.compute_energy_and_gradient_array(

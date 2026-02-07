@@ -40,6 +40,7 @@ _BENCHMARK_MODULES = {
     "kozlov_1disk_induction_quick": "benchmark_kozlov_1disk_3d_induction_quick",
     "kozlov_1disk_profile_hard_rim": "benchmark_kozlov_1disk_3d_profile_hard_rim",
     "kozlov_1disk_profile_hard_rim_free_disk": "benchmark_kozlov_1disk_3d_profile_hard_rim_free_disk",
+    "kozlov_1disk_profile_hard_rim_free_disk_light": "benchmark_kozlov_1disk_3d_profile_hard_rim_free_disk_light",
 }
 
 

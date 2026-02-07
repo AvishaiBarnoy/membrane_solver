@@ -48,6 +48,8 @@ from modules.energy.bending import (  # noqa: PLC0415
     _vertex_normals,
 )
 
+USES_TILT = True
+
 
 def _total_energy(
     mesh: Mesh,
