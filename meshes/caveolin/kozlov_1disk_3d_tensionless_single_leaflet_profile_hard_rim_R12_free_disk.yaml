@@ -125,6 +125,8 @@ vertices:
   - 0.0
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
     tilt_fixed_in: true
     tilt_fixed_out: true
     tilt_in:
@@ -233,50 +235,74 @@ vertices:
   - 0.0
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - 0.23094010767585033
   - 0.1333333333333333
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - 0.13333333333333336
   - 0.2309401076758503
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - 1.6328623988631376e-17
   - 0.26666666666666666
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - -0.13333333333333328
   - 0.23094010767585033
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - -0.23094010767585033
   - 0.1333333333333333
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - -0.26666666666666666
   - 3.265724797726275e-17
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - -0.23094010767585035
   - -0.13333333333333328
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - -0.13333333333333344
   - -0.23094010767585024
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - -4.8985871965894125e-17
   - -0.26666666666666666
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - 0.13333333333333336
   - -0.2309401076758503
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - 0.23094010767585024
   - -0.13333333333333344
   - 0.0
   - preset: disk
+    constraints:
+    - pin_to_plane
 - - 1.0
   - 0.0
   - 0.0
