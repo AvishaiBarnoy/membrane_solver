@@ -34,3 +34,26 @@ def test_refine_propagates_disk_interface_tags_to_midpoints():
         opts = getattr(v, "options", None) or {}
         assert opts.get("rim_slope_match_group") == "disk"
         assert opts.get("tilt_thetaB_group_in") == "disk"
+
+
+@pytest.mark.regression
+def test_refine_propagates_pin_to_plane_on_disk_vertices():
+    """Disk preset vertices should remain pinned to the plane after refinement."""
+    mesh = parse_geometry(
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
+    )
+    refined = refine_triangle_mesh(mesh)
+
+    disk_vertices = [
+        v
+        for v in refined.vertices.values()
+        if (getattr(v, "options", None) or {}).get("preset") == "disk"
+    ]
+    assert disk_vertices
+
+    for v in disk_vertices:
+        opts = getattr(v, "options", None) or {}
+        constraints = opts.get("constraints") or []
+        if isinstance(constraints, str):
+            constraints = [constraints]
+        assert "pin_to_plane" in constraints

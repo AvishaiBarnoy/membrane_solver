@@ -291,6 +291,22 @@ def refine_triangle_mesh(mesh):
     facet_to_new_facets = {}  # facet.index → [Facet, ...]
     next_facet_idx = max(mesh.facets.keys()) + 1 if mesh.facets else 0
 
+    def _merge_constraints(options: dict, additions: list[str]) -> None:
+        if not additions:
+            return
+        existing = options.get("constraints")
+        if existing is None:
+            options["constraints"] = list(additions)
+            return
+        if isinstance(existing, str):
+            merged = [existing]
+        else:
+            merged = list(existing)
+        for item in additions:
+            if item not in merged:
+                merged.append(item)
+        options["constraints"] = merged
+
     def _maybe_inherit_pin_to_circle_options(
         v1_options: dict, v2_options: dict
     ) -> dict | None:
@@ -336,7 +352,7 @@ def refine_triangle_mesh(mesh):
                 return ok, a if ok else None
             return (a == b), (a if a == b else None)
 
-        merged: dict = {"constraints": ["pin_to_circle"]}
+        merged: dict = {}
         keys = (
             "pin_to_circle_group",
             "pin_to_circle_mode",
@@ -355,6 +371,60 @@ def refine_triangle_mesh(mesh):
         if preset is not None and preset == v2_options.get("preset"):
             merged["preset"] = preset
 
+        return merged
+
+    def _maybe_inherit_pin_to_plane_options(
+        v1_options: dict, v2_options: dict
+    ) -> dict | None:
+        """Return shared pin_to_plane options when both endpoints are constrained."""
+
+        def has_pin_to_plane(options: dict) -> bool:
+            constraints = options.get("constraints")
+            if constraints == "pin_to_plane":
+                return True
+            if isinstance(constraints, list):
+                return "pin_to_plane" in constraints
+            return False
+
+        if not (has_pin_to_plane(v1_options) and has_pin_to_plane(v2_options)):
+            return None
+
+        def merge_equal(key: str) -> tuple[bool, object | None]:
+            a = v1_options.get(key)
+            b = v2_options.get(key)
+            if a is None and b is None:
+                return True, None
+            if a is None:
+                return True, b
+            if b is None:
+                return True, a
+            if isinstance(a, (list, tuple, np.ndarray)) or isinstance(
+                b, (list, tuple, np.ndarray)
+            ):
+                try:
+                    ok = bool(
+                        np.allclose(
+                            np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+                        )
+                    )
+                except Exception:
+                    ok = False
+                return ok, a if ok else None
+            return (a == b), (a if a == b else None)
+
+        merged: dict = {}
+        keys = (
+            "pin_to_plane_group",
+            "pin_to_plane_mode",
+            "pin_to_plane_normal",
+            "pin_to_plane_point",
+        )
+        for key in keys:
+            ok, val = merge_equal(key)
+            if not ok:
+                return None
+            if val is not None:
+                merged[key] = val
         return merged
 
     def _maybe_inherit_disk_target_options(
@@ -507,7 +577,15 @@ def refine_triangle_mesh(mesh):
                 getattr(mesh.vertices[v2], "options", {}) or {},
             )
             if inherited_circle is not None:
+                _merge_constraints(midpoint_options, ["pin_to_circle"])
                 midpoint_options.update(inherited_circle)
+            inherited_plane = _maybe_inherit_pin_to_plane_options(
+                getattr(mesh.vertices[v1], "options", {}) or {},
+                getattr(mesh.vertices[v2], "options", {}) or {},
+            )
+            if inherited_plane is not None:
+                _merge_constraints(midpoint_options, ["pin_to_plane"])
+                midpoint_options.update(inherited_plane)
             inherited_target = _maybe_inherit_disk_target_options(
                 getattr(mesh.vertices[v1], "options", {}) or {},
                 getattr(mesh.vertices[v2], "options", {}) or {},
