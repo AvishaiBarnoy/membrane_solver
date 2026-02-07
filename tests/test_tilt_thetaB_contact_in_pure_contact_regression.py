@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
@@ -123,6 +124,46 @@ def test_tilt_thetaB_contact_in_off_mode_ignores_nonzero_tilts() -> None:
     expected = _expected_contact_energy(mesh, group="disk", gamma=gamma, thetaB=thetaB)
     assert abs(float(E - expected)) < 1e-10
     assert float(np.max(np.abs(tilt_grad))) == 0.0
+
+
+def test_tilt_thetaB_contact_in_energy_array_matches_gradient_path() -> None:
+    mesh = parse_geometry(
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
+    )
+    gp = mesh.global_parameters
+    resolver = ParameterResolver(gp)
+
+    thetaB = 0.04
+    gp.set("tilt_thetaB_value", thetaB)
+    gp.set("tilt_thetaB_contact_penalty_mode", "off")
+
+    positions = mesh.positions_view()
+    tilts_in = np.zeros_like(positions)
+    tilts_in[:, 0] = 1e-3
+
+    idx_map = mesh.vertex_index_to_row
+    grad_arr = np.zeros_like(positions)
+    tilt_grad = np.zeros_like(positions)
+
+    e_grad = tilt_thetaB_contact_in.compute_energy_and_gradient_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=idx_map,
+        grad_arr=grad_arr,
+        tilts_in=tilts_in,
+        tilt_in_grad_arr=tilt_grad,
+    )
+    e_only = tilt_thetaB_contact_in.compute_energy_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=idx_map,
+        tilts_in=tilts_in,
+    )
+    assert float(e_only) == pytest.approx(float(e_grad), rel=1e-12, abs=1e-12)
 
 
 def test_tilt_thetaB_contact_in_off_mode_invariant_to_vertex_count_for_circle() -> None:

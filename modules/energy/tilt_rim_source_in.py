@@ -336,4 +336,102 @@ def compute_energy_and_gradient_array(
     return energy
 
 
-__all__ = ["compute_energy_and_gradient", "compute_energy_and_gradient_array"]
+def compute_energy_array(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    tilts_in: np.ndarray | None = None,
+    tilts_out: np.ndarray | None = None,
+) -> float:
+    """Dense-array inner-leaflet rim source energy (energy only)."""
+    _ = global_params, index_map, tilts_out
+    group = _resolve_group(param_resolver)
+    if group is None:
+        return 0.0
+
+    mode = _resolve_edge_mode(param_resolver)
+    selected = _selected_rim_edges(mesh, group, mode=mode)
+    if not selected:
+        return 0.0
+
+    if tilts_in is None:
+        tilts_in = mesh.tilts_in_view()
+    else:
+        tilts_in = np.asarray(tilts_in, dtype=float)
+        if tilts_in.shape != (len(mesh.vertex_ids), 3):
+            raise ValueError("tilts_in must have shape (N_vertices, 3)")
+
+    center = _resolve_center(param_resolver)
+
+    tail_rows: list[int] = []
+    head_rows: list[int] = []
+    strengths: list[float] = []
+    for eid in selected:
+        edge = mesh.edges[int(eid)]
+        t_row = mesh.vertex_index_to_row.get(int(edge.tail_index))
+        h_row = mesh.vertex_index_to_row.get(int(edge.head_index))
+        if t_row is None or h_row is None:
+            continue
+        tail_rows.append(int(t_row))
+        head_rows.append(int(h_row))
+        strengths.append(_resolve_strength(param_resolver, edge))
+
+    if not tail_rows:
+        return 0.0
+
+    tails = np.asarray(tail_rows, dtype=int)
+    heads = np.asarray(head_rows, dtype=int)
+    gamma = np.asarray(strengths, dtype=float)
+    if not np.any(gamma):
+        return 0.0
+
+    p0 = positions[tails]
+    p1 = positions[heads]
+    mid = 0.5 * (p0 + p1)
+
+    follow = False
+    for row in np.unique(np.concatenate([tails, heads])):
+        vid = int(mesh.vertex_ids[int(row)])
+        v = mesh.vertices.get(vid)
+        if v is None:
+            continue
+        if _pin_to_circle_group(getattr(v, "options", None)) != group:
+            continue
+        if _pin_to_circle_mode(mesh, getattr(v, "options", None)) == "fit":
+            follow = True
+            break
+
+    if follow:
+        rim_rows = np.unique(np.concatenate([tails, heads]))
+        center, normal = _resolve_followed_circle_frame(
+            mesh, group=group, rows=rim_rows
+        )
+    else:
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
+    r = mid - center[None, :]
+    r = r - np.einsum("ij,j->i", r, normal)[:, None] * normal[None, :]
+    rn = np.linalg.norm(r, axis=1)
+    good = rn > 1e-12
+    if not np.any(good):
+        return 0.0
+
+    r_hat = np.zeros_like(r)
+    r_hat[good] = r[good] / rn[good][:, None]
+
+    edge_vec = p1 - p0
+    lengths = np.linalg.norm(edge_vec, axis=1)
+
+    t_avg = 0.5 * (tilts_in[tails] + tilts_in[heads])
+    dots = np.einsum("ij,ij->i", t_avg, r_hat)
+    return float(-np.sum(gamma * lengths * dots))
+
+
+__all__ = [
+    "compute_energy_and_gradient",
+    "compute_energy_and_gradient_array",
+    "compute_energy_array",
+]

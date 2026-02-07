@@ -315,4 +315,100 @@ def compute_energy_and_gradient(
     return float(energy), shape_grad, tilt_grad
 
 
-__all__ = ["compute_energy_and_gradient", "compute_energy_and_gradient_array"]
+def compute_energy_array(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    tilts_in: np.ndarray | None = None,
+    tilts_out: np.ndarray | None = None,
+) -> float:
+    """Dense-array inner-leaflet disk target energy (energy only)."""
+    _ = global_params, index_map, tilts_out
+    k_target = float(param_resolver.get(None, "tilt_disk_target_strength_in") or 0.0)
+    if k_target == 0.0:
+        return 0.0
+
+    group = _resolve_group(param_resolver)
+    if group is None:
+        return 0.0
+
+    if tilts_in is None:
+        tilts_in = mesh.tilts_in_view()
+    else:
+        tilts_in = np.asarray(tilts_in, dtype=float)
+        if tilts_in.shape != (len(mesh.vertex_ids), 3):
+            raise ValueError("tilts_in must have shape (N_vertices, 3)")
+
+    tri_rows, _ = mesh.triangle_row_cache()
+    if tri_rows is None or len(tri_rows) == 0:
+        return 0.0
+
+    disk_rows = _collect_group_rows(mesh, group)
+    if disk_rows.size == 0:
+        return 0.0
+
+    center = _resolve_center(param_resolver)
+    normal = _resolve_normal(param_resolver)
+    if normal is None:
+        normal = _fit_plane_normal(positions[disk_rows])
+    if normal is None:
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
+    r_vec = positions[disk_rows]
+    r_vec = r_vec - center[None, :]
+    r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
+    r = np.linalg.norm(r_vec, axis=1)
+    if np.any(r > 1e-12):
+        r_max = float(np.max(r))
+    else:
+        return 0.0
+
+    theta_b = _resolve_theta_b(param_resolver)
+    lam = _resolve_lambda(param_resolver)
+    if lam <= 1e-12 or r_max <= 0.0:
+        theta = theta_b * r / max(r_max, 1e-12)
+    else:
+        num = _bessel_i1_series(lam * r)
+        den = _bessel_i1_series(np.array([lam * r_max], dtype=float))[0]
+        theta = theta_b * num / den
+
+    r_hat = np.zeros_like(r_vec)
+    good = r > 1e-12
+    r_hat[good] = r_vec[good] / r[good][:, None]
+
+    target = np.zeros_like(tilts_in)
+    target[disk_rows] = theta[:, None] * r_hat
+
+    diff = tilts_in - target
+    if disk_rows.size != len(mesh.vertex_ids):
+        diff_mask = np.ones(len(mesh.vertex_ids), dtype=bool)
+        diff_mask[disk_rows] = False
+        diff[diff_mask] = 0.0
+    diff_sq = np.einsum("ij,ij->i", diff, diff)
+
+    tri_pos = positions[tri_rows]
+    v0 = tri_pos[:, 0, :]
+    v1 = tri_pos[:, 1, :]
+    v2 = tri_pos[:, 2, :]
+
+    n = _fast_cross(v1 - v0, v2 - v0)
+    n_norm = np.linalg.norm(n, axis=1)
+    mask = n_norm >= 1e-12
+    if not np.any(mask):
+        return 0.0
+
+    areas = 0.5 * n_norm[mask]
+    tri_diff_sq_sum = diff_sq[tri_rows[mask]].sum(axis=1)
+    coeff = 0.5 * k_target * (tri_diff_sq_sum / 3.0)
+
+    return float(np.dot(coeff, areas))
+
+
+__all__ = [
+    "compute_energy_and_gradient",
+    "compute_energy_and_gradient_array",
+    "compute_energy_array",
+]
