@@ -203,4 +203,65 @@ def compute_energy_and_gradient_array(
     return energy
 
 
-__all__ = ["compute_energy_and_gradient", "compute_energy_and_gradient_array"]
+def compute_energy_array(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    tilts_in: np.ndarray | None = None,
+    tilts_out: np.ndarray | None = None,
+) -> float:
+    """Dense-array inter-leaflet coupling energy (energy only)."""
+    _ = global_params, index_map
+    sign = _resolve_coupling_mode(param_resolver)
+    k_c = _resolve_coupling_modulus(param_resolver)
+    if sign is None or k_c == 0.0:
+        return 0.0
+
+    tri_rows, _ = mesh.triangle_row_cache()
+    if tri_rows is None or len(tri_rows) == 0:
+        return 0.0
+
+    mesh.build_position_cache()
+    if tilts_in is None:
+        tilts_in = mesh.tilts_in_view()
+    else:
+        tilts_in = np.asarray(tilts_in, dtype=float)
+        if tilts_in.shape != (len(mesh.vertex_ids), 3):
+            raise ValueError("tilts_in must have shape (N_vertices, 3)")
+
+    if tilts_out is None:
+        tilts_out = mesh.tilts_out_view()
+    else:
+        tilts_out = np.asarray(tilts_out, dtype=float)
+        if tilts_out.shape != (len(mesh.vertex_ids), 3):
+            raise ValueError("tilts_out must have shape (N_vertices, 3)")
+
+    diff = tilts_out + sign * tilts_in
+    diff_sq = np.einsum("ij,ij->i", diff, diff)
+
+    tri_pos = positions[tri_rows]
+    v0 = tri_pos[:, 0, :]
+    v1 = tri_pos[:, 1, :]
+    v2 = tri_pos[:, 2, :]
+
+    n = _fast_cross(v1 - v0, v2 - v0)
+    n_norm = np.linalg.norm(n, axis=1)
+    mask = n_norm >= 1e-12
+    if not np.any(mask):
+        return 0.0
+
+    areas = 0.5 * n_norm[mask]
+    tri_diff_sq_sum = diff_sq[tri_rows[mask]].sum(axis=1)
+    coeff = 0.5 * k_c * (tri_diff_sq_sum / 3.0)
+
+    return float(np.dot(coeff, areas))
+
+
+__all__ = [
+    "compute_energy_and_gradient",
+    "compute_energy_and_gradient_array",
+    "compute_energy_array",
+]

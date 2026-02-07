@@ -170,4 +170,55 @@ def compute_energy_and_gradient_array(
     return energy
 
 
-__all__ = ["compute_energy_and_gradient", "compute_energy_and_gradient_array"]
+def compute_energy_array(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    tilts: np.ndarray | None = None,
+) -> float:
+    """Dense-array tilt energy (energy only)."""
+    _ = index_map
+    k_tilt = float(param_resolver.get(None, "tilt_rigidity") or 0.0)
+    if k_tilt == 0.0:
+        return 0.0
+
+    tri_rows, _ = mesh.triangle_row_cache()
+    if tri_rows is None or len(tri_rows) == 0:
+        return 0.0
+
+    mesh.build_position_cache()
+    if tilts is None:
+        tilts = mesh.tilts_view()
+    else:
+        tilts = np.asarray(tilts, dtype=float)
+        if tilts.shape != (len(mesh.vertex_ids), 3):
+            raise ValueError("tilts must have shape (N_vertices, 3)")
+
+    tilt_sq = np.einsum("ij,ij->i", tilts, tilts)
+
+    tri_pos = positions[tri_rows]
+    v0 = tri_pos[:, 0, :]
+    v1 = tri_pos[:, 1, :]
+    v2 = tri_pos[:, 2, :]
+
+    n = _fast_cross(v1 - v0, v2 - v0)
+    n_norm = np.linalg.norm(n, axis=1)
+    mask = n_norm >= 1e-12
+    if not np.any(mask):
+        return 0.0
+
+    areas = 0.5 * n_norm[mask]
+    tri_tilt_sq_sum = tilt_sq[tri_rows[mask]].sum(axis=1)
+    coeff = 0.5 * k_tilt * (tri_tilt_sq_sum / 3.0)
+
+    return float(np.dot(coeff, areas))
+
+
+__all__ = [
+    "compute_energy_and_gradient",
+    "compute_energy_and_gradient_array",
+    "compute_energy_array",
+]

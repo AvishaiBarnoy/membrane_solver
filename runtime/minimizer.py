@@ -262,6 +262,27 @@ class Minimizer:
         for module in self.energy_modules:
             if not getattr(module, "USES_TILT", False):
                 continue
+            if hasattr(module, "compute_energy_array"):
+                try:
+                    E_mod = module.compute_energy_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                        tilts=tilts,
+                    )
+                except TypeError:
+                    E_mod = module.compute_energy_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                    )
+                total_energy += float(E_mod)
+                continue
+
             if hasattr(module, "compute_energy_and_gradient_array"):
                 try:
                     E_mod = module.compute_energy_and_gradient_array(
@@ -401,6 +422,28 @@ class Minimizer:
         total_energy = 0.0
 
         for module in self.energy_modules:
+            if hasattr(module, "compute_energy_array"):
+                try:
+                    E_mod = module.compute_energy_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                    )
+                except TypeError:
+                    E_mod = module.compute_energy_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                    )
+                total_energy += float(E_mod)
+                continue
+
             if hasattr(module, "compute_energy_and_gradient_array"):
                 try:
                     E_mod = module.compute_energy_and_gradient_array(
@@ -485,6 +528,29 @@ class Minimizer:
                     total_energy += float(
                         0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_out)
                     )
+                continue
+
+            if hasattr(module, "compute_energy_array"):
+                try:
+                    E_mod = module.compute_energy_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                    )
+                except TypeError:
+                    # Some tilt modules ignore passed tilts and read from mesh.
+                    E_mod = module.compute_energy_array(
+                        self.mesh,
+                        self.global_params,
+                        self.param_resolver,
+                        positions=positions,
+                        index_map=index_map,
+                    )
+                total_energy += float(E_mod)
                 continue
 
             if hasattr(module, "compute_energy_and_gradient_array"):

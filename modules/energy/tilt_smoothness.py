@@ -173,4 +173,55 @@ def compute_energy_and_gradient_array(
     return energy
 
 
-__all__ = ["compute_energy_and_gradient", "compute_energy_and_gradient_array"]
+def compute_energy_array(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    tilts: np.ndarray | None = None,
+) -> float:
+    """Dense-array smoothness energy (energy only)."""
+    _ = global_params
+    k_smooth = float(param_resolver.get(None, "tilt_smoothness_rigidity") or 0.0)
+    if k_smooth == 0.0:
+        return 0.0
+
+    weights, tri_rows = _get_weights_and_tris(
+        mesh, positions=positions, index_map=index_map
+    )
+    if tri_rows is None:
+        return 0.0
+
+    if tilts is None:
+        tilts = mesh.tilts_view()
+    else:
+        tilts = np.asarray(tilts, dtype=float)
+        if tilts.shape != (len(mesh.vertex_ids), 3):
+            raise ValueError("tilts must have shape (N_vertices, 3)")
+
+    c0 = weights[:, 0]
+    c1 = weights[:, 1]
+    c2 = weights[:, 2]
+
+    t0 = tilts[tri_rows[:, 0]]
+    t1 = tilts[tri_rows[:, 1]]
+    t2 = tilts[tri_rows[:, 2]]
+
+    d12 = t1 - t2
+    d20 = t2 - t0
+    d01 = t0 - t1
+
+    n12 = np.einsum("ij,ij->i", d12, d12)
+    n20 = np.einsum("ij,ij->i", d20, d20)
+    n01 = np.einsum("ij,ij->i", d01, d01)
+
+    return float(0.25 * k_smooth * np.sum(c0 * n12 + c1 * n20 + c2 * n01))
+
+
+__all__ = [
+    "compute_energy_and_gradient",
+    "compute_energy_and_gradient_array",
+    "compute_energy_array",
+]
