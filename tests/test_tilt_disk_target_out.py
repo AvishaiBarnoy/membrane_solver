@@ -2,6 +2,7 @@ import os
 import sys
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -151,3 +152,35 @@ def test_tilt_disk_target_out_penalizes_mismatch() -> None:
     )
     assert float(energy) > 1e-4
     assert float(np.linalg.norm(tilt_grad)) > 1e-4
+
+
+def test_tilt_disk_target_out_energy_array_matches_gradient_path() -> None:
+    from modules.energy import tilt_disk_target_out
+
+    mesh = parse_geometry(_disk_fan_mesh())
+    resolver = ParameterResolver(mesh.global_parameters)
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    grad_arr = np.zeros_like(positions)
+    tilt_grad = np.zeros_like(positions)
+
+    tilts_out = mesh.tilts_out_view()
+    e_grad = tilt_disk_target_out.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_arr,
+        tilts_out=tilts_out,
+        tilt_out_grad_arr=tilt_grad,
+    )
+    e_only = tilt_disk_target_out.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_out=tilts_out,
+    )
+    assert float(e_only) == pytest.approx(float(e_grad), rel=1e-12, abs=1e-12)

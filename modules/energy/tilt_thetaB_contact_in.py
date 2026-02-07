@@ -339,4 +339,73 @@ __all__ = [
     "update_scalar_params",
     "compute_energy_and_gradient",
     "compute_energy_and_gradient_array",
+    "compute_energy_array",
 ]
+
+
+def compute_energy_array(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    tilts_in: np.ndarray | None = None,
+    tilts_out: np.ndarray | None = None,
+) -> float:
+    """Dense-array inner-leaflet θ_B contact energy (energy only)."""
+    _ = index_map, tilts_out
+    group = _resolve_group(param_resolver)
+    if group is None:
+        return 0.0
+
+    if tilts_in is None:
+        tilts_in = mesh.tilts_in_view()
+    else:
+        tilts_in = np.asarray(tilts_in, dtype=float)
+        if tilts_in.shape != (len(mesh.vertex_ids), 3):
+            raise ValueError("tilts_in must have shape (N_vertices, 3)")
+
+    rows = _collect_group_rows(mesh, group)
+    if rows.size == 0:
+        return 0.0
+
+    pts = positions[rows]
+    center = _resolve_center(param_resolver)
+    normal = _resolve_normal(param_resolver, pts)
+    order = _order_by_angle(pts, center=center, normal=normal)
+    rows = rows[order]
+    pts = pts[order]
+
+    weights = _arc_length_weights(pts, np.arange(len(rows)))
+    wsum = float(np.sum(weights))
+    if wsum <= 1e-12:
+        return 0.0
+
+    r_vec = pts - center[None, :]
+    r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
+    r_len = np.linalg.norm(r_vec, axis=1)
+    good = r_len > 1e-12
+    if not np.any(good):
+        return 0.0
+
+    r_hat = np.zeros_like(r_vec)
+    r_hat[good] = r_vec[good] / r_len[good][:, None]
+
+    theta_vals = np.einsum("ij,ij->i", tilts_in[rows], r_hat)
+    theta_B = _resolve_thetaB(global_params)
+    k = _resolve_k(param_resolver)
+    gamma = _resolve_gamma(param_resolver)
+    if k == 0.0 and gamma == 0.0:
+        return 0.0
+
+    R_eff = float(np.sum(weights * r_len) / wsum)
+    energy = 0.0
+    if gamma != 0.0:
+        energy += float(-2.0 * np.pi * R_eff * gamma * theta_B)
+
+    if _penalty_mode(global_params) == "legacy" and k != 0.0:
+        diff = theta_vals - theta_B
+        energy += float(0.5 * k * np.sum(weights * diff * diff))
+
+    return float(energy)
