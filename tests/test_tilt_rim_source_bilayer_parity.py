@@ -138,5 +138,82 @@ def test_tilt_rim_source_bilayer_matches_in_plus_out():
     )
 
     assert np.isclose(float(e_b), float(e_in + e_out), rtol=1e-12, atol=1e-12)
+
+
+def test_tilt_rim_source_energy_array_matches_gradient_path():
+    mesh = parse_geometry(_annulus_source_mesh())
+    _set_radial_tilts(mesh)
+    resolver = ParameterResolver(mesh.global_parameters)
+
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    grad_dummy = np.zeros_like(positions)
+
+    grad_in_b = np.zeros_like(positions)
+    grad_out_b = np.zeros_like(positions)
+    e_b_grad = tilt_rim_source_bilayer.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+        tilt_in_grad_arr=grad_in_b,
+        tilt_out_grad_arr=grad_out_b,
+    )
+    e_b_only = tilt_rim_source_bilayer.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+    )
+    assert np.isclose(float(e_b_only), float(e_b_grad), rtol=1e-12, atol=1e-12)
+
+    grad_in = np.zeros_like(positions)
+    e_in_grad = tilt_rim_source_in.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_in=mesh.tilts_in_view(),
+        tilt_in_grad_arr=grad_in,
+    )
+    e_in_only = tilt_rim_source_in.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=mesh.tilts_in_view(),
+    )
+    assert np.isclose(float(e_in_only), float(e_in_grad), rtol=1e-12, atol=1e-12)
+
+    grad_out = np.zeros_like(positions)
+    e_out_grad = tilt_rim_source_out.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_out=mesh.tilts_out_view(),
+        tilt_out_grad_arr=grad_out,
+    )
+    e_out_only = tilt_rim_source_out.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_out=mesh.tilts_out_view(),
+    )
+    assert np.isclose(float(e_out_only), float(e_out_grad), rtol=1e-12, atol=1e-12)
     assert np.allclose(grad_in_b, grad_in)
     assert np.allclose(grad_out_b, grad_out)
