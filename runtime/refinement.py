@@ -473,16 +473,28 @@ def refine_triangle_mesh(mesh):
                 return False
             return str(options.get("pin_to_circle_group") or "") == "disk"
 
-        if not (has_disk_pin(v1_options) and has_disk_pin(v2_options)):
-            return None
+        def has_disk_edge_preset(options: dict) -> bool:
+            return options.get("preset") == "disk_edge"
 
         merged: dict = {}
-        for key in ("rim_slope_match_group", "tilt_thetaB_group_in"):
-            a = v1_options.get(key)
-            b = v2_options.get(key)
-            if a is not None and b is not None and a == b:
-                merged[key] = a
-        return merged if merged else None
+        if has_disk_pin(v1_options) and has_disk_pin(v2_options):
+            for key in ("rim_slope_match_group", "tilt_thetaB_group_in"):
+                a = v1_options.get(key)
+                b = v2_options.get(key)
+                if a is not None and b is not None and a == b:
+                    merged[key] = a
+            return merged if merged else None
+
+        # Mixed edge: if the midpoint inherits preset=disk_edge, copy tags from the disk_edge endpoint.
+        if has_disk_edge_preset(v1_options) or has_disk_edge_preset(v2_options):
+            source = v1_options if has_disk_edge_preset(v1_options) else v2_options
+            for key in ("rim_slope_match_group", "tilt_thetaB_group_in"):
+                val = source.get(key)
+                if val is not None:
+                    merged[key] = val
+            return merged if merged else None
+
+        return None
 
     def _maybe_inherit_preset(v1_options: dict, v2_options: dict) -> str | None:
         """Return a deterministic preset for mid-edge vertices."""
