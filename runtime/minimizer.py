@@ -76,39 +76,87 @@ class Minimizer:
 
         self.param_resolver = ParameterResolver(global_params)
         self._gauss_bonnet_monitor: GaussBonnetMonitor | None = None
+        self._tilt_fixed_mask_cache: np.ndarray | None = None
+        self._tilt_fixed_mask_version: int = -1
+        self._tilt_fixed_mask_vertex_version: int = -1
+        self._tilt_fixed_mask_in_cache: np.ndarray | None = None
+        self._tilt_fixed_mask_in_version: int = -1
+        self._tilt_fixed_mask_in_vertex_version: int = -1
+        self._tilt_fixed_mask_out_cache: np.ndarray | None = None
+        self._tilt_fixed_mask_out_version: int = -1
+        self._tilt_fixed_mask_out_vertex_version: int = -1
 
     def _tilt_fixed_mask(self) -> np.ndarray:
         """Return a boolean mask for vertices whose tilt is clamped.
 
         The mask is in ``mesh.vertex_ids`` row order.
         """
-        return np.array(
+        flags_version = self.mesh._tilt_fixed_flags_version
+        vertex_version = self.mesh._vertex_ids_version
+        if (
+            self._tilt_fixed_mask_cache is not None
+            and self._tilt_fixed_mask_version == flags_version
+            and self._tilt_fixed_mask_vertex_version == vertex_version
+            and len(self._tilt_fixed_mask_cache) == len(self.mesh.vertices)
+        ):
+            return self._tilt_fixed_mask_cache
+        mask = np.array(
             [
                 bool(getattr(self.mesh.vertices[int(vid)], "tilt_fixed", False))
                 for vid in self.mesh.vertex_ids
             ],
             dtype=bool,
         )
+        self._tilt_fixed_mask_cache = mask
+        self._tilt_fixed_mask_version = flags_version
+        self._tilt_fixed_mask_vertex_version = vertex_version
+        return mask
 
     def _tilt_fixed_mask_in(self) -> np.ndarray:
         """Return a boolean mask for vertices whose inner-leaflet tilt is clamped."""
-        return np.array(
+        flags_version = self.mesh._tilt_fixed_flags_version
+        vertex_version = self.mesh._vertex_ids_version
+        if (
+            self._tilt_fixed_mask_in_cache is not None
+            and self._tilt_fixed_mask_in_version == flags_version
+            and self._tilt_fixed_mask_in_vertex_version == vertex_version
+            and len(self._tilt_fixed_mask_in_cache) == len(self.mesh.vertices)
+        ):
+            return self._tilt_fixed_mask_in_cache
+        mask = np.array(
             [
                 bool(getattr(self.mesh.vertices[int(vid)], "tilt_fixed_in", False))
                 for vid in self.mesh.vertex_ids
             ],
             dtype=bool,
         )
+        self._tilt_fixed_mask_in_cache = mask
+        self._tilt_fixed_mask_in_version = flags_version
+        self._tilt_fixed_mask_in_vertex_version = vertex_version
+        return mask
 
     def _tilt_fixed_mask_out(self) -> np.ndarray:
         """Return a boolean mask for vertices whose outer-leaflet tilt is clamped."""
-        return np.array(
+        flags_version = self.mesh._tilt_fixed_flags_version
+        vertex_version = self.mesh._vertex_ids_version
+        if (
+            self._tilt_fixed_mask_out_cache is not None
+            and self._tilt_fixed_mask_out_version == flags_version
+            and self._tilt_fixed_mask_out_vertex_version == vertex_version
+            and len(self._tilt_fixed_mask_out_cache) == len(self.mesh.vertices)
+        ):
+            return self._tilt_fixed_mask_out_cache
+        mask = np.array(
             [
                 bool(getattr(self.mesh.vertices[int(vid)], "tilt_fixed_out", False))
                 for vid in self.mesh.vertex_ids
             ],
             dtype=bool,
         )
+        self._tilt_fixed_mask_out_cache = mask
+        self._tilt_fixed_mask_out_version = flags_version
+        self._tilt_fixed_mask_out_vertex_version = vertex_version
+        return mask
 
     @staticmethod
     def _project_tilts_to_tangent_array(
@@ -1472,7 +1520,6 @@ STEP SIZE:\t {self.step_size}
     def compute_energy_and_gradient_array(self):
         """Return total energy and dense gradient array for the current mesh."""
         positions = self.mesh.positions_view()
-        vertex_ids = self.mesh.vertex_ids
         index_map = self.mesh.vertex_index_to_row
         grad_arr = np.zeros_like(positions)
 
@@ -1508,9 +1555,9 @@ STEP SIZE:\t {self.step_size}
             )
 
         # Always zero gradients for fixed vertices in the array pipeline.
-        for row, vidx in enumerate(vertex_ids):
-            if getattr(self.mesh.vertices[int(vidx)], "fixed", False):
-                grad_arr[row] = 0.0
+        fixed_mask = self.mesh.fixed_mask
+        if fixed_mask.shape[0] == grad_arr.shape[0]:
+            grad_arr[fixed_mask] = 0.0
 
         return total_energy, grad_arr
 

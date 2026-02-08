@@ -62,6 +62,17 @@ class Vertex:
         return object.__getattribute__(self, name)
 
     def __setattr__(self, name: str, value: Any) -> None:
+        if name in ("fixed", "tilt_fixed", "tilt_fixed_in", "tilt_fixed_out"):
+            old = self.__dict__.get(name, None)
+            object.__setattr__(self, name, value)
+            if old is not None and old != value:
+                mesh = self.__dict__.get("_mesh")
+                if mesh is not None:
+                    if name == "fixed":
+                        mesh._touch_fixed_flags()
+                    else:
+                        mesh._touch_tilt_fixed_flags()
+            return
         if name in ("tilt", "tilt_in", "tilt_out"):
             arr = np.asarray(value, dtype=float)
             if arr.shape != (3,):
@@ -939,8 +950,11 @@ class Mesh:
     _boundary_vertex_cache_version: int = -1
     _boundary_vertex_cache: set[int] = field(default_factory=set)
 
+    _fixed_flags_version: int = 0
+    _tilt_fixed_flags_version: int = 0
     _fixed_mask_cache: "np.ndarray | None" = None
     _fixed_mask_version: int = -1
+    _fixed_mask_vertex_version: int = -1
 
     _parameter_array_cache: Dict[str, "np.ndarray"] = field(default_factory=dict)
     _parameter_cache_version: int = -1
@@ -985,6 +999,12 @@ class Mesh:
 
     def increment_version(self):
         self._version += 1
+
+    def _touch_fixed_flags(self) -> None:
+        self._fixed_flags_version += 1
+
+    def _touch_tilt_fixed_flags(self) -> None:
+        self._tilt_fixed_flags_version += 1
 
     def _geometry_cache_active(self, positions: Optional[np.ndarray]) -> bool:
         """Return True when positions correspond to the active geometry cache."""
@@ -1042,7 +1062,8 @@ class Mesh:
 
         if (
             self._fixed_mask_cache is not None
-            and self._fixed_mask_version == self._version
+            and self._fixed_mask_version == self._fixed_flags_version
+            and self._fixed_mask_vertex_version == self._vertex_ids_version
             and len(self._fixed_mask_cache) == len(self.vertices)
         ):
             return self._fixed_mask_cache
@@ -1058,7 +1079,8 @@ class Mesh:
                 mask[i] = True
 
         self._fixed_mask_cache = mask
-        self._fixed_mask_version = self._version
+        self._fixed_mask_version = self._fixed_flags_version
+        self._fixed_mask_vertex_version = self._vertex_ids_version
         return mask
 
     def get_facet_parameter_array(
