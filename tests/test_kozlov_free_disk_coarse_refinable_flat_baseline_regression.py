@@ -18,9 +18,7 @@ def test_kozlov_free_disk_coarse_refinable_flat_has_no_angle_defect_baseline() -
     """Regression: refined disk-edge ring should not create spurious intrinsic curvature in a flat state."""
     path = os.path.join(
         os.path.dirname(__file__),
-        "..",
-        "meshes",
-        "caveolin",
+        "fixtures",
         "kozlov_free_disk_coarse_refinable.yaml",
     )
     mesh = parse_geometry(load_data(path))
