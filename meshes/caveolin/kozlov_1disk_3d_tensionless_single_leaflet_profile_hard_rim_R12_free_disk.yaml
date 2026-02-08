@@ -25,7 +25,7 @@ global_parameters:
   tilt_thetaB_optimize: true
   tilt_thetaB_optimize_every: 1
   tilt_thetaB_optimize_delta: 0.01
-  tilt_thetaB_optimize_inner_steps: 60
+  tilt_thetaB_optimize_inner_steps: 1
   # Treat the disk interface ring as a base-term boundary for bending_tilt_in,
   # so the internal hard interface does not pick up a spurious bulk curvature
   # penalty on planar configurations.
@@ -53,7 +53,7 @@ global_parameters:
   - 1.0
   tilt_solve_mode: coupled
   tilt_step_size: 0.15
-  tilt_inner_steps: 40
+  tilt_inner_steps: 3
   tilt_tol: 1.0e-10
   # Use reduced-energy evaluations in the shape line search so accepted steps
   # reflect the TeX reduced objective (tilt relaxed at fixed positions).
