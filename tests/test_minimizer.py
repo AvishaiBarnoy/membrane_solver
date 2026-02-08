@@ -23,6 +23,13 @@ class DummyEnergyModule:
         self._energy = energy
         self._grad_value = grad_value
 
+    def compute_energy_and_gradient_array(
+        self, mesh, global_params, resolver, positions, index_map, grad_arr
+    ):
+        for vidx, row in index_map.items():
+            grad_arr[row] += np.array([self._grad_value, 0.0, 0.0])
+        return self._energy
+
     def compute_energy_and_gradient(
         self, mesh, global_params, resolver, compute_gradient=True
     ):
@@ -115,7 +122,7 @@ def test_minimizer_dispatches_to_array_path():
 
 
 def test_minimizer_falls_back_to_dict_path():
-    """Verify that Minimizer still works with legacy modules."""
+    """Verify that Minimizer rejects legacy modules without array support."""
     mesh = build_min_mesh()
     mock_mod = MagicMock()
     del mock_mod.compute_energy_and_gradient_array
@@ -126,12 +133,12 @@ def test_minimizer_falls_back_to_dict_path():
     em.get_module.return_value = mock_mod
     cm = ConstraintModuleManager([])
 
-    minim = Minimizer(mesh, gp, MagicMock(), em, cm, energy_modules=["mock"])
-    E, grad = minim.compute_energy_and_gradient()
-
-    assert E == 5.0
-    assert 0 in grad
-    assert mock_mod.compute_energy_and_gradient.called
+    try:
+        Minimizer(mesh, gp, MagicMock(), em, cm, energy_modules=["mock"])
+    except TypeError as exc:
+        assert "compute_energy_and_gradient_array" in str(exc)
+    else:
+        raise AssertionError("Expected TypeError for dict-only energy module")
 
 
 def test_minimize_n_steps_le_zero_enforces_constraints():
