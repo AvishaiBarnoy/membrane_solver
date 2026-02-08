@@ -57,6 +57,7 @@ class Minimizer:
         self.energy_modules = [
             self.energy_manager.get_module(mod) for mod in module_list
         ]
+        self._validate_energy_modules_array()
 
         constraint_list = (
             constraint_modules
@@ -76,6 +77,16 @@ class Minimizer:
 
         self.param_resolver = ParameterResolver(global_params)
         self._gauss_bonnet_monitor: GaussBonnetMonitor | None = None
+
+    def _validate_energy_modules_array(self) -> None:
+        """Ensure energy modules support the array API required by minimization."""
+        for module in self.energy_modules:
+            if not hasattr(module, "compute_energy_and_gradient_array"):
+                name = getattr(module, "__name__", repr(module))
+                raise TypeError(
+                    f"Energy module {name} lacks compute_energy_and_gradient_array; "
+                    "dict fallbacks are not supported in the minimization loop."
+                )
 
     def _tilt_fixed_mask(self) -> np.ndarray:
         """Return a boolean mask for vertices whose tilt is clamped.
@@ -1478,28 +1489,16 @@ STEP SIZE:\t {self.step_size}
 
         total_energy = 0.0
         for module in self.energy_modules:
-            if hasattr(module, "compute_energy_and_gradient_array"):
-                # Use fast array path
-                E_mod = module.compute_energy_and_gradient_array(
-                    self.mesh,
-                    self.global_params,
-                    self.param_resolver,
-                    positions=positions,
-                    index_map=index_map,
-                    grad_arr=grad_arr,
-                )
-                total_energy += E_mod
-                continue
-
-            # Legacy path: compute dict and scatter
-            E_mod, g_mod = module.compute_energy_and_gradient(
-                self.mesh, self.global_params, self.param_resolver
+            # Use fast array path
+            E_mod = module.compute_energy_and_gradient_array(
+                self.mesh,
+                self.global_params,
+                self.param_resolver,
+                positions=positions,
+                index_map=index_map,
+                grad_arr=grad_arr,
             )
             total_energy += E_mod
-            for vidx, gvec in g_mod.items():
-                row = index_map.get(vidx)
-                if row is not None:
-                    grad_arr[row] += gvec
 
         # Apply constraint modifications to the gradient (e.g., Lagrange multipliers)
         if hasattr(self.constraint_manager, "apply_gradient_modifications_array"):
