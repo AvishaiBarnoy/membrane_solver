@@ -70,15 +70,12 @@ class BFGS(BaseStepper):
 
         if isinstance(grad, np.ndarray):
             mesh.build_position_cache()
-            vertex_ids = tuple(mesh.vertex_ids.tolist())
-            vids = tuple(vid for vid in vertex_ids if not mesh.vertices[vid].fixed)
-            x = np.zeros(3 * len(vids), dtype=float)
-            g = np.zeros_like(x)
-            for i, vid in enumerate(vids):
-                row = mesh.vertex_index_to_row[vid]
-                pos = mesh.vertices[vid].position
-                x[3 * i : 3 * i + 3] = pos
-                g[3 * i : 3 * i + 3] = grad[row]
+            fixed_mask = mesh.fixed_mask
+            movable_rows = np.flatnonzero(~fixed_mask)
+            vids = tuple(mesh.vertex_ids[movable_rows].tolist())
+            positions = mesh.positions_view()
+            x = positions[movable_rows].reshape(-1).copy()
+            g = grad[movable_rows].reshape(-1).copy()
         else:
             vids, x, g = self._collect_state(mesh, grad)
 
@@ -104,9 +101,8 @@ class BFGS(BaseStepper):
         direction_vec = -self._H_inv.dot(g)
         if isinstance(grad, np.ndarray):
             direction_arr = np.zeros_like(grad)
-            for i, vid in enumerate(vids):
-                row = mesh.vertex_index_to_row[vid]
-                direction_arr[row] = direction_vec[3 * i : 3 * i + 3]
+            if movable_rows.size:
+                direction_arr[movable_rows] = direction_vec.reshape(-1, 3)
             success, new_step, accepted_energy = backtracking_line_search_array(
                 mesh,
                 direction_arr,

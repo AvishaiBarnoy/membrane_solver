@@ -69,28 +69,30 @@ class ConjugateGradient(BaseStepper):
                 self.iter_count = 0
 
             direction_arr = np.zeros_like(grad)
-            for row, vidx in enumerate(vertex_ids):
-                if getattr(mesh.vertices[vidx], "fixed", False):
-                    continue
-                g = grad[row]
-                if self.precondition:
-                    g = g / (np.linalg.norm(g) + 1e-8)
+            g = grad
+            if self.precondition:
+                norms = np.linalg.norm(g, axis=1)
+                g = g / (norms[:, None] + 1e-8)
 
-                if (
-                    self.prev_grad_arr is None
-                    or self.iter_count % self.restart_interval == 0
-                ):
-                    d = -g
-                else:
-                    prev_g = self.prev_grad_arr[row]
-                    prev_d = self.prev_dir_arr[row]
-                    beta_pr = np.dot(g, g - prev_g) / (np.dot(prev_g, prev_g) + 1e-20)
-                    if beta_pr < 0:
-                        d = -g
-                    else:
-                        d = -g + beta_pr * prev_d
+            if (
+                self.prev_grad_arr is None
+                or self.iter_count % self.restart_interval == 0
+            ):
+                direction_arr = -g
+            else:
+                prev_g = self.prev_grad_arr
+                prev_d = self.prev_dir_arr
+                numer = np.einsum("ij,ij->i", g, g - prev_g)
+                denom = np.einsum("ij,ij->i", prev_g, prev_g) + 1e-20
+                beta_pr = numer / denom
+                direction_arr = -g + beta_pr[:, None] * prev_d
+                reset_mask = beta_pr < 0
+                if np.any(reset_mask):
+                    direction_arr[reset_mask] = -g[reset_mask]
 
-                direction_arr[row] = d
+            fixed_mask = mesh.fixed_mask
+            if fixed_mask.shape[0] == direction_arr.shape[0]:
+                direction_arr[fixed_mask] = 0.0
 
             success, new_step, accepted_energy = backtracking_line_search_array(
                 mesh,
