@@ -1902,9 +1902,11 @@ macros:
   - g40
   - r
   - V5
+  - t1e-3
   - g100
   - r
   - V5
+  - t1e-3
   - g120
   - tstat in
   - tstat out
