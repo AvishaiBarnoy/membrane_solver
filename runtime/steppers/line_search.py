@@ -214,11 +214,15 @@ def backtracking_line_search_array(
         raise ValueError("direction and gradient must have matching shapes")
 
     movable_rows = []
+    movable_vids = []
+    movable_vertices = []
     original_positions = {}
     for row, vidx in enumerate(vertex_ids):
         vertex = mesh.vertices[vidx]
         if not getattr(vertex, "fixed", False):
             movable_rows.append(row)
+            movable_vids.append(vidx)
+            movable_vertices.append(vertex)
         original_positions[vidx] = vertex.position.copy()
     energy0 = energy_fn()
     reduced_tilts = bool(getattr(mesh, "_line_search_reduced_energy", False))
@@ -256,9 +260,7 @@ def backtracking_line_search_array(
         max_disp = alpha * max_dir_norm
         is_safe_small_step = max_disp < safe_step_limit
 
-        for row in movable_rows:
-            vidx = vertex_ids[row]
-            vertex = mesh.vertices[vidx]
+        for row, vidx, vertex in zip(movable_rows, movable_vids, movable_vertices):
             disp = alpha * direction[row]
             vertex.position[:] = original_positions[vidx] + disp
         mesh.increment_version()
