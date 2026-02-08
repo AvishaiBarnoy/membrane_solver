@@ -1912,7 +1912,6 @@ macros:
   - tstat out
   - energy
   - energy curvature
-  - s bilayer
   profile_relax_light:
   - print msg Running profile_relax_light (quick refine + diagnostics).
   - g10
