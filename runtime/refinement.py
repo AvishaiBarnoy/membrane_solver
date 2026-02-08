@@ -484,6 +484,21 @@ def refine_triangle_mesh(mesh):
                 merged[key] = a
         return merged if merged else None
 
+    def _maybe_inherit_preset(v1_options: dict, v2_options: dict) -> str | None:
+        """Return a deterministic preset for mid-edge vertices."""
+        p1 = v1_options.get("preset")
+        p2 = v2_options.get("preset")
+        if p1 is None and p2 is None:
+            return None
+        if p1 is None:
+            return p2
+        if p2 is None:
+            return p1
+        if p1 == p2:
+            return p1
+        # Mixed presets: prefer v1 for determinism.
+        return p1
+
     def get_or_create_edge(v_from, v_to, parent_edge=None, parent_facet=None):
         key = (min(v_from, v_to), max(v_from, v_to))
         if key in edge_lookup:
@@ -598,6 +613,12 @@ def refine_triangle_mesh(mesh):
             )
             if inherited_interface is not None:
                 midpoint_options.update(inherited_interface)
+            inherited_preset = _maybe_inherit_preset(
+                getattr(mesh.vertices[v1], "options", {}) or {},
+                getattr(mesh.vertices[v2], "options", {}) or {},
+            )
+            if inherited_preset is not None:
+                midpoint_options["preset"] = inherited_preset
             midpoint = Vertex(
                 midpoint_idx,
                 np.asarray(midpoint_position, dtype=float),
