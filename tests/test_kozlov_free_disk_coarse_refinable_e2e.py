@@ -51,9 +51,7 @@ def test_kozlov_free_disk_coarse_refinable_runs_refine_avg_and_minimize() -> Non
     """E2E smoke: coarse refinable Kozlov mesh survives refine+avg and minimizes."""
     path = os.path.join(
         os.path.dirname(__file__),
-        "..",
-        "meshes",
-        "caveolin",
+        "fixtures",
         "kozlov_free_disk_coarse_refinable.yaml",
     )
     mesh = parse_geometry(load_data(path))
