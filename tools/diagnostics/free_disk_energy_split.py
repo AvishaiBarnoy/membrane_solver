@@ -37,6 +37,7 @@ from modules.energy.leaflet_presence import (
 from modules.energy.tilt_thetaB_contact_in import (
     compute_energy_and_gradient_array as contact_energy,
 )
+from runtime.energy_manager import EnergyModuleManager
 
 
 def _merge_base_config(base: dict, out: dict) -> dict:
@@ -183,18 +184,35 @@ def _split_masks(mesh, tri_rows_full: np.ndarray) -> Tuple[np.ndarray, np.ndarra
     return tri_mask_disk, tri_mask_outer
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--base", required=True, help="Base YAML with definitions/global parameters."
-    )
-    parser.add_argument(
-        "--out", required=True, help="Output YAML with relaxed positions/tilts."
-    )
-    args = parser.parse_args()
+def _energy_breakdown(mesh) -> dict[str, float]:
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    manager = EnergyModuleManager(mesh.energy_modules)
+    resolver = ParameterResolver(mesh.global_parameters)
+    breakdown: dict[str, float] = {}
+    for name, module in zip(mesh.energy_modules, manager.modules.values()):
+        if hasattr(module, "compute_energy_and_gradient_array"):
+            grad_dummy = np.zeros_like(positions)
+            energy = module.compute_energy_and_gradient_array(
+                mesh,
+                mesh.global_parameters,
+                resolver,
+                positions=positions,
+                index_map=index_map,
+                grad_arr=grad_dummy,
+            )
+        else:
+            energy, _ = module.compute_energy_and_gradient(
+                mesh,
+                mesh.global_parameters,
+                resolver,
+                compute_gradient=False,
+            )
+        breakdown[name] = float(energy)
+    return breakdown
 
-    base = load_data(args.base)
-    out = load_data(args.out)
+
+def compute_energy_split(base: dict, out: dict) -> dict[str, float]:
     merged = _merge_base_config(base, out)
 
     mesh = parse_geometry(merged)
@@ -202,15 +220,16 @@ def main() -> None:
 
     tri_rows_full, _ = mesh.triangle_row_cache()
     if tri_rows_full is None or tri_rows_full.size == 0:
-        raise SystemExit("No triangles found in mesh.")
+        raise ValueError("No triangles found in mesh.")
 
-    k_vecs, vertex_areas_vor, weights_full, tri_rows_curv = compute_curvature_data(
+    _, _, weights_full, tri_rows_curv = compute_curvature_data(
         mesh, positions, mesh.vertex_index_to_row
     )
     if tri_rows_curv.shape[0] != tri_rows_full.shape[0]:
-        raise SystemExit("Triangle rows mismatch between caches.")
+        raise ValueError("Triangle rows mismatch between caches.")
 
     tri_mask_disk, tri_mask_outer = _split_masks(mesh, tri_rows_full)
+    tri_mask_inner_outer = ~tri_mask_disk
 
     tilts_in = mesh.tilts_in_view()
     tilts_out = mesh.tilts_out_view()
@@ -220,6 +239,12 @@ def main() -> None:
     tilt_in_disk = _tilt_energy(
         positions=positions,
         tri_rows=tri_rows_full[tri_mask_disk],
+        tilts=tilts_in,
+        k_tilt=k_tilt_in,
+    )
+    tilt_in_outer = _tilt_energy(
+        positions=positions,
+        tri_rows=tri_rows_full[tri_mask_inner_outer],
         tilts=tilts_in,
         k_tilt=k_tilt_in,
     )
@@ -237,6 +262,17 @@ def main() -> None:
         tri_rows_full=tri_rows_full,
         weights_full=weights_full,
         tri_mask=tri_mask_disk,
+        tilts=tilts_in,
+        kappa_key="bending_modulus_in",
+        cache_tag="in",
+    )
+    bend_in_outer = _bending_tilt_energy(
+        mesh=mesh,
+        global_params=mesh.global_parameters,
+        positions=positions,
+        tri_rows_full=tri_rows_full,
+        weights_full=weights_full,
+        tri_mask=tri_mask_inner_outer,
         tilts=tilts_in,
         kappa_key="bending_modulus_in",
         cache_tag="in",
@@ -263,16 +299,58 @@ def main() -> None:
         grad_arr=None,
     )
 
+    breakdown = _energy_breakdown(mesh)
+    total = float(sum(breakdown.values()))
+
+    disk_total = tilt_in_disk + bend_in_disk
+    outer_total = tilt_in_outer + bend_in_outer + tilt_out_outer + bend_out_outer
+    split_total = disk_total + outer_total + float(contact)
+    return {
+        "tilt_in_disk": float(tilt_in_disk),
+        "tilt_in_outer": float(tilt_in_outer),
+        "tilt_out_outer": float(tilt_out_outer),
+        "bending_tilt_in_disk": float(bend_in_disk),
+        "bending_tilt_in_outer": float(bend_in_outer),
+        "bending_tilt_out_outer": float(bend_out_outer),
+        "contact": float(contact),
+        "disk_total": float(disk_total),
+        "outer_total": float(outer_total),
+        "split_total": float(split_total),
+        "global_total": float(total),
+        "global_breakdown": breakdown,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--base", required=True, help="Base YAML with definitions/global parameters."
+    )
+    parser.add_argument(
+        "--out", required=True, help="Output YAML with relaxed positions/tilts."
+    )
+    args = parser.parse_args()
+
+    base = load_data(args.base)
+    out = load_data(args.out)
+    split = compute_energy_split(base, out)
+
     print("Disk patch energy (inner leaflet, disk triangles):")
-    print(f"  tilt_in: {tilt_in_disk:.6g}")
-    print(f"  bending_tilt_in: {bend_in_disk:.6g}")
-    print(f"  total: {tilt_in_disk + bend_in_disk:.6g}")
-    print("Outer membrane energy (outer leaflet, non-disk triangles):")
-    print(f"  tilt_out: {tilt_out_outer:.6g}")
-    print(f"  bending_tilt_out: {bend_out_outer:.6g}")
-    print(f"  total: {tilt_out_outer + bend_out_outer:.6g}")
+    print(f"  tilt_in: {split['tilt_in_disk']:.6g}")
+    print(f"  bending_tilt_in: {split['bending_tilt_in_disk']:.6g}")
+    print(f"  total: {split['disk_total']:.6g}")
+    print("Outer membrane energy (inner non-disk + outer leaflet):")
+    print(f"  tilt_in (non-disk): {split['tilt_in_outer']:.6g}")
+    print(f"  bending_tilt_in (non-disk): {split['bending_tilt_in_outer']:.6g}")
+    print(f"  tilt_out (outer leaflet): {split['tilt_out_outer']:.6g}")
+    print(f"  bending_tilt_out (outer leaflet): {split['bending_tilt_out_outer']:.6g}")
+    print(f"  total: {split['outer_total']:.6g}")
     print("Contact energy:")
-    print(f"  tilt_thetaB_contact_in: {float(contact):.6g}")
+    print(f"  tilt_thetaB_contact_in: {split['contact']:.6g}")
+    print("Global energy check:")
+    print(f"  global_total: {split['global_total']:.6g}")
+    print(f"  split_total: {split['split_total']:.6g}")
+    print(f"  delta: {split['split_total'] - split['global_total']:.6g}")
 
 
 if __name__ == "__main__":
