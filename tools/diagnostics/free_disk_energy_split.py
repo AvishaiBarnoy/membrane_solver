@@ -37,7 +37,10 @@ from modules.energy.leaflet_presence import (
 from modules.energy.tilt_thetaB_contact_in import (
     compute_energy_and_gradient_array as contact_energy,
 )
+from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
+from runtime.minimizer import Minimizer
+from runtime.steppers.gradient_descent import GradientDescent
 
 
 def _merge_base_config(base: dict, out: dict) -> dict:
@@ -185,31 +188,16 @@ def _split_masks(mesh, tri_rows_full: np.ndarray) -> Tuple[np.ndarray, np.ndarra
 
 
 def _energy_breakdown(mesh) -> dict[str, float]:
-    positions = mesh.positions_view()
-    index_map = mesh.vertex_index_to_row
-    manager = EnergyModuleManager(mesh.energy_modules)
-    resolver = ParameterResolver(mesh.global_parameters)
-    breakdown: dict[str, float] = {}
-    for name, module in zip(mesh.energy_modules, manager.modules.values()):
-        if hasattr(module, "compute_energy_and_gradient_array"):
-            grad_dummy = np.zeros_like(positions)
-            energy = module.compute_energy_and_gradient_array(
-                mesh,
-                mesh.global_parameters,
-                resolver,
-                positions=positions,
-                index_map=index_map,
-                grad_arr=grad_dummy,
-            )
-        else:
-            energy, _ = module.compute_energy_and_gradient(
-                mesh,
-                mesh.global_parameters,
-                resolver,
-                compute_gradient=False,
-            )
-        breakdown[name] = float(energy)
-    return breakdown
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager(mesh.energy_modules),
+        ConstraintModuleManager(mesh.constraint_modules),
+        quiet=True,
+        tol=1e-6,
+    )
+    return minim.compute_energy_breakdown()
 
 
 def _inner_leaflet_vertex_split(
