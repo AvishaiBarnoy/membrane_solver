@@ -473,16 +473,44 @@ def refine_triangle_mesh(mesh):
                 return False
             return str(options.get("pin_to_circle_group") or "") == "disk"
 
-        if not (has_disk_pin(v1_options) and has_disk_pin(v2_options)):
-            return None
+        def has_disk_edge_preset(options: dict) -> bool:
+            return options.get("preset") == "disk_edge"
 
         merged: dict = {}
-        for key in ("rim_slope_match_group", "tilt_thetaB_group_in"):
-            a = v1_options.get(key)
-            b = v2_options.get(key)
-            if a is not None and b is not None and a == b:
-                merged[key] = a
-        return merged if merged else None
+        if has_disk_pin(v1_options) and has_disk_pin(v2_options):
+            for key in ("rim_slope_match_group", "tilt_thetaB_group_in"):
+                a = v1_options.get(key)
+                b = v2_options.get(key)
+                if a is not None and b is not None and a == b:
+                    merged[key] = a
+            return merged if merged else None
+
+        return None
+
+    def _maybe_inherit_preset(v1_options: dict, v2_options: dict) -> str | None:
+        """Return a deterministic preset for mid-edge vertices."""
+        p1 = v1_options.get("preset")
+        p2 = v2_options.get("preset")
+        if p1 is None and p2 is None:
+            return None
+        if p1 is None:
+            return p2
+        if p2 is None:
+            return p1
+        if p1 == p2:
+            return p1
+        # If one endpoint is disk_edge and the other is a disk interior preset,
+        # keep the interior preset to avoid inflating the boundary ring.
+        if p1 == "disk_edge" and str(p2).startswith("disk"):
+            return p2
+        if p2 == "disk_edge" and str(p1).startswith("disk"):
+            return p1
+        if p1 == "disk_edge" and not str(p2).startswith("disk"):
+            return p2
+        if p2 == "disk_edge" and not str(p1).startswith("disk"):
+            return p1
+        # Mixed presets: prefer v1 for determinism.
+        return p1
 
     def get_or_create_edge(v_from, v_to, parent_edge=None, parent_facet=None):
         key = (min(v_from, v_to), max(v_from, v_to))
@@ -598,6 +626,12 @@ def refine_triangle_mesh(mesh):
             )
             if inherited_interface is not None:
                 midpoint_options.update(inherited_interface)
+            inherited_preset = _maybe_inherit_preset(
+                getattr(mesh.vertices[v1], "options", {}) or {},
+                getattr(mesh.vertices[v2], "options", {}) or {},
+            )
+            if inherited_preset is not None:
+                midpoint_options["preset"] = inherited_preset
             midpoint = Vertex(
                 midpoint_idx,
                 np.asarray(midpoint_position, dtype=float),
