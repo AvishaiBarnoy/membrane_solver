@@ -485,15 +485,6 @@ def refine_triangle_mesh(mesh):
                     merged[key] = a
             return merged if merged else None
 
-        # Mixed edge: if the midpoint inherits preset=disk_edge, copy tags from the disk_edge endpoint.
-        if has_disk_edge_preset(v1_options) or has_disk_edge_preset(v2_options):
-            source = v1_options if has_disk_edge_preset(v1_options) else v2_options
-            for key in ("rim_slope_match_group", "tilt_thetaB_group_in"):
-                val = source.get(key)
-                if val is not None:
-                    merged[key] = val
-            return merged if merged else None
-
         return None
 
     def _maybe_inherit_preset(v1_options: dict, v2_options: dict) -> str | None:
@@ -507,6 +498,16 @@ def refine_triangle_mesh(mesh):
         if p2 is None:
             return p1
         if p1 == p2:
+            return p1
+        # If one endpoint is disk_edge and the other is a disk interior preset,
+        # keep the interior preset to avoid inflating the boundary ring.
+        if p1 == "disk_edge" and str(p2).startswith("disk"):
+            return p2
+        if p2 == "disk_edge" and str(p1).startswith("disk"):
+            return p1
+        if p1 == "disk_edge" and not str(p2).startswith("disk"):
+            return p2
+        if p2 == "disk_edge" and not str(p1).startswith("disk"):
             return p1
         # Mixed presets: prefer v1 for determinism.
         return p1
