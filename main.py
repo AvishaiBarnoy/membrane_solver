@@ -324,6 +324,13 @@ def main():
         else:
             log_path = str(args.log)
     logger = setup_logging(log_path, quiet=args.quiet, debug=args.debug)
+    if args.debug and args.output is None:
+        if os.access("/tmp", os.W_OK):
+            args.output = "/tmp/out.yaml"
+        else:
+            logger.warning(
+                "Debug output requested, but /tmp is not writable; no output file will be written."
+            )
 
     # Load mesh and parameters
     data = load_data(args.input)

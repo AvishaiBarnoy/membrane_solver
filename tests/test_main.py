@@ -261,3 +261,75 @@ def test_main_interactive_command_exception_is_logged(tmp_path, monkeypatch, cap
     with caplog.at_level("ERROR"):
         main_module.main()
     assert "Error executing command" in caplog.text
+
+
+def test_main_debug_defaults_output_to_tmp(tmp_path, monkeypatch):
+    mesh_path = tmp_path / "mesh.json"
+    write_mesh(mesh_path)
+
+    saved = {}
+
+    def fake_save(mesh, path, **_kwargs):
+        saved["path"] = path
+
+    monkeypatch.setattr(main_module, "save_geometry", fake_save)
+    monkeypatch.setattr(main_module.os, "access", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["main.py", "-i", str(mesh_path), "--debug", "--non-interactive", "-q"],
+    )
+
+    main_module.main()
+    assert saved["path"] == "/tmp/out.yaml"
+
+
+def test_main_debug_respects_explicit_output(tmp_path, monkeypatch):
+    mesh_path = tmp_path / "mesh.json"
+    write_mesh(mesh_path)
+
+    saved = {}
+    output_path = tmp_path / "out.json"
+
+    def fake_save(mesh, path, **_kwargs):
+        saved["path"] = path
+
+    monkeypatch.setattr(main_module, "save_geometry", fake_save)
+    monkeypatch.setattr(main_module.os, "access", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "main.py",
+            "-i",
+            str(mesh_path),
+            "--debug",
+            "--output",
+            str(output_path),
+            "--non-interactive",
+            "-q",
+        ],
+    )
+
+    main_module.main()
+    assert saved["path"] == str(output_path)
+
+
+def test_main_non_debug_without_output_does_not_write(tmp_path, monkeypatch):
+    mesh_path = tmp_path / "mesh.json"
+    write_mesh(mesh_path)
+
+    called = {"saved": False}
+
+    def fake_save(*_args, **_kwargs):
+        called["saved"] = True
+
+    monkeypatch.setattr(main_module, "save_geometry", fake_save)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["main.py", "-i", str(mesh_path), "--non-interactive", "-q"],
+    )
+
+    main_module.main()
+    assert called["saved"] is False
