@@ -131,6 +131,13 @@ intended for development and planning; users should consult `README.md` and
    - Deferred: requires tightly coupled inextensibility constraints (edge
      lengths, facet areas, and corner-angle preservation) to stay stable.
 
+## 5. Mesh tooling for targeted refinement
+
+1. Group-aware refinement workflow
+   - Document the current strategy: tag the disk/rim/outer presets, mark the rest of the mesh `no_refine=true`, and call `runtime.refinement.refine_triangle_mesh`. This lets us boost angular resolution around a specific group without rewriting the entire mesh.
+   - Write up the helper script there once it exists and reference it from `manual.md`.
+   - Later, wrap the workflow in a CLI command (or DSL macro) so contributors can rerun targeted refinement on demand.
+
 ## Tech debt
 
 1. Integrate common geometric constraints into KKT solves
