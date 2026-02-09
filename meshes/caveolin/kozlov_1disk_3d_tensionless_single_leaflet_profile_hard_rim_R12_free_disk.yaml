@@ -7,12 +7,12 @@ global_parameters:
   leaflet_out_absence_mode: triangles
   bending_modulus_in: 2.0
   bending_modulus_out: 2.0
-  tilt_modulus_in: 450.0
-  tilt_modulus_out: 450.0
+  tilt_modulus_in: 110.0
+  tilt_modulus_out: 110.0
   tilt_thetaB_group_in: disk
   tilt_thetaB_contact_penalty_mode: 'off'
   tilt_thetaB_strength_in: 1.0e8
-  tilt_thetaB_contact_strength_in: 4.286
+  tilt_thetaB_contact_strength_in: 8.572
   tilt_thetaB_value: 0.0
   tilt_thetaB_center:
   - 0.0
@@ -1906,12 +1906,12 @@ macros:
   - g40
   - r
   - V5
-  - t1e-3
-  - g100
-  - r
-  - V5
   - t5e-4
   - g120
+  - r
+  - V5
+  - t2e-4
+  - g160
   - tstat in
   - tstat out
   - energy
