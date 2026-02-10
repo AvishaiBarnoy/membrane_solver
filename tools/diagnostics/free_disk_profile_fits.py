@@ -230,6 +230,19 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--input", default="/tmp/out.yaml", help="Output mesh file")
     ap.add_argument("--bins", type=int, default=40)
     ap.add_argument("--no-curvature", action="store_true")
+    ap.add_argument(
+        "--flip-tilt-out",
+        dest="flip_tilt_out",
+        action="store_true",
+        default=True,
+        help="Flip tilt_out sign to align with theory conventions (default).",
+    )
+    ap.add_argument(
+        "--no-flip-tilt-out",
+        dest="flip_tilt_out",
+        action="store_false",
+        help="Do not flip tilt_out sign; report raw values.",
+    )
     args = ap.parse_args(list(argv) if argv is not None else None)
 
     data = _load_output(Path(args.input))
@@ -241,6 +254,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     r = radial["r"]
     tin = radial["tin"]
     tout = radial["tout"]
+    if args.flip_tilt_out:
+        tout = -tout
 
     # Inner fit (r <= R): tilt_in ~ theta_R * I1(lambda r) / I1(lambda R)
     rin, tin_med, _ = _bin_profile(r, tin, rmin=0.0, rmax=R, bins=args.bins)
