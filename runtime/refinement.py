@@ -490,33 +490,31 @@ def refine_triangle_mesh(mesh):
         on the original coarse vertices.
         """
 
-        def has_disk_pin(options: dict) -> bool:
-            constraints = options.get("constraints")
-            if constraints is None:
-                return False
-            if isinstance(constraints, str):
-                ok = constraints == "pin_to_circle"
-            elif isinstance(constraints, list):
-                ok = "pin_to_circle" in constraints
-            else:
-                ok = False
-            if not ok:
-                return False
-            return str(options.get("pin_to_circle_group") or "") == "disk"
-
-        def has_disk_edge_preset(options: dict) -> bool:
-            return options.get("preset") == "disk_edge"
+        def has_disk_interface(options: dict) -> bool:
+            return (
+                str(options.get("rim_slope_match_group") or "") == "disk"
+                and str(options.get("tilt_thetaB_group_in") or "") == "disk"
+            )
 
         merged: dict = {}
-        if has_disk_pin(v1_options) and has_disk_pin(v2_options):
-            for key in ("rim_slope_match_group", "tilt_thetaB_group_in"):
-                a = v1_options.get(key)
-                b = v2_options.get(key)
-                if a is not None and b is not None and a == b:
-                    merged[key] = a
-            return merged if merged else None
+        if has_disk_interface(v1_options) and has_disk_interface(v2_options):
+            merged["rim_slope_match_group"] = "disk"
+            merged["tilt_thetaB_group_in"] = "disk"
+            return merged
 
         return None
+
+    def _maybe_inherit_rigid_disk_group(
+        v1_options: dict, v2_options: dict
+    ) -> dict | None:
+        """Inherit rigid-disk group when both endpoints share it."""
+        g1 = v1_options.get("rigid_disk_group")
+        g2 = v2_options.get("rigid_disk_group")
+        if g1 is None or g2 is None:
+            return None
+        if str(g1) != str(g2):
+            return None
+        return {"rigid_disk_group": str(g1)}
 
     def _maybe_inherit_preset(
         v1_options: dict, v2_options: dict
@@ -548,9 +546,9 @@ def refine_triangle_mesh(mesh):
             )
 
         if p1 is None:
-            return (p2, False) if _is_ring_like(p2) else (p2, True)
+            return (None, False) if _is_ring_like(p2) else (p2, True)
         if p2 is None:
-            return (p1, False) if _is_ring_like(p1) else (p1, True)
+            return (None, False) if _is_ring_like(p1) else (p1, True)
         if p1 == p2:
             return p1, True
 
@@ -559,6 +557,10 @@ def refine_triangle_mesh(mesh):
         if _is_ring_like(p2) and not _is_ring_like(p1):
             return p1, True
         if _is_ring_like(p1) and _is_ring_like(p2):
+            if p1 == "disk_edge":
+                return p2, False
+            if p2 == "disk_edge":
+                return p1, False
             return p1, False
 
         # If one endpoint is disk_edge and the other is a disk interior preset,
@@ -693,6 +695,12 @@ def refine_triangle_mesh(mesh):
             )
             if inherited_interface is not None:
                 midpoint_options.update(inherited_interface)
+            inherited_rigid = _maybe_inherit_rigid_disk_group(
+                getattr(mesh.vertices[v1], "options", {}) or {},
+                getattr(mesh.vertices[v2], "options", {}) or {},
+            )
+            if inherited_rigid is not None:
+                midpoint_options.update(inherited_rigid)
             inherited_preset, apply_defaults = _maybe_inherit_preset(
                 getattr(mesh.vertices[v1], "options", {}) or {},
                 getattr(mesh.vertices[v2], "options", {}) or {},
