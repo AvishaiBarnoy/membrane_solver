@@ -50,6 +50,31 @@ def _find_row_by_preset(mesh, preset: str, *, require_free: bool = False) -> int
     raise AssertionError(f"No vertex found with preset={preset!r}")
 
 
+def _find_row_by_rim_group(mesh, group: str) -> int:
+    mesh.build_position_cache()
+    for row, vid in enumerate(mesh.vertex_ids):
+        v = mesh.vertices[int(vid)]
+        opts = getattr(v, "options", None) or {}
+        if opts.get("rim_slope_match_group") == group:
+            return int(row)
+    raise AssertionError(f"No vertex found with rim_slope_match_group={group!r}")
+
+
+def _find_row_by_non_disk(mesh) -> int:
+    mesh.build_position_cache()
+    for row, vid in enumerate(mesh.vertex_ids):
+        v = mesh.vertices[int(vid)]
+        opts = getattr(v, "options", None) or {}
+        if opts.get("preset") == "disk":
+            continue
+        if getattr(v, "fixed", False):
+            continue
+        if opts.get("tilt_fixed_out", False):
+            continue
+        return int(row)
+    raise AssertionError("No non-disk vertex found")
+
+
 def test_outer_leaflet_absent_on_disk_masks_out_energies() -> None:
     mesh = parse_geometry(load_data(_mesh_path()))
     minim = _build_minimizer(mesh)
@@ -66,7 +91,7 @@ def test_outer_leaflet_absent_on_disk_masks_out_energies() -> None:
     gp.set("leaflet_out_absent_presets", [])
 
     disk_row = _find_row_by_preset(mesh, "disk", require_free=True)
-    rim_row = _find_row_by_preset(mesh, "rim", require_free=False)
+    membrane_row = _find_row_by_non_disk(mesh)
 
     # Baseline energies.
     baseline = minim.compute_energy_breakdown()
@@ -95,9 +120,9 @@ def test_outer_leaflet_absent_on_disk_masks_out_energies() -> None:
         masked_baseline["bending_tilt_out"]
     )
 
-    # Sanity: rim remains a lipid region, so rim tilt_out should still matter.
+    # Sanity: a membrane (non-disk) vertex should still affect outer energies.
     tout3 = mesh.tilts_out_view().copy(order="F")
-    tout3[rim_row] = np.array([0.2, 0.0, 0.0], dtype=float)
+    tout3[membrane_row] = np.array([0.2, 0.0, 0.0], dtype=float)
     mesh.set_tilts_out_from_array(tout3)
     masked_rim = minim.compute_energy_breakdown()
     assert masked_rim["tilt_out"] != masked_baseline["tilt_out"]

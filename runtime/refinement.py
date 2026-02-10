@@ -67,6 +67,7 @@ def refine_polygonal_facets(mesh):
     new_vertices = mesh.vertices.copy()
     new_edges = mesh.edges.copy()
     new_mesh.vertices = new_vertices.copy()
+    new_mesh.definitions = getattr(mesh, "definitions", {}).copy()
     new_facets = {}
     next_edge_idx = max(new_edges.keys()) + 1 if new_edges else 1
     # Safe counter for new facet IDs to avoid collisions with existing IDs
@@ -307,6 +308,36 @@ def refine_triangle_mesh(mesh):
                 merged.append(item)
         options["constraints"] = merged
 
+    def _apply_preset_definitions(options: dict) -> tuple[dict, bool]:
+        preset = options.get("preset")
+        if not preset:
+            return options, False
+        definitions = getattr(mesh, "definitions", {}) or {}
+        defaults = definitions.get(preset)
+        if not isinstance(defaults, dict):
+            return options, False
+        merged = defaults.copy()
+        merged.update(options)
+
+        def _as_list(val):
+            if val is None:
+                return []
+            if isinstance(val, str):
+                return [val]
+            return list(val)
+
+        merged_constraints = _as_list(defaults.get("constraints"))
+        for item in _as_list(options.get("constraints")):
+            if item not in merged_constraints:
+                merged_constraints.append(item)
+        if merged_constraints:
+            merged["constraints"] = merged_constraints
+        else:
+            merged.pop("constraints", None)
+        if "preset" not in merged:
+            merged["preset"] = preset
+        return merged, bool(defaults.get("fixed", False))
+
     def _maybe_inherit_pin_to_circle_options(
         v1_options: dict, v2_options: dict
     ) -> dict | None:
@@ -459,58 +490,96 @@ def refine_triangle_mesh(mesh):
         on the original coarse vertices.
         """
 
-        def has_disk_pin(options: dict) -> bool:
-            constraints = options.get("constraints")
-            if constraints is None:
-                return False
-            if isinstance(constraints, str):
-                ok = constraints == "pin_to_circle"
-            elif isinstance(constraints, list):
-                ok = "pin_to_circle" in constraints
-            else:
-                ok = False
-            if not ok:
-                return False
-            return str(options.get("pin_to_circle_group") or "") == "disk"
-
-        def has_disk_edge_preset(options: dict) -> bool:
-            return options.get("preset") == "disk_edge"
+        def has_disk_interface(options: dict) -> bool:
+            return (
+                str(options.get("rim_slope_match_group") or "") == "disk"
+                and str(options.get("tilt_thetaB_group_in") or "") == "disk"
+            )
 
         merged: dict = {}
-        if has_disk_pin(v1_options) and has_disk_pin(v2_options):
-            for key in ("rim_slope_match_group", "tilt_thetaB_group_in"):
-                a = v1_options.get(key)
-                b = v2_options.get(key)
-                if a is not None and b is not None and a == b:
-                    merged[key] = a
-            return merged if merged else None
+        if has_disk_interface(v1_options) and has_disk_interface(v2_options):
+            merged["rim_slope_match_group"] = "disk"
+            merged["tilt_thetaB_group_in"] = "disk"
+            return merged
 
         return None
 
-    def _maybe_inherit_preset(v1_options: dict, v2_options: dict) -> str | None:
-        """Return a deterministic preset for mid-edge vertices."""
+    def _maybe_inherit_rigid_disk_group(
+        v1_options: dict, v2_options: dict
+    ) -> dict | None:
+        """Inherit rigid-disk group when both endpoints share it."""
+        g1 = v1_options.get("rigid_disk_group")
+        g2 = v2_options.get("rigid_disk_group")
+        if g1 is None or g2 is None:
+            return None
+        if str(g1) != str(g2):
+            return None
+        return {"rigid_disk_group": str(g1)}
+
+    def _maybe_inherit_preset(
+        v1_options: dict, v2_options: dict
+    ) -> tuple[str | None, bool]:
+        """Return a deterministic preset and whether to apply preset defaults."""
         p1 = v1_options.get("preset")
         p2 = v2_options.get("preset")
         if p1 is None and p2 is None:
-            return None
+            return None, False
+
+        definitions = getattr(mesh, "definitions", {}) or {}
+
+        def _is_disk(preset: object) -> bool:
+            return str(preset).startswith("disk") if preset is not None else False
+
+        def _is_ring_like(preset: object) -> bool:
+            if preset is None:
+                return False
+            opts = definitions.get(preset)
+            if not isinstance(opts, dict):
+                return False
+            return any(
+                key in opts
+                for key in (
+                    "pin_to_circle_group",
+                    "rim_slope_match_group",
+                    "tilt_thetaB_group_in",
+                )
+            )
+
         if p1 is None:
-            return p2
+            return (None, False) if _is_ring_like(p2) else (p2, True)
         if p2 is None:
-            return p1
+            return (None, False) if _is_ring_like(p1) else (p1, True)
         if p1 == p2:
-            return p1
+            return p1, True
+
+        if _is_ring_like(p1) and not _is_ring_like(p2):
+            return p2, True
+        if _is_ring_like(p2) and not _is_ring_like(p1):
+            return p1, True
+        if _is_ring_like(p1) and _is_ring_like(p2):
+            if p1 == "disk_edge":
+                return p2, False
+            if p2 == "disk_edge":
+                return p1, False
+            return p1, False
+
         # If one endpoint is disk_edge and the other is a disk interior preset,
         # keep the interior preset to avoid inflating the boundary ring.
-        if p1 == "disk_edge" and str(p2).startswith("disk"):
-            return p2
-        if p2 == "disk_edge" and str(p1).startswith("disk"):
-            return p1
-        if p1 == "disk_edge" and not str(p2).startswith("disk"):
-            return p2
-        if p2 == "disk_edge" and not str(p1).startswith("disk"):
-            return p1
+        if p1 == "disk_edge" and _is_disk(p2):
+            return p2, True
+        if p2 == "disk_edge" and _is_disk(p1):
+            return p1, True
+        if p1 == "disk_edge" and not _is_disk(p2):
+            return p2, True
+        if p2 == "disk_edge" and not _is_disk(p1):
+            return p1, True
+        # Avoid leaking disk presets onto membrane-side midpoints.
+        if _is_disk(p1) and not _is_disk(p2):
+            return p2, True
+        if _is_disk(p2) and not _is_disk(p1):
+            return p1, True
         # Mixed presets: prefer v1 for determinism.
-        return p1
+        return p1, True
 
     def get_or_create_edge(v_from, v_to, parent_edge=None, parent_facet=None):
         key = (min(v_from, v_to), max(v_from, v_to))
@@ -626,16 +695,27 @@ def refine_triangle_mesh(mesh):
             )
             if inherited_interface is not None:
                 midpoint_options.update(inherited_interface)
-            inherited_preset = _maybe_inherit_preset(
+            inherited_rigid = _maybe_inherit_rigid_disk_group(
                 getattr(mesh.vertices[v1], "options", {}) or {},
                 getattr(mesh.vertices[v2], "options", {}) or {},
             )
+            if inherited_rigid is not None:
+                midpoint_options.update(inherited_rigid)
+            inherited_preset, apply_defaults = _maybe_inherit_preset(
+                getattr(mesh.vertices[v1], "options", {}) or {},
+                getattr(mesh.vertices[v2], "options", {}) or {},
+            )
+            preset_fixed = False
             if inherited_preset is not None:
                 midpoint_options["preset"] = inherited_preset
+                if apply_defaults:
+                    midpoint_options, preset_fixed = _apply_preset_definitions(
+                        midpoint_options
+                    )
             midpoint = Vertex(
                 midpoint_idx,
                 np.asarray(midpoint_position, dtype=float),
-                fixed=edge.fixed,
+                fixed=edge.fixed or preset_fixed,
                 options=midpoint_options,
                 tilt=midpoint_tilt,
                 tilt_fixed=midpoint_tilt_fixed,
