@@ -52,11 +52,15 @@ Parameters
 
 from __future__ import annotations
 
+import logging
 from typing import Dict, Tuple
 
 import numpy as np
 
 from geometry.entities import Mesh
+
+logger = logging.getLogger("membrane_solver")
+_WARNED_DISK_EQUALS_RIM = False
 
 USES_TILT_LEAFLETS = True
 
@@ -67,6 +71,25 @@ def _resolve_group(param_resolver, key: str) -> str | None:
         return None
     group = str(raw).strip()
     return group if group else None
+
+
+def _sanitize_disk_group(
+    *, rim_group: str | None, disk_group: str | None
+) -> str | None:
+    """Disable degenerate disk-group coupling when it equals the rim group."""
+    if rim_group is None or disk_group is None:
+        return disk_group
+    if disk_group != rim_group:
+        return disk_group
+    global _WARNED_DISK_EQUALS_RIM
+    if not _WARNED_DISK_EQUALS_RIM:
+        logger.warning(
+            "rim_slope_match_disk_group matches rim_slope_match_group (%s); "
+            "skipping disk-side coupling to avoid degenerate constraints.",
+            rim_group,
+        )
+        _WARNED_DISK_EQUALS_RIM = True
+    return None
 
 
 def _resolve_strength(param_resolver) -> float:
@@ -230,6 +253,7 @@ def compute_energy_and_gradient_array(
     group = _resolve_group(param_resolver, "rim_slope_match_group")
     outer_group = _resolve_group(param_resolver, "rim_slope_match_outer_group")
     disk_group = _resolve_group(param_resolver, "rim_slope_match_disk_group")
+    disk_group = _sanitize_disk_group(rim_group=group, disk_group=disk_group)
     if group is None or outer_group is None:
         return 0.0
 

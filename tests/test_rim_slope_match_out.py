@@ -258,3 +258,66 @@ def test_rim_slope_match_out_with_disk_group_zero_when_matching() -> None:
         tilt_out_grad_arr=None,
     )
     assert abs(float(e_match)) < 1e-6
+
+
+def test_rim_slope_match_out_skips_disk_group_when_matching_rim() -> None:
+    mesh = parse_geometry(_annulus_three_ring_mesh())
+    mesh.global_parameters.set("rim_slope_match_disk_group", "rim")
+    resolver = ParameterResolver(mesh.global_parameters)
+
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    grad_dummy = np.zeros_like(positions)
+
+    rim_rows = []
+    outer_rows = []
+    for vid in mesh.vertex_ids:
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        row = mesh.vertex_index_to_row[int(vid)]
+        if opts.get("rim_slope_match_group") == "rim":
+            rim_rows.append(row)
+        elif opts.get("rim_slope_match_group") == "outer":
+            outer_rows.append(row)
+
+    rim_rows = np.asarray(rim_rows, dtype=int)
+    outer_rows = np.asarray(outer_rows, dtype=int)
+    rim_pos = positions[rim_rows]
+    outer_pos = positions[outer_rows]
+
+    rim_order = np.argsort(np.arctan2(rim_pos[:, 1], rim_pos[:, 0]))
+    outer_order = np.argsort(np.arctan2(outer_pos[:, 1], outer_pos[:, 0]))
+    rim_rows = rim_rows[rim_order]
+    outer_rows = outer_rows[outer_order]
+    rim_pos = positions[rim_rows]
+    outer_pos = positions[outer_rows]
+
+    r_rim = np.linalg.norm(rim_pos[:, :2], axis=1)
+    r_out = np.linalg.norm(outer_pos[:, :2], axis=1)
+    dr = np.maximum(r_out - r_rim, 1e-6)
+    phi = (outer_pos[:, 2] - rim_pos[:, 2]) / dr
+
+    r_hat = np.zeros_like(rim_pos)
+    good = r_rim > 1e-12
+    r_hat[good, 0] = rim_pos[good, 0] / r_rim[good]
+    r_hat[good, 1] = rim_pos[good, 1] / r_rim[good]
+
+    tilts_out = np.zeros_like(positions)
+    tilts_out[rim_rows] = phi[:, None] * r_hat
+    mesh.set_tilts_out_from_array(tilts_out)
+
+    tilts_in = np.zeros_like(positions)
+    mesh.set_tilts_in_from_array(tilts_in)
+
+    e_match = rim_slope_match_out.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+        tilt_in_grad_arr=None,
+        tilt_out_grad_arr=None,
+    )
+    assert abs(float(e_match)) < 1e-6

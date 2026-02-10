@@ -7,7 +7,13 @@ from scipy.special import i1, k0, k1
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from tools.diagnostics.free_disk_profile_fits import _fit_i1, _fit_k0, _fit_k1
+from tools.diagnostics.free_disk_profile_fits import (
+    _fit_i1,
+    _fit_k0,
+    _fit_k0_offset,
+    _fit_k1,
+    _fit_log,
+)
 
 
 def test_fit_k1_recovers_lambda() -> None:
@@ -41,5 +47,30 @@ def test_fit_k0_recovers_decay() -> None:
     y = amp * k0(psi * r)
     amp_hat, psi_hat, rmse = _fit_k0(r, y)
     assert rmse < 1e-6
+    assert abs(amp_hat - amp) / amp < 0.05
+    assert abs(psi_hat - psi) / psi < 0.05
+
+
+def test_fit_log_recovers_slope() -> None:
+    R = 1.0
+    r = np.linspace(1.1, 3.0, 60)
+    z0 = 0.2
+    a = 0.5
+    y = z0 + a * np.log(r / R)
+    z0_hat, a_hat, rmse = _fit_log(r, y, R)
+    assert rmse < 1e-6
+    assert abs(z0_hat - z0) / max(abs(z0), 1e-6) < 0.05
+    assert abs(a_hat - a) / a < 0.05
+
+
+def test_fit_k0_offset_recovers_params() -> None:
+    r = np.linspace(1.0, 3.0, 60)
+    z0 = -0.1
+    amp = 0.4
+    psi = 1.7
+    y = z0 + amp * k0(psi * r)
+    z0_hat, amp_hat, psi_hat, rmse = _fit_k0_offset(r, y)
+    assert rmse < 1e-6
+    assert abs(z0_hat - z0) / max(abs(z0), 1e-6) < 0.05
     assert abs(amp_hat - amp) / amp < 0.05
     assert abs(psi_hat - psi) / psi < 0.05

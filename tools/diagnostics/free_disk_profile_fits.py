@@ -161,6 +161,30 @@ def _fit_k0(r: np.ndarray, y: np.ndarray) -> Tuple[float, float, float]:
     return float(popt[0]), float(popt[1]), _rmse(y, yhat)
 
 
+def _fit_k0_offset(r: np.ndarray, y: np.ndarray) -> Tuple[float, float, float, float]:
+    def model(x, z0, amp, psi):
+        return z0 + amp * k0(psi * x)
+
+    z0 = float(np.median(y))
+    p0 = (z0, float(y[0] - z0), 1.0)
+    bounds = ([-np.inf, -np.inf, 1e-6], [np.inf, np.inf, 1e3])
+    popt, _ = curve_fit(model, r, y, p0=p0, bounds=bounds, maxfev=10000)
+    yhat = model(r, *popt)
+    return float(popt[0]), float(popt[1]), float(popt[2]), _rmse(y, yhat)
+
+
+def _fit_log(r: np.ndarray, y: np.ndarray, R: float) -> Tuple[float, float, float]:
+    def model(x, z0, a):
+        return z0 + a * np.log(x / R)
+
+    z0 = float(y[0])
+    denom = float(np.log(max(r[-1] / R, 1.000001)))
+    p0 = (z0, float((y[-1] - y[0]) / denom))
+    popt, _ = curve_fit(model, r, y, p0=p0, maxfev=10000)
+    yhat = model(r, *popt)
+    return float(popt[0]), float(popt[1]), _rmse(y, yhat)
+
+
 def _curvature_profile(
     mesh, *, center: np.ndarray, normal: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -180,6 +204,25 @@ def _curvature_profile(
         r.append(rr)
         h.append(float(fields.mean_curvature[row]))
     return np.asarray(r, dtype=float), np.asarray(h, dtype=float)
+
+
+def _height_profile(
+    data: dict, *, center: np.ndarray, normal: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    r = []
+    z = []
+    for v in data.get("vertices", []):
+        if not (isinstance(v, list) and v):
+            continue
+        p = np.asarray(v[:3], dtype=float)
+        rvec = p - center
+        rvec = rvec - np.dot(rvec, normal) * normal
+        rr = float(np.linalg.norm(rvec))
+        if rr < 1e-12:
+            continue
+        r.append(rr)
+        z.append(float(p[2]))
+    return np.asarray(r, dtype=float), np.asarray(z, dtype=float)
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -227,11 +270,39 @@ def main(argv: Iterable[str] | None = None) -> int:
             amp, psi, rmse = _fit_k0(r_hb, h_med)
             curvature_fit = {"amp": amp, "psi": psi, "rmse": rmse}
 
+    # Height fit (tensionless: log, finite tension: K0)
+    tension = float(params.get("surface_tension") or 0.0)
+    r_z, z = _height_profile(data, center=center, normal=normal)
+    z_fit = None
+    if r_z.size >= 3:
+        rzb, z_med, _ = _bin_profile(
+            r_z, z, rmin=R, rmax=float(np.max(r_z)), bins=args.bins
+        )
+        if rzb.size >= 3 and np.any(np.isfinite(z_med)):
+            if tension <= 0.0:
+                z0, a, rmse = _fit_log(rzb, z_med, R)
+                z_fit = {"model": "log", "z0": z0, "a": a, "rmse": rmse}
+            else:
+                z0, amp, psi, rmse = _fit_k0_offset(rzb, z_med)
+                z_fit = {"model": "k0", "z0": z0, "amp": amp, "psi": psi, "rmse": rmse}
+
+    inner_mask = (r_z > 0) & (r_z <= R)
+    z_flat = None
+    if np.any(inner_mask):
+        z_inner = z[inner_mask]
+        z_flat = {
+            "z_mean": float(np.mean(z_inner)),
+            "z_std": float(np.std(z_inner)),
+            "count": int(z_inner.size),
+        }
+
     out = {
         "R": R,
         "inner_fit_I1": inner_fit,
         "outer_fit_K1": outer_fit,
         "curvature_fit_K0": curvature_fit,
+        "height_fit": z_fit,
+        "disk_flatness": z_flat,
     }
     print(json.dumps(out, indent=2, sort_keys=True))
     return 0

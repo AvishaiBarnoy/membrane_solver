@@ -67,6 +67,7 @@ def refine_polygonal_facets(mesh):
     new_vertices = mesh.vertices.copy()
     new_edges = mesh.edges.copy()
     new_mesh.vertices = new_vertices.copy()
+    new_mesh.definitions = getattr(mesh, "definitions", {}).copy()
     new_facets = {}
     next_edge_idx = max(new_edges.keys()) + 1 if new_edges else 1
     # Safe counter for new facet IDs to avoid collisions with existing IDs
@@ -307,6 +308,36 @@ def refine_triangle_mesh(mesh):
                 merged.append(item)
         options["constraints"] = merged
 
+    def _apply_preset_definitions(options: dict) -> tuple[dict, bool]:
+        preset = options.get("preset")
+        if not preset:
+            return options, False
+        definitions = getattr(mesh, "definitions", {}) or {}
+        defaults = definitions.get(preset)
+        if not isinstance(defaults, dict):
+            return options, False
+        merged = defaults.copy()
+        merged.update(options)
+
+        def _as_list(val):
+            if val is None:
+                return []
+            if isinstance(val, str):
+                return [val]
+            return list(val)
+
+        merged_constraints = _as_list(defaults.get("constraints"))
+        for item in _as_list(options.get("constraints")):
+            if item not in merged_constraints:
+                merged_constraints.append(item)
+        if merged_constraints:
+            merged["constraints"] = merged_constraints
+        else:
+            merged.pop("constraints", None)
+        if "preset" not in merged:
+            merged["preset"] = preset
+        return merged, bool(defaults.get("fixed", False))
+
     def _maybe_inherit_pin_to_circle_options(
         v1_options: dict, v2_options: dict
     ) -> dict | None:
@@ -499,6 +530,10 @@ def refine_triangle_mesh(mesh):
             return p1
         if p1 == p2:
             return p1
+
+        def _is_disk(preset: object) -> bool:
+            return str(preset).startswith("disk") if preset is not None else False
+
         # If one endpoint is disk_edge and the other is a disk interior preset,
         # keep the interior preset to avoid inflating the boundary ring.
         if p1 == "disk_edge" and str(p2).startswith("disk"):
@@ -508,6 +543,11 @@ def refine_triangle_mesh(mesh):
         if p1 == "disk_edge" and not str(p2).startswith("disk"):
             return p2
         if p2 == "disk_edge" and not str(p1).startswith("disk"):
+            return p1
+        # Avoid leaking disk presets onto membrane-side midpoints.
+        if _is_disk(p1) and not _is_disk(p2):
+            return p2
+        if _is_disk(p2) and not _is_disk(p1):
             return p1
         # Mixed presets: prefer v1 for determinism.
         return p1
@@ -630,12 +670,16 @@ def refine_triangle_mesh(mesh):
                 getattr(mesh.vertices[v1], "options", {}) or {},
                 getattr(mesh.vertices[v2], "options", {}) or {},
             )
+            preset_fixed = False
             if inherited_preset is not None:
                 midpoint_options["preset"] = inherited_preset
+                midpoint_options, preset_fixed = _apply_preset_definitions(
+                    midpoint_options
+                )
             midpoint = Vertex(
                 midpoint_idx,
                 np.asarray(midpoint_position, dtype=float),
-                fixed=edge.fixed,
+                fixed=edge.fixed or preset_fixed,
                 options=midpoint_options,
                 tilt=midpoint_tilt,
                 tilt_fixed=midpoint_tilt_fixed,
