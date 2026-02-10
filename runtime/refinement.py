@@ -524,25 +524,50 @@ def refine_triangle_mesh(mesh):
         p2 = v2_options.get("preset")
         if p1 is None and p2 is None:
             return None
-        if p1 is None:
-            return p2
-        if p2 is None:
-            return p1
-        if p1 == p2:
-            return p1
+
+        definitions = getattr(mesh, "definitions", {}) or {}
 
         def _is_disk(preset: object) -> bool:
             return str(preset).startswith("disk") if preset is not None else False
 
+        def _is_ring_like(preset: object) -> bool:
+            if preset is None:
+                return False
+            opts = definitions.get(preset)
+            if not isinstance(opts, dict):
+                return False
+            return any(
+                key in opts
+                for key in (
+                    "pin_to_circle_group",
+                    "rim_slope_match_group",
+                    "tilt_thetaB_group_in",
+                )
+            )
+
+        if p1 is None:
+            return None if _is_ring_like(p2) else p2
+        if p2 is None:
+            return None if _is_ring_like(p1) else p1
+        if p1 == p2:
+            return p1
+
+        if _is_ring_like(p1) and not _is_ring_like(p2):
+            return p2
+        if _is_ring_like(p2) and not _is_ring_like(p1):
+            return p1
+        if _is_ring_like(p1) and _is_ring_like(p2):
+            return None
+
         # If one endpoint is disk_edge and the other is a disk interior preset,
         # keep the interior preset to avoid inflating the boundary ring.
-        if p1 == "disk_edge" and str(p2).startswith("disk"):
+        if p1 == "disk_edge" and _is_disk(p2):
             return p2
-        if p2 == "disk_edge" and str(p1).startswith("disk"):
+        if p2 == "disk_edge" and _is_disk(p1):
             return p1
-        if p1 == "disk_edge" and not str(p2).startswith("disk"):
+        if p1 == "disk_edge" and not _is_disk(p2):
             return p2
-        if p2 == "disk_edge" and not str(p1).startswith("disk"):
+        if p2 == "disk_edge" and not _is_disk(p1):
             return p1
         # Avoid leaking disk presets onto membrane-side midpoints.
         if _is_disk(p1) and not _is_disk(p2):
