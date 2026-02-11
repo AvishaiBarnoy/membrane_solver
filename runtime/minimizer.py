@@ -86,6 +86,11 @@ class Minimizer:
         self._tilt_fixed_mask_out_cache: np.ndarray | None = None
         self._tilt_fixed_mask_out_version: int = -1
         self._tilt_fixed_mask_out_vertex_version: int = -1
+        self._soa_cache_version: int = -1
+        self._soa_cache_vertex_version: int = -1
+        self._soa_positions: np.ndarray | None = None
+        self._soa_index_map: Dict[int, int] | None = None
+        self._soa_grad_dummy: np.ndarray | None = None
 
     def _validate_energy_modules_array(self) -> None:
         """Ensure energy modules support the array API required by minimization."""
@@ -96,6 +101,29 @@ class Minimizer:
                     f"Energy module {name} lacks compute_energy_and_gradient_array; "
                     "dict fallbacks are not supported in the minimization loop."
                 )
+
+    def _soa_views(self) -> tuple[np.ndarray, Dict[int, int], np.ndarray]:
+        """Return cached SoA views for positions, index map, and a scratch buffer."""
+        positions = self.mesh.positions_view()
+        vertex_version = self.mesh._vertex_ids_version
+        if (
+            self._soa_cache_version != self.mesh._version
+            or self._soa_cache_vertex_version != vertex_version
+            or self._soa_positions is not positions
+        ):
+            self._soa_positions = positions
+            self._soa_index_map = self.mesh.vertex_index_to_row
+            self._soa_cache_version = self.mesh._version
+            self._soa_cache_vertex_version = vertex_version
+            self._soa_grad_dummy = None
+
+        if (
+            self._soa_grad_dummy is None
+            or self._soa_grad_dummy.shape != positions.shape
+        ):
+            self._soa_grad_dummy = np.zeros_like(positions)
+
+        return positions, self._soa_index_map or {}, self._soa_grad_dummy
 
     def _tilt_fixed_mask(self) -> np.ndarray:
         """Return a boolean mask for vertices whose tilt is clamped.
@@ -1530,8 +1558,7 @@ STEP SIZE:\t {self.step_size}
 
     def compute_energy_and_gradient_array(self):
         """Return total energy and dense gradient array for the current mesh."""
-        positions = self.mesh.positions_view()
-        index_map = self.mesh.vertex_index_to_row
+        positions, index_map, _ = self._soa_views()
         grad_arr = np.zeros_like(positions)
 
         total_energy = 0.0
@@ -1645,13 +1672,12 @@ STEP SIZE:\t {self.step_size}
 
     def compute_energy(self):
         """Compute the total energy using the loaded modules."""
-        positions = self.mesh.positions_view()
-        index_map = self.mesh.vertex_index_to_row
-        grad_dummy = np.zeros_like(positions)
+        positions, index_map, grad_dummy = self._soa_views()
 
         total_energy = 0.0
         for module in self.energy_modules:
             if hasattr(module, "compute_energy_and_gradient_array"):
+                grad_dummy.fill(0.0)
                 E_mod = module.compute_energy_and_gradient_array(
                     self.mesh,
                     self.global_params,
@@ -1674,13 +1700,12 @@ STEP SIZE:\t {self.step_size}
 
     def compute_energy_breakdown(self) -> Dict[str, float]:
         """Return per-module energy contributions for the current mesh."""
-        positions = self.mesh.positions_view()
-        index_map = self.mesh.vertex_index_to_row
+        positions, index_map, grad_dummy = self._soa_views()
         breakdown: Dict[str, float] = {}
 
         for name, module in zip(self.energy_module_names, self.energy_modules):
             if hasattr(module, "compute_energy_and_gradient_array"):
-                grad_dummy = np.zeros_like(positions)
+                grad_dummy.fill(0.0)
                 E_mod = module.compute_energy_and_gradient_array(
                     self.mesh,
                     self.global_params,
