@@ -325,6 +325,12 @@ def _inner_leaflet_vertex_split(
 
 def compute_energy_split(base: dict, out: dict) -> dict[str, float]:
     merged = _merge_base_config(base, out)
+    # Preserve the saved mesh state by preventing preset defaults from being
+    # re-applied on load (refinement may have created vertices with only a
+    # preset tag). We still keep preset names for classification.
+    definitions = merged.get("definitions", {}) or {}
+    merged = dict(merged)
+    merged["definitions"] = {name: {} for name in definitions}
 
     mesh = parse_geometry(merged)
     positions = mesh.positions_view()

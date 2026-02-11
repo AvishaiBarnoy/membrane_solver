@@ -5,14 +5,14 @@ global_parameters:
   leaflet_out_absent_presets:
   - disk
   leaflet_out_absence_mode: triangles
-  bending_modulus_in: 2.0
-  bending_modulus_out: 2.0
-  tilt_modulus_in: 110.0
-  tilt_modulus_out: 110.0
+  bending_modulus_in: 1.0
+  bending_modulus_out: 1.0
+  tilt_modulus_in: 225.0
+  tilt_modulus_out: 225.0
   tilt_thetaB_group_in: rim
   tilt_thetaB_contact_penalty_mode: 'off'
   tilt_thetaB_strength_in: 1.0e8
-  tilt_thetaB_contact_strength_in: 8.5
+  tilt_thetaB_contact_strength_in: 4.286
   tilt_thetaB_value: 0.0
   tilt_thetaB_center:
   - 0.0
@@ -25,7 +25,7 @@ global_parameters:
   tilt_thetaB_optimize: true
   tilt_thetaB_optimize_every: 1
   tilt_thetaB_optimize_delta: 0.01
-  tilt_thetaB_optimize_inner_steps: 1
+  tilt_thetaB_optimize_inner_steps: 10
   bending_tilt_base_term_boundary_group_in: rim
   bending_tilt_base_term_boundary_group_out: rim
   bending_tilt_assume_J0_presets_in:
@@ -250,145 +250,145 @@ vertices:
 - - 0.466666666666667
   - 0.0
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 0.45076538560156554
   - 0.1207822210478431
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 0.40414518843273833
   - 0.23333333333333348
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 0.32998316455372245
   - 0.3299831645537224
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 0.23333333333333356
   - 0.40414518843273833
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 0.1207822210478431
   - 0.45076538560156554
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 2.857509198010493e-17
   - 0.466666666666667
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -0.12078222104784304
   - 0.45076538560156554
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -0.23333333333333342
   - 0.40414518843273833
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -0.3299831645537224
   - 0.32998316455372245
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -0.40414518843273833
   - 0.23333333333333348
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -0.4507653856015655
   - 0.12078222104784322
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -0.466666666666667
   - 5.715018396020985e-17
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -0.45076538560156554
   - -0.12078222104784313
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -0.4041451884327384
   - -0.2333333333333334
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -0.3299831645537226
   - -0.32998316455372223
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -0.2333333333333337
   - -0.4041451884327382
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -0.12078222104784304
   - -0.45076538560156554
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - -8.572527594031478e-17
   - -0.466666666666667
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 0.12078222104784289
   - -0.4507653856015656
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 0.23333333333333356
   - -0.40414518843273833
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 0.32998316455372234
   - -0.3299831645537225
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 0.4041451884327382
   - -0.2333333333333337
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 0.4507653856015654
   - -0.12078222104784349
   - 0.0
-  - preset: disk
+  - preset: rim
     rim_slope_match_group: rim
     rigid_disk_group: disk
 - - 0.5820000000000004
