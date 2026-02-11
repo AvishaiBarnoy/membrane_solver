@@ -241,8 +241,8 @@ def plot_geometry(
         Default color to use for edges when no per‑edge color is
         provided. Defaults to ``"k"`` (black).
     surface_shading : bool, optional
-        When ``True``, enable Matplotlib's built-in face shading to improve
-        depth perception. Defaults to ``True`` when ``draw_edges`` is ``False``.
+        When ``True``, enable camera-fixed face shading to improve depth
+        perception. Defaults to ``True`` when ``draw_edges`` is ``False``.
     facet_colors : dict[int, Any], optional
         Optional mapping ``facet_index -> color``. When provided it
         overrides both ``facet_color`` and any ``"color"`` entry in
@@ -301,22 +301,77 @@ def plot_geometry(
     def _make_poly_collection(
         tris, *, alpha_val, edgecolor_val, linewidths_val, facecolors_val=None
     ):
-        try:
-            return Poly3DCollection(
-                tris,
-                alpha=alpha_val,
-                edgecolor=edgecolor_val,
-                linewidths=linewidths_val,
-                facecolors=facecolors_val,
-                shade=use_shading,
+        collection = Poly3DCollection(
+            tris,
+            alpha=alpha_val,
+            edgecolor=edgecolor_val,
+            linewidths=linewidths_val,
+        )
+        if facecolors_val is not None:
+            collection.set_facecolor(facecolors_val)
+        if use_shading:
+            base_colors = (
+                np.asarray(facecolors_val, dtype=float)
+                if facecolors_val is not None
+                else None
             )
-        except TypeError:
-            return Poly3DCollection(
-                tris,
-                alpha=alpha_val,
-                edgecolor=edgecolor_val,
-                linewidths=linewidths_val,
-            )
+            if base_colors is not None:
+                collection._membrane_base_facecolors = base_colors
+                collection._membrane_triangles = np.asarray(tris, dtype=float)
+                collection._membrane_use_shading = True
+        return collection
+
+    def _camera_light_direction(ax):
+        az = np.deg2rad(float(getattr(ax, "azim", 0.0)))
+        el = np.deg2rad(float(getattr(ax, "elev", 0.0)))
+        view_dir = np.array(
+            [np.cos(el) * np.cos(az), np.cos(el) * np.sin(az), np.sin(el)],
+            dtype=float,
+        )
+        norm = float(np.linalg.norm(view_dir))
+        if norm <= 1e-12:
+            return np.array([0.0, 0.0, -1.0], dtype=float)
+        return -view_dir / norm
+
+    def _apply_camera_shading(ax):
+        light_dir = _camera_light_direction(ax)
+        for col in ax.collections:
+            if not isinstance(col, Poly3DCollection):
+                continue
+            if not getattr(col, "_membrane_use_shading", False):
+                continue
+            tris = getattr(col, "_membrane_triangles", None)
+            base = getattr(col, "_membrane_base_facecolors", None)
+            if tris is None or base is None:
+                continue
+            v0 = tris[:, 0]
+            v1 = tris[:, 1]
+            v2 = tris[:, 2]
+            normals = np.cross(v1 - v0, v2 - v0)
+            norms = np.linalg.norm(normals, axis=1)
+            mask = norms > 1e-12
+            normals = np.zeros_like(normals)
+            normals[mask] = normals[mask] / norms[mask][:, None]
+            intensity = np.clip(normals @ light_dir, 0.0, 1.0)
+            shade = 0.7 + 0.3 * intensity
+            shaded = np.array(base, copy=True)
+            shaded[:, :3] *= shade[:, None]
+            col.set_facecolor(shaded)
+
+    def _ensure_shading_handler(fig, ax):
+        if not use_shading:
+            return
+        _apply_camera_shading(ax)
+        cid = getattr(fig, "_membrane_shading_cid", None)
+        bound_ax = getattr(fig, "_membrane_shading_ax", None)
+        if cid is not None and bound_ax is ax:
+            return
+
+        def _on_draw(_event):
+            _apply_camera_shading(ax)
+
+        fig._membrane_shading_cid = fig.canvas.mpl_connect("draw_event", _on_draw)
+        fig._membrane_shading_ax = ax
 
     if color_by is not None and color_by not in _TILT_COLOR_BY:
         raise ValueError(
@@ -894,6 +949,9 @@ def plot_geometry(
 
     if tight_layout:
         plt.tight_layout()
+
+    if fig is not None:
+        _ensure_shading_handler(fig, ax)
 
     if show:
         plt.show()

@@ -98,7 +98,9 @@ def test_plot_geometry_shading_toggle(tmp_path, monkeypatch):
     was_interactive = plt.isinteractive()
     try:
         plot_geometry(mesh, show=False, draw_edges=False)
+        plt.gcf().canvas.draw()
         plot_geometry(mesh, show=False, draw_edges=True)
+        plt.gcf().canvas.draw()
     finally:
         if not was_interactive:
             plt.ioff()

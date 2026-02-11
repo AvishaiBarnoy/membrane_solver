@@ -22,6 +22,7 @@ class VisualizeCommand(Command):
         show_tilt_arrows = (
             getattr(minimizer, "vis_show_tilt_arrows", False) if minimizer else False
         )
+        draw_edges = True
         if args:
             tokens = [str(tok).strip().lower() for tok in args if str(tok).strip()]
             if any(tok in {"tilt", "t", "mag", "abs"} for tok in tokens):
@@ -40,6 +41,11 @@ class VisualizeCommand(Command):
                 color_by = "tilt_div_out"
             elif any(tok in {"plain", "none", "off"} for tok in tokens):
                 color_by = None
+
+            if any(tok in {"noedges", "noedge"} for tok in tokens):
+                draw_edges = False
+            elif any(tok in {"edges", "edge"} for tok in tokens):
+                draw_edges = True
 
             if any(tok in {"noarrows", "noarrow"} for tok in tokens):
                 show_tilt_arrows = False
@@ -66,6 +72,10 @@ class VisualizeCommand(Command):
                 "plain",
                 "none",
                 "off",
+                "edges",
+                "edge",
+                "noedges",
+                "noedge",
                 "arrows",
                 "arrow",
                 "quiver",
@@ -75,7 +85,8 @@ class VisualizeCommand(Command):
             unknown = [tok for tok in tokens if tok not in supported]
             if unknown:
                 print(
-                    "Usage: s [tilt|tilt_in|tilt_out|bilayer|div|div_in|div_out|plain] [arrows|noarrows]"
+                    "Usage: s [tilt|tilt_in|tilt_out|bilayer|div|div_in|div_out|plain] "
+                    "[edges|noedges] [arrows|noarrows]"
                 )
                 return
 
@@ -100,7 +111,7 @@ class VisualizeCommand(Command):
         plot_geometry(
             context.mesh,
             show_indices=False,
-            draw_edges=True,
+            draw_edges=draw_edges,
             transparent=False,
             color_by=color_by,
             show_tilt_arrows=show_tilt_arrows,
