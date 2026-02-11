@@ -34,6 +34,7 @@ class RefineCommand(Command):
                     show_tilt_arrows=getattr(
                         context.minimizer, "live_vis_show_tilt_arrows", False
                     ),
+                    show_edges=getattr(context.minimizer, "live_vis_show_edges", True),
                 )
                 context.minimizer.live_vis_state = state
         logger.info("Mesh refinement complete after %d pass(es).", count)
@@ -61,6 +62,7 @@ class VertexAverageCommand(Command):
                 show_tilt_arrows=getattr(
                     context.minimizer, "live_vis_show_tilt_arrows", False
                 ),
+                show_edges=getattr(context.minimizer, "live_vis_show_edges", True),
             )
             context.minimizer.live_vis_state = state
 
@@ -84,6 +86,7 @@ class EquiangulateCommand(Command):
                 show_tilt_arrows=getattr(
                     context.minimizer, "live_vis_show_tilt_arrows", False
                 ),
+                show_edges=getattr(context.minimizer, "live_vis_show_edges", True),
             )
             context.minimizer.live_vis_state = state
 

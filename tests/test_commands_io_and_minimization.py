@@ -12,6 +12,7 @@ from commands.minimization import (
     HessianCommand,
     LiveVisCommand,
     SetStepperCommand,
+    ShowEdgesCommand,
 )
 from geometry.entities import Edge, Mesh, Vertex
 from runtime.steppers.conjugate_gradient import ConjugateGradient
@@ -102,6 +103,28 @@ def test_live_vis_toggles_on_minimizer():
     assert ctx.minimizer.live_vis is True
     LiveVisCommand().execute(ctx, [])
     assert ctx.minimizer.live_vis is False
+
+
+def test_show_edges_command_updates_live_vis(monkeypatch):
+    mesh = build_line_mesh()
+    minimizer = SimpleNamespace(
+        live_vis=True,
+        live_vis_state=None,
+        live_vis_color_by=None,
+        live_vis_show_tilt_arrows=False,
+    )
+    ctx = SimpleNamespace(mesh=mesh, minimizer=minimizer)
+    called = {}
+
+    def fake_update_live_vis(*args, **kwargs):
+        called["kwargs"] = kwargs
+        return {"fig": None, "ax": None}
+
+    monkeypatch.setattr("visualization.plotting.update_live_vis", fake_update_live_vis)
+
+    ShowEdgesCommand().execute(ctx, ["off"])
+    assert ctx.minimizer.live_vis_show_edges is False
+    assert called["kwargs"]["show_edges"] is False
 
 
 def test_set_stepper_command_updates_context_and_minimizer():

@@ -882,6 +882,7 @@ def update_live_vis(
     color_by: Optional[str] = None,
     show_colorbar: bool | None = None,
     show_tilt_arrows: bool = False,
+    show_edges: bool = True,
 ) -> Dict[str, Any]:
     """Update or create a live visualization window for a mesh."""
     import matplotlib.pyplot as plt
@@ -906,6 +907,7 @@ def update_live_vis(
             "color_by": color_by,
             "show_colorbar": show_colorbar_flag,
             "show_tilt_arrows": show_tilt_arrows,
+            "show_edges": show_edges,
         }
     else:
         fig = state["fig"]
@@ -1224,7 +1226,7 @@ def update_live_vis(
         mesh,
         ax=ax,
         show=False,
-        draw_edges=True,
+        draw_edges=show_edges,
         transparent=False,
         color_by=color_by,
         show_colorbar=show_colorbar_flag,
@@ -1266,6 +1268,7 @@ def update_live_vis(
     state["color_by"] = color_by
     state["show_colorbar"] = show_colorbar_flag
     state["show_tilt_arrows"] = show_tilt_arrows
+    state["show_edges"] = show_edges
     state["colorbar"] = getattr(ax, "_membrane_colorbar", None)
     state["mappable"] = getattr(ax, "_membrane_mappable", None)
 
