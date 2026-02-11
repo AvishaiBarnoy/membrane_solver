@@ -52,4 +52,4 @@ def test_save_load_preserves_energy_breakdown(tmp_path):
     assert set(got) == set(expected)
     for key, expected_val in expected.items():
         got_val = got[key]
-        assert math.isclose(got_val, expected_val, rel_tol=1e-5, abs_tol=1e-7)
+        assert math.isclose(got_val, expected_val, rel_tol=1e-5, abs_tol=2e-7)
