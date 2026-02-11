@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from commands.completion import command_name_completions
+from commands.completion import command_line_completions
 from commands.context import CommandContext
 from commands.executor import execute_command_line
 from commands.registry import COMMAND_REGISTRY, get_command
@@ -106,7 +106,7 @@ def _setup_interactive_completion(context: CommandContext) -> None:
 
     def _completer(text: str, state: int):
         macros = getattr(context.mesh, "macros", {}) or {}
-        candidates = command_name_completions(
+        candidates = command_line_completions(
             text=text,
             line_buffer=readline.get_line_buffer(),
             command_names=COMMAND_REGISTRY.keys(),

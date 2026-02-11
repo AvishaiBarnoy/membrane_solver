@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from commands.completion import command_name_completions
+from commands.completion import command_line_completions, command_name_completions
 
 
 def test_command_name_completion_uses_last_semicolon_segment():
@@ -26,3 +26,26 @@ def test_command_name_completion_does_not_complete_args():
         macro_names=[],
     )
     assert candidates == []
+
+
+def test_energy_subcommand_completion():
+    candidates = command_line_completions(
+        text="",
+        line_buffer="energy ",
+        command_names=["energy", "set"],
+        macro_names=[],
+    )
+    assert "breakdown" in candidates
+    assert "curvature" in candidates
+    assert "total" in candidates
+    assert "ref" in candidates
+
+
+def test_energy_subcommand_completion_prefix():
+    candidates = command_line_completions(
+        text="c",
+        line_buffer="energy c",
+        command_names=["energy", "set"],
+        macro_names=[],
+    )
+    assert candidates == ["curvature"]

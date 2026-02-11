@@ -4,6 +4,18 @@ from __future__ import annotations
 
 from typing import Iterable
 
+ENERGY_SUBCOMMANDS = (
+    "breakdown",
+    "details",
+    "detail",
+    "stats",
+    "curvature",
+    "total",
+    "sum",
+    "ref",
+    "reference",
+)
+
 
 def command_name_completions(
     *,
@@ -40,3 +52,52 @@ def command_name_completions(
     names = set(str(n) for n in command_names) | set(str(n) for n in macro_names)
     matches = sorted(n for n in names if n.startswith(starts))
     return matches
+
+
+def command_line_completions(
+    *,
+    text: str,
+    line_buffer: str,
+    command_names: Iterable[str],
+    macro_names: Iterable[str] = (),
+) -> list[str]:
+    """Return completion candidates for the current command line."""
+    buf = line_buffer or ""
+    segment = buf.split(";")[-1].lstrip()
+    if not segment:
+        return command_name_completions(
+            text=text,
+            line_buffer=line_buffer,
+            command_names=command_names,
+            macro_names=macro_names,
+        )
+
+    tokens = segment.split()
+    if not tokens:
+        return command_name_completions(
+            text=text,
+            line_buffer=line_buffer,
+            command_names=command_names,
+            macro_names=macro_names,
+        )
+
+    if len(tokens) == 1 and not segment.endswith(" "):
+        return command_name_completions(
+            text=text,
+            line_buffer=line_buffer,
+            command_names=command_names,
+            macro_names=macro_names,
+        )
+
+    cmd = tokens[0].lower()
+    if cmd != "energy":
+        return []
+
+    want = (text or "").strip()
+    if not want and not segment.endswith(" "):
+        want = tokens[-1]
+
+    candidates = [
+        name for name in ENERGY_SUBCOMMANDS if not want or name.startswith(want)
+    ]
+    return sorted(candidates)
