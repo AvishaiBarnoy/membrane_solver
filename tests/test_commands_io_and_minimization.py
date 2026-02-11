@@ -69,6 +69,7 @@ def test_visualize_command_calls_plot(monkeypatch):
     assert called["show_indices"] is False
     assert called["color_by"] is None
     assert called["show_tilt_arrows"] is False
+    assert called["draw_edges"] is True
 
 
 def test_visualize_command_allows_tilt_coloring(monkeypatch):
@@ -86,6 +87,22 @@ def test_visualize_command_allows_tilt_coloring(monkeypatch):
 
     assert called["mesh"] is mesh
     assert called.get("color_by") == "tilt_mag"
+
+
+def test_visualize_command_allows_edge_toggle(monkeypatch):
+    mesh = build_line_mesh()
+    ctx = SimpleNamespace(mesh=mesh)
+    called = {}
+
+    def fake_plot(m, **kwargs):
+        called["mesh"] = m
+        called.update(kwargs)
+
+    monkeypatch.setattr("visualization.plotting.plot_geometry", fake_plot)
+    VisualizeCommand().execute(ctx, ["noedges"])
+
+    assert called["mesh"] is mesh
+    assert called.get("draw_edges") is False
 
 
 def test_properties_command_prints_header(capsys):
