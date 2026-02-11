@@ -338,14 +338,38 @@ def parse_geometry(data: dict) -> Mesh:
                     f"Vertex {vid} tilt_out must be a 2- or 3-vector of numbers; got {raw_tilt_out!r}"
                 )
 
-        mesh.vertices[vid] = Vertex(
+        def _tilt_to_array(raw, name):
+            if raw is None:
+                return None
+            arr = np.asarray(raw, dtype=float)
+            if arr.shape == (2,):
+                arr = np.array([arr[0], arr[1], 0.0], dtype=float)
+            elif arr.shape != (3,):
+                raise ValueError(
+                    f"Vertex {vid} {name} must have length 2 or 3; got {arr!r}"
+                )
+            return arr
+
+        tilt_arr = _tilt_to_array(raw_tilt, "tilt")
+        tilt_in_arr = _tilt_to_array(raw_tilt_in, "tilt_in")
+        tilt_out_arr = _tilt_to_array(raw_tilt_out, "tilt_out")
+
+        vertex = Vertex(
             index=vid,
             position=pos_array,
             options=options,
             tilt_fixed=bool(tilt_fixed_val),
             tilt_fixed_in=bool(tilt_fixed_in_val),
             tilt_fixed_out=bool(tilt_fixed_out_val),
+            tilt=tilt_arr if tilt_arr is not None else np.zeros(3, dtype=float),
+            tilt_in=tilt_in_arr
+            if tilt_in_arr is not None
+            else np.zeros(3, dtype=float),
+            tilt_out=tilt_out_arr
+            if tilt_out_arr is not None
+            else np.zeros(3, dtype=float),
         )
+        mesh.vertices[vid] = vertex
 
         if "energy" in options:
             if isinstance(options["energy"], list):
@@ -1007,6 +1031,8 @@ def save_geometry(
                 for b in mesh.bodies.keys()
             ],
         },
+        "energy_modules": list(mesh.energy_modules),
+        "constraint_modules": list(mesh.constraint_modules),
         "global_parameters": mesh.global_parameters.to_dict(),
         "instructions": mesh.instructions,
     }

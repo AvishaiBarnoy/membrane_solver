@@ -42,9 +42,9 @@ def test_kozlov_free_disk_uses_shared_rim_ring_at_disk_edge() -> None:
     r_disk = np.linalg.norm(positions[rim_rows, :2], axis=1)
     assert np.allclose(r_disk, 7.0 / 15.0, atol=1e-12, rtol=0.0)
 
-    # Shared ring: rim-matching vertices should belong to the disk preset.
+    # Shared ring: rim-matching vertices should belong to the rim preset.
     rim_presets = {mesh.vertices[int(vid)].options.get("preset") for vid in rim_vids}
-    assert rim_presets == {"disk"}
+    assert rim_presets == {"rim"}
 
 
 def test_kozlov_free_disk_refinement_keeps_disk_vertices_in_rigid_group() -> None:

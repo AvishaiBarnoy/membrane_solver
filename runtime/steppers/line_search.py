@@ -111,6 +111,20 @@ def backtracking_line_search(
     alpha = step_size
     alpha_max = alpha_max_factor * step_size
 
+    scalar_params = getattr(mesh, "global_parameters", None)
+    scalar_snapshot = (
+        scalar_params.to_dict().copy() if scalar_params is not None else None
+    )
+
+    def _restore_scalar_params() -> None:
+        if scalar_params is None or scalar_snapshot is None:
+            return
+        current = scalar_params.to_dict()
+        for key in list(current.keys()):
+            if key not in scalar_snapshot:
+                scalar_params.unset(key)
+        scalar_params.update(scalar_snapshot)
+
     backtracks = 0
     for _ in range(max_iter):
         # Heuristic: Check if step is small enough to be unconditionally safe
@@ -174,6 +188,7 @@ def backtracking_line_search(
             mesh.set_tilts_from_array(original_tilts)
             mesh.set_tilts_in_from_array(original_tilts_in)
             mesh.set_tilts_out_from_array(original_tilts_out)
+        _restore_scalar_params()
         mesh.increment_version()
 
         alpha *= beta
@@ -194,6 +209,41 @@ def backtracking_line_search(
         mesh.set_tilts_from_array(original_tilts)
         mesh.set_tilts_in_from_array(original_tilts_in)
         mesh.set_tilts_out_from_array(original_tilts_out)
+    _restore_scalar_params()
+    if logger.isEnabledFor(logging.WARNING):
+        max_pos = 0.0
+        for vidx, vertex in mesh.vertices.items():
+            diff = vertex.position - original_positions[vidx]
+            max_pos = max(max_pos, float(np.linalg.norm(diff)))
+        max_tilt = 0.0
+        max_tilt_in = 0.0
+        max_tilt_out = 0.0
+        if needs_tilt_restore:
+            max_tilt = float(
+                np.max(np.linalg.norm(mesh.tilts_view() - original_tilts, axis=1))
+            )
+            max_tilt_in = float(
+                np.max(np.linalg.norm(mesh.tilts_in_view() - original_tilts_in, axis=1))
+            )
+            max_tilt_out = float(
+                np.max(
+                    np.linalg.norm(mesh.tilts_out_view() - original_tilts_out, axis=1)
+                )
+            )
+        if (
+            max_pos > 1e-9
+            or max_tilt > 1e-9
+            or max_tilt_in > 1e-9
+            or max_tilt_out > 1e-9
+        ):
+            logger.warning(
+                "Line search failed but state restore mismatch: "
+                "max|Δx|=%.3e max|Δtilt|=%.3e max|Δtilt_in|=%.3e max|Δtilt_out|=%.3e",
+                max_pos,
+                max_tilt,
+                max_tilt_in,
+                max_tilt_out,
+            )
     mesh.increment_version()
 
     logger.debug(
@@ -269,6 +319,21 @@ def backtracking_line_search_array(
     alpha_max = alpha_max_factor * step_size
     backtracks = 0
 
+    # Snapshot scalar params (e.g. thetaB) to ensure full rollback on failure.
+    scalar_params = getattr(mesh, "global_parameters", None)
+    scalar_snapshot = (
+        scalar_params.to_dict().copy() if scalar_params is not None else None
+    )
+
+    def _restore_scalar_params() -> None:
+        if scalar_params is None or scalar_snapshot is None:
+            return
+        current = scalar_params.to_dict()
+        for key in list(current.keys()):
+            if key not in scalar_snapshot:
+                scalar_params.unset(key)
+        scalar_params.update(scalar_snapshot)
+
     for _ in range(max_iter):
         max_disp = alpha * max_dir_norm
         is_safe_small_step = max_disp < safe_step_limit
@@ -322,6 +387,7 @@ def backtracking_line_search_array(
             mesh.set_tilts_from_array(original_tilts)
             mesh.set_tilts_in_from_array(original_tilts_in)
             mesh.set_tilts_out_from_array(original_tilts_out)
+        _restore_scalar_params()
         mesh.increment_version()
 
         alpha *= beta
@@ -339,6 +405,41 @@ def backtracking_line_search_array(
         mesh.set_tilts_from_array(original_tilts)
         mesh.set_tilts_in_from_array(original_tilts_in)
         mesh.set_tilts_out_from_array(original_tilts_out)
+    _restore_scalar_params()
+    if logger.isEnabledFor(logging.WARNING):
+        max_pos = 0.0
+        for vidx, pos in original_positions.items():
+            diff = mesh.vertices[vidx].position - pos
+            max_pos = max(max_pos, float(np.linalg.norm(diff)))
+        max_tilt = 0.0
+        max_tilt_in = 0.0
+        max_tilt_out = 0.0
+        if needs_tilt_restore:
+            max_tilt = float(
+                np.max(np.linalg.norm(mesh.tilts_view() - original_tilts, axis=1))
+            )
+            max_tilt_in = float(
+                np.max(np.linalg.norm(mesh.tilts_in_view() - original_tilts_in, axis=1))
+            )
+            max_tilt_out = float(
+                np.max(
+                    np.linalg.norm(mesh.tilts_out_view() - original_tilts_out, axis=1)
+                )
+            )
+        if (
+            max_pos > 1e-9
+            or max_tilt > 1e-9
+            or max_tilt_in > 1e-9
+            or max_tilt_out > 1e-9
+        ):
+            logger.warning(
+                "Line search failed but state restore mismatch: "
+                "max|Δx|=%.3e max|Δtilt|=%.3e max|Δtilt_in|=%.3e max|Δtilt_out|=%.3e",
+                max_pos,
+                max_tilt,
+                max_tilt_in,
+                max_tilt_out,
+            )
     mesh.increment_version()
 
     logger.debug(
