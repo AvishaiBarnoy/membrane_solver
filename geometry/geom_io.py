@@ -920,6 +920,17 @@ def save_geometry(
     *,
     compact: bool = False,
 ):
+    def _to_builtin(value):
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        if isinstance(value, np.generic):
+            return value.item()
+        if isinstance(value, dict):
+            return {k: _to_builtin(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_to_builtin(v) for v in value]
+        return value
+
     def _sorted_keys(dct):
         return sorted(dct.keys())
 
@@ -1036,10 +1047,45 @@ def save_geometry(
         "global_parameters": mesh.global_parameters.to_dict(),
         "instructions": mesh.instructions,
     }
-    if getattr(mesh, "definitions", None):
-        data["definitions"] = mesh.definitions
+    definitions = (
+        mesh.definitions.copy()
+        if isinstance(getattr(mesh, "definitions", None), dict)
+        else {}
+    )
+    used_presets: set[str] = set()
+    for vertex in mesh.vertices.values():
+        preset = (vertex.options or {}).get("preset")
+        if preset:
+            used_presets.add(str(preset))
+    for edge in mesh.edges.values():
+        preset = (edge.options or {}).get("preset")
+        if preset:
+            used_presets.add(str(preset))
+    for facet in mesh.facets.values():
+        preset = (facet.options or {}).get("preset")
+        if preset:
+            used_presets.add(str(preset))
+    if used_presets:
+        for preset in used_presets:
+            definitions.setdefault(preset, {})
+        data["definitions"] = definitions
+    elif definitions:
+        data["definitions"] = definitions
+
+    filename_str = str(path)
     with open(path, "w") as f:
-        if compact:
-            json.dump(data, f, separators=(",", ":"), ensure_ascii=False)
+        if filename_str.endswith((".yaml", ".yml")):
+            yaml.safe_dump(
+                _to_builtin(data),
+                f,
+                default_flow_style=bool(compact),
+                sort_keys=False,
+                allow_unicode=True,
+            )
         else:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+            if compact:
+                json.dump(
+                    _to_builtin(data), f, separators=(",", ":"), ensure_ascii=False
+                )
+            else:
+                json.dump(_to_builtin(data), f, indent=4, ensure_ascii=False)

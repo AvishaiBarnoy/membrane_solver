@@ -53,3 +53,34 @@ def test_save_load_preserves_energy_breakdown(tmp_path):
     for key, expected_val in expected.items():
         got_val = got[key]
         assert math.isclose(got_val, expected_val, rel_tol=1e-5, abs_tol=2e-7)
+
+
+def test_save_geometry_synthesizes_preset_definitions(tmp_path):
+    base = load_data("tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml")
+    mesh = parse_geometry(base)
+    # Simulate a mesh that lost its definitions while still carrying presets.
+    mesh.definitions = {}
+
+    out_path = tmp_path / "mesh.yaml"
+    save_geometry(mesh, str(out_path), compact=True)
+
+    out = load_data(str(out_path))
+    definitions = out.get("definitions")
+    assert isinstance(definitions, dict)
+
+    used_presets = set()
+    for vid in mesh.vertices.values():
+        preset = (vid.options or {}).get("preset")
+        if preset:
+            used_presets.add(str(preset))
+    for eid in mesh.edges.values():
+        preset = (eid.options or {}).get("preset")
+        if preset:
+            used_presets.add(str(preset))
+    for fid in mesh.facets.values():
+        preset = (fid.options or {}).get("preset")
+        if preset:
+            used_presets.add(str(preset))
+
+    assert used_presets
+    assert used_presets.issubset(set(definitions.keys()))
