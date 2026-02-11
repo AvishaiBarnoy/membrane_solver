@@ -209,6 +209,7 @@ def plot_geometry(
     no_axes: bool = False,
     show: bool = True,
     tight_layout: bool = True,
+    surface_shading: bool | None = None,
 ) -> None:
     """
     Visualize a mesh in 3D using Matplotlib.
@@ -239,6 +240,9 @@ def plot_geometry(
     edge_color :
         Default color to use for edges when no per‑edge color is
         provided. Defaults to ``"k"`` (black).
+    surface_shading : bool, optional
+        When ``True``, enable Matplotlib's built-in face shading to improve
+        depth perception. Defaults to ``True`` when ``draw_edges`` is ``False``.
     facet_colors : dict[int, Any], optional
         Optional mapping ``facet_index -> color``. When provided it
         overrides both ``facet_color`` and any ``"color"`` entry in
@@ -292,6 +296,27 @@ def plot_geometry(
 
     # For line-only meshes, automatically draw edges so the plot isn't empty.
     draw_edges = bool(draw_edges or (not mesh.facets and mesh.edges))
+    use_shading = (not draw_edges) if surface_shading is None else bool(surface_shading)
+
+    def _make_poly_collection(
+        tris, *, alpha_val, edgecolor_val, linewidths_val, facecolors_val=None
+    ):
+        try:
+            return Poly3DCollection(
+                tris,
+                alpha=alpha_val,
+                edgecolor=edgecolor_val,
+                linewidths=linewidths_val,
+                facecolors=facecolors_val,
+                shade=use_shading,
+            )
+        except TypeError:
+            return Poly3DCollection(
+                tris,
+                alpha=alpha_val,
+                edgecolor=edgecolor_val,
+                linewidths=linewidths_val,
+            )
 
     if color_by is not None and color_by not in _TILT_COLOR_BY:
         raise ValueError(
@@ -449,23 +474,23 @@ def plot_geometry(
                     colors_out[:, 3] = 1.0
 
                 alpha = 0.4 if transparent else 1.0
-                top_collection = Poly3DCollection(
+                top_collection = _make_poly_collection(
                     triangles_top,
-                    alpha=alpha,
-                    edgecolor=edge_color if not draw_edges else (0.2, 0.2, 0.2),
-                    linewidths=1.0 if draw_edges else 0.0,
+                    alpha_val=alpha,
+                    edgecolor_val=edge_color if not draw_edges else (0.2, 0.2, 0.2),
+                    linewidths_val=1.0 if draw_edges else 0.0,
+                    facecolors_val=colors_out,
                 )
-                top_collection.set_facecolor(colors_out)
                 top_collection.set_label("_mesh_facets_out")
                 ax.add_collection3d(top_collection)
 
-                bottom_collection = Poly3DCollection(
+                bottom_collection = _make_poly_collection(
                     triangles_bottom,
-                    alpha=alpha,
-                    edgecolor=edge_color if not draw_edges else (0.2, 0.2, 0.2),
-                    linewidths=1.0 if draw_edges else 0.0,
+                    alpha_val=alpha,
+                    edgecolor_val=edge_color if not draw_edges else (0.2, 0.2, 0.2),
+                    linewidths_val=1.0 if draw_edges else 0.0,
+                    facecolors_val=colors_in,
                 )
-                bottom_collection.set_facecolor(colors_in)
                 bottom_collection.set_label("_mesh_facets_in")
                 ax.add_collection3d(bottom_collection)
 
@@ -603,13 +628,13 @@ def plot_geometry(
                     values_arr = np.asarray(scalar_values, dtype=float)
                     face_colors = list(_colors_from_scalars(color_by, values_arr))
                 alpha = 0.4 if transparent else 1.0
-                tri_collection = Poly3DCollection(
+                tri_collection = _make_poly_collection(
                     triangles,
-                    alpha=alpha,
-                    edgecolor=edge_color if not draw_edges else (0.2, 0.2, 0.2),
-                    linewidths=1.0 if draw_edges else 0.0,
+                    alpha_val=alpha,
+                    edgecolor_val=edge_color if not draw_edges else (0.2, 0.2, 0.2),
+                    linewidths_val=1.0 if draw_edges else 0.0,
+                    facecolors_val=face_colors,
                 )
-                tri_collection.set_facecolor(face_colors)
                 tri_collection.set_label("_mesh_facets")
                 ax.add_collection3d(tri_collection)
 
