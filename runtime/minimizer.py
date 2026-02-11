@@ -1979,9 +1979,40 @@ STEP SIZE:\t {self.step_size}
             # that fixed-geometry runs can still relax the tilt field.
             tilt_mode = self.global_params.get("tilt_solve_mode", "fixed")
             if self._uses_leaflet_tilts():
-                self._relax_leaflet_tilts(
-                    positions=self.mesh.positions_view(), mode=tilt_mode
+                # Guard against tilt-only relaxation spikes on fixed geometry.
+                guard_factor = float(
+                    self.global_params.get("tilt_relax_energy_guard_factor", 0.0) or 0.0
                 )
+                guard_min = float(
+                    self.global_params.get("tilt_relax_energy_guard_min", 0.0) or 0.0
+                )
+                if guard_factor > 0.0:
+                    pre_energy = float(self.compute_energy())
+                    pre_tin = self.mesh.tilts_in_view().copy(order="F")
+                    pre_tout = self.mesh.tilts_out_view().copy(order="F")
+                    self._relax_leaflet_tilts(
+                        positions=self.mesh.positions_view(), mode=tilt_mode
+                    )
+                    post_energy = float(self.compute_energy())
+                    threshold = max(guard_min, pre_energy * guard_factor)
+                    if post_energy > threshold:
+                        self.mesh.set_tilts_in_from_array(pre_tin)
+                        self.mesh.set_tilts_out_from_array(pre_tout)
+                        if logger.isEnabledFor(logging.WARNING):
+                            logger.warning(
+                                "Tilt relaxation energy spike: %.6g -> %.6g (threshold %.6g). "
+                                "Rolling back tilts for iteration %d.",
+                                pre_energy,
+                                post_energy,
+                                threshold,
+                                i,
+                            )
+                    else:
+                        self.mesh.project_tilts_to_tangent()
+                else:
+                    self._relax_leaflet_tilts(
+                        positions=self.mesh.positions_view(), mode=tilt_mode
+                    )
             else:
                 self._relax_tilts(positions=self.mesh.positions_view(), mode=tilt_mode)
 
