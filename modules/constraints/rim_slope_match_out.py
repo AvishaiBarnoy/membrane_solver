@@ -154,6 +154,48 @@ def _arc_length_weights(positions: np.ndarray, order: np.ndarray) -> np.ndarray:
     return 0.5 * (l_next + l_prev)
 
 
+def _arc_length_params(positions: np.ndarray) -> tuple[np.ndarray, float]:
+    n = len(positions)
+    if n == 0:
+        return np.zeros(0, dtype=float), 0.0
+    diffs = positions[(np.arange(n) + 1) % n] - positions
+    seg = np.linalg.norm(diffs, axis=1)
+    total = float(np.sum(seg))
+    if total <= 0.0:
+        return np.zeros(n, dtype=float), 0.0
+    s = np.concatenate(([0.0], np.cumsum(seg[:-1], dtype=float)))
+    s /= total
+    return s, total
+
+
+def _interp_ring_positions(
+    positions: np.ndarray, s_targets: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+    n = len(positions)
+    if n == 0 or s_targets.size == 0:
+        return None
+    s_out, total = _arc_length_params(positions)
+    if total <= 0.0 or s_out.size < 2:
+        return None
+    idx1 = np.searchsorted(s_out, s_targets, side="right") % n
+    idx0 = (idx1 - 1) % n
+    s0 = s_out[idx0]
+    s1 = s_out[idx1]
+    s1_adj = s1.copy()
+    s_targets_adj = s_targets.copy()
+    wrap = s1_adj <= s0
+    s1_adj[wrap] += 1.0
+    s_targets_adj = np.where(s_targets_adj < s0, s_targets_adj + 1.0, s_targets_adj)
+    denom = s1_adj - s0
+    t = np.zeros_like(s_targets_adj)
+    mask = denom > 1e-12
+    t[mask] = (s_targets_adj[mask] - s0[mask]) / denom[mask]
+    w1 = t
+    w0 = 1.0 - t
+    interp = positions[idx0] * w0[:, None] + positions[idx1] * w1[:, None]
+    return interp, idx0, idx1, w0, w1
+
+
 def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
     group = _resolve_group(global_params, "rim_slope_match_group")
     outer_group = _resolve_group(global_params, "rim_slope_match_outer_group")
@@ -168,8 +210,6 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
     rim_rows = _collect_group_rows(mesh, group)
     outer_rows = _collect_group_rows(mesh, outer_group)
     if rim_rows.size == 0 or outer_rows.size == 0:
-        return None
-    if rim_rows.size != outer_rows.size:
         return None
 
     center = _resolve_center(global_params)
@@ -189,6 +229,18 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
     outer_rows = outer_rows[outer_order]
     rim_pos = positions[rim_rows]
     outer_pos = positions[outer_rows]
+    outer_idx0 = np.arange(len(rim_rows), dtype=int)
+    outer_idx1 = np.arange(len(rim_rows), dtype=int)
+    outer_w0 = np.ones(len(rim_rows), dtype=float)
+    outer_w1 = np.zeros(len(rim_rows), dtype=float)
+    if rim_rows.size != outer_rows.size:
+        s_rim, total_rim = _arc_length_params(rim_pos)
+        if total_rim <= 0.0:
+            return None
+        interp = _interp_ring_positions(outer_pos, s_rim)
+        if interp is None:
+            return None
+        outer_pos, outer_idx0, outer_idx1, outer_w0, outer_w1 = interp
 
     r_vec = rim_pos - center[None, :]
     r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
@@ -253,6 +305,10 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
     return {
         "rim_rows": rim_rows,
         "outer_rows": outer_rows,
+        "outer_idx0": outer_idx0,
+        "outer_idx1": outer_idx1,
+        "outer_w0": outer_w0,
+        "outer_w1": outer_w1,
         "disk_rows": disk_rows,
         "r_hat": r_hat,
         "disk_r_hat": disk_r_hat,
@@ -282,6 +338,10 @@ def constraint_gradients_array(
 
     rim_rows = data["rim_rows"]
     outer_rows = data["outer_rows"]
+    outer_idx0 = data["outer_idx0"]
+    outer_idx1 = data["outer_idx1"]
+    outer_w0 = data["outer_w0"]
+    outer_w1 = data["outer_w1"]
     disk_rows = data["disk_rows"]
     weight_sqrt = data["weight_sqrt"]
     inv_dr = data["inv_dr"]
@@ -306,14 +366,20 @@ def constraint_gradients_array(
         # Gradient of -phi: rim (+inv_dr), outer (-inv_dr)
         # Multiplied by weight_sqrt (captured in coeff)
         g_out[rim_rows[i]] += coeff * normal
-        g_out[outer_rows[i]] += -coeff * normal
+        out0 = outer_rows[outer_idx0[i]]
+        out1 = outer_rows[outer_idx1[i]]
+        g_out[out0] += -coeff * outer_w0[i] * normal
+        if out1 != out0 or outer_w1[i] != 0.0:
+            g_out[out1] += -coeff * outer_w1[i] * normal
         constraints.append(g_out)
 
         if disk_rows is not None:
             g_in = np.zeros_like(positions)
             # Gradient of +phi: rim (-inv_dr), outer (+inv_dr)
             g_in[rim_rows[i]] += -coeff * normal
-            g_in[outer_rows[i]] += coeff * normal
+            g_in[out0] += coeff * outer_w0[i] * normal
+            if out1 != out0 or outer_w1[i] != 0.0:
+                g_in[out1] += coeff * outer_w1[i] * normal
             constraints.append(g_in)
 
     return constraints or None

@@ -186,6 +186,48 @@ def _arc_length_weights(positions: np.ndarray, order: np.ndarray) -> np.ndarray:
     return 0.5 * (l_next + l_prev)
 
 
+def _arc_length_params(positions: np.ndarray) -> tuple[np.ndarray, float]:
+    n = len(positions)
+    if n == 0:
+        return np.zeros(0, dtype=float), 0.0
+    diffs = positions[(np.arange(n) + 1) % n] - positions
+    seg = np.linalg.norm(diffs, axis=1)
+    total = float(np.sum(seg))
+    if total <= 0.0:
+        return np.zeros(n, dtype=float), 0.0
+    s = np.concatenate(([0.0], np.cumsum(seg[:-1], dtype=float)))
+    s /= total
+    return s, total
+
+
+def _interp_ring_positions(
+    positions: np.ndarray, s_targets: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+    n = len(positions)
+    if n == 0 or s_targets.size == 0:
+        return None
+    s_out, total = _arc_length_params(positions)
+    if total <= 0.0 or s_out.size < 2:
+        return None
+    idx1 = np.searchsorted(s_out, s_targets, side="right") % n
+    idx0 = (idx1 - 1) % n
+    s0 = s_out[idx0]
+    s1 = s_out[idx1]
+    s1_adj = s1.copy()
+    s_targets_adj = s_targets.copy()
+    wrap = s1_adj <= s0
+    s1_adj[wrap] += 1.0
+    s_targets_adj = np.where(s_targets_adj < s0, s_targets_adj + 1.0, s_targets_adj)
+    denom = s1_adj - s0
+    t = np.zeros_like(s_targets_adj)
+    mask = denom > 1e-12
+    t[mask] = (s_targets_adj[mask] - s0[mask]) / denom[mask]
+    w1 = t
+    w0 = 1.0 - t
+    interp = positions[idx0] * w0[:, None] + positions[idx1] * w1[:, None]
+    return interp, idx0, idx1, w0, w1
+
+
 def compute_energy_and_gradient(
     mesh: Mesh, global_params, param_resolver, *, compute_gradient: bool = True
 ) -> (
@@ -265,8 +307,6 @@ def compute_energy_and_gradient_array(
     outer_rows = _collect_group_rows(mesh, outer_group)
     if rim_rows.size == 0 or outer_rows.size == 0:
         return 0.0
-    if rim_rows.size != outer_rows.size:
-        return 0.0
 
     if tilts_out is None:
         tilts_out = mesh.tilts_out_view()
@@ -299,6 +339,18 @@ def compute_energy_and_gradient_array(
     outer_rows = outer_rows[outer_order]
     rim_pos = positions[rim_rows]
     outer_pos = positions[outer_rows]
+    outer_idx0 = np.arange(len(rim_rows), dtype=int)
+    outer_idx1 = np.arange(len(rim_rows), dtype=int)
+    outer_w0 = np.ones(len(rim_rows), dtype=float)
+    outer_w1 = np.zeros(len(rim_rows), dtype=float)
+    if rim_rows.size != outer_rows.size:
+        s_rim, total_rim = _arc_length_params(rim_pos)
+        if total_rim <= 0.0:
+            return 0.0
+        interp = _interp_ring_positions(outer_pos, s_rim)
+        if interp is None:
+            return 0.0
+        outer_pos, outer_idx0, outer_idx1, outer_w0, outer_w1 = interp
 
     # Radial direction (in-plane).
     r_vec = rim_pos - center[None, :]
@@ -435,7 +487,11 @@ def compute_energy_and_gradient_array(
         grad_rim += (grad_coeff * inv_dr)[:, None] * normal[None, :]
         grad_out += (-grad_coeff * inv_dr)[:, None] * normal[None, :]
         np.add.at(grad_arr, rim_rows, grad_rim)
-        np.add.at(grad_arr, outer_rows, grad_out)
+        out0 = outer_rows[outer_idx0]
+        out1 = outer_rows[outer_idx1]
+        np.add.at(grad_arr, out0, grad_out * outer_w0[:, None])
+        if np.any(outer_w1 != 0.0) or np.any(out1 != out0):
+            np.add.at(grad_arr, out1, grad_out * outer_w1[:, None])
 
     return energy
 
