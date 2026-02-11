@@ -353,7 +353,7 @@ def plot_geometry(
             normals = np.zeros_like(normals)
             normals[mask] = normals[mask] / norms[mask][:, None]
             intensity = np.clip(normals @ light_dir, 0.0, 1.0)
-            shade = 0.3 + 0.7 * intensity
+            shade = 0.7 + 0.3 * intensity
             shaded = np.array(base, copy=True)
             shaded[:, :3] *= shade[:, None]
             col.set_facecolor(shaded)
