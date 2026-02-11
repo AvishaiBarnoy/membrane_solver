@@ -22,6 +22,7 @@ from commands.minimization import (
     HessianCommand,
     LiveVisCommand,
     SetStepperCommand,
+    ShowEdgesCommand,
 )
 
 COMMAND_REGISTRY = {
@@ -32,6 +33,7 @@ COMMAND_REGISTRY = {
     "hessian": HessianCommand(),
     "lv": LiveVisCommand(),
     "live_vis": LiveVisCommand(),
+    "show_edges": ShowEdgesCommand(),
     "r": RefineCommand(),
     "v": VertexAverageCommand(),
     "vertex_average": VertexAverageCommand(),

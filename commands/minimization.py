@@ -38,6 +38,7 @@ class GoCommand(Command):
                     show_tilt_arrows=getattr(
                         context.minimizer, "live_vis_show_tilt_arrows", False
                     ),
+                    show_edges=getattr(context.minimizer, "live_vis_show_edges", True),
                 )
                 context.minimizer.live_vis_state = state
 
@@ -135,6 +136,7 @@ class HessianCommand(Command):
                     show_tilt_arrows=getattr(
                         context.minimizer, "live_vis_show_tilt_arrows", False
                     ),
+                    show_edges=getattr(context.minimizer, "live_vis_show_edges", True),
                 )
                 context.minimizer.live_vis_state = state
         logger.info(
@@ -171,6 +173,8 @@ class LiveVisCommand(Command):
 
             if not hasattr(context.minimizer, "live_vis_show_tilt_arrows"):
                 context.minimizer.live_vis_show_tilt_arrows = False
+            if not hasattr(context.minimizer, "live_vis_show_edges"):
+                context.minimizer.live_vis_show_edges = True
             if any(tok in {"noarrows", "noarrow"} for tok in tokens):
                 context.minimizer.live_vis_show_tilt_arrows = False
             elif any(tok in {"arrows", "arrow", "quiver"} for tok in tokens):
@@ -252,8 +256,57 @@ class LiveVisCommand(Command):
                 show_tilt_arrows=getattr(
                     context.minimizer, "live_vis_show_tilt_arrows", False
                 ),
+                show_edges=getattr(context.minimizer, "live_vis_show_edges", True),
             )
             context.minimizer.live_vis_state = state
         logger.info(
             f"Live visualization {'enabled' if context.minimizer.live_vis else 'disabled'}"
+        )
+
+
+class ShowEdgesCommand(Command):
+    """Toggle edge rendering for live visualization."""
+
+    def execute(self, context, args):
+        minimizer = getattr(context, "minimizer", None)
+        if minimizer is None:
+            print("No minimizer available for live visualization.")
+            return
+
+        if not hasattr(minimizer, "live_vis_show_edges"):
+            minimizer.live_vis_show_edges = True
+
+        action = None
+        if args:
+            action = str(args[0]).strip().lower()
+
+        if action in {None, "", "toggle"}:
+            minimizer.live_vis_show_edges = not bool(minimizer.live_vis_show_edges)
+        elif action in {"on", "true", "yes", "1"}:
+            minimizer.live_vis_show_edges = True
+        elif action in {"off", "false", "no", "0"}:
+            minimizer.live_vis_show_edges = False
+        else:
+            print("Usage: show_edges [on|off|toggle]")
+            return
+
+        if not getattr(minimizer, "live_vis", False):
+            print("Live visualization is not active; run 'lv' to enable.")
+            return
+
+        if hasattr(context, "mesh"):
+            from visualization.plotting import update_live_vis
+
+            minimizer.live_vis_state = None
+            minimizer.live_vis_state = update_live_vis(
+                context.mesh,
+                state=None,
+                title="Live visualization",
+                color_by=getattr(minimizer, "live_vis_color_by", None),
+                show_tilt_arrows=getattr(minimizer, "live_vis_show_tilt_arrows", False),
+                show_edges=getattr(minimizer, "live_vis_show_edges", True),
+            )
+        logger.info(
+            "Live visualization edges %s.",
+            "enabled" if minimizer.live_vis_show_edges else "disabled",
         )

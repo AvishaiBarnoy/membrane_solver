@@ -38,6 +38,7 @@ class HelpCommand(Command):
         print(
             "  live_vis / lv [tilt|div|plain] [arrows|noarrows] Turn on/off live visualization during minimization"
         )
+        print("  show_edges [on|off|toggle]  Toggle edge rendering for live vis")
         print("  save          Save geometry to 'interactive.temp'")
         print("  energy        Shortcut for 'print energy breakdown'")
         print("  history       Show commands entered in this session")
