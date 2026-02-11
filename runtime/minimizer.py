@@ -91,6 +91,7 @@ class Minimizer:
         self._soa_positions: np.ndarray | None = None
         self._soa_index_map: Dict[int, int] | None = None
         self._soa_grad_dummy: np.ndarray | None = None
+        self._last_mesh_op_tilt_constraints_enforced: bool | None = None
 
     def _validate_energy_modules_array(self) -> None:
         """Ensure energy modules support the array API required by minimization."""
@@ -124,6 +125,36 @@ class Minimizer:
             self._soa_grad_dummy = np.zeros_like(positions)
 
         return positions, self._soa_index_map or {}, self._soa_grad_dummy
+
+    def _log_debug_energy_context(self, iteration: int) -> None:
+        if not logger.isEnabledFor(logging.DEBUG):
+            return
+        breakdown = self.compute_energy_breakdown()
+        thetaB_contact = float(breakdown.get("tilt_thetaB_contact_in", 0.0))
+        thetaB_val = float(self.global_params.get("tilt_thetaB_value") or 0.0)
+        line_search_reduced = bool(
+            self.global_params.get("line_search_reduced_energy", False)
+        )
+        line_search_steps = int(
+            self.global_params.get("line_search_reduced_tilt_inner_steps", 0) or 0
+        )
+        guard_factor = float(
+            self.global_params.get("tilt_relax_energy_guard_factor", 0.0) or 0.0
+        )
+        tilt_enforced = self._last_mesh_op_tilt_constraints_enforced
+        logger.debug(
+            "Debug energy context i=%d: tilt_thetaB_contact_in=%.6g "
+            "tilt_thetaB_value=%.6g line_search_reduced=%s "
+            "line_search_steps=%d tilt_relax_guard=%.6g "
+            "tilt_constraints_enforced=%s",
+            iteration,
+            thetaB_contact,
+            thetaB_val,
+            line_search_reduced,
+            line_search_steps,
+            guard_factor,
+            tilt_enforced,
+        )
 
     def _tilt_fixed_mask(self) -> np.ndarray:
         """Return a boolean mask for vertices whose tilt is clamped.
@@ -1959,6 +1990,9 @@ STEP SIZE:\t {self.step_size}
             self.constraint_manager.enforce_tilt_constraints(
                 target_mesh, global_params=self.global_params
             )
+            self._last_mesh_op_tilt_constraints_enforced = True
+        else:
+            self._last_mesh_op_tilt_constraints_enforced = False
         # Constraint modules mutate vertex positions/tilts in-place; bump the
         # mesh version so cached SoA views (positions/tilts/curvature) are not
         # stale after mesh operations like refinement/averaging.
@@ -1999,6 +2033,7 @@ STEP SIZE:\t {self.step_size}
                 callback(self.mesh, i)
 
             self._update_scalar_params()
+            self._log_debug_energy_context(i)
 
             # Tilt solve modes are evaluated before the shape convergence check so
             # that fixed-geometry runs can still relax the tilt field.
