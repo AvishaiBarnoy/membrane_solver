@@ -15,6 +15,7 @@ from modules.energy.leaflet_presence import (
 )
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.diagnostics.gauss_bonnet import GaussBonnetMonitor
+from runtime.energy_context import EnergyContext
 from runtime.energy_manager import EnergyModuleManager
 from runtime.interface_validation import validate_disk_interface_topology
 from runtime.leaflet_validation import validate_leaflet_absence_topology
@@ -93,6 +94,7 @@ class Minimizer:
         self._soa_index_map: Dict[int, int] | None = None
         self._soa_grad_dummy: np.ndarray | None = None
         self._last_mesh_op_tilt_constraints_enforced: bool | None = None
+        self._energy_context: EnergyContext | None = None
 
     def _validate_energy_modules_array(self) -> None:
         """Ensure energy modules support the array API required by minimization."""
@@ -103,6 +105,13 @@ class Minimizer:
                     f"Energy module {name} lacks compute_energy_and_gradient_array; "
                     "dict fallbacks are not supported in the minimization loop."
                 )
+
+    def energy_context(self) -> EnergyContext:
+        """Return a reusable evaluation context bound to current mesh versions."""
+        if self._energy_context is None:
+            self._energy_context = EnergyContext()
+        self._energy_context.ensure_for_mesh(self.mesh)
+        return self._energy_context
 
     def _soa_views(self) -> tuple[np.ndarray, Dict[int, int], np.ndarray]:
         """Return cached SoA views for positions, index map, and a scratch buffer."""
