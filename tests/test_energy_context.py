@@ -1,6 +1,8 @@
 import os
 import sys
 
+import numpy as np
+
 sys.path.insert(0, os.getcwd())
 
 from geometry.geom_io import load_data, parse_geometry
@@ -17,30 +19,38 @@ def _build_mesh():
     )
 
 
-def test_geometry_cache_invalidates_on_mesh_version_change() -> None:
+def test_triangle_rows_cache_survives_mesh_version_change() -> None:
     mesh = _build_mesh()
     ctx = EnergyContext()
     ctx.ensure_for_mesh(mesh)
-    ctx.geometry.set("probe", 123)
-    assert ctx.geometry.get("probe") == 123
+    rows1, facets1 = ctx.geometry.triangle_rows(mesh)
 
     mesh.increment_version()
     ctx.ensure_for_mesh(mesh)
-    assert ctx.geometry.get("probe") is None
-    assert ctx.geometry.is_valid_for(mesh)
+    rows2, facets2 = ctx.geometry.triangle_rows(mesh)
+
+    if rows1 is None:
+        assert rows2 is None
+    else:
+        assert rows2 is rows1
+        assert np.array_equal(rows2, rows1)
+    assert facets2 == facets1
 
 
-def test_geometry_cache_invalidates_on_topology_change() -> None:
+def test_triangle_rows_cache_refreshes_on_facet_loop_change() -> None:
     mesh = _build_mesh()
     ctx = EnergyContext()
     ctx.ensure_for_mesh(mesh)
-    ctx.geometry.set("probe", 123)
-    assert ctx.geometry.get("probe") == 123
+    rows1, facets1 = ctx.geometry.triangle_rows(mesh)
 
-    mesh.increment_topology_version()
+    mesh.build_facet_vertex_loops()
     ctx.ensure_for_mesh(mesh)
-    assert ctx.geometry.get("probe") is None
-    assert ctx.geometry.is_valid_for(mesh)
+    rows2, facets2 = ctx.geometry.triangle_rows(mesh)
+
+    assert facets2 == facets1
+    if rows1 is not None and rows2 is not None:
+        assert rows2 is not rows1
+        assert np.array_equal(rows2, rows1)
 
 
 def test_minimizer_energy_context_reuses_and_rebinds() -> None:
@@ -55,15 +65,20 @@ def test_minimizer_energy_context_reuses_and_rebinds() -> None:
     )
 
     ctx1 = minim.energy_context()
-    ctx1.geometry.set("probe", 123)
+    p1, idx1 = ctx1.geometry.soa_views(mesh)
     ctx2 = minim.energy_context()
     assert ctx2 is ctx1
-    assert ctx2.geometry.get("probe") == 123
+    p2, idx2 = ctx2.geometry.soa_views(mesh)
+    assert p2 is p1
+    assert idx2 == idx1
 
     mesh.increment_version()
+    mesh.vertices[int(mesh.vertex_ids[0])].position += np.array([0.1, 0.0, 0.0])
     ctx3 = minim.energy_context()
     assert ctx3 is ctx1
-    assert ctx3.geometry.get("probe") is None
+    p3, idx3 = ctx3.geometry.soa_views(mesh)
+    assert p3.shape == p2.shape
+    assert idx3 == idx2
 
 
 def test_geometry_cache_triangle_rows_match_mesh_cache() -> None:
