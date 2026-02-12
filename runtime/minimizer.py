@@ -1124,7 +1124,9 @@ class Minimizer:
         if k_tilt != 0.0:
             tri_rows, _ = self._triangle_rows()
             if tri_rows is not None and len(tri_rows) > 0:
-                areas = self.mesh.triangle_areas(positions)
+                areas = self.energy_context().geometry.triangle_areas(
+                    self.mesh, positions
+                )
                 if areas is not None and len(areas) == len(tri_rows):
                     vertex_areas = np.zeros(n_vertices, dtype=float)
                     area_thirds = areas / 3.0
@@ -1173,7 +1175,9 @@ class Minimizer:
         if k_in != 0.0 or k_out != 0.0:
             tri_rows, _ = self._triangle_rows()
             if tri_rows is not None and len(tri_rows) > 0:
-                areas = self.mesh.triangle_areas(positions)
+                areas = self.energy_context().geometry.triangle_areas(
+                    self.mesh, positions
+                )
                 if areas is not None and len(areas) == len(tri_rows):
                     vertex_areas = np.zeros(n_vertices, dtype=float)
                     area_thirds = areas / 3.0
