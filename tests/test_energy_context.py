@@ -147,3 +147,57 @@ def test_triangle_areas_normals_refresh_after_position_update() -> None:
 
     assert areas2 is not areas1
     assert normals2 is not normals1
+
+
+def test_p1_triangle_shape_gradients_match_mesh_cache() -> None:
+    mesh = _build_mesh()
+    positions = mesh.positions_view()
+    mesh_area, mesh_g0, mesh_g1, mesh_g2, mesh_tri = (
+        mesh.p1_triangle_shape_gradient_cache(positions)
+    )
+
+    ctx = EnergyContext()
+    ctx.ensure_for_mesh(mesh)
+    ctx_area, ctx_g0, ctx_g1, ctx_g2, ctx_tri = (
+        ctx.geometry.p1_triangle_shape_gradients(mesh, positions)
+    )
+
+    assert np.array_equal(ctx_tri, mesh_tri)
+    assert np.allclose(ctx_area, mesh_area)
+    assert np.allclose(ctx_g0, mesh_g0)
+    assert np.allclose(ctx_g1, mesh_g1)
+    assert np.allclose(ctx_g2, mesh_g2)
+
+
+def test_p1_triangle_shape_gradients_refresh_after_position_update() -> None:
+    mesh = _build_mesh()
+    ctx = EnergyContext()
+    ctx.ensure_for_mesh(mesh)
+    area1, g01, g11, g21, tri1 = ctx.geometry.p1_triangle_shape_gradients(mesh)
+
+    vid = int(mesh.vertex_ids[0])
+    mesh.vertices[vid].position += np.array([0.02, -0.03, 0.0])
+    mesh.increment_version()
+    area2, g02, g12, g22, tri2 = ctx.geometry.p1_triangle_shape_gradients(mesh)
+
+    assert np.array_equal(tri2, tri1)
+    assert area2 is not area1
+    assert g02 is not g01
+    assert g12 is not g11
+    assert g22 is not g21
+
+
+def test_minimizer_binds_active_energy_context_on_mesh() -> None:
+    mesh = _build_mesh()
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager(mesh.energy_modules),
+        ConstraintModuleManager(mesh.constraint_modules),
+        quiet=True,
+    )
+    assert not hasattr(mesh, "_active_energy_context")
+    ctx = minim.energy_context()
+    assert hasattr(mesh, "_active_energy_context")
+    assert getattr(mesh, "_active_energy_context") is ctx
