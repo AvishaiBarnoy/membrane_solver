@@ -175,9 +175,15 @@ def compute_energy_and_gradient_array(
         if tilts.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts must have shape (N_vertices, 3)")
 
-    area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
-        mesh.p1_triangle_shape_gradient_cache(positions)
-    )
+    ctx = getattr(mesh, "_active_energy_context", None)
+    if ctx is not None:
+        area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
+            ctx.geometry.p1_triangle_shape_gradients(mesh, positions)
+        )
+    else:
+        area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
+            mesh.p1_triangle_shape_gradient_cache(positions)
+        )
     if tri_rows_cache.size and tri_rows_cache.shape[0] == tri_rows.shape[0]:
         div_tri = p1_triangle_divergence_from_shape_gradients(
             tilts=tilts, tri_rows=tri_rows, g0=g0_cache, g1=g1_cache, g2=g2_cache

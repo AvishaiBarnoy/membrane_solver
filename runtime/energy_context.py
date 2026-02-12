@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from geometry.entities import Mesh
+from geometry.entities import Mesh, _fast_cross
 
 
 @dataclass
@@ -25,6 +25,9 @@ class GeometryCache:
     _bary_mesh_version: int = -1
     _bary_loops_version: int = -1
     _bary_vertex_ids_version: int = -1
+    _p1_mesh_version: int = -1
+    _p1_loops_version: int = -1
+    _p1_vertex_ids_version: int = -1
     _store: dict[str, Any] = field(default_factory=dict)
 
     def is_valid_for(self, mesh: Mesh) -> bool:
@@ -213,6 +216,64 @@ class GeometryCache:
         self._bary_loops_version = int(mesh._facet_loops_version)
         self._bary_vertex_ids_version = int(mesh._vertex_ids_version)
         return vertex_areas
+
+    def p1_triangle_shape_gradients(
+        self, mesh: Mesh, positions: np.ndarray | None = None
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Return context-cached P1 triangle shape gradients."""
+        self.bind(mesh)
+        tri_rows, _ = self.triangle_rows(mesh)
+        if tri_rows is None or tri_rows.size == 0:
+            zeros1 = np.zeros(0, dtype=float)
+            zeros3 = np.zeros((0, 3), dtype=float)
+            tri_empty = np.zeros((0, 3), dtype=np.int32)
+            return zeros1, zeros3, zeros3, zeros3, tri_empty
+
+        if positions is None:
+            positions, _ = self.soa_views(mesh)
+
+        if (
+            self._p1_mesh_version == int(mesh._version)
+            and self._p1_loops_version == int(mesh._facet_loops_version)
+            and self._p1_vertex_ids_version == int(mesh._vertex_ids_version)
+            and self.get("p1_area") is not None
+            and self.get("p1_g0") is not None
+            and self.get("p1_g1") is not None
+            and self.get("p1_g2") is not None
+        ):
+            return (
+                self.get("p1_area"),
+                self.get("p1_g0"),
+                self.get("p1_g1"),
+                self.get("p1_g2"),
+                tri_rows,
+            )
+
+        v0 = positions[tri_rows[:, 0]]
+        v1 = positions[tri_rows[:, 1]]
+        v2 = positions[tri_rows[:, 2]]
+
+        n = _fast_cross(v1 - v0, v2 - v0)
+        n2 = np.einsum("ij,ij->i", n, n)
+        denom = np.maximum(n2, 1e-20)
+
+        e0 = v2 - v1
+        e1 = v0 - v2
+        e2 = v1 - v0
+
+        g0 = _fast_cross(n, e0) / denom[:, None]
+        g1 = _fast_cross(n, e1) / denom[:, None]
+        g2 = _fast_cross(n, e2) / denom[:, None]
+        area = 0.5 * np.sqrt(np.maximum(n2, 0.0))
+
+        self.set("p1_area", area)
+        self.set("p1_g0", g0)
+        self.set("p1_g1", g1)
+        self.set("p1_g2", g2)
+        self._p1_mesh_version = int(mesh._version)
+        self._p1_loops_version = int(mesh._facet_loops_version)
+        self._p1_vertex_ids_version = int(mesh._vertex_ids_version)
+        return area, g0, g1, g2, tri_rows
 
 
 @dataclass

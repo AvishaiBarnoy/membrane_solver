@@ -111,6 +111,9 @@ class Minimizer:
         if self._energy_context is None:
             self._energy_context = EnergyContext()
         self._energy_context.ensure_for_mesh(self.mesh)
+        # Internal bridge while modules are incrementally migrated to
+        # context-aware cache access.
+        setattr(self.mesh, "_active_energy_context", self._energy_context)
         return self._energy_context
 
     def _soa_views(self) -> tuple[np.ndarray, Dict[int, int], np.ndarray]:

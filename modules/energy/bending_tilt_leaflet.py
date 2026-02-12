@@ -388,9 +388,15 @@ def compute_energy_and_gradient_array_leaflet(
         raise ValueError("tilts must have shape (N_vertices, 3)")
 
     # Use cached triangle P1 basis gradients when geometry is frozen/cached.
-    area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
-        mesh.p1_triangle_shape_gradient_cache(positions)
-    )
+    ctx = getattr(mesh, "_active_energy_context", None)
+    if ctx is not None:
+        area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
+            ctx.geometry.p1_triangle_shape_gradients(mesh, positions)
+        )
+    else:
+        area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
+            mesh.p1_triangle_shape_gradient_cache(positions)
+        )
     if tri_rows_cache.size and tri_rows_cache.shape[0] == tri_rows_full.shape[0]:
         g0_use = g0_cache
         g1_use = g1_cache
