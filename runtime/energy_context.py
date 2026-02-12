@@ -19,6 +19,12 @@ class GeometryCache:
     _soa_vertex_ids_version: int = -1
     _triangle_rows_loops_version: int = -1
     _triangle_rows_vertex_ids_version: int = -1
+    _triangle_geom_mesh_version: int = -1
+    _triangle_geom_loops_version: int = -1
+    _triangle_geom_vertex_ids_version: int = -1
+    _bary_mesh_version: int = -1
+    _bary_loops_version: int = -1
+    _bary_vertex_ids_version: int = -1
     _store: dict[str, Any] = field(default_factory=dict)
 
     def is_valid_for(self, mesh: Mesh) -> bool:
@@ -131,6 +137,82 @@ class GeometryCache:
         self._triangle_rows_loops_version = int(mesh._facet_loops_version)
         self._triangle_rows_vertex_ids_version = int(mesh._vertex_ids_version)
         return tri_rows, tri_facets
+
+    def triangle_areas_normals(
+        self, mesh: Mesh, positions: np.ndarray | None = None
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Return context-cached triangle areas and unnormalized normals."""
+        self.bind(mesh)
+        tri_rows, _ = self.triangle_rows(mesh)
+        if tri_rows is None or tri_rows.size == 0:
+            return np.array([], dtype=float), np.zeros((0, 3), dtype=float)
+
+        if positions is None:
+            positions, _ = self.soa_views(mesh)
+
+        if (
+            self._triangle_geom_mesh_version == int(mesh._version)
+            and self._triangle_geom_loops_version == int(mesh._facet_loops_version)
+            and self._triangle_geom_vertex_ids_version == int(mesh._vertex_ids_version)
+            and self.get("triangle_areas") is not None
+            and self.get("triangle_normals") is not None
+        ):
+            return self.get("triangle_areas"), self.get("triangle_normals")
+
+        v0 = positions[tri_rows[:, 0]]
+        v1 = positions[tri_rows[:, 1]]
+        v2 = positions[tri_rows[:, 2]]
+        normals = np.cross(v1 - v0, v2 - v0)
+        areas = 0.5 * np.linalg.norm(normals, axis=1)
+
+        self.set("triangle_areas", areas)
+        self.set("triangle_normals", normals)
+        self._triangle_geom_mesh_version = int(mesh._version)
+        self._triangle_geom_loops_version = int(mesh._facet_loops_version)
+        self._triangle_geom_vertex_ids_version = int(mesh._vertex_ids_version)
+        return areas, normals
+
+    def triangle_areas(
+        self, mesh: Mesh, positions: np.ndarray | None = None
+    ) -> np.ndarray:
+        """Return context-cached triangle areas."""
+        areas, _ = self.triangle_areas_normals(mesh, positions)
+        return areas
+
+    def barycentric_vertex_areas(
+        self, mesh: Mesh, positions: np.ndarray | None = None
+    ) -> np.ndarray:
+        """Return context-cached barycentric per-vertex areas."""
+        self.bind(mesh)
+        n_verts = len(mesh.vertex_ids)
+        if n_verts == 0:
+            return np.array([], dtype=float)
+
+        tri_rows, _ = self.triangle_rows(mesh)
+        if tri_rows is None or tri_rows.size == 0:
+            return np.zeros(n_verts, dtype=float)
+
+        if (
+            self._bary_mesh_version == int(mesh._version)
+            and self._bary_loops_version == int(mesh._facet_loops_version)
+            and self._bary_vertex_ids_version == int(mesh._vertex_ids_version)
+            and self.get("barycentric_vertex_areas") is not None
+        ):
+            return self.get("barycentric_vertex_areas")
+
+        areas = self.triangle_areas(mesh, positions)
+        vertex_areas = np.zeros(n_verts, dtype=float)
+        if areas.size:
+            area_thirds = areas / 3.0
+            np.add.at(vertex_areas, tri_rows[:, 0], area_thirds)
+            np.add.at(vertex_areas, tri_rows[:, 1], area_thirds)
+            np.add.at(vertex_areas, tri_rows[:, 2], area_thirds)
+
+        self.set("barycentric_vertex_areas", vertex_areas)
+        self._bary_mesh_version = int(mesh._version)
+        self._bary_loops_version = int(mesh._facet_loops_version)
+        self._bary_vertex_ids_version = int(mesh._vertex_ids_version)
+        return vertex_areas
 
 
 @dataclass

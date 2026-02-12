@@ -108,3 +108,42 @@ def test_energy_context_scratch_array_reused_and_zeroed() -> None:
     arr2 = ctx.scratch_array("grad", shape=(4, 3))
     assert arr2 is arr1
     assert float(arr2.sum()) == 0.0
+
+
+def test_triangle_areas_normals_match_mesh_cache() -> None:
+    mesh = _build_mesh()
+    mesh_areas = mesh.triangle_areas()
+    mesh_normals = mesh.triangle_normals()
+
+    ctx = EnergyContext()
+    ctx.ensure_for_mesh(mesh)
+    ctx_areas, ctx_normals = ctx.geometry.triangle_areas_normals(mesh)
+
+    assert np.allclose(ctx_areas, mesh_areas)
+    assert np.allclose(ctx_normals, mesh_normals)
+
+
+def test_barycentric_vertex_areas_match_mesh_cache() -> None:
+    mesh = _build_mesh()
+    mesh_bary = mesh.barycentric_vertex_areas()
+
+    ctx = EnergyContext()
+    ctx.ensure_for_mesh(mesh)
+    ctx_bary = ctx.geometry.barycentric_vertex_areas(mesh)
+
+    assert np.allclose(ctx_bary, mesh_bary)
+
+
+def test_triangle_areas_normals_refresh_after_position_update() -> None:
+    mesh = _build_mesh()
+    ctx = EnergyContext()
+    ctx.ensure_for_mesh(mesh)
+    areas1, normals1 = ctx.geometry.triangle_areas_normals(mesh)
+
+    vid = int(mesh.vertex_ids[0])
+    mesh.vertices[vid].position += np.array([0.05, 0.01, 0.0])
+    mesh.increment_version()
+    areas2, normals2 = ctx.geometry.triangle_areas_normals(mesh)
+
+    assert areas2 is not areas1
+    assert normals2 is not normals1
