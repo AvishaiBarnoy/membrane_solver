@@ -64,3 +64,32 @@ def test_minimizer_energy_context_reuses_and_rebinds() -> None:
     ctx3 = minim.energy_context()
     assert ctx3 is ctx1
     assert ctx3.geometry.get("probe") is None
+
+
+def test_geometry_cache_triangle_rows_match_mesh_cache() -> None:
+    mesh = _build_mesh()
+    mesh_rows, mesh_facets = mesh.triangle_row_cache()
+
+    ctx = EnergyContext()
+    ctx.ensure_for_mesh(mesh)
+    ctx_rows, ctx_facets = ctx.geometry.triangle_rows(mesh)
+
+    if mesh_rows is None:
+        assert ctx_rows is None
+    else:
+        assert ctx_rows is not None
+        assert ctx_rows.shape == mesh_rows.shape
+        assert (ctx_rows == mesh_rows).all()
+    assert ctx_facets == mesh_facets
+
+
+def test_energy_context_scratch_array_reused_and_zeroed() -> None:
+    mesh = _build_mesh()
+    ctx = EnergyContext()
+    ctx.ensure_for_mesh(mesh)
+
+    arr1 = ctx.scratch_array("grad", shape=(4, 3))
+    arr1[0, 0] = 12.0
+    arr2 = ctx.scratch_array("grad", shape=(4, 3))
+    assert arr2 is arr1
+    assert float(arr2.sum()) == 0.0
