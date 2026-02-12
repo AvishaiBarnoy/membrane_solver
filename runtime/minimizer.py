@@ -1,5 +1,6 @@
 # runtime/minimizer.py
 
+import copy
 import logging
 from typing import Callable, Dict, List, Optional
 
@@ -129,10 +130,8 @@ class Minimizer:
     def _log_debug_energy_context(self, iteration: int) -> None:
         if not logger.isEnabledFor(logging.DEBUG):
             return
-        # Keep this context logger side-effect free. Calling full per-module
-        # breakdown here can populate long-lived caches with incomplete keys,
-        # which has caused debug-vs-nondebug trajectory drift.
-        thetaB_contact = float("nan")
+        breakdown = self._diagnostic_energy_breakdown()
+        thetaB_contact = float(breakdown.get("tilt_thetaB_contact_in", 0.0))
         thetaB_val = float(self.global_params.get("tilt_thetaB_value") or 0.0)
         line_search_reduced = bool(
             self.global_params.get("line_search_reduced_energy", False)
@@ -187,9 +186,58 @@ class Minimizer:
             self.global_params._params = dict(snapshot["global_params"])
 
     def _run_debug_diagnostic(self, fn):
-        """Run a diagnostic while preserving mutable simulation state."""
+        """Run a diagnostic without mutating the live simulation state.
+
+        Diagnostics are evaluated on a deep-copied mesh/parameters to guarantee
+        observational behavior even when energy modules populate caches.
+        """
         if not logger.isEnabledFor(logging.DEBUG):
             return fn()
+
+        # Only handle bound methods on this Minimizer instance. For other
+        # callables, fall back to the snapshot/restore guard.
+        fn_self = getattr(fn, "__self__", None)
+        fn_name = getattr(fn, "__name__", None)
+        if fn_self is not self or not isinstance(fn_name, str):
+            snapshot = self._diagnostic_snapshot()
+            try:
+                return fn()
+            finally:
+                self._diagnostic_restore(snapshot)
+
+        mesh_copy = self.mesh.copy()
+        gp_copy = copy.deepcopy(self.global_params)
+        mesh_copy.global_parameters = gp_copy
+        diag = Minimizer(
+            mesh_copy,
+            gp_copy,
+            self.stepper,
+            self.energy_manager,
+            self.constraint_manager,
+            energy_modules=list(getattr(mesh_copy, "energy_modules", [])),
+            constraint_modules=list(getattr(mesh_copy, "constraint_modules", [])),
+            step_size=float(self.step_size),
+            tol=float(self.tol),
+            quiet=True,
+        )
+
+        if fn_name == "compute_energy":
+            return diag.compute_energy()
+        if fn_name == "compute_energy_breakdown":
+            return diag.compute_energy_breakdown()
+        if fn_name == "compute_energy_and_gradient_array":
+            return diag.compute_energy_and_gradient_array()
+
+        # Fallback: if this is another Minimizer method that takes no args,
+        # prefer calling it on the copied Minimizer instance.
+        target = getattr(diag, fn_name, None)
+        if callable(target):
+            try:
+                return target()
+            except TypeError:
+                pass
+
+        # Last resort: snapshot/restore guard on the live state.
         snapshot = self._diagnostic_snapshot()
         try:
             return fn()

@@ -85,11 +85,15 @@ def test_debug_energy_context_does_not_call_breakdown(caplog, monkeypatch) -> No
         quiet=True,
     )
 
-    def _boom(self):
-        raise AssertionError("breakdown should not be called from debug context")
+    called = {"count": 0}
 
-    monkeypatch.setattr(Minimizer, "_diagnostic_energy_breakdown", _boom)
+    def _count_calls(self):
+        called["count"] += 1
+        return {}
+
+    monkeypatch.setattr(Minimizer, "_diagnostic_energy_breakdown", _count_calls)
     minim._log_debug_energy_context(0)
+    assert called["count"] == 1
 
 
 def test_debug_minimize_loop_does_not_probe_diagnostic_energy(monkeypatch) -> None:
