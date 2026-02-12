@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 
+from core.ordered_unique_list import OrderedUniqueList
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 
 logger = logging.getLogger("membrane_solver")
@@ -266,8 +267,10 @@ def refine_polygonal_facets(mesh):
     new_mesh.facets = new_facets
     new_mesh.bodies = new_bodies
     new_mesh.global_parameters = mesh.global_parameters
-    new_mesh.energy_modules = mesh.energy_modules
-    new_mesh.constraint_modules = mesh.constraint_modules
+    new_mesh.energy_modules = OrderedUniqueList(getattr(mesh, "energy_modules", []))
+    new_mesh.constraint_modules = OrderedUniqueList(
+        getattr(mesh, "constraint_modules", [])
+    )
     new_mesh.instructions = mesh.instructions
     new_mesh.macros = getattr(mesh, "macros", {}).copy()
     new_mesh.build_connectivity_maps()
@@ -1044,8 +1047,10 @@ def refine_triangle_mesh(mesh):
     new_mesh.facets = new_facets
     new_mesh.bodies = new_bodies
     new_mesh.global_parameters = mesh.global_parameters
-    new_mesh.energy_modules = mesh.energy_modules
-    new_mesh.constraint_modules = mesh.constraint_modules
+    new_mesh.energy_modules = OrderedUniqueList(getattr(mesh, "energy_modules", []))
+    new_mesh.constraint_modules = OrderedUniqueList(
+        getattr(mesh, "constraint_modules", [])
+    )
     new_mesh.instructions = mesh.instructions
     new_mesh.macros = getattr(mesh, "macros", {}).copy()
 

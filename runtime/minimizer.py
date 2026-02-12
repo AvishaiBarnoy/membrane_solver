@@ -129,8 +129,10 @@ class Minimizer:
     def _log_debug_energy_context(self, iteration: int) -> None:
         if not logger.isEnabledFor(logging.DEBUG):
             return
-        breakdown = self.compute_energy_breakdown()
-        thetaB_contact = float(breakdown.get("tilt_thetaB_contact_in", 0.0))
+        # Keep this context logger side-effect free. Calling full per-module
+        # breakdown here can populate long-lived caches with incomplete keys,
+        # which has caused debug-vs-nondebug trajectory drift.
+        thetaB_contact = float("nan")
         thetaB_val = float(self.global_params.get("tilt_thetaB_value") or 0.0)
         line_search_reduced = bool(
             self.global_params.get("line_search_reduced_energy", False)
@@ -155,6 +157,52 @@ class Minimizer:
             guard_factor,
             tilt_enforced,
         )
+
+    def _diagnostic_snapshot(self) -> dict:
+        """Capture mutable state that must not change in debug diagnostics."""
+        snapshot: dict = {
+            "global_params": dict(self.global_params.to_dict()),
+            "tilts": None,
+            "tilts_in": None,
+            "tilts_out": None,
+        }
+        if self._uses_leaflet_tilts():
+            snapshot["tilts_in"] = self.mesh.tilts_in_view().copy(order="F")
+            snapshot["tilts_out"] = self.mesh.tilts_out_view().copy(order="F")
+        else:
+            snapshot["tilts"] = self.mesh.tilts_view().copy(order="F")
+        return snapshot
+
+    def _diagnostic_restore(self, snapshot: dict) -> None:
+        """Restore mutable state after debug diagnostics."""
+        if snapshot.get("tilts_in") is not None:
+            if not np.array_equal(self.mesh.tilts_in_view(), snapshot["tilts_in"]):
+                self.mesh.set_tilts_in_from_array(snapshot["tilts_in"])
+            if not np.array_equal(self.mesh.tilts_out_view(), snapshot["tilts_out"]):
+                self.mesh.set_tilts_out_from_array(snapshot["tilts_out"])
+        elif snapshot.get("tilts") is not None:
+            if not np.array_equal(self.mesh.tilts_view(), snapshot["tilts"]):
+                self.mesh.set_tilts_from_array(snapshot["tilts"])
+        if snapshot.get("global_params") != self.global_params.to_dict():
+            self.global_params._params = dict(snapshot["global_params"])
+
+    def _run_debug_diagnostic(self, fn):
+        """Run a diagnostic while preserving mutable simulation state."""
+        if not logger.isEnabledFor(logging.DEBUG):
+            return fn()
+        snapshot = self._diagnostic_snapshot()
+        try:
+            return fn()
+        finally:
+            self._diagnostic_restore(snapshot)
+
+    def _diagnostic_energy(self) -> float:
+        """Energy computation for diagnostics (debug-safe)."""
+        return float(self._run_debug_diagnostic(self.compute_energy))
+
+    def _diagnostic_energy_breakdown(self) -> Dict[str, float]:
+        """Energy breakdown for diagnostics (debug-safe)."""
+        return self._run_debug_diagnostic(self.compute_energy_breakdown)
 
     def _tilt_fixed_mask(self) -> np.ndarray:
         """Return a boolean mask for vertices whose tilt is clamped.
@@ -1791,8 +1839,10 @@ STEP SIZE:\t {self.step_size}
         if not logger.isEnabledFor(logging.DEBUG):
             return
         try:
-            energy_scalar = float(self.compute_energy())
-            energy_array, _ = self.compute_energy_and_gradient_array()
+            energy_scalar = float(self._run_debug_diagnostic(self.compute_energy))
+            energy_array, _ = self._run_debug_diagnostic(
+                self.compute_energy_and_gradient_array
+            )
             energy_array = float(energy_array)
         except Exception as exc:
             logger.debug("Energy consistency check (%s) skipped: %s", label, exc)
@@ -1811,7 +1861,7 @@ STEP SIZE:\t {self.step_size}
             return
 
         try:
-            breakdown = self.compute_energy_breakdown()
+            breakdown = self._diagnostic_energy_breakdown()
         except Exception as exc:
             logger.debug("Energy breakdown failed during consistency check: %s", exc)
             return
@@ -2156,13 +2206,15 @@ STEP SIZE:\t {self.step_size}
                     f"Step {i:4d}: Area = {total_area:.5f}, Energy = {last_state_energy:.5f}, Step Size  = {step_size_in:.2e}"
                 )
             if logger.isEnabledFor(logging.DEBUG):
-                energy_post_step = self.compute_energy()
-                self._log_energy_phase(i, "post_step", energy_post_step)
+                # Do not probe energy here: additional debug-only energy
+                # evaluations can mutate caches and perturb the optimization
+                # trajectory.
+                self._log_energy_phase(i, "post_step", float(last_state_energy))
             # Keep any stored 3D tilt field tangent to the updated surface.
             self.mesh.project_tilts_to_tangent()
             if logger.isEnabledFor(logging.DEBUG):
-                energy_post_project = self.compute_energy()
-                self._log_energy_phase(i, "post_step_tilt_project", energy_post_project)
+                # Keep this phase marker without re-evaluating energy.
+                self._log_energy_phase(i, "post_step_tilt_project", float("nan"))
             if step_mode == "fixed":
                 # Keep the cross-iteration step size constant, but still allow
                 # the line search to backtrack within each iteration for
@@ -2296,11 +2348,9 @@ STEP SIZE:\t {self.step_size}
                         self.enforce_constraints_after_mesh_ops(self.mesh)
                         self.mesh.project_tilts_to_tangent()
                         if logger.isEnabledFor(logging.DEBUG):
-                            energy_post_constraints = self.compute_energy()
+                            # Avoid debug-only energy probes here as well.
                             self._log_energy_phase(
-                                i,
-                                "post_step_constraints",
-                                energy_post_constraints,
+                                i, "post_step_constraints", float("nan")
                             )
                         reset = getattr(self.stepper, "reset", None)
                         if callable(reset):

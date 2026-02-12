@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional
 import numpy as np
 
 from core.exceptions import BodyOrientationError, InvalidEdgeIndexError
+from core.ordered_unique_list import OrderedUniqueList
 from core.parameters.global_parameters import GlobalParameters
 
 logger = logging.getLogger("membrane_solver")
@@ -902,8 +903,8 @@ class Mesh:
     facets: Dict[int, "Facet"] = field(default_factory=dict)
     bodies: Dict[int, "Body"] = field(default_factory=dict)
     global_parameters: "GlobalParameters" = None  # Use the class here
-    energy_modules: List[str] = field(default_factory=list)
-    constraint_modules: List[str] = field(default_factory=list)
+    energy_modules: List[str] = field(default_factory=OrderedUniqueList)
+    constraint_modules: List[str] = field(default_factory=OrderedUniqueList)
     instructions: List[str] = field(default_factory=list)
     macros: Dict[str, List[str]] = field(default_factory=dict)
     definitions: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -1158,8 +1159,10 @@ class Mesh:
         if hasattr(self, "global_parameters"):
             new_mesh.global_parameters = copy.deepcopy(self.global_parameters)
         new_mesh.macros = copy.deepcopy(getattr(self, "macros", {}))
-        new_mesh.energy_modules = list(getattr(self, "energy_modules", []))
-        new_mesh.constraint_modules = list(getattr(self, "constraint_modules", []))
+        new_mesh.energy_modules = OrderedUniqueList(getattr(self, "energy_modules", []))
+        new_mesh.constraint_modules = OrderedUniqueList(
+            getattr(self, "constraint_modules", [])
+        )
         new_mesh.instructions = list(getattr(self, "instructions", []))
         new_mesh._topology_version = self._topology_version
         return new_mesh

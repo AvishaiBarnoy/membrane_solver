@@ -6,6 +6,7 @@ import numpy as np
 import yaml
 
 from core.expr_eval import eval_expr
+from core.ordered_unique_list import OrderedUniqueList
 from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from runtime.refinement import refine_polygonal_facets
@@ -178,19 +179,21 @@ def parse_geometry(data: dict) -> Mesh:
             "consider enabling volume_projection_during_minimization."
         )
 
-    # Initialize module_name list
-    energy_module_names = set(data.get("energy_modules", []))
+    # Initialize module-name list with deterministic order. Keep only the
+    # first occurrence of each module to avoid duplicates without hash-order
+    # non-determinism across processes.
+    energy_module_names = OrderedUniqueList(data.get("energy_modules", []))
     # If the input doesn't specify any modules but has surface tension,
     # default to 'surface' for backward compatibility.
     if (
         not energy_module_names
         and mesh.global_parameters.get("surface_tension", 0.0) > 0
     ):
-        energy_module_names.add("surface")
+        energy_module_names.append("surface")
 
     # Allow explicit constraint modules at the top level (e.g. "global_area")
     # in addition to those inferred from per‑entity "constraints" options.
-    constraint_module_names = list(data.get("constraint_modules", []))
+    constraint_module_names = OrderedUniqueList(data.get("constraint_modules", []))
     # If the input specifies a global target surface area, automatically load
     # the corresponding constraint so users do not have to list the module
     # manually.
@@ -863,10 +866,10 @@ def parse_geometry(data: dict) -> Mesh:
     mesh.macros = macros
 
     # Energy modules
-    mesh.energy_modules = list(energy_module_names)
+    mesh.energy_modules = OrderedUniqueList(energy_module_names)
 
     # Constraint modules
-    mesh.constraint_modules = list(set(constraint_module_names))
+    mesh.constraint_modules = OrderedUniqueList(constraint_module_names)
 
     def _strip_tilt_options(target: Mesh) -> None:
         for vertex in target.vertices.values():

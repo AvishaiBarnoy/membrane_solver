@@ -197,6 +197,23 @@ def test_parse_geometry_evaluates_defines():
     assert math.isclose(mesh.global_parameters.get("WALLT"), -0.5, rel_tol=1e-6)
 
 
+def test_parse_geometry_preserves_module_order_and_dedupes():
+    data = {
+        "vertices": [[0, 0, 0], [1, 0, 0]],
+        "edges": [[0, 1]],
+        "energy_modules": ["tilt_out", "tilt_in", "tilt_out", "bending_tilt_in"],
+        "constraint_modules": [
+            "pin_to_plane",
+            "pin_to_circle",
+            "pin_to_plane",
+            "global_area",
+        ],
+    }
+    mesh = parse_geometry(data)
+    assert mesh.energy_modules == ["tilt_out", "tilt_in", "bending_tilt_in"]
+    assert mesh.constraint_modules == ["pin_to_plane", "pin_to_circle", "global_area"]
+
+
 def test_tilt_in_out_roundtrip(tmp_path):
     data = {
         "vertices": [
