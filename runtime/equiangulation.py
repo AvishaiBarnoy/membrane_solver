@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 
+from core.ordered_unique_list import OrderedUniqueList
 from geometry.entities import Edge, Facet, Mesh
 
 logger = logging.getLogger("membrane_solver")
@@ -89,8 +90,10 @@ def equiangulate_iteration(mesh: Mesh) -> tuple[Mesh, bool]:
     new_mesh.facets = {idx: f.copy() for idx, f in mesh.facets.items()}
     new_mesh.bodies = {idx: b.copy() for idx, b in mesh.bodies.items()}
     new_mesh.global_parameters = mesh.global_parameters
-    new_mesh.energy_modules = mesh.energy_modules[:]
-    new_mesh.constraint_modules = mesh.constraint_modules[:]
+    new_mesh.energy_modules = OrderedUniqueList(getattr(mesh, "energy_modules", []))
+    new_mesh.constraint_modules = OrderedUniqueList(
+        getattr(mesh, "constraint_modules", [])
+    )
     new_mesh.instructions = mesh.instructions[:]
     new_mesh.macros = getattr(mesh, "macros", {}).copy()
 
