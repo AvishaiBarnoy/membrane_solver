@@ -115,26 +115,16 @@ class Minimizer:
 
     def _soa_views(self) -> tuple[np.ndarray, Dict[int, int], np.ndarray]:
         """Return cached SoA views for positions, index map, and a scratch buffer."""
-        positions = self.mesh.positions_view()
-        vertex_version = self.mesh._vertex_ids_version
-        if (
-            self._soa_cache_version != self.mesh._version
-            or self._soa_cache_vertex_version != vertex_version
-            or self._soa_positions is not positions
-        ):
-            self._soa_positions = positions
-            self._soa_index_map = self.mesh.vertex_index_to_row
-            self._soa_cache_version = self.mesh._version
-            self._soa_cache_vertex_version = vertex_version
-            self._soa_grad_dummy = None
+        ctx = self.energy_context()
+        positions, index_map = ctx.geometry.soa_views(self.mesh)
+        grad_dummy = ctx.scratch_array(
+            "soa_grad_dummy", shape=positions.shape, dtype=positions.dtype
+        )
+        return positions, index_map, grad_dummy
 
-        if (
-            self._soa_grad_dummy is None
-            or self._soa_grad_dummy.shape != positions.shape
-        ):
-            self._soa_grad_dummy = np.zeros_like(positions)
-
-        return positions, self._soa_index_map or {}, self._soa_grad_dummy
+    def _triangle_rows(self) -> tuple[np.ndarray | None, list[int]]:
+        """Return triangle rows/facets via energy context cache."""
+        return self.energy_context().geometry.triangle_rows(self.mesh)
 
     def _log_debug_energy_context(self, iteration: int) -> None:
         if not logger.isEnabledFor(logging.DEBUG):
@@ -1132,7 +1122,7 @@ class Minimizer:
 
         k_tilt = float(self.param_resolver.get(None, "tilt_rigidity") or 0.0)
         if k_tilt != 0.0:
-            tri_rows, _ = self.mesh.triangle_row_cache()
+            tri_rows, _ = self._triangle_rows()
             if tri_rows is not None and len(tri_rows) > 0:
                 areas = self.mesh.triangle_areas(positions)
                 if areas is not None and len(areas) == len(tri_rows):
@@ -1181,7 +1171,7 @@ class Minimizer:
         k_in = float(self.param_resolver.get(None, "tilt_modulus_in") or 0.0)
         k_out = float(self.param_resolver.get(None, "tilt_modulus_out") or 0.0)
         if k_in != 0.0 or k_out != 0.0:
-            tri_rows, _ = self.mesh.triangle_row_cache()
+            tri_rows, _ = self._triangle_rows()
             if tri_rows is not None and len(tri_rows) > 0:
                 areas = self.mesh.triangle_areas(positions)
                 if areas is not None and len(areas) == len(tri_rows):
@@ -1332,7 +1322,7 @@ class Minimizer:
                 )
             grad_dummy = np.zeros_like(positions)
 
-            tri_rows, _ = self.mesh.triangle_row_cache()
+            tri_rows, _ = self._triangle_rows()
             if tri_rows is None or len(tri_rows) == 0:
                 return
 
