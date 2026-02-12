@@ -353,6 +353,7 @@ def compute_energy_and_gradient_array_leaflet(
     positions: np.ndarray,
     index_map: Dict[int, int],
     grad_arr: np.ndarray | None,
+    ctx=None,
     tilts: np.ndarray,
     tilt_grad_arr: np.ndarray | None,
     kappa_key: str,
@@ -388,7 +389,6 @@ def compute_energy_and_gradient_array_leaflet(
         raise ValueError("tilts must have shape (N_vertices, 3)")
 
     # Use cached triangle P1 basis gradients when geometry is frozen/cached.
-    ctx = getattr(mesh, "_active_energy_context", None)
     if ctx is not None:
         area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
             ctx.geometry.p1_triangle_shape_gradients(mesh, positions)
