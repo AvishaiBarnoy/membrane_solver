@@ -151,6 +151,7 @@ def compute_energy_and_gradient_array(
     positions: np.ndarray,
     index_map: Dict[int, int],
     grad_arr: np.ndarray | None,
+    ctx=None,
     tilts: np.ndarray | None = None,
     tilt_grad_arr: np.ndarray | None = None,
 ) -> float:
@@ -175,7 +176,6 @@ def compute_energy_and_gradient_array(
         if tilts.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts must have shape (N_vertices, 3)")
 
-    ctx = getattr(mesh, "_active_energy_context", None)
     if ctx is not None:
         area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
             ctx.geometry.p1_triangle_shape_gradients(mesh, positions)

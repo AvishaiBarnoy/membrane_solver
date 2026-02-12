@@ -187,7 +187,7 @@ def test_p1_triangle_shape_gradients_refresh_after_position_update() -> None:
     assert g22 is not g21
 
 
-def test_minimizer_binds_active_energy_context_on_mesh() -> None:
+def test_minimizer_does_not_bind_active_energy_context_on_mesh() -> None:
     mesh = _build_mesh()
     minim = Minimizer(
         mesh,
@@ -198,6 +198,41 @@ def test_minimizer_binds_active_energy_context_on_mesh() -> None:
         quiet=True,
     )
     assert not hasattr(mesh, "_active_energy_context")
-    ctx = minim.energy_context()
-    assert hasattr(mesh, "_active_energy_context")
-    assert getattr(mesh, "_active_energy_context") is ctx
+    _ = minim.energy_context()
+    assert not hasattr(mesh, "_active_energy_context")
+
+
+def test_minimizer_passes_explicit_ctx_to_array_modules() -> None:
+    class _CtxRequiredModule:
+        @staticmethod
+        def compute_energy_and_gradient_array(
+            mesh,
+            global_params,
+            param_resolver,
+            *,
+            positions,
+            index_map,
+            grad_arr,
+            ctx,
+            **kwargs,
+        ):
+            _ = mesh, global_params, param_resolver, positions, index_map, kwargs
+            assert ctx is not None
+            grad_arr[:] = 0.0
+            return 0.0
+
+    mesh = _build_mesh()
+    mesh.energy_modules = ["ctx_required"]
+    energy_manager = EnergyModuleManager([])
+    energy_manager.modules["ctx_required"] = _CtxRequiredModule
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        energy_manager,
+        ConstraintModuleManager(mesh.constraint_modules),
+        energy_modules=["ctx_required"],
+        quiet=True,
+    )
+    energy = minim.compute_energy()
+    assert energy == 0.0

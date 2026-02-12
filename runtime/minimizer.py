@@ -1,6 +1,7 @@
 # runtime/minimizer.py
 
 import copy
+import inspect
 import logging
 from typing import Callable, Dict, List, Optional
 
@@ -95,6 +96,7 @@ class Minimizer:
         self._soa_grad_dummy: np.ndarray | None = None
         self._last_mesh_op_tilt_constraints_enforced: bool | None = None
         self._energy_context: EnergyContext | None = None
+        self._module_accepts_ctx: dict[int, bool] = {}
 
     def _validate_energy_modules_array(self) -> None:
         """Ensure energy modules support the array API required by minimization."""
@@ -111,10 +113,43 @@ class Minimizer:
         if self._energy_context is None:
             self._energy_context = EnergyContext()
         self._energy_context.ensure_for_mesh(self.mesh)
-        # Internal bridge while modules are incrementally migrated to
-        # context-aware cache access.
-        setattr(self.mesh, "_active_energy_context", self._energy_context)
         return self._energy_context
+
+    def _call_module_array(self, module, **kwargs):
+        """Call module array API with explicit ctx and graceful fallback."""
+        key = id(module)
+        accepts_ctx = self._module_accepts_ctx.get(key)
+        if accepts_ctx is None:
+            accepts_ctx = False
+            fn = getattr(module, "compute_energy_and_gradient_array", None)
+            if fn is not None:
+                try:
+                    sig = inspect.signature(fn)
+                    if "ctx" in sig.parameters:
+                        accepts_ctx = True
+                    else:
+                        accepts_ctx = any(
+                            p.kind is inspect.Parameter.VAR_KEYWORD
+                            for p in sig.parameters.values()
+                        )
+                except (TypeError, ValueError):
+                    accepts_ctx = False
+            self._module_accepts_ctx[key] = accepts_ctx
+
+        if accepts_ctx:
+            return module.compute_energy_and_gradient_array(
+                self.mesh,
+                self.global_params,
+                self.param_resolver,
+                ctx=self.energy_context(),
+                **kwargs,
+            )
+        return module.compute_energy_and_gradient_array(
+            self.mesh,
+            self.global_params,
+            self.param_resolver,
+            **kwargs,
+        )
 
     def _soa_views(self) -> tuple[np.ndarray, Dict[int, int], np.ndarray]:
         """Return cached SoA views for positions, index map, and a scratch buffer."""
@@ -501,10 +536,8 @@ class Minimizer:
 
             if hasattr(module, "compute_energy_and_gradient_array"):
                 try:
-                    E_mod = module.compute_energy_and_gradient_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
+                    E_mod = self._call_module_array(
+                        module,
                         positions=positions,
                         index_map=index_map,
                         grad_arr=grad_dummy,
@@ -513,20 +546,16 @@ class Minimizer:
                     )
                 except TypeError:
                     try:
-                        E_mod = module.compute_energy_and_gradient_array(
-                            self.mesh,
-                            self.global_params,
-                            self.param_resolver,
+                        E_mod = self._call_module_array(
+                            module,
                             positions=positions,
                             index_map=index_map,
                             grad_arr=grad_dummy,
                             tilts=tilts,
                         )
                     except TypeError:
-                        E_mod = module.compute_energy_and_gradient_array(
-                            self.mesh,
-                            self.global_params,
-                            self.param_resolver,
+                        E_mod = self._call_module_array(
+                            module,
                             positions=positions,
                             index_map=index_map,
                             grad_arr=grad_dummy,
@@ -568,10 +597,8 @@ class Minimizer:
                 continue
             if hasattr(module, "compute_energy_and_gradient_array"):
                 try:
-                    E_mod = module.compute_energy_and_gradient_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
+                    E_mod = self._call_module_array(
+                        module,
                         positions=positions,
                         index_map=index_map,
                         grad_arr=grad_dummy,
@@ -580,20 +607,16 @@ class Minimizer:
                     )
                 except TypeError:
                     try:
-                        E_mod = module.compute_energy_and_gradient_array(
-                            self.mesh,
-                            self.global_params,
-                            self.param_resolver,
+                        E_mod = self._call_module_array(
+                            module,
                             positions=positions,
                             index_map=index_map,
                             grad_arr=grad_dummy,
                             tilts=tilts,
                         )
                     except TypeError:
-                        E_mod = module.compute_energy_and_gradient_array(
-                            self.mesh,
-                            self.global_params,
-                            self.param_resolver,
+                        E_mod = self._call_module_array(
+                            module,
                             positions=positions,
                             index_map=index_map,
                             grad_arr=grad_dummy,
@@ -662,10 +685,8 @@ class Minimizer:
 
             if hasattr(module, "compute_energy_and_gradient_array"):
                 try:
-                    E_mod = module.compute_energy_and_gradient_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
+                    E_mod = self._call_module_array(
+                        module,
                         positions=positions,
                         index_map=index_map,
                         grad_arr=grad_dummy,
@@ -675,10 +696,8 @@ class Minimizer:
                         tilt_out_grad_arr=None,
                     )
                 except TypeError:
-                    E_mod = module.compute_energy_and_gradient_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
+                    E_mod = self._call_module_array(
+                        module,
                         positions=positions,
                         index_map=index_map,
                         grad_arr=grad_dummy,
@@ -771,10 +790,8 @@ class Minimizer:
 
             if hasattr(module, "compute_energy_and_gradient_array"):
                 try:
-                    E_mod = module.compute_energy_and_gradient_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
+                    E_mod = self._call_module_array(
+                        module,
                         positions=positions,
                         index_map=index_map,
                         grad_arr=None,
@@ -785,10 +802,8 @@ class Minimizer:
                     )
                 except TypeError:
                     # Some tilt modules ignore passed tilts and read from mesh.
-                    E_mod = module.compute_energy_and_gradient_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
+                    E_mod = self._call_module_array(
+                        module,
                         positions=positions,
                         index_map=index_map,
                         grad_arr=None,
@@ -891,10 +906,8 @@ class Minimizer:
                     else grad_dummy
                 )
                 try:
-                    E_mod = module.compute_energy_and_gradient_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
+                    E_mod = self._call_module_array(
+                        module,
                         positions=positions,
                         index_map=index_map,
                         grad_arr=grad_arg,
@@ -904,10 +917,8 @@ class Minimizer:
                         tilt_out_grad_arr=tilt_out_grad_arr,
                     )
                 except TypeError:
-                    E_mod = module.compute_energy_and_gradient_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
+                    E_mod = self._call_module_array(
+                        module,
                         positions=positions,
                         index_map=index_map,
                         grad_arr=grad_arg,
@@ -1697,10 +1708,8 @@ STEP SIZE:\t {self.step_size}
         total_energy = 0.0
         for module in self.energy_modules:
             # Use fast array path
-            E_mod = module.compute_energy_and_gradient_array(
-                self.mesh,
-                self.global_params,
-                self.param_resolver,
+            E_mod = self._call_module_array(
+                module,
                 positions=positions,
                 index_map=index_map,
                 grad_arr=grad_arr,
@@ -1811,10 +1820,8 @@ STEP SIZE:\t {self.step_size}
         for module in self.energy_modules:
             if hasattr(module, "compute_energy_and_gradient_array"):
                 grad_dummy.fill(0.0)
-                E_mod = module.compute_energy_and_gradient_array(
-                    self.mesh,
-                    self.global_params,
-                    self.param_resolver,
+                E_mod = self._call_module_array(
+                    module,
                     positions=positions,
                     index_map=index_map,
                     grad_arr=grad_dummy,
@@ -1839,10 +1846,8 @@ STEP SIZE:\t {self.step_size}
         for name, module in zip(self.energy_module_names, self.energy_modules):
             if hasattr(module, "compute_energy_and_gradient_array"):
                 grad_dummy.fill(0.0)
-                E_mod = module.compute_energy_and_gradient_array(
-                    self.mesh,
-                    self.global_params,
-                    self.param_resolver,
+                E_mod = self._call_module_array(
+                    module,
                     positions=positions,
                     index_map=index_map,
                     grad_arr=grad_dummy,
