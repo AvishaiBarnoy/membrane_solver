@@ -104,17 +104,19 @@ def _collect_rows(mesh: Mesh, group: str) -> np.ndarray:
     return np.asarray(rows, dtype=int)
 
 
-def constraint_gradients_tilt_array(
+def _build_tilt_row_constraints(
     mesh: Mesh,
     global_params,
-    *,
     positions: np.ndarray,
-    index_map: dict[int, int],
-    tilts_in: np.ndarray | None = None,
-    tilts_out: np.ndarray | None = None,
-) -> list[tuple[np.ndarray | None, np.ndarray | None]] | None:
-    """Return tilt constraint gradients enforcing `tilt_in == tilt_out` on the rim."""
-    _ = index_map, tilts_in, tilts_out
+) -> (
+    list[
+        tuple[
+            tuple[np.ndarray, np.ndarray] | None,
+            tuple[np.ndarray, np.ndarray] | None,
+        ]
+    ]
+    | None
+):
     group = _resolve_group(global_params)
     if group is None:
         return None
@@ -129,14 +131,75 @@ def constraint_gradients_tilt_array(
         normal = np.array([0.0, 0.0, 1.0], dtype=float)
     u, v = _orthonormal_basis(normal)
 
-    constraints: list[tuple[np.ndarray | None, np.ndarray | None]] = []
+    constraints: list[
+        tuple[
+            tuple[np.ndarray, np.ndarray] | None,
+            tuple[np.ndarray, np.ndarray] | None,
+        ]
+    ] = []
     for dvec in (u, v):
-        g_in = np.zeros_like(positions)
-        g_out = np.zeros_like(positions)
-        g_in[rows] += dvec
-        g_out[rows] += -dvec
-        constraints.append((g_in, g_out))
+        in_part = (
+            rows.copy(),
+            np.tile(np.asarray(dvec, dtype=float).reshape(1, 3), (rows.size, 1)),
+        )
+        out_part = (
+            rows.copy(),
+            np.tile(np.asarray(-dvec, dtype=float).reshape(1, 3), (rows.size, 1)),
+        )
+        constraints.append((in_part, out_part))
     return constraints
+
+
+def constraint_gradients_tilt_array(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+    tilts_in: np.ndarray | None = None,
+    tilts_out: np.ndarray | None = None,
+) -> list[tuple[np.ndarray | None, np.ndarray | None]] | None:
+    """Return tilt constraint gradients enforcing `tilt_in == tilt_out` on the rim."""
+    _ = index_map, tilts_in, tilts_out
+    row_constraints = _build_tilt_row_constraints(mesh, global_params, positions)
+    if not row_constraints:
+        return None
+    constraints: list[tuple[np.ndarray | None, np.ndarray | None]] = []
+    for in_part, out_part in row_constraints:
+        g_in = None
+        g_out = None
+        if in_part is not None:
+            in_rows, in_vecs = in_part
+            g_in = np.zeros_like(positions)
+            np.add.at(g_in, in_rows, in_vecs)
+        if out_part is not None:
+            out_rows, out_vecs = out_part
+            g_out = np.zeros_like(positions)
+            np.add.at(g_out, out_rows, out_vecs)
+        constraints.append((g_in, g_out))
+    return constraints or None
+
+
+def constraint_gradients_tilt_rows_array(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+    tilts_in: np.ndarray | None = None,
+    tilts_out: np.ndarray | None = None,
+) -> (
+    list[
+        tuple[
+            tuple[np.ndarray, np.ndarray] | None,
+            tuple[np.ndarray, np.ndarray] | None,
+        ]
+    ]
+    | None
+):
+    """Return sparse-row tilt constraints enforcing `tilt_in == tilt_out`."""
+    _ = index_map, tilts_in, tilts_out
+    return _build_tilt_row_constraints(mesh, global_params, positions)
 
 
 def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
@@ -195,4 +258,8 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
     mesh.set_tilts_out_from_array(tilts_out)
 
 
-__all__ = ["constraint_gradients_tilt_array", "enforce_tilt_constraint"]
+__all__ = [
+    "constraint_gradients_tilt_array",
+    "constraint_gradients_tilt_rows_array",
+    "enforce_tilt_constraint",
+]
