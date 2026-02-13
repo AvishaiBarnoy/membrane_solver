@@ -2258,12 +2258,6 @@ STEP SIZE:\t {self.step_size}
                 if hasattr(self.mesh, "_line_search_reduced_accept_rule"):
                     delattr(self.mesh, "_line_search_reduced_accept_rule")
             last_state_energy = float(accepted_energy)
-            if not self.quiet:
-                # Compute total area only when needed for diagnostics.
-                total_area = self.mesh.compute_total_surface_area()
-                print(
-                    f"Step {i:4d}: Area = {total_area:.5f}, Energy = {last_state_energy:.5f}, Step Size  = {step_size_in:.2e}"
-                )
             if logger.isEnabledFor(logging.DEBUG):
                 # Do not probe energy here: additional debug-only energy
                 # evaluations can mutate caches and perturb the optimization
@@ -2271,6 +2265,14 @@ STEP SIZE:\t {self.step_size}
                 self._log_energy_phase(i, "post_step", float(last_state_energy))
             # Keep any stored 3D tilt field tangent to the updated surface.
             self.mesh.project_tilts_to_tangent()
+            if not self.quiet:
+                # User-visible step diagnostics should report the same total
+                # energy definition as `energy` / final summaries.
+                total_area = self.mesh.compute_total_surface_area()
+                reported_energy = float(self.compute_energy())
+                print(
+                    f"Step {i:4d}: Area = {total_area:.5f}, Energy = {reported_energy:.5f}, Step Size  = {step_size_in:.2e}"
+                )
             if logger.isEnabledFor(logging.DEBUG):
                 # Keep this phase marker without re-evaluating energy.
                 self._log_energy_phase(i, "post_step_tilt_project", float("nan"))

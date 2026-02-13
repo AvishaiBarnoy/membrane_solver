@@ -69,3 +69,31 @@ def test_accepted_energy_mismatch_logs_only_in_debug(caplog, monkeypatch) -> Non
     with caplog.at_level(logging.DEBUG, logger="membrane_solver"):
         minim.minimize(n_steps=1)
     assert "Accepted energy mismatch" in caplog.text
+
+
+def test_step_log_reports_recomputed_full_energy(capsys, monkeypatch) -> None:
+    mesh = _build_triangle_mesh()
+    gp = GlobalParameters({"step_size_mode": "fixed", "step_size": 0.1})
+
+    minim = Minimizer(
+        mesh,
+        gp,
+        DummyStepper(accepted_energy=1.0),
+        EnergyModuleManager([]),
+        ConstraintModuleManager([]),
+        quiet=False,
+    )
+
+    monkeypatch.setattr(
+        minim,
+        "compute_energy_and_gradient_array",
+        lambda: (0.0, np.ones((len(mesh.vertex_ids), 3))),
+    )
+    monkeypatch.setattr(minim, "compute_energy", lambda: 2.0)
+    monkeypatch.setattr(minim, "compute_energy_breakdown", lambda: {"dummy": 2.0})
+
+    minim.minimize(n_steps=1)
+    out = capsys.readouterr().out
+    assert "Step" in out
+    assert "Energy = 2.00000" in out
+    assert "Energy = 1.00000" not in out
