@@ -151,6 +151,154 @@ def _build_reference(
     )
 
 
+def _get_reference(mesh, vids: list[int], *, group: str | None, global_params):
+    rim_group = _resolve_rim_group(global_params)
+    rim_indices = _collect_rim_indices(mesh, vids, rim_group=rim_group)
+    target_radius = _resolve_target_radius(mesh, global_params)
+
+    cache = _get_ref_cache(mesh)
+    key = _ref_key(group)
+    ref = cache.get(key)
+    if ref is None or ref.shape[0] != len(vids):
+        ref = _build_reference(
+            mesh, vids, rim_indices=rim_indices, target_radius=target_radius
+        )
+        cache[key] = ref
+    return ref
+
+
+def _choose_anchor_triplet(ref: np.ndarray) -> tuple[int, int, int | None]:
+    n = ref.shape[0]
+    if n < 2:
+        return 0, 0, None
+    anchor_a = 0
+    d2 = np.sum((ref - ref[anchor_a][None, :]) ** 2, axis=1)
+    anchor_b = int(np.argmax(d2))
+    if n < 3:
+        return anchor_a, anchor_b, None
+    ab = ref[anchor_b] - ref[anchor_a]
+    area_scores = np.linalg.norm(np.cross(ref - ref[anchor_a][None, :], ab), axis=1)
+    area_scores[anchor_a] = -1.0
+    area_scores[anchor_b] = -1.0
+    anchor_c = int(np.argmax(area_scores))
+    if area_scores[anchor_c] <= 1e-12:
+        return anchor_a, anchor_b, None
+    return anchor_a, anchor_b, anchor_c
+
+
+def _independent_distance_pairs(ref: np.ndarray) -> list[tuple[int, int]]:
+    n = ref.shape[0]
+    if n < 2:
+        return []
+    a, b, c = _choose_anchor_triplet(ref)
+    pairs: list[tuple[int, int]] = []
+    seen: set[tuple[int, int]] = set()
+
+    def add_pair(i: int, j: int) -> None:
+        if i == j:
+            return
+        key = (i, j) if i < j else (j, i)
+        if key in seen:
+            return
+        seen.add(key)
+        pairs.append(key)
+
+    for i in range(n):
+        if i != a:
+            add_pair(a, i)
+    for i in range(n):
+        if i not in {a, b}:
+            add_pair(b, i)
+    if c is not None:
+        for i in range(n):
+            if i not in {a, b, c}:
+                add_pair(c, i)
+    return pairs
+
+
+def constraint_gradients(mesh, global_params) -> list[dict[int, np.ndarray]] | None:
+    """Return rigid-disk shape-constraint gradients for KKT projection.
+
+    The constraints are independent pairwise distance invariants built from the
+    cached rigid-disk reference configuration. This preserves rigid-body
+    motions (translations/rotations) while suppressing non-rigid deformation.
+    """
+    group = _resolve_group(global_params)
+    vids = _collect_disk_vertices(mesh, group=group)
+    if len(vids) < 2:
+        return None
+
+    ref = _get_reference(mesh, vids, group=group, global_params=global_params)
+    pairs = _independent_distance_pairs(ref)
+    if not pairs:
+        return None
+
+    gradients: list[dict[int, np.ndarray]] = []
+    for i, j in pairs:
+        vid_i = int(vids[i])
+        vid_j = int(vids[j])
+        vi = mesh.vertices.get(vid_i)
+        vj = mesh.vertices.get(vid_j)
+        if vi is None or vj is None:
+            continue
+        if getattr(vi, "fixed", False) and getattr(vj, "fixed", False):
+            continue
+        diff = np.asarray(vi.position - vj.position, dtype=float)
+        gC: dict[int, np.ndarray] = {}
+        if not getattr(vi, "fixed", False):
+            gC[vid_i] = diff.copy()
+        if not getattr(vj, "fixed", False):
+            gC[vid_j] = (-diff).copy()
+        if gC:
+            gradients.append(gC)
+
+    return gradients or None
+
+
+def constraint_gradients_array(
+    mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> list[np.ndarray] | None:
+    _ = global_params
+    group = _resolve_group(global_params)
+    vids = _collect_disk_vertices(mesh, group=group)
+    if len(vids) < 2:
+        return None
+
+    ref = _get_reference(mesh, vids, group=group, global_params=global_params)
+    pairs = _independent_distance_pairs(ref)
+    if not pairs:
+        return None
+
+    gradients: list[np.ndarray] = []
+    for i, j in pairs:
+        vid_i = int(vids[i])
+        vid_j = int(vids[j])
+        row_i = index_map.get(vid_i)
+        row_j = index_map.get(vid_j)
+        if row_i is None or row_j is None:
+            continue
+        vi = mesh.vertices.get(vid_i)
+        vj = mesh.vertices.get(vid_j)
+        if vi is None or vj is None:
+            continue
+        if getattr(vi, "fixed", False) and getattr(vj, "fixed", False):
+            continue
+        diff = np.asarray(positions[row_i] - positions[row_j], dtype=float)
+        g_arr = np.zeros_like(positions)
+        if not getattr(vi, "fixed", False):
+            g_arr[row_i] += diff
+        if not getattr(vj, "fixed", False):
+            g_arr[row_j] -= diff
+        if np.any(g_arr):
+            gradients.append(g_arr)
+
+    return gradients or None
+
+
 def enforce_constraint(mesh, global_params=None, **_kwargs) -> None:
     """Project disk vertices onto a rigid-body transform of their reference."""
     group = _resolve_group(global_params)
@@ -165,15 +313,7 @@ def enforce_constraint(mesh, global_params=None, **_kwargs) -> None:
 
     rim_indices = _collect_rim_indices(mesh, vids, rim_group=rim_group)
     target_radius = _resolve_target_radius(mesh, global_params)
-
-    cache = _get_ref_cache(mesh)
-    key = _ref_key(group)
-    ref = cache.get(key)
-    if ref is None or ref.shape[0] != len(vids):
-        ref = _build_reference(
-            mesh, vids, rim_indices=rim_indices, target_radius=target_radius
-        )
-        cache[key] = ref
+    ref = _get_reference(mesh, vids, group=group, global_params=global_params)
 
     current = np.array([mesh.vertices[int(v)].position for v in vids], dtype=float)
     R, t = _kabsch(ref, current)
@@ -202,4 +342,4 @@ def enforce_constraint(mesh, global_params=None, **_kwargs) -> None:
         mesh.vertices[int(vid)].position[:] = corrected[idx]
 
 
-__all__ = ["enforce_constraint"]
+__all__ = ["enforce_constraint", "constraint_gradients", "constraint_gradients_array"]
