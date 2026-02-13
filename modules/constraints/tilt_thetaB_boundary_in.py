@@ -170,20 +170,75 @@ def constraint_gradients_tilt_array(
     tilts_out: np.ndarray | None = None,
 ) -> list[tuple[np.ndarray | None, np.ndarray | None]] | None:
     """Return tilt-space KKT gradients for `t_in·r_dir = thetaB` constraints."""
+    row_constraints = constraint_gradients_tilt_rows_array(
+        mesh,
+        global_params,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=tilts_in,
+        tilts_out=tilts_out,
+    )
+    if not row_constraints:
+        return None
+    constraints: list[tuple[np.ndarray | None, np.ndarray | None]] = []
+    for in_part, out_part in row_constraints:
+        g_in = None
+        g_out = None
+        if in_part is not None:
+            in_rows, in_vecs = in_part
+            g_in = np.zeros_like(positions)
+            g_in[in_rows] += in_vecs
+        if out_part is not None:
+            out_rows, out_vecs = out_part
+            g_out = np.zeros_like(positions)
+            g_out[out_rows] += out_vecs
+        constraints.append((g_in, g_out))
+    return constraints or None
+
+
+def constraint_gradients_tilt_rows_array(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+    tilts_in: np.ndarray | None = None,
+    tilts_out: np.ndarray | None = None,
+) -> (
+    list[
+        tuple[
+            tuple[np.ndarray, np.ndarray] | None,
+            tuple[np.ndarray, np.ndarray] | None,
+        ]
+    ]
+    | None
+):
+    """Return sparse tilt-space KKT gradients for `t_in·r_dir = thetaB`."""
     _ = index_map, tilts_in, tilts_out
     data = _boundary_directions(mesh, global_params, positions=positions)
     if data is None:
         return None
     rows, r_dir = data
 
-    constraints: list[tuple[np.ndarray | None, np.ndarray | None]] = []
+    constraints: list[
+        tuple[
+            tuple[np.ndarray, np.ndarray] | None,
+            tuple[np.ndarray, np.ndarray] | None,
+        ]
+    ] = []
     for row, dvec in zip(rows, r_dir):
         vid = int(mesh.vertex_ids[int(row)])
         if getattr(mesh.vertices[vid], "tilt_fixed_in", False):
             continue
-        g_in = np.zeros_like(positions)
-        g_in[int(row)] += dvec
-        constraints.append((g_in, None))
+        constraints.append(
+            (
+                (
+                    np.asarray([int(row)], dtype=int),
+                    np.asarray(dvec, dtype=float).reshape(1, 3),
+                ),
+                None,
+            )
+        )
     return constraints or None
 
 
@@ -221,5 +276,6 @@ __all__ = [
     "constraint_gradients",
     "constraint_gradients_array",
     "constraint_gradients_tilt_array",
+    "constraint_gradients_tilt_rows_array",
     "enforce_tilt_constraint",
 ]

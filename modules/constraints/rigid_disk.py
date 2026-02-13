@@ -299,6 +299,59 @@ def constraint_gradients_array(
     return gradients or None
 
 
+def constraint_gradients_rows_array(
+    mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> list[tuple[np.ndarray, np.ndarray]] | None:
+    """Sparse row variant of rigid-disk shape gradients."""
+    group = _resolve_group(global_params)
+    vids = _collect_disk_vertices(mesh, group=group)
+    if len(vids) < 2:
+        return None
+
+    ref = _get_reference(mesh, vids, group=group, global_params=global_params)
+    pairs = _independent_distance_pairs(ref)
+    if not pairs:
+        return None
+
+    gradients: list[tuple[np.ndarray, np.ndarray]] = []
+    for i, j in pairs:
+        vid_i = int(vids[i])
+        vid_j = int(vids[j])
+        row_i = index_map.get(vid_i)
+        row_j = index_map.get(vid_j)
+        if row_i is None or row_j is None:
+            continue
+        vi = mesh.vertices.get(vid_i)
+        vj = mesh.vertices.get(vid_j)
+        if vi is None or vj is None:
+            continue
+        fix_i = getattr(vi, "fixed", False)
+        fix_j = getattr(vj, "fixed", False)
+        if fix_i and fix_j:
+            continue
+        diff = np.asarray(positions[row_i] - positions[row_j], dtype=float)
+        if fix_i:
+            gradients.append(
+                (np.asarray([int(row_j)], dtype=int), (-diff).reshape(1, 3))
+            )
+            continue
+        if fix_j:
+            gradients.append((np.asarray([int(row_i)], dtype=int), diff.reshape(1, 3)))
+            continue
+        gradients.append(
+            (
+                np.asarray([int(row_i), int(row_j)], dtype=int),
+                np.vstack([diff, -diff]),
+            )
+        )
+
+    return gradients or None
+
+
 def enforce_constraint(mesh, global_params=None, **_kwargs) -> None:
     """Project disk vertices onto a rigid-body transform of their reference."""
     group = _resolve_group(global_params)
@@ -342,4 +395,9 @@ def enforce_constraint(mesh, global_params=None, **_kwargs) -> None:
         mesh.vertices[int(vid)].position[:] = corrected[idx]
 
 
-__all__ = ["enforce_constraint", "constraint_gradients", "constraint_gradients_array"]
+__all__ = [
+    "enforce_constraint",
+    "constraint_gradients",
+    "constraint_gradients_array",
+    "constraint_gradients_rows_array",
+]

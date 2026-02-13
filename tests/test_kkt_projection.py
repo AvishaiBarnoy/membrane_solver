@@ -32,6 +32,15 @@ class DummyArrayConstraint:
         return self._constraints
 
 
+class DummyRowArrayConstraint:
+    def __init__(self, row_constraints):
+        self._row_constraints = row_constraints
+
+    def constraint_gradients_rows_array(self, mesh, global_params, **kwargs):
+        _ = mesh, global_params, kwargs
+        return self._row_constraints
+
+
 class DummyTiltConstraint:
     def __init__(self, constraints):
         self._constraints = constraints
@@ -39,6 +48,15 @@ class DummyTiltConstraint:
     def constraint_gradients_tilt_array(self, mesh, global_params, **kwargs):
         _ = mesh, global_params, kwargs
         return self._constraints
+
+
+class DummyTiltRowConstraint:
+    def __init__(self, row_constraints):
+        self._row_constraints = row_constraints
+
+    def constraint_gradients_tilt_rows_array(self, mesh, global_params, **kwargs):
+        _ = mesh, global_params, kwargs
+        return self._row_constraints
 
 
 class DummyMesh:
@@ -139,3 +157,79 @@ def test_tilt_array_constraint_kkt_projection_removes_components():
     )
     assert np.allclose(tilt_in_grad, np.zeros_like(tilt_in_grad))
     assert np.allclose(tilt_out_grad, np.zeros_like(tilt_out_grad))
+
+
+def test_row_constraint_kkt_projection_matches_dense():
+    cm_dense = ConstraintModuleManager([])
+    cm_rows = ConstraintModuleManager([])
+
+    g0 = np.zeros((3, 3), dtype=float)
+    g1 = np.zeros((3, 3), dtype=float)
+    g0[0, :] = np.array([1.0, 2.0, 0.0])
+    g0[2, :] = np.array([0.0, -1.0, 1.0])
+    g1[1, :] = np.array([0.0, 1.0, 1.0])
+
+    cm_dense.modules = {"dummy": DummyArrayConstraint([g0, g1])}
+    cm_rows.modules = {
+        "dummy": DummyRowArrayConstraint(
+            [
+                (
+                    np.asarray([0, 2], dtype=int),
+                    np.asarray([[1.0, 2.0, 0.0], [0.0, -1.0, 1.0]], dtype=float),
+                ),
+                (
+                    np.asarray([1], dtype=int),
+                    np.asarray([[0.0, 1.0, 1.0]], dtype=float),
+                ),
+            ]
+        )
+    }
+
+    grad_dense = np.asarray(
+        [[1.0, -2.0, 0.5], [3.0, 4.0, -1.0], [0.1, 0.2, 0.3]], dtype=float
+    )
+    grad_rows = grad_dense.copy()
+    mesh = DummyMesh(3)
+
+    cm_dense.apply_gradient_modifications_array(
+        grad_dense, mesh=mesh, global_params=None
+    )
+    cm_rows.apply_gradient_modifications_array(grad_rows, mesh=mesh, global_params=None)
+
+    assert np.allclose(grad_rows, grad_dense, atol=1e-12, rtol=0.0)
+
+
+def test_tilt_row_constraint_kkt_projection_matches_dense():
+    cm_dense = ConstraintModuleManager([])
+    cm_rows = ConstraintModuleManager([])
+
+    g_in = np.zeros((2, 3), dtype=float)
+    g_out = np.zeros((2, 3), dtype=float)
+    g_in[0] = np.array([1.0, 0.0, 0.0])
+    g_out[1] = np.array([0.0, 2.0, 0.0])
+
+    cm_dense.modules = {"dummy": DummyTiltConstraint([(g_in, None), (None, g_out)])}
+    cm_rows.modules = {
+        "dummy": DummyTiltRowConstraint(
+            [
+                ((np.asarray([0], dtype=int), np.asarray([[1.0, 0.0, 0.0]])), None),
+                (None, (np.asarray([1], dtype=int), np.asarray([[0.0, 2.0, 0.0]]))),
+            ]
+        )
+    }
+
+    tilt_in_dense = np.asarray([[5.0, 1.0, -2.0], [0.0, 0.0, 0.0]], dtype=float)
+    tilt_out_dense = np.asarray([[0.0, 0.0, 0.0], [-4.0, 3.0, 1.0]], dtype=float)
+    tilt_in_rows = tilt_in_dense.copy()
+    tilt_out_rows = tilt_out_dense.copy()
+    mesh = DummyMesh(2)
+
+    cm_dense.apply_tilt_gradient_modifications_array(
+        tilt_in_dense, tilt_out_dense, mesh=mesh, global_params=None
+    )
+    cm_rows.apply_tilt_gradient_modifications_array(
+        tilt_in_rows, tilt_out_rows, mesh=mesh, global_params=None
+    )
+
+    assert np.allclose(tilt_in_rows, tilt_in_dense, atol=1e-12, rtol=0.0)
+    assert np.allclose(tilt_out_rows, tilt_out_dense, atol=1e-12, rtol=0.0)
