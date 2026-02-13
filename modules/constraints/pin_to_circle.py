@@ -396,4 +396,169 @@ def enforce_constraint(mesh, **_kwargs):
             vertex.position[:] = center + radius * tangent
 
 
-__all__ = ["enforce_constraint"]
+def _collect_pin_to_circle_targets(mesh):
+    fixed_targets: list[tuple[int, dict | None]] = []
+    fit_groups: dict[object, dict[str, object]] = {}
+
+    def add_fit_vertex(vidx: int, options: dict | None):
+        group = _group_from_options(options)
+        entry = fit_groups.setdefault(
+            group, {"vertex_ids": set(), "options": [], "mode": "fit"}
+        )
+        entry["vertex_ids"].add(int(vidx))
+        if options:
+            entry["options"].append(options)
+            entry["mode"] = _mode_from_options(mesh, options)
+
+    for vertex in mesh.vertices.values():
+        options = getattr(vertex, "options", None)
+        if not _entity_has_constraint(options):
+            continue
+        mode = _mode_from_options(mesh, options)
+        if mode in {"fit", "slide"}:
+            add_fit_vertex(int(vertex.index), options)
+            continue
+        fixed_targets.append((int(vertex.index), options))
+
+    for edge in mesh.edges.values():
+        options = getattr(edge, "options", None)
+        if not _entity_has_constraint(options):
+            continue
+        mode = _mode_from_options(mesh, options)
+        if mode in {"fit", "slide"}:
+            add_fit_vertex(int(edge.tail_index), options)
+            add_fit_vertex(int(edge.head_index), options)
+            continue
+        fixed_targets.append((int(edge.tail_index), options))
+        fixed_targets.append((int(edge.head_index), options))
+
+    return fixed_targets, fit_groups
+
+
+def _resolve_fit_circle_for_group(mesh, spec: dict[str, object]):
+    vertex_ids = sorted(spec["vertex_ids"])
+    if len(vertex_ids) < 3:
+        return None
+    points = np.array([mesh.vertices[i].position for i in vertex_ids], dtype=float)
+    option_sources = list(spec["options"])
+    normal_fixed, radius_fixed = _resolve_fit_params(mesh, option_sources)
+    normal = normal_fixed if normal_fixed is not None else _fit_plane_normal(points)
+    if normal is None:
+        return None
+
+    mode = str(spec.get("mode") or "fit").lower()
+    if mode == "slide":
+        gp = getattr(mesh, "global_parameters", None)
+        base_point_raw = None
+        for opts in option_sources:
+            if opts and opts.get("pin_to_circle_point") is not None:
+                base_point_raw = opts.get("pin_to_circle_point")
+                break
+        if base_point_raw is None and gp is not None:
+            base_point_raw = gp.get("pin_to_circle_point")
+        if base_point_raw is None:
+            base_point_raw = [0.0, 0.0, 0.0]
+        base_point = np.asarray(base_point_raw, dtype=float).reshape(3)
+
+        offsets = points - base_point[None, :]
+        t = float(np.mean(offsets @ normal))
+        center = base_point + t * normal
+
+        points_plane = (
+            points - ((points - center[None, :]) @ normal)[:, None] * normal[None, :]
+        )
+        radial = points_plane - center[None, :]
+        radial = radial - (radial @ normal)[:, None] * normal[None, :]
+        r_vals = np.linalg.norm(radial, axis=1)
+        radius = float(np.mean(r_vals)) if radius_fixed is None else float(radius_fixed)
+        if not np.isfinite(radius) or radius <= 0.0:
+            return None
+    else:
+        fitted = _fit_circle_in_plane(points, normal, radius_fixed)
+        if fitted is None:
+            return None
+        center, radius = fitted
+    return (
+        np.asarray(normal, dtype=float),
+        np.asarray(center, dtype=float),
+        float(radius),
+    )
+
+
+def _circle_constraint_gradients_for_vertex(
+    *,
+    pos: np.ndarray,
+    normal: np.ndarray,
+    center: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    g_plane = np.asarray(normal, dtype=float)
+    pos_plane = pos - np.dot(pos - center, normal) * normal
+    radial = pos_plane - center
+    radial_hat = _normalize(radial)
+    if radial_hat is None:
+        radial_hat = _default_tangent(normal)
+    return g_plane, np.asarray(radial_hat, dtype=float)
+
+
+def constraint_gradients(mesh, _global_params) -> list[dict[int, np.ndarray]] | None:
+    """Return shape-constraint gradients for KKT projection."""
+    gradients: list[dict[int, np.ndarray]] = []
+    fixed_targets, fit_groups = _collect_pin_to_circle_targets(mesh)
+
+    for vidx, options in fixed_targets:
+        vertex = mesh.vertices.get(int(vidx))
+        if vertex is None or getattr(vertex, "fixed", False):
+            continue
+        params = _resolve_circle(mesh, options)
+        if params is None:
+            continue
+        normal, center, _radius = params
+        g_plane, g_radial = _circle_constraint_gradients_for_vertex(
+            pos=vertex.position, normal=normal, center=center
+        )
+        gradients.append({int(vidx): g_plane})
+        gradients.append({int(vidx): g_radial})
+
+    for spec in fit_groups.values():
+        resolved = _resolve_fit_circle_for_group(mesh, spec)
+        if resolved is None:
+            continue
+        normal, center, _radius = resolved
+        for vidx in sorted(spec["vertex_ids"]):
+            vertex = mesh.vertices.get(int(vidx))
+            if vertex is None or getattr(vertex, "fixed", False):
+                continue
+            g_plane, g_radial = _circle_constraint_gradients_for_vertex(
+                pos=vertex.position, normal=normal, center=center
+            )
+            gradients.append({int(vidx): g_plane})
+            gradients.append({int(vidx): g_radial})
+
+    return gradients or None
+
+
+def constraint_gradients_array(
+    mesh,
+    _global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> list[np.ndarray] | None:
+    """Dense array variant of pin-to-circle shape gradients."""
+    _ = positions
+    dict_grads = constraint_gradients(mesh, _global_params)
+    if not dict_grads:
+        return None
+    arr_grads: list[np.ndarray] = []
+    for gC in dict_grads:
+        g_arr = np.zeros((len(index_map), 3), dtype=float)
+        for vidx, gvec in gC.items():
+            row = index_map.get(int(vidx))
+            if row is None:
+                continue
+            g_arr[row] += np.asarray(gvec, dtype=float)
+        arr_grads.append(g_arr)
+    return arr_grads or None
+
+
+__all__ = ["enforce_constraint", "constraint_gradients", "constraint_gradients_array"]

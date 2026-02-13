@@ -6,6 +6,7 @@ import numpy as np
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import parse_geometry
+from modules.constraints import pin_to_circle
 from runtime.constraint_manager import ConstraintModuleManager
 
 
@@ -259,3 +260,89 @@ def test_pin_to_circle_refine_preserves_planar_rim_z() -> None:
     manager = ConstraintModuleManager(refined.constraint_modules)
     manager.enforce_all(refined)
     assert rim_z_range(refined) < 1e-10
+
+
+def test_pin_to_circle_constraint_gradients_match_finite_difference() -> None:
+    data = {
+        "vertices": [
+            [1.4, 0.6, 0.3, {"constraints": ["pin_to_circle"]}],
+            [0.0, 0.0, 0.0],
+        ],
+        "edges": [[0, 1]],
+        "faces": [],
+        "global_parameters": {
+            "pin_to_circle_normal": [0.0, 0.0, 1.0],
+            "pin_to_circle_point": [0.0, 0.0, 0.0],
+            "pin_to_circle_radius": 1.5,
+        },
+    }
+    mesh = parse_geometry(data)
+    grads = pin_to_circle.constraint_gradients(mesh, mesh.global_parameters)
+    assert grads is not None
+    g_for_v = [g[0] for g in grads if 0 in g]
+    assert len(g_for_v) >= 2
+    g_plane = g_for_v[0]
+    g_radial = g_for_v[1]
+
+    x0 = mesh.vertices[0].position.copy()
+    n = np.array([0.0, 0.0, 1.0], dtype=float)
+    c = np.array([0.0, 0.0, 0.0], dtype=float)
+    r = 1.5
+
+    def residual_plane(x: np.ndarray) -> float:
+        return float(np.dot(x - c, n))
+
+    def residual_radial(x: np.ndarray) -> float:
+        x_plane = x - float(np.dot(x - c, n)) * n
+        return float(np.linalg.norm(x_plane - c) - r)
+
+    eps = 1e-7
+    fd_plane = np.zeros(3, dtype=float)
+    fd_radial = np.zeros(3, dtype=float)
+    for axis in range(3):
+        xp = x0.copy()
+        xm = x0.copy()
+        xp[axis] += eps
+        xm[axis] -= eps
+        fd_plane[axis] = (residual_plane(xp) - residual_plane(xm)) / (2.0 * eps)
+        fd_radial[axis] = (residual_radial(xp) - residual_radial(xm)) / (2.0 * eps)
+
+    assert np.allclose(g_plane, fd_plane, rtol=1e-6, atol=1e-8)
+    assert np.allclose(g_radial, fd_radial, rtol=1e-5, atol=1e-7)
+
+
+def test_pin_to_circle_constraint_gradients_array_matches_dict() -> None:
+    data = {
+        "vertices": [
+            [1.4, 0.6, 0.3, {"constraints": ["pin_to_circle"]}],
+            [0.3, 1.3, -0.2, {"constraints": ["pin_to_circle"]}],
+            [0.0, 0.0, 0.0],
+        ],
+        "edges": [[0, 2, {"constraints": ["pin_to_circle"]}]],
+        "faces": [],
+        "global_parameters": {
+            "pin_to_circle_normal": [0.0, 0.0, 1.0],
+            "pin_to_circle_point": [0.0, 0.0, 0.0],
+            "pin_to_circle_radius": 1.5,
+        },
+    }
+    mesh = parse_geometry(data)
+    mesh.build_position_cache()
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    g_dict = pin_to_circle.constraint_gradients(mesh, mesh.global_parameters)
+    g_arr = pin_to_circle.constraint_gradients_array(
+        mesh,
+        mesh.global_parameters,
+        positions=positions,
+        index_map=index_map,
+    )
+    assert g_dict is not None and g_arr is not None
+    assert len(g_dict) == len(g_arr)
+
+    for gC, gA in zip(g_dict, g_arr):
+        dense = np.zeros_like(positions)
+        for vidx, vec in gC.items():
+            dense[index_map[int(vidx)]] += vec
+        assert np.allclose(dense, gA, atol=1e-12, rtol=0.0)
