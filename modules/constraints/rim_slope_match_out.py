@@ -331,6 +331,30 @@ def constraint_gradients_array(
     index_map: dict[int, int],
 ) -> list[np.ndarray] | None:
     """Return dense constraint gradients for rim matching (shape only)."""
+    row_constraints = constraint_gradients_rows_array(
+        mesh,
+        global_params,
+        positions=positions,
+        index_map=index_map,
+    )
+    if not row_constraints:
+        return None
+    constraints: list[np.ndarray] = []
+    for rows, vecs in row_constraints:
+        g_arr = np.zeros_like(positions)
+        np.add.at(g_arr, rows, vecs)
+        constraints.append(g_arr)
+    return constraints or None
+
+
+def constraint_gradients_rows_array(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> list[tuple[np.ndarray, np.ndarray]] | None:
+    """Return sparse-row constraint gradients for rim matching (shape only)."""
     _ = index_map
     data = _build_matching_data(mesh, global_params, positions)
     if data is None:
@@ -348,7 +372,7 @@ def constraint_gradients_array(
     valid = data["valid"]
     normal = data["normal"]
 
-    constraints: list[np.ndarray] = []
+    constraints: list[tuple[np.ndarray, np.ndarray]] = []
     # Note: theta_scalar is available but does not change the gradient structure
     # for the asymmetric constraints:
     # 1. t_out . r = phi  => C = t_out.r - phi = 0
@@ -361,26 +385,32 @@ def constraint_gradients_array(
             continue
         coeff = weight_sqrt[i] * inv_dr[i]
 
-        g_out = np.zeros_like(positions)
-        # Gradient of phi w.r.t z: rim (-inv_dr), outer (+inv_dr)
-        # Gradient of -phi: rim (+inv_dr), outer (-inv_dr)
-        # Multiplied by weight_sqrt (captured in coeff)
-        g_out[rim_rows[i]] += coeff * normal
         out0 = outer_rows[outer_idx0[i]]
         out1 = outer_rows[outer_idx1[i]]
-        g_out[out0] += -coeff * outer_w0[i] * normal
+        rows_out = [int(rim_rows[i]), int(out0)]
+        vecs_out = [coeff * normal, -coeff * outer_w0[i] * normal]
         if out1 != out0 or outer_w1[i] != 0.0:
-            g_out[out1] += -coeff * outer_w1[i] * normal
-        constraints.append(g_out)
+            rows_out.append(int(out1))
+            vecs_out.append(-coeff * outer_w1[i] * normal)
+        constraints.append(
+            (
+                np.asarray(rows_out, dtype=int),
+                np.asarray(vecs_out, dtype=float),
+            )
+        )
 
         if disk_rows is not None:
-            g_in = np.zeros_like(positions)
-            # Gradient of +phi: rim (-inv_dr), outer (+inv_dr)
-            g_in[rim_rows[i]] += -coeff * normal
-            g_in[out0] += coeff * outer_w0[i] * normal
+            rows_in = [int(rim_rows[i]), int(out0)]
+            vecs_in = [-coeff * normal, coeff * outer_w0[i] * normal]
             if out1 != out0 or outer_w1[i] != 0.0:
-                g_in[out1] += coeff * outer_w1[i] * normal
-            constraints.append(g_in)
+                rows_in.append(int(out1))
+                vecs_in.append(coeff * outer_w1[i] * normal)
+            constraints.append(
+                (
+                    np.asarray(rows_in, dtype=int),
+                    np.asarray(vecs_in, dtype=float),
+                )
+            )
 
     return constraints or None
 
@@ -395,6 +425,50 @@ def constraint_gradients_tilt_array(
     tilts_out: np.ndarray | None = None,
 ) -> list[tuple[np.ndarray | None, np.ndarray | None]] | None:
     """Return dense constraint gradients for rim matching (tilts)."""
+    row_constraints = constraint_gradients_tilt_rows_array(
+        mesh,
+        global_params,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=tilts_in,
+        tilts_out=tilts_out,
+    )
+    if not row_constraints:
+        return None
+    constraints: list[tuple[np.ndarray | None, np.ndarray | None]] = []
+    for in_part, out_part in row_constraints:
+        g_in = None
+        g_out = None
+        if in_part is not None:
+            rows_in, vecs_in = in_part
+            g_in = np.zeros_like(positions)
+            np.add.at(g_in, rows_in, vecs_in)
+        if out_part is not None:
+            rows_out, vecs_out = out_part
+            g_out = np.zeros_like(positions)
+            np.add.at(g_out, rows_out, vecs_out)
+        constraints.append((g_in, g_out))
+    return constraints or None
+
+
+def constraint_gradients_tilt_rows_array(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+    tilts_in: np.ndarray | None = None,
+    tilts_out: np.ndarray | None = None,
+) -> (
+    list[
+        tuple[
+            tuple[np.ndarray, np.ndarray] | None,
+            tuple[np.ndarray, np.ndarray] | None,
+        ]
+    ]
+    | None
+):
+    """Return sparse-row constraint gradients for rim matching (tilts)."""
     _ = index_map, tilts_in, tilts_out
     data = _build_matching_data(mesh, global_params, positions)
     if data is None:
@@ -412,7 +486,12 @@ def constraint_gradients_tilt_array(
 
     normals = mesh.vertex_normals(positions=positions)
 
-    constraints: list[tuple[np.ndarray | None, np.ndarray | None]] = []
+    constraints: list[
+        tuple[
+            tuple[np.ndarray, np.ndarray] | None,
+            tuple[np.ndarray, np.ndarray] | None,
+        ]
+    ] = []
 
     for i, ok in enumerate(valid):
         if not ok or weight_sqrt[i] == 0.0:
@@ -426,36 +505,39 @@ def constraint_gradients_tilt_array(
             continue
         r_dir = r_dir / r_norm
 
-        g_out = np.zeros_like(positions)
-        g_out[rim_rows[i]] += coeff * r_dir
-        constraints.append((None, g_out))
+        out_part = (
+            np.asarray([int(rim_rows[i])], dtype=int),
+            np.asarray([coeff * r_dir], dtype=float),
+        )
 
         if disk_rows is None or disk_r_hat is None:
+            constraints.append((None, out_part))
             continue
 
-        # If theta_scalar is present, we still need a constraint on t_in.
-        # But we don't need to project onto disk_rows (since theta_B is scalar).
-        # However, the legacy code structure couples t_in to disk rows if local_disk is set.
-        # But for scalar theta_B, the constraint is t_in . r = theta_B - phi.
-        # The gradient w.r.t t_in is just r_dir.
-        # The gradient w.r.t disk tilts is 0 (since theta_B is scalar).
-
-        g_in = np.zeros_like(positions)
-        g_in[rim_rows[i]] += coeff * r_dir
+        rows_in = [int(rim_rows[i])]
+        vecs_in = [coeff * r_dir]
 
         if theta_scalar is None:
-            # Legacy: theta_disk depends on disk tilts. Add gradient.
             if local_disk:
-                g_in[disk_rows[i]] += -coeff * disk_r_hat[i]
+                rows_in.append(int(disk_rows[i]))
+                vecs_in.append(-coeff * disk_r_hat[i])
             else:
                 if disk_weights is None:
+                    constraints.append((None, out_part))
                     continue
                 weight_sum = float(np.sum(disk_weights))
                 if weight_sum > 0.0:
                     factors = (disk_weights / weight_sum)[:, None] * disk_r_hat
-                    g_in[disk_rows] += -coeff * factors
+                    for row_idx, factor in zip(disk_rows, factors):
+                        rows_in.append(int(row_idx))
+                        vecs_in.append(-coeff * factor)
 
-        constraints.append((g_in, None))
+        in_part = (
+            np.asarray(rows_in, dtype=int),
+            np.asarray(vecs_in, dtype=float),
+        )
+        constraints.append((None, out_part))
+        constraints.append((in_part, None))
 
     return constraints or None
 
@@ -544,6 +626,8 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
 
 __all__ = [
     "constraint_gradients_array",
+    "constraint_gradients_rows_array",
     "constraint_gradients_tilt_array",
+    "constraint_gradients_tilt_rows_array",
     "enforce_tilt_constraint",
 ]
