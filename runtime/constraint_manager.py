@@ -231,26 +231,38 @@ class ConstraintModuleManager:
                 grad_arr -= lam * gC_arr
             return
 
-        A = np.zeros((k, k), dtype=float)
-        b = np.zeros(k, dtype=float)
-        for i, gCi in enumerate(all_constraints):
-            b[i] = float(np.sum(grad_arr * gCi))
-            for j in range(i, k):
-                gCj = all_constraints[j]
-                A[i, j] = float(np.sum(gCi * gCj))
-                if j != i:
-                    A[j, i] = A[i, j]
+        self._project_dense_gradient_against_constraints(grad_arr, all_constraints)
 
+    @staticmethod
+    def _project_dense_gradient_against_constraints(
+        grad_arr: np.ndarray, constraints: list[np.ndarray]
+    ) -> None:
+        """Project ``grad_arr`` onto the complement of dense constraint rows.
+
+        Uses a vectorized KKT solve:
+          A = C C^T, b = C g, lam = solve(A, b), g <- g - C^T lam
+        where each row of ``C`` is one flattened dense constraint gradient.
+        """
+        if not constraints:
+            return
+        if len(constraints) == 1:
+            gC = constraints[0]
+            norm_sq = float(np.sum(gC * gC))
+            if norm_sq > 1e-18:
+                lam = float(np.sum(grad_arr * gC)) / norm_sq
+                grad_arr -= lam * gC
+            return
+
+        grad_flat = grad_arr.reshape(-1)
+        C = np.stack([np.asarray(gC, dtype=float).reshape(-1) for gC in constraints])
+        b = C @ grad_flat
+        A = C @ C.T
         A[np.diag_indices_from(A)] += 1e-18
         try:
             lam = np.linalg.solve(A, b)
         except np.linalg.LinAlgError:
             return
-
-        for gCi, lam_i in zip(all_constraints, lam):
-            if lam_i == 0.0:
-                continue
-            grad_arr -= lam_i * gCi
+        grad_flat -= C.T @ lam
 
     def apply_tilt_gradient_modifications_array(
         self,
@@ -303,52 +315,31 @@ class ConstraintModuleManager:
         if not all_constraints:
             return
 
-        k = len(all_constraints)
-        A = np.zeros((k, k), dtype=float)
-        b = np.zeros(k, dtype=float)
-        for i, (gC_in_i, gC_out_i) in enumerate(all_constraints):
-            g_in_i = (
-                np.zeros_like(tilt_in_grad_arr)
-                if gC_in_i is None
-                else np.asarray(gC_in_i, dtype=float)
+        constraints_flat: list[np.ndarray] = []
+        zeros_in = np.zeros_like(tilt_in_grad_arr)
+        zeros_out = np.zeros_like(tilt_out_grad_arr)
+        for gC_in, gC_out in all_constraints:
+            g_in = zeros_in if gC_in is None else np.asarray(gC_in, dtype=float)
+            g_out = zeros_out if gC_out is None else np.asarray(gC_out, dtype=float)
+            constraints_flat.append(
+                np.concatenate([g_in.reshape(-1), g_out.reshape(-1)])
             )
-            g_out_i = (
-                np.zeros_like(tilt_out_grad_arr)
-                if gC_out_i is None
-                else np.asarray(gC_out_i, dtype=float)
-            )
-            b[i] = float(
-                np.sum(tilt_in_grad_arr * g_in_i) + np.sum(tilt_out_grad_arr * g_out_i)
-            )
-            for j in range(i, k):
-                gC_in_j, gC_out_j = all_constraints[j]
-                g_in_j = (
-                    np.zeros_like(tilt_in_grad_arr)
-                    if gC_in_j is None
-                    else np.asarray(gC_in_j, dtype=float)
-                )
-                g_out_j = (
-                    np.zeros_like(tilt_out_grad_arr)
-                    if gC_out_j is None
-                    else np.asarray(gC_out_j, dtype=float)
-                )
-                A[i, j] = float(np.sum(g_in_i * g_in_j) + np.sum(g_out_i * g_out_j))
-                if j != i:
-                    A[j, i] = A[i, j]
 
+        stacked_grad = np.concatenate(
+            [tilt_in_grad_arr.reshape(-1), tilt_out_grad_arr.reshape(-1)]
+        )
+        C = np.stack(constraints_flat)
+        b = C @ stacked_grad
+        A = C @ C.T
         A[np.diag_indices_from(A)] += 1e-18
         try:
             lam = np.linalg.solve(A, b)
         except np.linalg.LinAlgError:
             return
-
-        for (gC_in, gC_out), lam_i in zip(all_constraints, lam):
-            if lam_i == 0.0:
-                continue
-            if gC_in is not None:
-                tilt_in_grad_arr -= lam_i * gC_in
-            if gC_out is not None:
-                tilt_out_grad_arr -= lam_i * gC_out
+        stacked_grad -= C.T @ lam
+        n_in = tilt_in_grad_arr.size
+        tilt_in_grad_arr[:] = stacked_grad[:n_in].reshape(tilt_in_grad_arr.shape)
+        tilt_out_grad_arr[:] = stacked_grad[n_in:].reshape(tilt_out_grad_arr.shape)
 
     def enforce_tilt_constraints(self, mesh, **kwargs) -> None:
         """Invoke tilt-only constraint projections on all loaded modules."""
