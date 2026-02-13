@@ -1,6 +1,12 @@
+import os
+import sys
+
 import numpy as np
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from geometry.geom_io import load_data, parse_geometry
+from modules.constraints import tilt_thetaB_boundary_in
 from runtime.constraint_manager import ConstraintModuleManager
 
 
@@ -155,3 +161,73 @@ def test_tilt_thetaB_boundary_in_noops_when_group_missing_or_empty() -> None:
     gp.set("rim_slope_match_disk_group", "does_not_exist")
     cm.enforce_tilt_constraints(mesh, global_params=gp)
     assert np.allclose(mesh.tilts_in_view(), before, atol=0.0, rtol=0.0)
+
+
+def test_tilt_thetaB_boundary_in_constraint_gradients_tilt_match_fd() -> None:
+    mesh = parse_geometry(
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
+    )
+    gp = mesh.global_parameters
+    gp.set("tilt_thetaB_value", 0.07)
+    gp.set("tilt_thetaB_center", [0.0, 0.0, 0.0])
+    gp.set("tilt_thetaB_normal", [0.0, 0.0, 1.0])
+    gp.set("tilt_thetaB_group_in", "disk")
+
+    mesh.build_position_cache()
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_out = mesh.tilts_out_view().copy(order="F")
+
+    g_list = tilt_thetaB_boundary_in.constraint_gradients_tilt_array(
+        mesh,
+        gp,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=tilts_in,
+        tilts_out=tilts_out,
+    )
+    assert g_list is not None and len(g_list) > 0
+
+    g_in, g_out = g_list[0]
+    assert g_in is not None
+    assert g_out is None
+    rows = np.flatnonzero(np.linalg.norm(g_in, axis=1) > 0.0)
+    assert rows.size == 1
+    row = int(rows[0])
+    dvec = g_in[row].copy()
+
+    thetaB = float(gp.get("tilt_thetaB_value") or 0.0)
+    t0 = tilts_in[row].copy()
+
+    def residual(tvec: np.ndarray) -> float:
+        return float(np.dot(tvec, dvec) - thetaB)
+
+    eps = 1e-7
+    fd = np.zeros(3, dtype=float)
+    for axis in range(3):
+        tp = t0.copy()
+        tm = t0.copy()
+        tp[axis] += eps
+        tm[axis] -= eps
+        fd[axis] = (residual(tp) - residual(tm)) / (2.0 * eps)
+
+    assert np.allclose(dvec, fd, atol=1e-8, rtol=1e-6)
+
+
+def test_tilt_thetaB_boundary_in_shape_gradient_hooks_return_none() -> None:
+    mesh = parse_geometry(
+        load_data(_fixture_path("kozlov_free_disk_coarse_refinable.yaml"))
+    )
+    gp = mesh.global_parameters
+    mesh.build_position_cache()
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    assert tilt_thetaB_boundary_in.constraint_gradients(mesh, gp) is None
+    assert (
+        tilt_thetaB_boundary_in.constraint_gradients_array(
+            mesh, gp, positions=positions, index_map=index_map
+        )
+        is None
+    )
