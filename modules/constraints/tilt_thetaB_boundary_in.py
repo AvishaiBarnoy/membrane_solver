@@ -101,12 +101,94 @@ def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
     return np.asarray(rows, dtype=int)
 
 
-def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
-    """Project inner-leaflet radial tilt on the disk boundary to thetaB."""
+def _boundary_directions(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Return boundary rows and tangent-plane radial directions."""
     group = _resolve_group(global_params)
     if group is None:
-        return
+        return None
 
+    rows = _collect_group_rows(mesh, group)
+    if rows.size == 0:
+        return None
+
+    pts = positions[rows]
+    center = _resolve_center(global_params)
+    normal = _resolve_normal(global_params, pts)
+
+    r_vec = pts - center[None, :]
+    r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
+    r_len = np.linalg.norm(r_vec, axis=1)
+    good = r_len > 1e-12
+    if not np.any(good):
+        return None
+
+    r_hat = np.zeros_like(r_vec)
+    r_hat[good] = r_vec[good] / r_len[good][:, None]
+
+    normals_v = mesh.vertex_normals(positions=positions)[rows]
+    r_dir = r_hat - np.einsum("ij,ij->i", r_hat, normals_v)[:, None] * normals_v
+    nrm = np.linalg.norm(r_dir, axis=1)
+    ok = nrm > 1e-12
+    r_dir[ok] = r_dir[ok] / nrm[ok][:, None]
+    valid = good & ok
+    if not np.any(valid):
+        return None
+
+    return rows[valid], r_dir[valid]
+
+
+def constraint_gradients(mesh: Mesh, global_params=None) -> None:
+    """No shape constraints for this tilt-only module."""
+    _ = mesh, global_params
+    return None
+
+
+def constraint_gradients_array(
+    mesh: Mesh,
+    global_params=None,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> None:
+    """No shape constraints for this tilt-only module."""
+    _ = mesh, global_params, positions, index_map
+    return None
+
+
+def constraint_gradients_tilt_array(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+    tilts_in: np.ndarray | None = None,
+    tilts_out: np.ndarray | None = None,
+) -> list[tuple[np.ndarray | None, np.ndarray | None]] | None:
+    """Return tilt-space KKT gradients for `t_in·r_dir = thetaB` constraints."""
+    _ = index_map, tilts_in, tilts_out
+    data = _boundary_directions(mesh, global_params, positions=positions)
+    if data is None:
+        return None
+    rows, r_dir = data
+
+    constraints: list[tuple[np.ndarray | None, np.ndarray | None]] = []
+    for row, dvec in zip(rows, r_dir):
+        vid = int(mesh.vertex_ids[int(row)])
+        if getattr(mesh.vertices[vid], "tilt_fixed_in", False):
+            continue
+        g_in = np.zeros_like(positions)
+        g_in[int(row)] += dvec
+        constraints.append((g_in, None))
+    return constraints or None
+
+
+def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
+    """Project inner-leaflet radial tilt on the disk boundary to thetaB."""
     thetaB = (
         0.0
         if global_params is None
@@ -114,49 +196,30 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
     )
 
     positions = mesh.positions_view()
-    rows = _collect_group_rows(mesh, group)
-    if rows.size == 0:
+    data = _boundary_directions(mesh, global_params, positions=positions)
+    if data is None:
         return
-
-    pts = positions[rows]
-    center = _resolve_center(global_params)
-    normal = _resolve_normal(global_params, pts)
-
-    # In-plane radial vectors from center to the boundary ring.
-    r_vec = pts - center[None, :]
-    r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
-    r_len = np.linalg.norm(r_vec, axis=1)
-    good = r_len > 1e-12
-    if not np.any(good):
-        return
-
-    r_hat = np.zeros_like(r_vec)
-    r_hat[good] = r_vec[good] / r_len[good][:, None]
+    rows, r_dir = data
 
     tilts_in = mesh.tilts_in_view().copy(order="F")
-    normals_v = mesh.vertex_normals(positions=positions)
 
-    for i, ok in enumerate(good):
-        if not ok:
-            continue
-        row = int(rows[i])
+    for i, row in enumerate(rows):
+        row = int(row)
         vid = int(mesh.vertex_ids[row])
         if getattr(mesh.vertices[vid], "tilt_fixed_in", False):
             continue
 
-        # Use the radial direction projected into the local tangent plane.
-        n = normals_v[row]
-        r_dir = r_hat[i] - float(np.dot(r_hat[i], n)) * n
-        r_norm = float(np.linalg.norm(r_dir))
-        if r_norm < 1e-12:
-            continue
-        r_dir = r_dir / r_norm
-
         t = tilts_in[row]
-        t_rad = float(np.dot(t, r_dir))
-        tilts_in[row] = t + (thetaB - t_rad) * r_dir
+        dvec = r_dir[i]
+        t_rad = float(np.dot(t, dvec))
+        tilts_in[row] = t + (thetaB - t_rad) * dvec
 
     mesh.set_tilts_in_from_array(tilts_in)
 
 
-__all__ = ["enforce_tilt_constraint"]
+__all__ = [
+    "constraint_gradients",
+    "constraint_gradients_array",
+    "constraint_gradients_tilt_array",
+    "enforce_tilt_constraint",
+]
