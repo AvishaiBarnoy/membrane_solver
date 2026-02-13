@@ -236,4 +236,130 @@ def enforce_constraint(mesh, tol: float = 0.0, max_iter: int = 1, **_kwargs) -> 
             vertex.position[:] = _project_onto_plane(vertex.position, normal, point)
 
 
-__all__ = ["enforce_constraint"]
+def _collect_targets(mesh):
+    """Collect fixed-mode targets and group-mode vertex sets."""
+    fixed_targets: list[tuple[int, dict | None]] = []
+    group_vertices: dict[str, set[int]] = {}
+    group_mode: dict[str, str] = {}
+    group_normal: dict[str, np.ndarray | None] = {}
+
+    def note_group(group: str, mode: str, normal: np.ndarray | None, vidx: int) -> None:
+        group_vertices.setdefault(group, set()).add(int(vidx))
+        if group not in group_mode:
+            group_mode[group] = mode
+        elif group_mode[group] != "fit" and mode == "fit":
+            group_mode[group] = "fit"
+        if normal is not None and group_normal.get(group) is None:
+            group_normal[group] = normal
+
+    for vidx, vertex in mesh.vertices.items():
+        opts = getattr(vertex, "options", None)
+        if not _has_pin_to_plane(opts):
+            continue
+        mode = _mode_from_options(mesh, opts)
+        if mode == "fixed":
+            fixed_targets.append((int(vidx), opts))
+            continue
+        note_group(
+            _group_from_options(opts),
+            mode,
+            _resolve_normal_from_options(mesh, opts),
+            int(vidx),
+        )
+
+    for edge in mesh.edges.values():
+        opts = getattr(edge, "options", None)
+        if not _has_pin_to_plane(opts):
+            continue
+        mode = _mode_from_options(mesh, opts)
+        if mode == "fixed":
+            fixed_targets.append((int(edge.tail_index), opts))
+            fixed_targets.append((int(edge.head_index), opts))
+            continue
+        group = _group_from_options(opts)
+        normal = _resolve_normal_from_options(mesh, opts)
+        note_group(group, mode, normal, int(edge.tail_index))
+        note_group(group, mode, normal, int(edge.head_index))
+
+    return fixed_targets, group_vertices, group_mode, group_normal
+
+
+def _resolve_group_plane(
+    mesh,
+    vids: set[int],
+    mode: str,
+    normal_hint: np.ndarray | None,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    if not vids:
+        return None
+    points = np.array([mesh.vertices[v].position for v in vids], dtype=float)
+    normal = normal_hint
+    if normal is None:
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+    if mode == "fit":
+        fitted = _fit_plane_normal(points)
+        if fitted is not None:
+            normal = fitted
+    norm = float(np.linalg.norm(normal))
+    if norm < 1e-15:
+        return None
+    return normal / norm, np.mean(points, axis=0)
+
+
+def constraint_gradients(mesh, _global_params) -> list[dict[int, np.ndarray]] | None:
+    """Return shape-constraint gradients for KKT projection."""
+    fixed_targets, group_vertices, group_mode, group_normal = _collect_targets(mesh)
+    gradients: list[dict[int, np.ndarray]] = []
+
+    for vidx, opts in fixed_targets:
+        vertex = mesh.vertices.get(int(vidx))
+        if vertex is None or getattr(vertex, "fixed", False):
+            continue
+        resolved = _resolve_plane_from_options(mesh, opts)
+        if resolved is None:
+            continue
+        normal, _ = resolved
+        gradients.append({int(vidx): np.asarray(normal, dtype=float)})
+
+    for group, vids in group_vertices.items():
+        resolved = _resolve_group_plane(
+            mesh, vids, group_mode.get(group, "fixed"), group_normal.get(group)
+        )
+        if resolved is None:
+            continue
+        normal, _ = resolved
+        normal = np.asarray(normal, dtype=float)
+        for vidx in sorted(vids):
+            vertex = mesh.vertices.get(int(vidx))
+            if vertex is None or getattr(vertex, "fixed", False):
+                continue
+            gradients.append({int(vidx): normal.copy()})
+
+    return gradients or None
+
+
+def constraint_gradients_array(
+    mesh,
+    _global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> list[np.ndarray] | None:
+    """Dense array variant of pin-to-plane shape gradients."""
+    _ = positions
+    dict_grads = constraint_gradients(mesh, _global_params)
+    if not dict_grads:
+        return None
+    arr_grads: list[np.ndarray] = []
+    for gC in dict_grads:
+        g_arr = np.zeros((len(index_map), 3), dtype=float)
+        for vidx, gvec in gC.items():
+            row = index_map.get(int(vidx))
+            if row is None:
+                continue
+            g_arr[row] += np.asarray(gvec, dtype=float)
+        arr_grads.append(g_arr)
+    return arr_grads or None
+
+
+__all__ = ["enforce_constraint", "constraint_gradients", "constraint_gradients_array"]
