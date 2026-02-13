@@ -53,6 +53,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Milestone C: 3D Kozlov annulus mesh with bilayer tilt↔curvature coupling (`meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml`) plus E2E regression tests (including leaflet sign flip).
 - Analytic regression benchmark for the 1-disk model (tensionless: distal/proximal tilts match; `docs/tex/1_disk_3d.pdf`).
 - θ_B bilayer rim source energy module `tilt_rim_source_bilayer` (single source definition; equivalent to `tilt_rim_source_in` + `tilt_rim_source_out` with equal parameters).
+- Acceptance E2E parity test for the named free-disk mesh (`tests/test_kozlov_free_disk_mesh_theory_parity_acceptance_e2e.py`) against `docs/tex/1_disk_3d.tex` with 15% tolerance on `theta_B` and energy plus convergence-trend checks.
 
 ### Fixed
 - Geometry-freeze caching now reuses curvature/area weights during tilt relaxation when positions are fixed.
@@ -118,6 +119,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Benchmark suite profiling: `python tools/suite.py --profile` emits per-case `.pstats` files (plus optional text summaries) for easier A/B performance analysis.
 - Fixed edges now freeze their endpoint vertices (including during refinement), matching Evolver-style behavior.
 - Expression-based energy and constraints with safe evaluation and numeric gradients.
+- Increased `tilt_thetaB_optimize_delta` to `0.03` in `meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_profile_hard_rim_R12_free_disk.yaml` to reach the theory-scale `theta_B` within the bounded acceptance workflow.
 - Expression `defines`: top-level symbols evaluated from expressions (usable in energy/constraint expressions).
 - Benchmarks now run in read-only sandboxes (no temp files); README/manual updated with benchmark usage.
 - Documentation callouts: README, `manual.md`, and `docs/ROADMAP.md` now highlight testing requirements, shared exceptions, and upcoming placeholder modules for curvature/tilt energies.

@@ -24,7 +24,7 @@ global_parameters:
   - 1.0
   tilt_thetaB_optimize: true
   tilt_thetaB_optimize_every: 1
-  tilt_thetaB_optimize_delta: 0.01
+  tilt_thetaB_optimize_delta: 0.03
   tilt_thetaB_optimize_inner_steps: 10
   bending_tilt_base_term_boundary_group_in: rim
   bending_tilt_base_term_boundary_group_out: rim
