@@ -4865,7 +4865,10 @@ macros:
   - r
   - V2
   - energy
-  - g20
+  - t5e-3
+  - g8
+  - t2e-3
+  - g12
   - tstat in
   - tstat out
   - energy
