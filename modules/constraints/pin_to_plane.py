@@ -362,4 +362,59 @@ def constraint_gradients_array(
     return arr_grads or None
 
 
-__all__ = ["enforce_constraint", "constraint_gradients", "constraint_gradients_array"]
+def constraint_gradients_rows_array(
+    mesh,
+    _global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> list[tuple[np.ndarray, np.ndarray]] | None:
+    """Sparse row variant of pin-to-plane shape gradients."""
+    _ = positions
+    fixed_targets, group_vertices, group_mode, group_normal = _collect_targets(mesh)
+    row_grads: list[tuple[np.ndarray, np.ndarray]] = []
+
+    for vidx, opts in fixed_targets:
+        vertex = mesh.vertices.get(int(vidx))
+        if vertex is None or getattr(vertex, "fixed", False):
+            continue
+        row = index_map.get(int(vidx))
+        if row is None:
+            continue
+        resolved = _resolve_plane_from_options(mesh, opts)
+        if resolved is None:
+            continue
+        normal, _ = resolved
+        row_grads.append(
+            (
+                np.asarray([int(row)], dtype=int),
+                np.asarray(normal, dtype=float).reshape(1, 3),
+            )
+        )
+
+    for group, vids in group_vertices.items():
+        resolved = _resolve_group_plane(
+            mesh, vids, group_mode.get(group, "fixed"), group_normal.get(group)
+        )
+        if resolved is None:
+            continue
+        normal, _ = resolved
+        normal = np.asarray(normal, dtype=float).reshape(1, 3)
+        for vidx in sorted(vids):
+            vertex = mesh.vertices.get(int(vidx))
+            if vertex is None or getattr(vertex, "fixed", False):
+                continue
+            row = index_map.get(int(vidx))
+            if row is None:
+                continue
+            row_grads.append((np.asarray([int(row)], dtype=int), normal.copy()))
+
+    return row_grads or None
+
+
+__all__ = [
+    "enforce_constraint",
+    "constraint_gradients",
+    "constraint_gradients_array",
+    "constraint_gradients_rows_array",
+]

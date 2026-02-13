@@ -8,6 +8,37 @@ import numpy as np
 logger = logging.getLogger("ConstraintManager")
 
 
+def _as_row_gradient_payload(payload):
+    """Normalize a sparse row-gradient payload to ``(rows, vecs)`` arrays.
+
+    Expected shapes:
+      - rows: (m,), integer row ids in ``[0, n_rows)``
+      - vecs: (m, 3), float vectors at each row
+    """
+    if not isinstance(payload, tuple) or len(payload) != 2:
+        raise ValueError("row gradient payload must be a (rows, vectors) tuple")
+    rows = np.asarray(payload[0], dtype=int).reshape(-1)
+    vecs = np.asarray(payload[1], dtype=float)
+    if vecs.ndim != 2 or vecs.shape[1] != 3:
+        raise ValueError("row gradient vectors must have shape (m, 3)")
+    if rows.shape[0] != vecs.shape[0]:
+        raise ValueError("row gradient rows/vectors length mismatch")
+    return rows, vecs
+
+
+def _accumulate_sparse_row_into_dense_flat(
+    dense_row: np.ndarray, rows: np.ndarray, vecs: np.ndarray
+) -> None:
+    if rows.size == 0:
+        return
+    flat_cols = np.empty(rows.size * 3, dtype=int)
+    base = 3 * rows
+    flat_cols[0::3] = base
+    flat_cols[1::3] = base + 1
+    flat_cols[2::3] = base + 2
+    np.add.at(dense_row, flat_cols, vecs.reshape(-1))
+
+
 class ConstraintModuleManager:
     def __init__(self, module_names):
         self.modules = {}
@@ -151,14 +182,38 @@ class ConstraintModuleManager:
 
         Preferred interface for constraint modules is ``constraint_gradients_array``,
         returning a list of dense arrays with the same shape as ``grad_arr``.
+        For high-cardinality constraints, modules may provide
+        ``constraint_gradients_rows_array`` returning sparse row payloads
+        ``(rows, vectors)`` with shapes ``(m,)`` and ``(m, 3)``.
         The legacy dict-based ``constraint_gradients`` is still supported.
         """
         mesh.build_position_cache()
         positions = mesh.positions_view()
         index_map = mesh.vertex_index_to_row
 
+        sparse_row_constraints: list[tuple[np.ndarray, np.ndarray]] = []
         all_constraints: list[np.ndarray] = []
         for name, module in self.modules.items():
+            g_list_rows = None
+            if hasattr(module, "constraint_gradients_rows_array"):
+                try:
+                    g_list_rows = module.constraint_gradients_rows_array(
+                        mesh,
+                        global_params,
+                        positions=positions,
+                        index_map=index_map,
+                    )
+                except TypeError:
+                    g_list_rows = module.constraint_gradients_rows_array(
+                        mesh, global_params
+                    )
+                if g_list_rows:
+                    for payload in g_list_rows:
+                        rows, vecs = _as_row_gradient_payload(payload)
+                        if rows.size:
+                            sparse_row_constraints.append((rows, vecs))
+                    continue
+
             g_list_arr = None
             if hasattr(module, "constraint_gradients_array"):
                 try:
@@ -208,6 +263,7 @@ class ConstraintModuleManager:
 
             if (
                 name not in self._warned_no_grad
+                and not hasattr(module, "constraint_gradients_rows_array")
                 and not hasattr(module, "constraint_gradients_array")
                 and not hasattr(module, "constraint_gradients")
                 and not hasattr(module, "constraint_gradient")
@@ -220,18 +276,48 @@ class ConstraintModuleManager:
                 self._warned_no_grad.add(name)
 
         if not all_constraints:
+            if not sparse_row_constraints:
+                return
+            if len(sparse_row_constraints) == 1:
+                rows, vecs = sparse_row_constraints[0]
+                norm_sq = float(np.sum(vecs * vecs))
+                if norm_sq <= 1e-18:
+                    return
+                dot = float(np.sum(grad_arr[rows] * vecs))
+                grad_updates = np.zeros_like(grad_arr)
+                np.add.at(grad_updates, rows, vecs)
+                grad_arr -= (dot / norm_sq) * grad_updates
+                return
+            self._project_mixed_gradient_against_constraints(
+                grad_arr,
+                dense_constraints=[],
+                sparse_constraints=sparse_row_constraints,
+            )
             return
 
-        k = len(all_constraints)
+        k = len(all_constraints) + len(sparse_row_constraints)
         if k == 1:
-            gC_arr = all_constraints[0]
-            norm_sq = float(np.sum(gC_arr * gC_arr))
+            if all_constraints:
+                gC_arr = all_constraints[0]
+                norm_sq = float(np.sum(gC_arr * gC_arr))
+                if norm_sq > 1e-18:
+                    lam = float(np.sum(grad_arr * gC_arr)) / norm_sq
+                    grad_arr -= lam * gC_arr
+                return
+            rows, vecs = sparse_row_constraints[0]
+            norm_sq = float(np.sum(vecs * vecs))
             if norm_sq > 1e-18:
-                lam = float(np.sum(grad_arr * gC_arr)) / norm_sq
-                grad_arr -= lam * gC_arr
+                dot = float(np.sum(grad_arr[rows] * vecs))
+                grad_updates = np.zeros_like(grad_arr)
+                np.add.at(grad_updates, rows, vecs)
+                grad_arr -= (dot / norm_sq) * grad_updates
             return
 
-        self._project_dense_gradient_against_constraints(grad_arr, all_constraints)
+        self._project_mixed_gradient_against_constraints(
+            grad_arr,
+            dense_constraints=all_constraints,
+            sparse_constraints=sparse_row_constraints,
+        )
 
     @staticmethod
     def _project_dense_gradient_against_constraints(
@@ -255,6 +341,38 @@ class ConstraintModuleManager:
 
         grad_flat = grad_arr.reshape(-1)
         C = np.stack([np.asarray(gC, dtype=float).reshape(-1) for gC in constraints])
+        b = C @ grad_flat
+        A = C @ C.T
+        A[np.diag_indices_from(A)] += 1e-18
+        try:
+            lam = np.linalg.solve(A, b)
+        except np.linalg.LinAlgError:
+            return
+        grad_flat -= C.T @ lam
+
+    @staticmethod
+    def _project_mixed_gradient_against_constraints(
+        grad_arr: np.ndarray,
+        *,
+        dense_constraints: list[np.ndarray],
+        sparse_constraints: list[tuple[np.ndarray, np.ndarray]],
+    ) -> None:
+        """Project using dense and sparse-row constraints in one KKT solve."""
+        n_dof = int(grad_arr.size)
+        k = len(dense_constraints) + len(sparse_constraints)
+        if k == 0:
+            return
+
+        C = np.zeros((k, n_dof), dtype=float)
+        row_idx = 0
+        for gC in dense_constraints:
+            C[row_idx, :] = np.asarray(gC, dtype=float).reshape(-1)
+            row_idx += 1
+        for rows, vecs in sparse_constraints:
+            _accumulate_sparse_row_into_dense_flat(C[row_idx, :], rows, vecs)
+            row_idx += 1
+
+        grad_flat = grad_arr.reshape(-1)
         b = C @ grad_flat
         A = C @ C.T
         A[np.diag_indices_from(A)] += 1e-18
@@ -294,8 +412,50 @@ class ConstraintModuleManager:
 
         index_map = mesh.vertex_index_to_row
         all_constraints: list[tuple[np.ndarray | None, np.ndarray | None]] = []
+        row_constraints: list[
+            tuple[
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+            ]
+        ] = []
 
         for module in self.modules.values():
+            if hasattr(module, "constraint_gradients_tilt_rows_array"):
+                try:
+                    g_list_rows = module.constraint_gradients_tilt_rows_array(
+                        mesh,
+                        global_params,
+                        positions=positions,
+                        index_map=index_map,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                    )
+                except TypeError:
+                    g_list_rows = module.constraint_gradients_tilt_rows_array(
+                        mesh, global_params
+                    )
+                if g_list_rows:
+                    for payload in g_list_rows:
+                        if not isinstance(payload, tuple) or len(payload) != 2:
+                            raise ValueError(
+                                "tilt row payload must be a ((rows, vecs)|None, (rows, vecs)|None) tuple"
+                            )
+                        in_part = payload[0]
+                        out_part = payload[1]
+                        in_norm = None
+                        out_norm = None
+                        if in_part is not None:
+                            in_rows, in_vecs = _as_row_gradient_payload(in_part)
+                            if in_rows.size:
+                                in_norm = (in_rows, in_vecs)
+                        if out_part is not None:
+                            out_rows, out_vecs = _as_row_gradient_payload(out_part)
+                            if out_rows.size:
+                                out_norm = (out_rows, out_vecs)
+                        if in_norm is not None or out_norm is not None:
+                            row_constraints.append((in_norm, out_norm))
+                    continue
+
             if not hasattr(module, "constraint_gradients_tilt_array"):
                 continue
             try:
@@ -312,7 +472,7 @@ class ConstraintModuleManager:
             if g_list:
                 all_constraints.extend(g_list)
 
-        if not all_constraints:
+        if not all_constraints and not row_constraints:
             return
 
         constraints_flat: list[np.ndarray] = []
@@ -328,7 +488,27 @@ class ConstraintModuleManager:
         stacked_grad = np.concatenate(
             [tilt_in_grad_arr.reshape(-1), tilt_out_grad_arr.reshape(-1)]
         )
-        C = np.stack(constraints_flat)
+        n_single = tilt_in_grad_arr.size
+        n_total = 2 * n_single
+        k_total = len(constraints_flat) + len(row_constraints)
+        C = np.zeros((k_total, n_total), dtype=float)
+        row_idx = 0
+        for c_row in constraints_flat:
+            C[row_idx, :] = c_row
+            row_idx += 1
+        for in_part, out_part in row_constraints:
+            if in_part is not None:
+                in_rows, in_vecs = in_part
+                _accumulate_sparse_row_into_dense_flat(
+                    C[row_idx, :n_single], in_rows, in_vecs
+                )
+            if out_part is not None:
+                out_rows, out_vecs = out_part
+                _accumulate_sparse_row_into_dense_flat(
+                    C[row_idx, n_single:], out_rows, out_vecs
+                )
+            row_idx += 1
+
         b = C @ stacked_grad
         A = C @ C.T
         A[np.diag_indices_from(A)] += 1e-18

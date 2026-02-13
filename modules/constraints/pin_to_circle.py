@@ -561,4 +561,65 @@ def constraint_gradients_array(
     return arr_grads or None
 
 
-__all__ = ["enforce_constraint", "constraint_gradients", "constraint_gradients_array"]
+def constraint_gradients_rows_array(
+    mesh,
+    _global_params,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> list[tuple[np.ndarray, np.ndarray]] | None:
+    """Sparse row variant of pin-to-circle shape gradients."""
+    _ = positions
+    row_grads: list[tuple[np.ndarray, np.ndarray]] = []
+    fixed_targets, fit_groups = _collect_pin_to_circle_targets(mesh)
+
+    for vidx, options in fixed_targets:
+        vertex = mesh.vertices.get(int(vidx))
+        if vertex is None or getattr(vertex, "fixed", False):
+            continue
+        row = index_map.get(int(vidx))
+        if row is None:
+            continue
+        params = _resolve_circle(mesh, options)
+        if params is None:
+            continue
+        normal, center, _radius = params
+        g_plane, g_radial = _circle_constraint_gradients_for_vertex(
+            pos=vertex.position, normal=normal, center=center
+        )
+        row_arr = np.asarray([int(row)], dtype=int)
+        row_grads.append((row_arr, np.asarray(g_plane, dtype=float).reshape(1, 3)))
+        row_grads.append(
+            (row_arr.copy(), np.asarray(g_radial, dtype=float).reshape(1, 3))
+        )
+
+    for spec in fit_groups.values():
+        resolved = _resolve_fit_circle_for_group(mesh, spec)
+        if resolved is None:
+            continue
+        normal, center, _radius = resolved
+        for vidx in sorted(spec["vertex_ids"]):
+            vertex = mesh.vertices.get(int(vidx))
+            if vertex is None or getattr(vertex, "fixed", False):
+                continue
+            row = index_map.get(int(vidx))
+            if row is None:
+                continue
+            g_plane, g_radial = _circle_constraint_gradients_for_vertex(
+                pos=vertex.position, normal=normal, center=center
+            )
+            row_arr = np.asarray([int(row)], dtype=int)
+            row_grads.append((row_arr, np.asarray(g_plane, dtype=float).reshape(1, 3)))
+            row_grads.append(
+                (row_arr.copy(), np.asarray(g_radial, dtype=float).reshape(1, 3))
+            )
+
+    return row_grads or None
+
+
+__all__ = [
+    "enforce_constraint",
+    "constraint_gradients",
+    "constraint_gradients_array",
+    "constraint_gradients_rows_array",
+]
