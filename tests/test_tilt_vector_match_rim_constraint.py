@@ -72,3 +72,63 @@ def test_tilt_vector_match_rim_enforces_in_plane_matching_per_leaflet():
     # With average mode and symmetric geometry, in-plane components should match.
     assert np.allclose(tilts_in[disk_rows, :2], tilts_in[rim_rows, :2], atol=1e-10)
     assert np.allclose(tilts_out[disk_rows, :2], tilts_out[rim_rows, :2], atol=1e-10)
+
+
+def test_tilt_vector_match_rim_row_constraints_match_dense():
+    n_theta = 10
+    disk_opts = {"tilt_vector_match_group": "cav1", "tilt_vector_match_role": "disk"}
+    rim_opts = {"tilt_vector_match_group": "cav1", "tilt_vector_match_role": "rim"}
+
+    vertices = _ring(n_theta, 0.8, 0.0, disk_opts) + _ring(n_theta, 1.0, 0.0, rim_opts)
+    edges = [[i, (i + 1) % n_theta] for i in range(n_theta)]
+    faces = []
+
+    mesh = parse_geometry(
+        {
+            "global_parameters": {"tilt_vector_match_mode": "average"},
+            "constraint_modules": ["tilt_vector_match_rim"],
+            "energy_modules": [],
+            "vertices": vertices,
+            "edges": edges,
+            "faces": faces,
+            "instructions": [],
+        }
+    )
+
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    dense = tilt_vector_match_rim.constraint_gradients_tilt_array(
+        mesh,
+        mesh.global_parameters,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+    )
+    rows = tilt_vector_match_rim.constraint_gradients_tilt_rows_array(
+        mesh,
+        mesh.global_parameters,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+    )
+
+    assert dense is not None
+    assert rows is not None
+    assert len(dense) == len(rows)
+    for (dense_in, dense_out), (row_in, row_out) in zip(dense, rows):
+        if dense_in is None:
+            assert row_in is None
+        else:
+            assert row_in is not None
+            rebuilt_in = np.zeros_like(positions)
+            np.add.at(rebuilt_in, row_in[0], row_in[1])
+            assert np.allclose(rebuilt_in, dense_in, atol=1e-12, rtol=0.0)
+        if dense_out is None:
+            assert row_out is None
+        else:
+            assert row_out is not None
+            rebuilt_out = np.zeros_like(positions)
+            np.add.at(rebuilt_out, row_out[0], row_out[1])
+            assert np.allclose(rebuilt_out, dense_out, atol=1e-12, rtol=0.0)
