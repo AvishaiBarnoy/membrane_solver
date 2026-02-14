@@ -67,6 +67,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Reduced leaflet-tilt synchronization overhead in the minimizer by using cache-backed array updates during thetaB candidate scans and tilt-relaxation constraint enforcement (`runtime/minimizer.py`), while preserving final energy/thetaB results in regression tests.
 - Cached `bending_tilt` boundary-group row collection in `modules/energy/bending_tilt_leaflet.py` to avoid repeated per-vertex scans during inner tilt relaxation loops.
 - Geometry-freeze caching now reuses curvature/area weights during tilt relaxation when positions are fixed.
+- Reduced repeated per-vertex rebinding overhead in `Mesh.set_tilts_in_from_array` and `Mesh.set_tilts_out_from_array` by tracking vertex row-binding version state, while keeping raw vertex tilt attributes synchronized for cache-correct energy parity.
 - `energy` breakdown output now separates internal energy vs external work terms (sources) and supports `energy ref` for reference-state deltas.
 - **Tilt Persistence**: Corrected `save_geometry` to persist `tilt` and `tilt_fixed` vertex properties to output JSON files.
 - **Live-Vis Warnings**: Silenced `plt.pause` warnings on headless CI backends.
