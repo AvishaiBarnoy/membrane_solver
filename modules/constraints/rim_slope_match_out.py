@@ -214,14 +214,40 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         theta_param = global_params.get("rim_slope_match_thetaB_param")
     if group is None or outer_group is None:
         return None
+    center = _resolve_center(global_params)
+    raw_normal = _resolve_normal(global_params)
+    normal_token = (
+        None
+        if raw_normal is None
+        else tuple(np.asarray(raw_normal, dtype=float).reshape(3).tolist())
+    )
+    theta_token = None
+    if theta_param is not None and global_params is not None:
+        theta_token = float(global_params.get(str(theta_param)) or 0.0)
+    cache_key = (
+        int(mesh._version),
+        int(mesh._vertex_ids_version),
+        str(group),
+        str(outer_group),
+        None if disk_group is None else str(disk_group),
+        None if theta_param is None else str(theta_param),
+        theta_token,
+        tuple(center.tolist()),
+        normal_token,
+        id(positions),
+    )
+    cache_attr = "_rim_slope_match_data_cache"
+    if mesh._geometry_cache_active(positions):
+        cached = getattr(mesh, cache_attr, None)
+        if cached is not None and cached.get("key") == cache_key:
+            return cached.get("value")
 
     rim_rows = _collect_group_rows(mesh, group)
     outer_rows = _collect_group_rows(mesh, outer_group)
     if rim_rows.size == 0 or outer_rows.size == 0:
         return None
 
-    center = _resolve_center(global_params)
-    normal = _resolve_normal(global_params)
+    normal = raw_normal
     if normal is None:
         normal = _fit_plane_normal(positions[rim_rows])
     if normal is None:
@@ -283,9 +309,7 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
     disk_r_hat = None
     disk_weights = None
     local_disk = False
-    theta_scalar = None
-    if theta_param is not None and global_params is not None:
-        theta_scalar = float(global_params.get(str(theta_param)) or 0.0)
+    theta_scalar = theta_token
     if disk_group is not None:
         disk_rows = _collect_group_rows(mesh, disk_group)
         if disk_rows.size:
@@ -310,7 +334,7 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
                 disk_weights = _arc_length_weights(disk_pos, np.arange(len(disk_rows)))
                 disk_weights = np.where(good_disk, disk_weights, 0.0)
 
-    return {
+    result = {
         "rim_rows": rim_rows,
         "outer_rows": outer_rows,
         "outer_idx0": outer_idx0,
@@ -329,6 +353,9 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         "normal": normal,
         "theta_scalar": theta_scalar,
     }
+    if mesh._geometry_cache_active(positions):
+        setattr(mesh, cache_attr, {"key": cache_key, "value": result})
+    return result
 
 
 def constraint_gradients_array(

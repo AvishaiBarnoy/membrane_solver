@@ -119,13 +119,34 @@ def _boundary_directions(
     group = _resolve_group(global_params)
     if group is None:
         return None
+    center = _resolve_center(global_params)
+    raw_normal = (
+        None if global_params is None else global_params.get("tilt_thetaB_normal")
+    )
+    normal_token = (
+        None
+        if raw_normal is None
+        else tuple(np.asarray(raw_normal, dtype=float).reshape(3).tolist())
+    )
+    cache_key = (
+        int(mesh._version),
+        int(mesh._vertex_ids_version),
+        str(group),
+        tuple(center.tolist()),
+        normal_token,
+        id(positions),
+    )
+    cache_attr = "_tilt_thetaB_boundary_directions_cache"
+    if mesh._geometry_cache_active(positions):
+        cached = getattr(mesh, cache_attr, None)
+        if cached is not None and cached.get("key") == cache_key:
+            return cached.get("value")
 
     rows = _collect_group_rows(mesh, group)
     if rows.size == 0:
         return None
 
     pts = positions[rows]
-    center = _resolve_center(global_params)
     normal = _resolve_normal(global_params, pts)
 
     r_vec = pts - center[None, :]
@@ -147,7 +168,10 @@ def _boundary_directions(
     if not np.any(valid):
         return None
 
-    return rows[valid], r_dir[valid]
+    result = (rows[valid], r_dir[valid])
+    if mesh._geometry_cache_active(positions):
+        setattr(mesh, cache_attr, {"key": cache_key, "value": result})
+    return result
 
 
 def constraint_gradients(mesh: Mesh, global_params=None) -> None:
