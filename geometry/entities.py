@@ -1794,11 +1794,13 @@ class Mesh:
         self._tilts_in_cache_version = self._tilts_in_version
         self._tilts_in_cache_counts = len(self.vertex_ids)
         self._tilts_in_cache_vertex_version = self._vertex_ids_version
+        cache = self._tilts_in_cache
         for row, vid in enumerate(self.vertex_ids):
             vertex = self.vertices[int(vid)]
             vertex._mesh = self
             vertex._row = row
-            object.__setattr__(vertex, "tilt_in", self._tilts_in_cache[row].copy())
+            # Store a row view to avoid per-vertex copy allocations.
+            object.__setattr__(vertex, "tilt_in", cache[row])
 
     def set_tilts_out_from_array(self, tilts: "np.ndarray") -> None:
         """Scatter a dense outer-leaflet tilt array back onto vertex objects."""
@@ -1814,11 +1816,13 @@ class Mesh:
         self._tilts_out_cache_version = self._tilts_out_version
         self._tilts_out_cache_counts = len(self.vertex_ids)
         self._tilts_out_cache_vertex_version = self._vertex_ids_version
+        cache = self._tilts_out_cache
         for row, vid in enumerate(self.vertex_ids):
             vertex = self.vertices[int(vid)]
             vertex._mesh = self
             vertex._row = row
-            object.__setattr__(vertex, "tilt_out", self._tilts_out_cache[row].copy())
+            # Store a row view to avoid per-vertex copy allocations.
+            object.__setattr__(vertex, "tilt_out", cache[row])
 
     def build_facet_vertex_loops(self):
         """Precompute ordered vertex loops for all facets.
