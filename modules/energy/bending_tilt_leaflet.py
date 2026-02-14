@@ -143,6 +143,46 @@ def _base_term_boundary_group(global_params, *, cache_tag: str) -> str | None:
     return group if group else None
 
 
+def _interior_mask_leaflet(
+    mesh: Mesh,
+    global_params,
+    *,
+    cache_tag: str,
+    index_map: Dict[int, int],
+) -> np.ndarray:
+    """Return cached interior mask for base-term evaluation.
+
+    Interior vertices are all non-boundary vertices, optionally excluding a
+    configured interface group and preset list used for theory-mode matching.
+    """
+    group = _base_term_boundary_group(global_params, cache_tag=cache_tag)
+    cache_key = (
+        int(mesh._vertex_ids_version),
+        int(mesh._topology_version),
+        None if group is None else str(group),
+    )
+    cache_attr = f"_bending_tilt_interior_mask_cache_{cache_tag}"
+    cached = getattr(mesh, cache_attr, None)
+    if cached is not None and cached.get("key") == cache_key:
+        return cached["mask"]
+
+    is_interior = np.ones(len(mesh.vertex_ids), dtype=bool)
+
+    boundary_vids = mesh.boundary_vertex_ids
+    if boundary_vids:
+        boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
+        if boundary_rows:
+            is_interior[np.asarray(boundary_rows, dtype=int)] = False
+
+    if group:
+        rows = _collect_group_rows(mesh, group=group, index_map=index_map)
+        if rows.size:
+            is_interior[rows] = False
+
+    setattr(mesh, cache_attr, {"key": cache_key, "mask": is_interior})
+    return is_interior
+
+
 def _resolve_bending_modulus(global_params, kappa_key: str) -> float:
     """Return the leaflet-specific bending modulus or the global default."""
     val = global_params.get(kappa_key)
@@ -278,16 +318,9 @@ def _total_energy_leaflet(
     k_mag = np.linalg.norm(k_vecs, axis=1)
     H_vor = k_mag / (2.0 * safe_areas_vor)
 
-    boundary_vids = mesh.boundary_vertex_ids
-    is_interior = np.ones(len(mesh.vertex_ids), dtype=bool)
-    if boundary_vids:
-        boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
-        is_interior[boundary_rows] = False
-    group = _base_term_boundary_group(global_params, cache_tag=cache_tag)
-    if group:
-        rows = _collect_group_rows(mesh, group=group, index_map=index_map)
-        if rows.size:
-            is_interior[rows] = False
+    is_interior = _interior_mask_leaflet(
+        mesh, global_params, cache_tag=cache_tag, index_map=index_map
+    )
 
     base_term = (2.0 * H_vor) - c0_arr
     base_term[~is_interior] = 0.0
@@ -446,19 +479,9 @@ def compute_energy_and_gradient_array_leaflet(
     k_mag = np.linalg.norm(k_vecs, axis=1)
     H_vor = k_mag / (2.0 * safe_areas_vor)
 
-    boundary_vids = mesh.boundary_vertex_ids
-    is_interior = np.ones(len(mesh.vertex_ids), dtype=bool)
-    if boundary_vids:
-        boundary_rows = [index_map[vid] for vid in boundary_vids if vid in index_map]
-        is_interior[boundary_rows] = False
-    group = _base_term_boundary_group(global_params, cache_tag=cache_tag)
-    if group:
-        # Treat this tagged interface ring like a boundary for the curvature
-        # (base) term. This avoids spuriously assigning a bulk Helfrich penalty
-        # to an internal ring that exists only to represent a hard interface.
-        rows = _collect_group_rows(mesh, group=group, index_map=index_map)
-        if rows.size:
-            is_interior[rows] = False
+    is_interior = _interior_mask_leaflet(
+        mesh, global_params, cache_tag=cache_tag, index_map=index_map
+    )
 
     ratio = np.zeros_like(vertex_areas_eff)
     mask_vor = safe_areas_vor > 1e-15
@@ -533,8 +556,7 @@ def compute_energy_and_gradient_array_leaflet(
         )
     elif mode == "approx":
         grad_arr[:] -= _apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
-        if boundary_vids:
-            grad_arr[boundary_rows] = 0.0
+        grad_arr[~is_interior] = 0.0
     else:
         # --- Analytic gradient backpropagation (copied from bending.py) ---
         v0_idxs, v1_idxs, v2_idxs = tri_rows[:, 0], tri_rows[:, 1], tri_rows[:, 2]
