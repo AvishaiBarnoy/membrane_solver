@@ -954,6 +954,8 @@ def save_geometry(
 
     facet_ids = _sorted_keys(mesh.facets)
     facet_id_map = {old: new for new, old in enumerate(facet_ids)}  # 0-based
+    pos_view = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
 
     def export_edge_index(old_signed_edge_index: int):
         sign = -1 if old_signed_edge_index < 0 else 1
@@ -991,11 +993,19 @@ def save_geometry(
         "vertices": [
             (
                 [
-                    *mesh.vertices[old_vid].position.tolist(),
+                    *(
+                        pos_view[index_map[int(old_vid)]]
+                        if int(old_vid) in index_map
+                        else mesh.vertices[old_vid].position
+                    ).tolist(),
                     prepare_options(mesh.vertices[old_vid]),
                 ]
                 if prepare_options(mesh.vertices[old_vid])
-                else mesh.vertices[old_vid].position.tolist()
+                else (
+                    pos_view[index_map[int(old_vid)]]
+                    if int(old_vid) in index_map
+                    else mesh.vertices[old_vid].position
+                ).tolist()
             )
             for old_vid in vertex_ids
         ],
