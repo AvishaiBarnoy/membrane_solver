@@ -68,6 +68,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Cached `bending_tilt` boundary-group row collection in `modules/energy/bending_tilt_leaflet.py` to avoid repeated per-vertex scans during inner tilt relaxation loops.
 - Geometry-freeze caching now reuses curvature/area weights during tilt relaxation when positions are fixed.
 - Reduced repeated per-vertex rebinding overhead in `Mesh.set_tilts_in_from_array` and `Mesh.set_tilts_out_from_array` by tracking vertex row-binding version state, while keeping raw vertex tilt attributes synchronized for cache-correct energy parity.
+- Optimized sparse leaflet tilt KKT projection in `runtime/constraint_manager.py` by projecting over compressed active DOFs for row-sparse constraints instead of building a full stacked dense constraint matrix each call.
 - `energy` breakdown output now separates internal energy vs external work terms (sources) and supports `energy ref` for reference-state deltas.
 - **Tilt Persistence**: Corrected `save_geometry` to persist `tilt` and `tilt_fixed` vertex properties to output JSON files.
 - **Live-Vis Warnings**: Silenced `plt.pause` warnings on headless CI backends.

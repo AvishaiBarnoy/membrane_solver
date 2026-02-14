@@ -320,3 +320,86 @@ def test_tilt_mixed_constraints_match_stacked_reference():
 
     assert np.allclose(got_in, ref_in, atol=1e-12, rtol=0.0)
     assert np.allclose(got_out, ref_out, atol=1e-12, rtol=0.0)
+
+
+def test_tilt_sparse_rows_with_duplicate_entries_match_stacked_reference():
+    cm = ConstraintModuleManager([])
+
+    # Duplicate row entries exercise payload coalescing and add.at semantics.
+    rows0_in = np.asarray([0, 0, 2], dtype=int)
+    vecs0_in = np.asarray(
+        [[1.0, 0.0, 0.5], [0.5, -0.25, 0.0], [0.0, 1.0, 0.0]], dtype=float
+    )
+    rows0_out = np.asarray([1, 1], dtype=int)
+    vecs0_out = np.asarray([[0.0, 2.0, 0.0], [0.25, 0.0, -1.0]], dtype=float)
+
+    rows1_in = np.asarray([2, 3], dtype=int)
+    vecs1_in = np.asarray([[0.1, -0.2, 0.3], [1.0, 0.0, 0.0]], dtype=float)
+    rows1_out = np.asarray([0, 3, 3], dtype=int)
+    vecs1_out = np.asarray(
+        [[-0.5, 0.0, 0.0], [0.0, 0.5, 0.5], [0.0, 1.0, -0.5]], dtype=float
+    )
+
+    cm.modules = {
+        "rows": DummyTiltRowConstraint(
+            [
+                ((rows0_in, vecs0_in), (rows0_out, vecs0_out)),
+                ((rows1_in, vecs1_in), (rows1_out, vecs1_out)),
+            ]
+        )
+    }
+
+    tilt_in = np.asarray(
+        [
+            [2.0, -1.0, 0.0],
+            [0.5, 0.25, -0.5],
+            [0.1, -0.2, 0.3],
+            [1.0, 2.0, -1.0],
+        ],
+        dtype=float,
+    )
+    tilt_out = np.asarray(
+        [
+            [-1.0, 0.5, 0.0],
+            [1.5, -0.25, 0.75],
+            [0.1, -0.1, 0.3],
+            [0.2, 0.3, -0.4],
+        ],
+        dtype=float,
+    )
+    mesh = DummyMesh(4)
+
+    got_in = tilt_in.copy()
+    got_out = tilt_out.copy()
+    cm.apply_tilt_gradient_modifications_array(
+        got_in, got_out, mesh=mesh, global_params=None
+    )
+
+    # Stacked reference formulation.
+    n_single = tilt_in.size
+    n_total = 2 * n_single
+    C = np.zeros((2, n_total), dtype=float)
+    for row, vec in zip(rows0_in, vecs0_in):
+        base = 3 * int(row)
+        C[0, base : base + 3] += vec
+    for row, vec in zip(rows0_out, vecs0_out):
+        base = n_single + 3 * int(row)
+        C[0, base : base + 3] += vec
+    for row, vec in zip(rows1_in, vecs1_in):
+        base = 3 * int(row)
+        C[1, base : base + 3] += vec
+    for row, vec in zip(rows1_out, vecs1_out):
+        base = n_single + 3 * int(row)
+        C[1, base : base + 3] += vec
+
+    stacked = np.concatenate([tilt_in.reshape(-1), tilt_out.reshape(-1)])
+    b = C @ stacked
+    A = C @ C.T
+    A[np.diag_indices_from(A)] += 1e-18
+    lam = np.linalg.solve(A, b)
+    stacked -= C.T @ lam
+    ref_in = stacked[:n_single].reshape(tilt_in.shape)
+    ref_out = stacked[n_single:].reshape(tilt_out.shape)
+
+    assert np.allclose(got_in, ref_in, atol=1e-12, rtol=0.0)
+    assert np.allclose(got_out, ref_out, atol=1e-12, rtol=0.0)
