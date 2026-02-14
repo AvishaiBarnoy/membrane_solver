@@ -31,12 +31,10 @@ def _accumulate_sparse_row_into_dense_flat(
 ) -> None:
     if rows.size == 0:
         return
-    flat_cols = np.empty(rows.size * 3, dtype=int)
-    base = 3 * rows
-    flat_cols[0::3] = base
-    flat_cols[1::3] = base + 1
-    flat_cols[2::3] = base + 2
-    np.add.at(dense_row, flat_cols, vecs.reshape(-1))
+    # Dense row is flattened (N,3); accumulate directly in 2D to avoid
+    # allocating index-expansion buffers on every constraint row.
+    dense_row_2d = dense_row.reshape(-1, 3)
+    np.add.at(dense_row_2d, rows, vecs)
 
 
 class ConstraintModuleManager:

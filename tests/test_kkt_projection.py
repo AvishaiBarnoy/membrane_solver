@@ -5,7 +5,10 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from runtime.constraint_manager import ConstraintModuleManager
+from runtime.constraint_manager import (
+    ConstraintModuleManager,
+    _accumulate_sparse_row_into_dense_flat,
+)
 
 
 class DummyConstraint:
@@ -75,6 +78,31 @@ class DummyMesh:
 
     def tilts_out_view(self):
         return np.zeros_like(self._positions)
+
+
+def test_accumulate_sparse_row_into_dense_flat_handles_duplicate_rows() -> None:
+    dense = np.zeros(9, dtype=float)  # 3 rows x 3 dof
+    rows = np.asarray([0, 1, 1, 2], dtype=int)
+    vecs = np.asarray(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0],
+            [0.0, -0.5, 1.5],
+            [3.0, 0.0, -1.0],
+        ],
+        dtype=float,
+    )
+    _accumulate_sparse_row_into_dense_flat(dense, rows, vecs)
+    got = dense.reshape(3, 3)
+    exp = np.asarray(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, 1.5, 1.5],
+            [3.0, 0.0, -1.0],
+        ],
+        dtype=float,
+    )
+    assert np.allclose(got, exp, atol=0.0, rtol=0.0)
 
 
 def test_single_constraint_kkt_projection_zeroes_parallel_component():

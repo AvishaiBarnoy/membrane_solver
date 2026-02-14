@@ -57,6 +57,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Acceptance E2E parity test for the named free-disk mesh (`tests/test_kozlov_free_disk_mesh_theory_parity_acceptance_e2e.py`) against `docs/tex/1_disk_3d.tex` with 15% tolerance on `theta_B` and energy plus convergence-trend checks.
 
 ### Fixed
+- Reduced sparse-row KKT assembly overhead in `runtime/constraint_manager.py` by accumulating directly into a `(N,3)` reshaped view instead of constructing expanded flat-index buffers per constraint row.
 - Cached leaflet interior/base-term masks in `modules/energy/bending_tilt_leaflet.py` to avoid rebuilding boundary/group exclusions across repeated bending-tilt evaluations.
 - Cached geometry-derived tilt-constraint payloads for `rim_slope_match_out` and `tilt_thetaB_boundary_in` when geometry cache is active, reducing repeated per-call setup in inner KKT tilt projection loops.
 - Reduced per-call allocation overhead in `Mesh.set_tilts_in_from_array` and `Mesh.set_tilts_out_from_array` by storing cache-backed row views instead of per-vertex copy buffers.
