@@ -223,6 +223,10 @@ Interactive commands:
   Profile the inner-loop tilt relaxation hot paths (single-field or leaflet),
   writing `.pstats` and a text summary under `benchmarks/outputs/profiles`.
 
+- `python tools/profile_macro_hotspots.py`
+  Profile macro runs step-by-step and optionally capture one command
+  (for example `g1`) with `cProfile` to emit `.pstats` and a text summary.
+
 - `python tools/tilt_benchmark_runner.py`
   Run `meshes/tilt_benchmarks/*.yaml` and print energy/tilt/divergence summaries
   (optionally writing JSON/CSV and plots).
