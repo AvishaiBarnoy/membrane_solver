@@ -180,6 +180,71 @@ def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
     return out
 
 
+def _boundary_geometry_payload(
+    mesh: Mesh,
+    *,
+    group: str,
+    positions: np.ndarray,
+    param_resolver,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float] | None:
+    """Return ordered boundary rows and geometric weights for thetaB contact."""
+    rows = _collect_group_rows(mesh, group)
+    if rows.size == 0:
+        return None
+
+    center = _resolve_center(param_resolver)
+    raw_normal = param_resolver.get(None, "tilt_thetaB_normal")
+    normal_token = (
+        None
+        if raw_normal is None
+        else tuple(np.asarray(raw_normal, dtype=float).reshape(3).tolist())
+    )
+    cache_key = (
+        int(mesh._version),
+        int(mesh._vertex_ids_version),
+        str(group),
+        tuple(center.tolist()),
+        normal_token,
+        id(positions),
+    )
+    cache_attr = "_tilt_thetaB_contact_boundary_geom_cache"
+    if mesh._geometry_cache_active(positions):
+        cached = getattr(mesh, cache_attr, None)
+        if cached is not None and cached.get("key") == cache_key:
+            return cached.get("value")
+
+    pts = positions[rows]
+    normal = _resolve_normal(param_resolver, pts)
+    order = _order_by_angle(pts, center=center, normal=normal)
+    rows = rows[order]
+    pts = pts[order]
+
+    weights = _arc_length_weights(pts, np.arange(len(rows)))
+    wsum = float(np.sum(weights))
+    if wsum <= 1e-12:
+        return None
+
+    r_vec = pts - center[None, :]
+    r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
+    r_len = np.linalg.norm(r_vec, axis=1)
+    good = r_len > 1e-12
+    if not np.any(good):
+        return None
+
+    rows = rows[good]
+    weights = weights[good]
+    r_len = r_len[good]
+    r_hat = r_vec[good] / r_len[:, None]
+    wsum = float(np.sum(weights))
+    if wsum <= 1e-12:
+        return None
+
+    payload = (rows, weights, r_hat, r_len, wsum)
+    if mesh._geometry_cache_active(positions):
+        setattr(mesh, cache_attr, {"key": cache_key, "value": payload})
+    return payload
+
+
 def update_scalar_params(mesh: Mesh, global_params, param_resolver) -> None:
     """Update global θ_B by minimizing the local quadratic energy."""
     if _penalty_mode(global_params) != "legacy":
@@ -192,32 +257,13 @@ def update_scalar_params(mesh: Mesh, global_params, param_resolver) -> None:
     if group is None:
         return
 
-    rows = _collect_group_rows(mesh, group)
-    if rows.size == 0:
-        return
-
     positions = mesh.positions_view()
-    pts = positions[rows]
-    center = _resolve_center(param_resolver)
-    normal = _resolve_normal(param_resolver, pts)
-    order = _order_by_angle(pts, center=center, normal=normal)
-    rows = rows[order]
-    pts = pts[order]
-
-    weights = _arc_length_weights(pts, np.arange(len(rows)))
-    wsum = float(np.sum(weights))
-    if wsum <= 1e-12:
+    payload = _boundary_geometry_payload(
+        mesh, group=group, positions=positions, param_resolver=param_resolver
+    )
+    if payload is None:
         return
-
-    r_vec = pts - center[None, :]
-    r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
-    r_len = np.linalg.norm(r_vec, axis=1)
-    good = r_len > 1e-12
-    if not np.any(good):
-        return
-
-    r_hat = np.zeros_like(r_vec)
-    r_hat[good] = r_vec[good] / r_len[good][:, None]
+    rows, weights, r_hat, r_len, wsum = payload
 
     tilts_in = mesh.tilts_in_view()
     theta_vals = np.einsum("ij,ij->i", tilts_in[rows], r_hat)
@@ -290,31 +336,12 @@ def compute_energy_and_gradient_array(
         if tilts_in.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_in must have shape (N_vertices, 3)")
 
-    rows = _collect_group_rows(mesh, group)
-    if rows.size == 0:
+    payload = _boundary_geometry_payload(
+        mesh, group=group, positions=positions, param_resolver=param_resolver
+    )
+    if payload is None:
         return 0.0
-
-    pts = positions[rows]
-    center = _resolve_center(param_resolver)
-    normal = _resolve_normal(param_resolver, pts)
-    order = _order_by_angle(pts, center=center, normal=normal)
-    rows = rows[order]
-    pts = pts[order]
-
-    weights = _arc_length_weights(pts, np.arange(len(rows)))
-    wsum = float(np.sum(weights))
-    if wsum <= 1e-12:
-        return 0.0
-
-    r_vec = pts - center[None, :]
-    r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
-    r_len = np.linalg.norm(r_vec, axis=1)
-    good = r_len > 1e-12
-    if not np.any(good):
-        return 0.0
-
-    r_hat = np.zeros_like(r_vec)
-    r_hat[good] = r_vec[good] / r_len[good][:, None]
+    rows, weights, r_hat, r_len, wsum = payload
 
     theta_vals = np.einsum("ij,ij->i", tilts_in[rows], r_hat)
     theta_B = _resolve_thetaB(global_params)
@@ -374,31 +401,12 @@ def compute_energy_array(
         if tilts_in.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_in must have shape (N_vertices, 3)")
 
-    rows = _collect_group_rows(mesh, group)
-    if rows.size == 0:
+    payload = _boundary_geometry_payload(
+        mesh, group=group, positions=positions, param_resolver=param_resolver
+    )
+    if payload is None:
         return 0.0
-
-    pts = positions[rows]
-    center = _resolve_center(param_resolver)
-    normal = _resolve_normal(param_resolver, pts)
-    order = _order_by_angle(pts, center=center, normal=normal)
-    rows = rows[order]
-    pts = pts[order]
-
-    weights = _arc_length_weights(pts, np.arange(len(rows)))
-    wsum = float(np.sum(weights))
-    if wsum <= 1e-12:
-        return 0.0
-
-    r_vec = pts - center[None, :]
-    r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
-    r_len = np.linalg.norm(r_vec, axis=1)
-    good = r_len > 1e-12
-    if not np.any(good):
-        return 0.0
-
-    r_hat = np.zeros_like(r_vec)
-    r_hat[good] = r_vec[good] / r_len[good][:, None]
+    rows, weights, r_hat, r_len, wsum = payload
 
     theta_vals = np.einsum("ij,ij->i", tilts_in[rows], r_hat)
     theta_B = _resolve_thetaB(global_params)
