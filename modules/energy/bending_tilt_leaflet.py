@@ -114,6 +114,12 @@ def _collect_group_rows(
     mesh: Mesh, *, group: str, index_map: Dict[int, int]
 ) -> np.ndarray:
     """Return vertex-row indices whose options tag them as members of ``group``."""
+    cache_key = (mesh._vertex_ids_version, str(group))
+    cache_attr = "_bending_tilt_group_rows_cache"
+    cached = getattr(mesh, cache_attr, None)
+    if cached is not None and cached.get("key") == cache_key:
+        return cached["rows"]
+
     rows: list[int] = []
     for vid in mesh.vertex_ids:
         opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
@@ -121,7 +127,9 @@ def _collect_group_rows(
             row = index_map.get(int(vid))
             if row is not None:
                 rows.append(int(row))
-    return np.asarray(rows, dtype=int)
+    out = np.asarray(rows, dtype=int)
+    setattr(mesh, cache_attr, {"key": cache_key, "rows": out})
+    return out
 
 
 def _base_term_boundary_group(global_params, *, cache_tag: str) -> str | None:
