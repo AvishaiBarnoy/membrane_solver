@@ -112,3 +112,57 @@ def test_thetaB_optimize_enables_nontrivial_thetaB_under_stiff_boundary_penalty(
 
     assert abs(thetaB_local) < 5.0e-3
     assert abs(thetaB_opt) > 1.0e-2
+
+
+@pytest.mark.regression
+def test_thetaB_optimize_fast_tilt_state_update_matches_legacy_energy() -> None:
+    """Fast cache-based tilt state updates must match legacy scatter semantics."""
+    base_params = {
+        "tilt_solve_mode": "coupled",
+        "tilt_solver": "gd",
+        "tilt_step_size": 0.05,
+        "tilt_inner_steps": 40,
+        "tilt_tol": 1e-12,
+        "tilt_thetaB_optimize": True,
+        "tilt_thetaB_optimize_every": 1,
+        "tilt_thetaB_optimize_delta": 0.05,
+        "tilt_thetaB_optimize_inner_steps": 40,
+        "rim_slope_match_disk_group": "disk",
+        "tilt_thetaB_center": [0.0, 0.0, 0.0],
+        "tilt_thetaB_strength_in": 1.0e3,
+        "tilt_thetaB_contact_strength_in": 1.0,
+        "tilt_thetaB_value": 0.0,
+        "tilt_modulus_in": 50.0,
+    }
+
+    def _run(*, legacy_setter: bool) -> tuple[float, float]:
+        mesh = _fan_disk_mesh(n_ring=16, radius=1.0)
+        gp = GlobalParameters(dict(base_params))
+        mesh.global_parameters = gp
+        mesh.energy_modules = ["tilt_in", "tilt_thetaB_contact_in"]
+        mesh.constraint_modules = []
+
+        minim = Minimizer(
+            mesh,
+            gp,
+            GradientDescent(),
+            EnergyModuleManager(mesh.energy_modules),
+            ConstraintModuleManager(mesh.constraint_modules),
+            quiet=True,
+            tol=1e-12,
+        )
+        if legacy_setter:
+            minim._set_leaflet_tilts_from_arrays_fast = (  # type: ignore[method-assign]
+                lambda tin, tout: (
+                    minim.mesh.set_tilts_in_from_array(tin),
+                    minim.mesh.set_tilts_out_from_array(tout),
+                )
+            )
+        minim.minimize(n_steps=1)
+        return float(minim.compute_energy()), float(gp.get("tilt_thetaB_value") or 0.0)
+
+    e_fast, theta_fast = _run(legacy_setter=False)
+    e_legacy, theta_legacy = _run(legacy_setter=True)
+
+    assert e_fast == pytest.approx(e_legacy, rel=1e-12, abs=1e-12)
+    assert theta_fast == pytest.approx(theta_legacy, rel=1e-12, abs=1e-12)

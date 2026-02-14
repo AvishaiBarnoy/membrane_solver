@@ -135,3 +135,23 @@ def test_thetaB_scalar_optimizer_restores_tilt_inner_steps_semantics():
     gp.set("tilt_inner_steps", 123)
     minimizer._optimize_thetaB_scalar(tilt_mode="fixed", iteration=1)
     assert int(gp.get("tilt_inner_steps")) == 123
+
+
+@pytest.mark.unit
+def test_set_leaflet_tilts_from_arrays_fast_updates_mesh_views_and_vertices():
+    gp = GlobalParameters({"tilt_thetaB_optimize": False})
+    minimizer = _minimizer_with_dummy_energy(target=0.0, global_params=gp)
+    mesh = minimizer.mesh
+
+    tin = np.asarray([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]], dtype=float)
+    tout = np.asarray(
+        [[-0.1, -0.2, -0.3], [-0.4, -0.5, -0.6], [-0.7, -0.8, -0.9]], dtype=float
+    )
+
+    minimizer._set_leaflet_tilts_from_arrays_fast(tin, tout)
+
+    assert np.allclose(mesh.tilts_in_view(), tin)
+    assert np.allclose(mesh.tilts_out_view(), tout)
+    # Vertex accessors must reflect cache-backed values.
+    assert np.allclose(mesh.vertices[0].tilt_in, tin[0])
+    assert np.allclose(mesh.vertices[2].tilt_out, tout[2])
