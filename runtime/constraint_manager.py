@@ -37,6 +37,20 @@ def _accumulate_sparse_row_into_dense_flat(
     np.add.at(dense_row_2d, rows, vecs)
 
 
+def _coalesce_sparse_row_payload(
+    rows: np.ndarray, vecs: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Combine duplicate row ids in a sparse row-gradient payload."""
+    if rows.size <= 1:
+        return rows, vecs
+    uniq_rows, inv = np.unique(rows, return_inverse=True)
+    if uniq_rows.size == rows.size:
+        return rows, vecs
+    uniq_vecs = np.zeros((uniq_rows.size, 3), dtype=float)
+    np.add.at(uniq_vecs, inv, vecs)
+    return uniq_rows, uniq_vecs
+
+
 class ConstraintModuleManager:
     def __init__(self, module_names):
         self.modules = {}
@@ -380,6 +394,110 @@ class ConstraintModuleManager:
             return
         grad_flat -= C.T @ lam
 
+    @staticmethod
+    def _project_leaflet_sparse_rows_against_constraints(
+        tilt_in_grad_arr: np.ndarray,
+        tilt_out_grad_arr: np.ndarray,
+        row_constraints: list[
+            tuple[
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+            ]
+        ],
+    ) -> None:
+        """Project leaflet gradients using sparse row constraints only.
+
+        This avoids constructing a dense stacked constraint matrix over all
+        leaflet DOFs when all active constraints are row-sparse payloads.
+        """
+        k = len(row_constraints)
+        if k == 0:
+            return
+
+        if k == 1:
+            in_part, out_part = row_constraints[0]
+            norm_sq = 0.0
+            dot = 0.0
+            if in_part is not None:
+                in_rows, in_vecs = in_part
+                norm_sq += float(np.sum(in_vecs * in_vecs))
+                dot += float(np.sum(tilt_in_grad_arr[in_rows] * in_vecs))
+            if out_part is not None:
+                out_rows, out_vecs = out_part
+                norm_sq += float(np.sum(out_vecs * out_vecs))
+                dot += float(np.sum(tilt_out_grad_arr[out_rows] * out_vecs))
+            if norm_sq <= 1e-18:
+                return
+            scale = -(dot / norm_sq)
+            if in_part is not None:
+                in_rows, in_vecs = in_part
+                np.add.at(tilt_in_grad_arr, in_rows, scale * in_vecs)
+            if out_part is not None:
+                out_rows, out_vecs = out_part
+                np.add.at(tilt_out_grad_arr, out_rows, scale * out_vecs)
+            return
+
+        n_single = int(tilt_in_grad_arr.size)
+        n_total = 2 * n_single
+
+        cols_chunks: list[np.ndarray] = []
+        axes = np.asarray([0, 1, 2], dtype=int)
+        for in_part, out_part in row_constraints:
+            if in_part is not None:
+                in_rows, _ = in_part
+                cols_chunks.append((3 * in_rows[:, None] + axes[None, :]).reshape(-1))
+            if out_part is not None:
+                out_rows, _ = out_part
+                cols_chunks.append(
+                    (n_single + 3 * out_rows[:, None] + axes[None, :]).reshape(-1)
+                )
+
+        if not cols_chunks:
+            return
+        active_cols = np.unique(np.concatenate(cols_chunks))
+        col_to_comp = np.full(n_total, -1, dtype=int)
+        col_to_comp[active_cols] = np.arange(active_cols.size, dtype=int)
+
+        C = np.zeros((k, active_cols.size), dtype=float)
+        for i, (in_part, out_part) in enumerate(row_constraints):
+            if in_part is not None:
+                in_rows, in_vecs = in_part
+                in_cols = (3 * in_rows[:, None] + axes[None, :]).reshape(-1)
+                C[i, col_to_comp[in_cols]] = in_vecs.reshape(-1)
+            if out_part is not None:
+                out_rows, out_vecs = out_part
+                out_cols = (n_single + 3 * out_rows[:, None] + axes[None, :]).reshape(
+                    -1
+                )
+                C[i, col_to_comp[out_cols]] = out_vecs.reshape(-1)
+
+        grad_flat = np.concatenate(
+            [tilt_in_grad_arr.reshape(-1), tilt_out_grad_arr.reshape(-1)]
+        )
+        grad_active = grad_flat[active_cols]
+        b = C @ grad_active
+        A = C @ C.T
+        A[np.diag_indices_from(A)] += 1e-18
+        try:
+            lam = np.linalg.solve(A, b)
+        except np.linalg.LinAlgError:
+            return
+        grad_active -= C.T @ lam
+        delta = grad_flat[active_cols] - grad_active
+
+        in_mask = active_cols < n_single
+        if np.any(in_mask):
+            in_cols = active_cols[in_mask]
+            in_rows = in_cols // 3
+            in_comp = in_cols % 3
+            tilt_in_grad_arr[in_rows, in_comp] -= delta[in_mask]
+        out_mask = ~in_mask
+        if np.any(out_mask):
+            out_cols = active_cols[out_mask] - n_single
+            out_rows = out_cols // 3
+            out_comp = out_cols % 3
+            tilt_out_grad_arr[out_rows, out_comp] -= delta[out_mask]
+
     def apply_tilt_gradient_modifications_array(
         self,
         tilt_in_grad_arr: np.ndarray,
@@ -444,10 +562,16 @@ class ConstraintModuleManager:
                         out_norm = None
                         if in_part is not None:
                             in_rows, in_vecs = _as_row_gradient_payload(in_part)
+                            in_rows, in_vecs = _coalesce_sparse_row_payload(
+                                in_rows, in_vecs
+                            )
                             if in_rows.size:
                                 in_norm = (in_rows, in_vecs)
                         if out_part is not None:
                             out_rows, out_vecs = _as_row_gradient_payload(out_part)
+                            out_rows, out_vecs = _coalesce_sparse_row_payload(
+                                out_rows, out_vecs
+                            )
                             if out_rows.size:
                                 out_norm = (out_rows, out_vecs)
                         if in_norm is not None or out_norm is not None:
@@ -471,6 +595,12 @@ class ConstraintModuleManager:
                 all_constraints.extend(g_list)
 
         if not all_constraints and not row_constraints:
+            return
+
+        if not all_constraints:
+            self._project_leaflet_sparse_rows_against_constraints(
+                tilt_in_grad_arr, tilt_out_grad_arr, row_constraints
+            )
             return
 
         constraints_flat: list[np.ndarray] = []
