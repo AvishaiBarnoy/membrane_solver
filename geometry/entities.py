@@ -935,6 +935,7 @@ class Mesh:
     _tilts_out_cache_counts: int = -1
     _tilts_out_cache_vertex_version: int = -1
     _tilts_out_version: int = 0
+    _vertex_row_binding_version: int = -1
     _triangle_rows_cache: "np.ndarray | None" = None
     _triangle_rows_cache_version: int = -1
     _triangle_row_facets: list[int] = field(default_factory=list)
@@ -1666,6 +1667,7 @@ class Mesh:
             self._tilts_cache = new_cache
             self._tilt_cache_counts = n_verts
             self._tilt_cache_vertex_version = self._vertex_ids_version
+            self._vertex_row_binding_version = self._vertex_ids_version
         self._tilts_cache_version = self._tilts_version
         return self._tilts_cache
 
@@ -1704,6 +1706,7 @@ class Mesh:
             self._tilts_in_cache = new_cache
             self._tilts_in_cache_counts = n_verts
             self._tilts_in_cache_vertex_version = self._vertex_ids_version
+            self._vertex_row_binding_version = self._vertex_ids_version
         self._tilts_in_cache_version = self._tilts_in_version
         return self._tilts_in_cache
 
@@ -1742,6 +1745,7 @@ class Mesh:
             self._tilts_out_cache = new_cache
             self._tilts_out_cache_counts = n_verts
             self._tilts_out_cache_vertex_version = self._vertex_ids_version
+            self._vertex_row_binding_version = self._vertex_ids_version
         self._tilts_out_cache_version = self._tilts_out_version
         return self._tilts_out_cache
 
@@ -1779,6 +1783,7 @@ class Mesh:
             vertex._mesh = self
             vertex._row = row
             object.__setattr__(vertex, "tilt", self._tilts_cache[row].copy())
+        self._vertex_row_binding_version = self._vertex_ids_version
 
     def set_tilts_in_from_array(self, tilts: "np.ndarray") -> None:
         """Scatter a dense inner-leaflet tilt array back onto vertex objects."""
@@ -1795,12 +1800,16 @@ class Mesh:
         self._tilts_in_cache_counts = len(self.vertex_ids)
         self._tilts_in_cache_vertex_version = self._vertex_ids_version
         cache = self._tilts_in_cache
+        need_rebind = self._vertex_row_binding_version != self._vertex_ids_version
         for row, vid in enumerate(self.vertex_ids):
             vertex = self.vertices[int(vid)]
-            vertex._mesh = self
-            vertex._row = row
+            if need_rebind:
+                vertex._mesh = self
+                vertex._row = row
             # Store a row view to avoid per-vertex copy allocations.
             object.__setattr__(vertex, "tilt_in", cache[row])
+        if need_rebind:
+            self._vertex_row_binding_version = self._vertex_ids_version
 
     def set_tilts_out_from_array(self, tilts: "np.ndarray") -> None:
         """Scatter a dense outer-leaflet tilt array back onto vertex objects."""
@@ -1817,12 +1826,16 @@ class Mesh:
         self._tilts_out_cache_counts = len(self.vertex_ids)
         self._tilts_out_cache_vertex_version = self._vertex_ids_version
         cache = self._tilts_out_cache
+        need_rebind = self._vertex_row_binding_version != self._vertex_ids_version
         for row, vid in enumerate(self.vertex_ids):
             vertex = self.vertices[int(vid)]
-            vertex._mesh = self
-            vertex._row = row
+            if need_rebind:
+                vertex._mesh = self
+                vertex._row = row
             # Store a row view to avoid per-vertex copy allocations.
             object.__setattr__(vertex, "tilt_out", cache[row])
+        if need_rebind:
+            self._vertex_row_binding_version = self._vertex_ids_version
 
     def build_facet_vertex_loops(self):
         """Precompute ordered vertex loops for all facets.
