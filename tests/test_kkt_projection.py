@@ -233,3 +233,62 @@ def test_tilt_row_constraint_kkt_projection_matches_dense():
 
     assert np.allclose(tilt_in_rows, tilt_in_dense, atol=1e-12, rtol=0.0)
     assert np.allclose(tilt_out_rows, tilt_out_dense, atol=1e-12, rtol=0.0)
+
+
+def test_tilt_mixed_constraints_match_stacked_reference():
+    cm = ConstraintModuleManager([])
+
+    g_in_dense = np.zeros((3, 3), dtype=float)
+    g_out_dense = np.zeros((3, 3), dtype=float)
+    g_in_dense[0] = np.array([1.0, -2.0, 0.5])
+    g_out_dense[2] = np.array([0.25, 1.0, -1.5])
+
+    rows_in = np.asarray([1], dtype=int)
+    vecs_in = np.asarray([[0.5, 0.0, 1.0]], dtype=float)
+    rows_out = np.asarray([0, 1], dtype=int)
+    vecs_out = np.asarray([[1.0, 0.0, 0.0], [0.0, 2.0, 0.0]], dtype=float)
+
+    cm.modules = {
+        "dense": DummyTiltConstraint([(g_in_dense, g_out_dense)]),
+        "rows": DummyTiltRowConstraint([((rows_in, vecs_in), (rows_out, vecs_out))]),
+    }
+
+    tilt_in = np.asarray(
+        [[2.0, -1.0, 0.0], [0.5, 0.25, -0.5], [0.0, 0.0, 1.0]], dtype=float
+    )
+    tilt_out = np.asarray(
+        [[-1.0, 0.5, 0.0], [1.5, -0.25, 0.75], [0.1, -0.1, 0.3]], dtype=float
+    )
+    mesh = DummyMesh(3)
+
+    got_in = tilt_in.copy()
+    got_out = tilt_out.copy()
+    cm.apply_tilt_gradient_modifications_array(
+        got_in, got_out, mesh=mesh, global_params=None
+    )
+
+    # Stacked reference formulation (the pre-optimization algebra).
+    n_single = tilt_in.size
+    n_total = 2 * n_single
+    C = np.zeros((2, n_total), dtype=float)
+    C[0, :n_single] = g_in_dense.reshape(-1)
+    C[0, n_single:] = g_out_dense.reshape(-1)
+    # Sparse row payload in/out packed into a single stacked row.
+    for row, vec in zip(rows_in, vecs_in):
+        base = 3 * int(row)
+        C[1, base : base + 3] += vec
+    for row, vec in zip(rows_out, vecs_out):
+        base = n_single + 3 * int(row)
+        C[1, base : base + 3] += vec
+
+    stacked = np.concatenate([tilt_in.reshape(-1), tilt_out.reshape(-1)])
+    b = C @ stacked
+    A = C @ C.T
+    A[np.diag_indices_from(A)] += 1e-18
+    lam = np.linalg.solve(A, b)
+    stacked -= C.T @ lam
+    ref_in = stacked[:n_single].reshape(tilt_in.shape)
+    ref_out = stacked[n_single:].reshape(tilt_out.shape)
+
+    assert np.allclose(got_in, ref_in, atol=1e-12, rtol=0.0)
+    assert np.allclose(got_out, ref_out, atol=1e-12, rtol=0.0)
