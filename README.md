@@ -119,6 +119,18 @@ To profile each benchmark case and generate per-case `.pstats` outputs:
 This runs `python tools/suite.py --profile` and writes results under
 `benchmarks/outputs/profiles` by default.
 
+To profile a specific macro run with per-step timings and an optional
+`cProfile` capture for a hot command (for example `g1`):
+
+```bash
+python tools/profile_macro_hotspots.py \
+  --mesh meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_profile_hard_rim_R12_free_disk.yaml \
+  --macro profile_relax_light \
+  --profile-command g1 \
+  --outdir benchmarks/outputs/profiles \
+  --label kozlov_profile_relax_light
+```
+
 ## Optional Fortran kernels (f2py)
 
 Optional hot-loop kernels can be compiled with NumPy `f2py` for speedups.

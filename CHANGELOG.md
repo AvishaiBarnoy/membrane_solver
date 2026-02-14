@@ -10,6 +10,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Compound commands via semicolons (e.g. `g50; V3; g10`).
   - `s bilayer` visualization mode (parity with `lv bilayer`).
 - Performance tooling: `tools/profile_tilt.py` to profile tilt relaxation hot-loops.
+- Performance tooling: `tools/profile_macro_hotspots.py` for per-step macro timing plus optional `cProfile` capture of a selected command.
 - New benchmark case: `benchmarks/benchmark_tilt_relaxation.py` (tilt relaxation hot-loop timing).
 - Rim source energies now follow fitted pin-to-circle rims (`pin_to_circle_mode: fit`) as they translate in space.
 - KH-pure tilt benchmark variants without smoothness regularization (`meshes/tilt_benchmarks/kh_pure_*`).
