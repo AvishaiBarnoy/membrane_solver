@@ -14,9 +14,7 @@ from modules.constraints.tilt_thetaB_boundary_in import (
 
 def _load_mesh():
     mesh = parse_geometry(
-        load_data(
-            "meshes/caveolin/kozlov_1disk_3d_tensionless_single_leaflet_profile_hard_rim_R12_free_disk.yaml"
-        )
+        load_data("tests/fixtures/kozlov_free_disk_coarse_refinable.yaml")
     )
     mesh.build_position_cache()
     return mesh, mesh.global_parameters
