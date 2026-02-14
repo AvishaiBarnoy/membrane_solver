@@ -1476,8 +1476,7 @@ class Minimizer:
                         # Tilt constraints operate on the mesh state, so scatter the
                         # accepted tilt arrays, enforce, then re-load for continued
                         # relaxation steps.
-                        self.mesh.set_tilts_in_from_array(tilts_in)
-                        self.mesh.set_tilts_out_from_array(tilts_out)
+                        self._set_leaflet_tilts_from_arrays_fast(tilts_in, tilts_out)
                         self.constraint_manager.enforce_tilt_constraints(
                             self.mesh, global_params=self.global_params
                         )
@@ -1526,8 +1525,7 @@ class Minimizer:
 
                 E0, gnorm = _leaflet_tilt_gradients()
                 if gnorm == 0.0 or (tol > 0.0 and gnorm < tol):
-                    self.mesh.set_tilts_in_from_array(tilts_in)
-                    self.mesh.set_tilts_out_from_array(tilts_out)
+                    self._set_leaflet_tilts_from_arrays_fast(tilts_in, tilts_out)
                     return
 
                 res_in = -tilt_in_grad
@@ -1588,8 +1586,7 @@ class Minimizer:
                         break
 
                     if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
-                        self.mesh.set_tilts_in_from_array(tilts_in)
-                        self.mesh.set_tilts_out_from_array(tilts_out)
+                        self._set_leaflet_tilts_from_arrays_fast(tilts_in, tilts_out)
                         self.constraint_manager.enforce_tilt_constraints(
                             self.mesh, global_params=self.global_params
                         )
@@ -1645,8 +1642,7 @@ class Minimizer:
                     dir_out = z_out + beta * dir_out
                     rz_old = rz_new
 
-        self.mesh.set_tilts_in_from_array(tilts_in)
-        self.mesh.set_tilts_out_from_array(tilts_out)
+        self._set_leaflet_tilts_from_arrays_fast(tilts_in, tilts_out)
         if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
             self.constraint_manager.enforce_tilt_constraints(
                 self.mesh, global_params=self.global_params
@@ -1997,6 +1993,21 @@ STEP SIZE:\t {self.step_size}
                 except TypeError:
                     module.update_scalar_params(self.mesh, self.global_params)
 
+    def _set_leaflet_tilts_from_arrays_fast(
+        self, tilts_in: np.ndarray, tilts_out: np.ndarray
+    ) -> None:
+        """Update leaflet tilt caches from dense arrays without per-vertex scatter."""
+        tilts_in_arr = np.asarray(tilts_in, dtype=float)
+        tilts_out_arr = np.asarray(tilts_out, dtype=float)
+        in_view = self.mesh.tilts_in_view()
+        out_view = self.mesh.tilts_out_view()
+        if tilts_in_arr.shape != in_view.shape or tilts_out_arr.shape != out_view.shape:
+            raise ValueError("tilt arrays must match mesh leaflet tilt view shapes")
+        in_view[:] = tilts_in_arr
+        out_view[:] = tilts_out_arr
+        self.mesh.touch_tilts_in()
+        self.mesh.touch_tilts_out()
+
     def _optimize_thetaB_scalar(self, *, tilt_mode: str, iteration: int) -> None:
         """Optionally optimize the scalar thetaB by sampling reduced energies.
 
@@ -2034,8 +2045,7 @@ STEP SIZE:\t {self.step_size}
 
         def eval_candidate(thetaB_val: float) -> tuple[float, np.ndarray, np.ndarray]:
             self.global_params.set("tilt_thetaB_value", float(thetaB_val))
-            self.mesh.set_tilts_in_from_array(base_tin)
-            self.mesh.set_tilts_out_from_array(base_tout)
+            self._set_leaflet_tilts_from_arrays_fast(base_tin, base_tout)
             # Relax tilts only; shape is handled by the main loop.
             self._relax_leaflet_tilts(
                 positions=self.mesh.positions_view(), mode=tilt_mode
@@ -2071,8 +2081,7 @@ STEP SIZE:\t {self.step_size}
         best_e, best_thetaB, best_tin, best_tout = best
         # Always restore the chosen candidate state (including "no change").
         self.global_params.set("tilt_thetaB_value", float(best_thetaB))
-        self.mesh.set_tilts_in_from_array(best_tin)
-        self.mesh.set_tilts_out_from_array(best_tout)
+        self._set_leaflet_tilts_from_arrays_fast(best_tin, best_tout)
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
@@ -2165,8 +2174,7 @@ STEP SIZE:\t {self.step_size}
                     post_energy = float(self.compute_energy())
                     threshold = max(guard_min, pre_energy * guard_factor)
                     if post_energy > threshold:
-                        self.mesh.set_tilts_in_from_array(pre_tin)
-                        self.mesh.set_tilts_out_from_array(pre_tout)
+                        self._set_leaflet_tilts_from_arrays_fast(pre_tin, pre_tout)
                         if logger.isEnabledFor(logging.WARNING):
                             logger.warning(
                                 "Tilt relaxation energy spike: %.6g -> %.6g (threshold %.6g). "
