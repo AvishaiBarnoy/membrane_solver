@@ -57,6 +57,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Acceptance E2E parity test for the named free-disk mesh (`tests/test_kozlov_free_disk_mesh_theory_parity_acceptance_e2e.py`) against `docs/tex/1_disk_3d.tex` with 15% tolerance on `theta_B` and energy plus convergence-trend checks.
 
 ### Fixed
+- Cached leaflet-absence vertex masks in `modules/energy/leaflet_presence.py` with mesh-version and preset-token invalidation, removing repeated per-call vertex scans from hot loops.
 - Added vertex-group row-index caching for `tilt_thetaB_contact_in`, `tilt_thetaB_boundary_in`, and `rim_slope_match_out` to reduce repeated per-vertex scans in inner minimization loops.
 - Partitioned `_compute_effective_areas` cache entries by caller token (`modules/energy/bending.py`) so dual-leaflet evaluations no longer evict each other’s cached effective areas.
 - Reduced leaflet-tilt synchronization overhead in the minimizer by using cache-backed array updates during thetaB candidate scans and tilt-relaxation constraint enforcement (`runtime/minimizer.py`), while preserving final energy/thetaB results in regression tests.

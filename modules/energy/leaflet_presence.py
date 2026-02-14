@@ -61,8 +61,33 @@ def leaflet_absent_vertex_mask(
 
     key = f"leaflet_{leaflet_norm}_absent_presets"
     absent_presets = set(_normalize_preset_list(global_params.get(key)))
+    absent_token = tuple(sorted(absent_presets))
+
+    cache = getattr(mesh, "_leaflet_absent_mask_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(mesh, "_leaflet_absent_mask_cache", cache)
+
+    entry = cache.get(leaflet_norm)
+    if (
+        entry is not None
+        and entry.get("mesh_version") == int(mesh._version)
+        and entry.get("vertex_ids_version") == int(mesh._vertex_ids_version)
+        and entry.get("absent_token") == absent_token
+        and entry.get("vertex_count") == len(mesh.vertex_ids)
+    ):
+        return entry["mask"]
+
     if not absent_presets:
-        return np.zeros(len(mesh.vertex_ids), dtype=bool)
+        mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
+        cache[leaflet_norm] = {
+            "mesh_version": int(mesh._version),
+            "vertex_ids_version": int(mesh._vertex_ids_version),
+            "absent_token": absent_token,
+            "vertex_count": len(mesh.vertex_ids),
+            "mask": mask,
+        }
+        return mask
 
     mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
     for row, vid in enumerate(mesh.vertex_ids):
@@ -70,6 +95,13 @@ def leaflet_absent_vertex_mask(
         preset = opts.get("preset")
         if preset in absent_presets:
             mask[row] = True
+    cache[leaflet_norm] = {
+        "mesh_version": int(mesh._version),
+        "vertex_ids_version": int(mesh._vertex_ids_version),
+        "absent_token": absent_token,
+        "vertex_count": len(mesh.vertex_ids),
+        "mask": mask,
+    }
     return mask
 
 
