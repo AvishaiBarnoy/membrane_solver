@@ -427,7 +427,12 @@ def compute_energy_and_gradient_array_leaflet(
     div_term = float(div_sign) * div_tri
 
     vertex_areas_eff, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
-        mesh, positions, tri_rows, weights, index_map
+        mesh,
+        positions,
+        tri_rows,
+        weights,
+        index_map,
+        cache_token=f"bending_tilt_leaflet_{cache_tag}",
     )
     safe_areas_vor = np.maximum(vertex_areas_vor, 1e-12)
 

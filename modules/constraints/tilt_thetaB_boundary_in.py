@@ -87,6 +87,12 @@ def _resolve_normal(global_params, points: np.ndarray) -> np.ndarray:
 
 
 def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
+    cache_key = (mesh._vertex_ids_version, str(group))
+    cache_attr = "_tilt_thetaB_boundary_group_rows_cache"
+    cached = getattr(mesh, cache_attr, None)
+    if cached is not None and cached.get("key") == cache_key:
+        return cached["rows"]
+
     rows: list[int] = []
     for vid in mesh.vertex_ids:
         opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
@@ -98,7 +104,9 @@ def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
             row = mesh.vertex_index_to_row.get(int(vid))
             if row is not None:
                 rows.append(int(row))
-    return np.asarray(rows, dtype=int)
+    out = np.asarray(rows, dtype=int)
+    setattr(mesh, cache_attr, {"key": cache_key, "rows": out})
+    return out
 
 
 def _boundary_directions(
