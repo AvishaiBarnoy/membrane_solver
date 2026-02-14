@@ -165,6 +165,8 @@ def _compute_effective_areas(
     tri_rows: np.ndarray,
     weights: np.ndarray,
     index_map: Dict[int, int],
+    *,
+    cache_token: str = "default",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Compute effective vertex areas by redistributing boundary vertex contributions.
 
@@ -172,21 +174,25 @@ def _compute_effective_areas(
     """
     _ = index_map
     is_cached_pos = mesh._geometry_cache_active(positions)
+    key_vertex = f"vertex_areas_eff::{cache_token}"
+    key_va0 = f"va0_eff::{cache_token}"
+    key_va1 = f"va1_eff::{cache_token}"
+    key_va2 = f"va2_eff::{cache_token}"
     if (
         is_cached_pos
         and mesh._curvature_version == mesh._version
-        and "vertex_areas_eff" in mesh._curvature_cache
+        and key_vertex in mesh._curvature_cache
     ):
         c = mesh._curvature_cache
         # The cache is keyed to the full triangle set. Leaflet masking can
         # request effective areas on a triangle subset, so only reuse the cache
         # when the triangle count matches.
-        if len(c.get("va0_eff", ())) == int(tri_rows.shape[0]):
+        if len(c.get(key_va0, ())) == int(tri_rows.shape[0]):
             return (
-                c["vertex_areas_eff"],
-                c["va0_eff"],
-                c["va1_eff"],
-                c["va2_eff"],
+                c[key_vertex],
+                c[key_va0],
+                c[key_va1],
+                c[key_va2],
             )
 
     n_verts = len(mesh.vertex_ids)
@@ -285,10 +291,10 @@ def _compute_effective_areas(
     np.add.at(vertex_areas_eff, tri_rows[:, 2], va_eff[:, 2])
 
     if is_cached_pos and mesh._curvature_version == mesh._version:
-        mesh._curvature_cache["vertex_areas_eff"] = vertex_areas_eff
-        mesh._curvature_cache["va0_eff"] = va_eff[:, 0]
-        mesh._curvature_cache["va1_eff"] = va_eff[:, 1]
-        mesh._curvature_cache["va2_eff"] = va_eff[:, 2]
+        mesh._curvature_cache[key_vertex] = vertex_areas_eff
+        mesh._curvature_cache[key_va0] = va_eff[:, 0]
+        mesh._curvature_cache[key_va1] = va_eff[:, 1]
+        mesh._curvature_cache[key_va2] = va_eff[:, 2]
 
     return vertex_areas_eff, va_eff[:, 0], va_eff[:, 1], va_eff[:, 2]
 

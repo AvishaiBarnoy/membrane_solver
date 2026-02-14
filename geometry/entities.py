@@ -1013,7 +1013,7 @@ class Mesh:
             positions = getattr(self, "_positions_cache", None)
 
         if positions is getattr(self, "_positions_cache", None):
-            return True
+            return self._positions_cache_version == self._version
 
         if self._geometry_freeze_depth <= 0:
             return False

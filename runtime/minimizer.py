@@ -1836,6 +1836,11 @@ STEP SIZE:\t {self.step_size}
 
     def compute_energy_breakdown(self) -> Dict[str, float]:
         """Return per-module energy contributions for the current mesh."""
+        # Diagnostic breakdowns should be evaluated from a clean geometry cache.
+        # This avoids carrying stale curvature-derived intermediates from prior
+        # minimization iterations into report-only code paths.
+        self.mesh._curvature_cache = {}
+        self.mesh._curvature_version = -1
         positions, index_map, grad_dummy = self._soa_views()
         breakdown: Dict[str, float] = {}
 
