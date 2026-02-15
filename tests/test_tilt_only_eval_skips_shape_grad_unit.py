@@ -135,3 +135,34 @@ def test_tilt_in_tilt_grad_parity_when_shape_grad_skipped() -> None:
 
     assert float(E_skip) == pytest.approx(float(E_full), rel=1e-12, abs=1e-12)
     assert np.allclose(tgrad_skip, tgrad_full, atol=1e-10, rtol=1e-10)
+
+
+def test_scalar_triangle_scatter_bincount_matches_add_at() -> None:
+    rng = np.random.default_rng(11)
+    n_verts = 8
+    tri_rows = np.asarray(
+        [
+            [0, 1, 2],
+            [2, 1, 3],
+            [2, 4, 5],
+            [5, 1, 0],
+            [7, 7, 7],
+        ],
+        dtype=int,
+    )
+    va0_eff = rng.normal(size=tri_rows.shape[0])
+    va1_eff = rng.normal(size=tri_rows.shape[0])
+    va2_eff = rng.normal(size=tri_rows.shape[0])
+    div_term = rng.normal(size=tri_rows.shape[0])
+
+    ref = np.zeros(n_verts, dtype=float)
+    np.add.at(ref, tri_rows[:, 0], va0_eff * div_term)
+    np.add.at(ref, tri_rows[:, 1], va1_eff * div_term)
+    np.add.at(ref, tri_rows[:, 2], va2_eff * div_term)
+
+    got = np.zeros(n_verts, dtype=float)
+    got += np.bincount(tri_rows[:, 0], weights=va0_eff * div_term, minlength=n_verts)
+    got += np.bincount(tri_rows[:, 1], weights=va1_eff * div_term, minlength=n_verts)
+    got += np.bincount(tri_rows[:, 2], weights=va2_eff * div_term, minlength=n_verts)
+
+    assert np.allclose(got, ref, atol=0.0, rtol=0.0)
