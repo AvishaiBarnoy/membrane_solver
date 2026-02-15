@@ -500,13 +500,18 @@ def test_leaflet_sparse_kkt_solver_cholesky_and_fallback_match() -> None:
     A = np.asarray([[3.0, 1.0], [1.0, 2.0]], dtype=float)
     b = np.asarray([2.0, -1.0], dtype=float)
     chol = np.linalg.cholesky(A)
+    solve_mat = np.linalg.inv(A)
 
-    op_chol = {"A": A, "chol_L": chol}
+    op_inv = {"A": A, "chol_L": chol, "solve_mat": solve_mat}
+    lam_inv = ConstraintModuleManager._solve_leaflet_sparse_kkt(op_inv, b)
+
+    op_chol = {"A": A, "chol_L": chol, "solve_mat": None}
     lam_chol = ConstraintModuleManager._solve_leaflet_sparse_kkt(op_chol, b)
 
-    op_fallback = {"A": A, "chol_L": None}
+    op_fallback = {"A": A, "chol_L": None, "solve_mat": None}
     lam_fallback = ConstraintModuleManager._solve_leaflet_sparse_kkt(op_fallback, b)
 
     ref = np.linalg.solve(A, b)
+    assert np.allclose(lam_inv, ref, atol=1e-12, rtol=0.0)
     assert np.allclose(lam_chol, ref, atol=1e-12, rtol=0.0)
     assert np.allclose(lam_fallback, ref, atol=1e-12, rtol=0.0)
