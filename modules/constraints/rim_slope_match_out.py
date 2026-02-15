@@ -123,8 +123,15 @@ def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
     cache_key = (mesh._vertex_ids_version, str(group))
     cache_attr = "_rim_slope_match_group_rows_cache"
     cached = getattr(mesh, cache_attr, None)
-    if cached is not None and cached.get("key") == cache_key:
-        return cached["rows"]
+    if isinstance(cached, dict) and "entries" in cached:
+        entries = cached["entries"]
+        rows = entries.get(cache_key)
+        if rows is not None:
+            return rows
+    else:
+        entries = {}
+        if isinstance(cached, dict) and cached.get("key") == cache_key:
+            return cached["rows"]
 
     rows: list[int] = []
     for vid in mesh.vertex_ids:
@@ -134,7 +141,11 @@ def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
             if row is not None:
                 rows.append(int(row))
     out = np.asarray(rows, dtype=int)
-    setattr(mesh, cache_attr, {"key": cache_key, "rows": out})
+    entries[cache_key] = out
+    if len(entries) > 32:
+        # Keep the cache bounded while preserving recent keys.
+        entries = dict(list(entries.items())[-16:])
+    setattr(mesh, cache_attr, {"entries": entries})
     return out
 
 
@@ -239,7 +250,11 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
     cache_attr = "_rim_slope_match_data_cache"
     if mesh._geometry_cache_active(positions):
         cached = getattr(mesh, cache_attr, None)
-        if cached is not None and cached.get("key") == cache_key:
+        if isinstance(cached, dict) and "entries" in cached:
+            value = cached["entries"].get(cache_key)
+            if value is not None:
+                return value
+        elif cached is not None and cached.get("key") == cache_key:
             return cached.get("value")
 
     rim_rows = _collect_group_rows(mesh, group)
@@ -354,7 +369,12 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         "theta_scalar": theta_scalar,
     }
     if mesh._geometry_cache_active(positions):
-        setattr(mesh, cache_attr, {"key": cache_key, "value": result})
+        cached = getattr(mesh, cache_attr, None)
+        entries = cached.get("entries", {}) if isinstance(cached, dict) else {}
+        entries[cache_key] = result
+        if len(entries) > 16:
+            entries = dict(list(entries.items())[-8:])
+        setattr(mesh, cache_attr, {"entries": entries})
     return result
 
 
