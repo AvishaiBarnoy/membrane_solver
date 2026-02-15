@@ -191,3 +191,43 @@ def test_rim_slope_match_out_constraint_enforces_radial_tilts():
 
     assert np.allclose(t_out_rad, phi, atol=1e-6)
     assert np.allclose(t_in_rad, target_in, atol=1e-6)
+
+
+def test_group_rows_cache_keeps_multiple_groups() -> None:
+    data = _build_rim_match_geometry()
+    mesh = parse_geometry(data)
+    mesh.build_position_cache()
+
+    from modules.constraints import rim_slope_match_out as constraint
+
+    rim_rows_1 = constraint._collect_group_rows(mesh, "rim")
+    outer_rows_1 = constraint._collect_group_rows(mesh, "outer")
+    disk_rows_1 = constraint._collect_group_rows(mesh, "disk")
+    rim_rows_2 = constraint._collect_group_rows(mesh, "rim")
+
+    np.testing.assert_array_equal(rim_rows_1, rim_rows_2)
+    assert outer_rows_1.size > 0
+    assert disk_rows_1.size > 0
+
+    cache = getattr(mesh, "_rim_slope_match_group_rows_cache", {})
+    entries = cache.get("entries", {})
+    assert len(entries) >= 3
+
+
+def test_matching_data_cache_reuses_and_invalidates_on_version_change() -> None:
+    data = _build_rim_match_geometry()
+    mesh = parse_geometry(data)
+    mesh.build_position_cache()
+    gp = mesh.global_parameters
+    positions = mesh.positions_view()
+
+    from modules.constraints import rim_slope_match_out as constraint
+
+    d1 = constraint._build_matching_data(mesh, gp, positions)
+    d2 = constraint._build_matching_data(mesh, gp, positions)
+    assert d1 is d2
+
+    mesh.increment_version()
+    positions2 = mesh.positions_view()
+    d3 = constraint._build_matching_data(mesh, gp, positions2)
+    assert d3 is not d2
