@@ -451,7 +451,7 @@ def test_tilt_sparse_projection_operator_cache_reuse_and_invalidation(
         staticmethod(_counted_build),
     )
 
-    gp = {}
+    gp = {"tilt_thetaB_value": 0.01}
     g_in = np.asarray([[2.0, -1.0, 0.5], [0.1, 0.2, 0.3], [0.0, 0.0, 0.0]], dtype=float)
     g_out = np.asarray(
         [[0.0, 0.0, 0.0], [1.0, -2.0, 0.0], [0.4, 0.5, 0.6]], dtype=float
@@ -468,8 +468,29 @@ def test_tilt_sparse_projection_operator_cache_reuse_and_invalidation(
     # Cache hit should avoid rebuilding the operator.
     assert build_calls["n"] == 1
 
-    mesh._version += 1
+    # Unrelated global param changes should not invalidate this operator cache.
+    gp["tilt_thetaB_value"] = 0.02
+    cm.apply_tilt_gradient_modifications_array(
+        g_in2.copy(), g_out2.copy(), mesh=mesh, global_params=gp
+    )
+    assert build_calls["n"] == 1
+
+    # Changing sparse payload values should force a rebuild.
+    rows_constraint = cm.modules["rows"]._row_constraints
+    rows_constraint[0] = (
+        (
+            np.asarray([0, 1], dtype=int),
+            np.asarray([[1.5, 0.0, 0.0], [0.0, 0.5, 0.0]], dtype=float),
+        ),
+        None,
+    )
     cm.apply_tilt_gradient_modifications_array(
         g_in2.copy(), g_out2.copy(), mesh=mesh, global_params=gp
     )
     assert build_calls["n"] == 2
+
+    mesh._version += 1
+    cm.apply_tilt_gradient_modifications_array(
+        g_in2.copy(), g_out2.copy(), mesh=mesh, global_params=gp
+    )
+    assert build_calls["n"] == 3
