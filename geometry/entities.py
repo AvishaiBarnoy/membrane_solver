@@ -1794,22 +1794,33 @@ class Mesh:
         if tilts_arr.shape != (len(self.vertex_ids), 3):
             raise ValueError("tilts_in must have shape (N_vertices, 3)")
 
+        cache = self._tilts_in_cache
+        can_reuse_cache = (
+            cache is not None
+            and cache.shape == tilts_arr.shape
+            and self._tilts_in_cache_counts == len(self.vertex_ids)
+            and self._tilts_in_cache_vertex_version == self._vertex_ids_version
+            and self._vertex_row_binding_version == self._vertex_ids_version
+        )
+
         self._tilts_in_version += 1
+        if can_reuse_cache:
+            np.copyto(cache, tilts_arr, casting="no")
+            self._tilts_in_cache_version = self._tilts_in_version
+            return
+
         self._tilts_in_cache = np.array(tilts_arr, dtype=float, order="F", copy=True)
         self._tilts_in_cache_version = self._tilts_in_version
         self._tilts_in_cache_counts = len(self.vertex_ids)
         self._tilts_in_cache_vertex_version = self._vertex_ids_version
         cache = self._tilts_in_cache
-        need_rebind = self._vertex_row_binding_version != self._vertex_ids_version
         for row, vid in enumerate(self.vertex_ids):
             vertex = self.vertices[int(vid)]
-            if need_rebind:
-                vertex._mesh = self
-                vertex._row = row
+            vertex._mesh = self
+            vertex._row = row
             # Store a row view to avoid per-vertex copy allocations.
             object.__setattr__(vertex, "tilt_in", cache[row])
-        if need_rebind:
-            self._vertex_row_binding_version = self._vertex_ids_version
+        self._vertex_row_binding_version = self._vertex_ids_version
 
     def set_tilts_out_from_array(self, tilts: "np.ndarray") -> None:
         """Scatter a dense outer-leaflet tilt array back onto vertex objects."""
@@ -1820,22 +1831,33 @@ class Mesh:
         if tilts_arr.shape != (len(self.vertex_ids), 3):
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
 
+        cache = self._tilts_out_cache
+        can_reuse_cache = (
+            cache is not None
+            and cache.shape == tilts_arr.shape
+            and self._tilts_out_cache_counts == len(self.vertex_ids)
+            and self._tilts_out_cache_vertex_version == self._vertex_ids_version
+            and self._vertex_row_binding_version == self._vertex_ids_version
+        )
+
         self._tilts_out_version += 1
+        if can_reuse_cache:
+            np.copyto(cache, tilts_arr, casting="no")
+            self._tilts_out_cache_version = self._tilts_out_version
+            return
+
         self._tilts_out_cache = np.array(tilts_arr, dtype=float, order="F", copy=True)
         self._tilts_out_cache_version = self._tilts_out_version
         self._tilts_out_cache_counts = len(self.vertex_ids)
         self._tilts_out_cache_vertex_version = self._vertex_ids_version
         cache = self._tilts_out_cache
-        need_rebind = self._vertex_row_binding_version != self._vertex_ids_version
         for row, vid in enumerate(self.vertex_ids):
             vertex = self.vertices[int(vid)]
-            if need_rebind:
-                vertex._mesh = self
-                vertex._row = row
+            vertex._mesh = self
+            vertex._row = row
             # Store a row view to avoid per-vertex copy allocations.
             object.__setattr__(vertex, "tilt_out", cache[row])
-        if need_rebind:
-            self._vertex_row_binding_version = self._vertex_ids_version
+        self._vertex_row_binding_version = self._vertex_ids_version
 
     def build_facet_vertex_loops(self):
         """Precompute ordered vertex loops for all facets.
