@@ -483,7 +483,14 @@ def compute_energy_and_gradient_array_leaflet(
         mesh, global_params, cache_tag=cache_tag, index_map=index_map
     )
 
-    ratio = np.zeros_like(vertex_areas_eff)
+    if ctx is not None:
+        ratio = ctx.scratch_array(
+            f"btl_{cache_tag}_ratio",
+            shape=vertex_areas_eff.shape,
+            dtype=vertex_areas_eff.dtype,
+        )
+    else:
+        ratio = np.zeros_like(vertex_areas_eff)
     mask_vor = safe_areas_vor > 1e-15
     ratio[mask_vor] = vertex_areas_eff[mask_vor] / safe_areas_vor[mask_vor]
 
@@ -498,15 +505,35 @@ def compute_energy_and_gradient_array_leaflet(
             base_term[rows] = 0.0
 
     term_tri = base_term[tri_rows] + div_term[:, None]
-    va_eff = np.stack([va0_eff, va1_eff, va2_eff], axis=1)
     kappa_tri = kappa_arr[tri_rows]
-    total_energy = float(0.5 * np.sum(kappa_tri * term_tri**2 * va_eff))
+    total_energy = float(
+        0.5
+        * np.sum(
+            (kappa_tri[:, 0] * term_tri[:, 0] ** 2 * va0_eff)
+            + (kappa_tri[:, 1] * term_tri[:, 1] ** 2 * va1_eff)
+            + (kappa_tri[:, 2] * term_tri[:, 2] ** 2 * va2_eff)
+        )
+    )
 
-    div_eff_num = np.zeros_like(base_term)
+    if ctx is not None:
+        div_eff_num = ctx.scratch_array(
+            f"btl_{cache_tag}_div_eff_num",
+            shape=base_term.shape,
+            dtype=base_term.dtype,
+        )
+    else:
+        div_eff_num = np.zeros_like(base_term)
     np.add.at(div_eff_num, tri_rows[:, 0], va0_eff * div_term)
     np.add.at(div_eff_num, tri_rows[:, 1], va1_eff * div_term)
     np.add.at(div_eff_num, tri_rows[:, 2], va2_eff * div_term)
-    div_eff = np.zeros_like(base_term)
+    if ctx is not None:
+        div_eff = ctx.scratch_array(
+            f"btl_{cache_tag}_div_eff",
+            shape=base_term.shape,
+            dtype=base_term.dtype,
+        )
+    else:
+        div_eff = np.zeros_like(base_term)
     mask_eff = vertex_areas_eff > 1e-20
     div_eff[mask_eff] = div_eff_num[mask_eff] / vertex_areas_eff[mask_eff]
 
@@ -519,7 +546,11 @@ def compute_energy_and_gradient_array_leaflet(
             if tilt_grad_arr.shape != (len(mesh.vertex_ids), 3):
                 raise ValueError("tilt_grad_arr must have shape (N_vertices, 3)")
 
-            dE_ddiv = float(div_sign) * np.sum(kappa_tri * term_tri * va_eff, axis=1)
+            dE_ddiv = float(div_sign) * (
+                (kappa_tri[:, 0] * term_tri[:, 0] * va0_eff)
+                + (kappa_tri[:, 1] * term_tri[:, 1] * va1_eff)
+                + (kappa_tri[:, 2] * term_tri[:, 2] * va2_eff)
+            )
             factor = dE_ddiv[:, None]
 
             np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
@@ -529,13 +560,23 @@ def compute_energy_and_gradient_array_leaflet(
 
     mode = _gradient_mode(global_params)
     normals = _vertex_normals(mesh, positions, tri_rows)
-    K_dir = np.zeros_like(k_vecs)
+    if ctx is not None:
+        K_dir = ctx.scratch_array(
+            f"btl_{cache_tag}_K_dir", shape=k_vecs.shape, dtype=k_vecs.dtype
+        )
+    else:
+        K_dir = np.zeros_like(k_vecs)
     mask_k = k_mag > 1e-15
     K_dir[mask_k] = k_vecs[mask_k] / k_mag[mask_k][:, None]
     K_dir[~mask_k] = normals[~mask_k]
 
     scale_K = (kappa_arr * term * ratio).astype(float, copy=False)
-    factor_K_vec = np.empty_like(K_dir, order="F")
+    if ctx is not None:
+        factor_K_vec = ctx.scratch_array(
+            f"btl_{cache_tag}_factor_K_vec", shape=K_dir.shape, dtype=K_dir.dtype
+        )
+    else:
+        factor_K_vec = np.empty_like(K_dir, order="F")
     np.multiply(K_dir, scale_K[:, None], out=factor_K_vec)
 
     fA_eff = 0.5 * kappa_arr * term**2
@@ -605,7 +646,14 @@ def compute_energy_and_gradient_array_leaflet(
             u2, v2_vec = v0 - v2, v1 - v2
             g_c2_u, g_c2_v = _grad_cotan(u2, v2_vec)
 
-        grad_cot = np.zeros_like(positions)
+        if ctx is not None:
+            grad_cot = ctx.scratch_array(
+                f"btl_{cache_tag}_grad_cot",
+                shape=positions.shape,
+                dtype=positions.dtype,
+            )
+        else:
+            grad_cot = np.zeros_like(positions)
         val0, val1, val2 = dE_dc0[:, None], dE_dc1[:, None], dE_dc2[:, None]
         np.add.at(grad_cot, v1_idxs, val0 * g_c0_u)
         np.add.at(grad_cot, v2_idxs, val0 * g_c0_v)
@@ -625,7 +673,14 @@ def compute_energy_and_gradient_array_leaflet(
         tri_fA_eff = fA_eff[tri_rows]
         sum_fA_eff_int = np.sum(tri_fA_eff * tri_is_int, axis=1)
 
-        avg_fA_eff = np.zeros(len(tri_rows), dtype=float)
+        if ctx is not None:
+            avg_fA_eff = ctx.scratch_array(
+                f"btl_{cache_tag}_avg_fA_eff",
+                shape=(len(tri_rows),),
+                dtype=float,
+            )
+        else:
+            avg_fA_eff = np.zeros(len(tri_rows), dtype=float)
         mask_has_int = interior_counts > 0
         avg_fA_eff[mask_has_int] = (
             sum_fA_eff_int[mask_has_int] / interior_counts[mask_has_int]
@@ -635,7 +690,14 @@ def compute_energy_and_gradient_array_leaflet(
         tri_fA_vor = fA_vor[tri_rows]
         C = C_eff + tri_fA_vor
 
-        grad_area = np.zeros_like(positions)
+        if ctx is not None:
+            grad_area = ctx.scratch_array(
+                f"btl_{cache_tag}_grad_area",
+                shape=positions.shape,
+                dtype=positions.dtype,
+            )
+        else:
+            grad_area = np.zeros_like(positions)
 
         is_obtuse = (c0 < 0) | (c1 < 0) | (c2 < 0)
         m_std = ~is_obtuse
@@ -719,14 +781,20 @@ def compute_energy_and_gradient_array_leaflet(
                     np.add.at(grad_area, v2o, factor * gT_v)
                     np.add.at(grad_area, v0o, factor * -(gT_u + gT_v))
 
-        grad_arr[:] += grad_linear + grad_cot + grad_area
+        grad_arr[:] += grad_linear
+        grad_arr[:] += grad_cot
+        grad_arr[:] += grad_area
 
     if tilt_grad_arr is not None:
         tilt_grad_arr = np.asarray(tilt_grad_arr, dtype=float)
         if tilt_grad_arr.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilt_grad_arr must have shape (N_vertices, 3)")
 
-        dE_ddiv = float(div_sign) * np.sum(kappa_tri * term_tri * va_eff, axis=1)
+        dE_ddiv = float(div_sign) * (
+            (kappa_tri[:, 0] * term_tri[:, 0] * va0_eff)
+            + (kappa_tri[:, 1] * term_tri[:, 1] * va1_eff)
+            + (kappa_tri[:, 2] * term_tri[:, 2] * va2_eff)
+        )
         factor = dE_ddiv[:, None]
 
         np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)

@@ -12,6 +12,7 @@ from geometry.tilt_operators import (
     p1_triangle_divergence_from_shape_gradients,
 )
 from modules.energy import bending_tilt_leaflet as bt_leaflet
+from runtime.energy_context import EnergyContext
 
 
 def _build_two_triangle_mesh() -> Mesh:
@@ -127,3 +128,81 @@ def test_bending_tilt_leaflet_uses_cached_shape_gradients_without_changing_resul
     assert float(E_a) == pytest.approx(float(E_b), rel=1e-12, abs=1e-12)
     assert np.allclose(grad_a, grad_b, atol=1e-10, rtol=1e-10)
     assert np.allclose(tilt_grad_a, tilt_grad_b, atol=1e-10, rtol=1e-10)
+
+
+def test_bending_tilt_leaflet_ctx_scratch_reuse_preserves_outputs() -> None:
+    mesh = _build_two_triangle_mesh()
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    n = len(mesh.vertex_ids)
+    rng = np.random.default_rng(7)
+    tilts = rng.normal(size=(n, 3))
+
+    class _GP(dict):
+        def get(self, key, default=None):
+            return super().get(key, default)
+
+    gp = _GP(
+        {
+            "bending_modulus_in": 1.7,
+            "spontaneous_curvature_in": 0.03,
+        }
+    )
+
+    grad_ref = np.zeros_like(positions)
+    tilt_grad_ref = np.zeros_like(tilts)
+    energy_ref = bt_leaflet.compute_energy_and_gradient_array_leaflet(
+        mesh,
+        gp,
+        None,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_ref,
+        tilts=tilts,
+        tilt_grad_arr=tilt_grad_ref,
+        kappa_key="bending_modulus_in",
+        cache_tag="in",
+        div_sign=1.0,
+    )
+
+    ctx = EnergyContext()
+    grad_a = np.zeros_like(positions)
+    tilt_grad_a = np.zeros_like(tilts)
+    energy_a = bt_leaflet.compute_energy_and_gradient_array_leaflet(
+        mesh,
+        gp,
+        None,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_a,
+        ctx=ctx,
+        tilts=tilts,
+        tilt_grad_arr=tilt_grad_a,
+        kappa_key="bending_modulus_in",
+        cache_tag="in",
+        div_sign=1.0,
+    )
+
+    grad_b = np.zeros_like(positions)
+    tilt_grad_b = np.zeros_like(tilts)
+    energy_b = bt_leaflet.compute_energy_and_gradient_array_leaflet(
+        mesh,
+        gp,
+        None,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_b,
+        ctx=ctx,
+        tilts=tilts,
+        tilt_grad_arr=tilt_grad_b,
+        kappa_key="bending_modulus_in",
+        cache_tag="in",
+        div_sign=1.0,
+    )
+
+    assert float(energy_a) == pytest.approx(float(energy_ref), rel=1e-12, abs=1e-12)
+    assert float(energy_b) == pytest.approx(float(energy_ref), rel=1e-12, abs=1e-12)
+    assert np.allclose(grad_a, grad_ref, atol=1e-10, rtol=1e-10)
+    assert np.allclose(grad_b, grad_ref, atol=1e-10, rtol=1e-10)
+    assert np.allclose(tilt_grad_a, tilt_grad_ref, atol=1e-10, rtol=1e-10)
+    assert np.allclose(tilt_grad_b, tilt_grad_ref, atol=1e-10, rtol=1e-10)
