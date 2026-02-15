@@ -66,12 +66,19 @@ class DummyMesh:
     def __init__(self, n_rows: int):
         self._positions = np.zeros((n_rows, 3), dtype=float)
         self.vertex_index_to_row = {i: i for i in range(n_rows)}
+        self._version = 0
+        self._vertex_ids_version = 0
+        self._facet_loops_version = 0
+        self._tilt_fixed_flags_version = 0
 
     def build_position_cache(self):
         return None
 
     def positions_view(self):
         return self._positions
+
+    def _geometry_cache_active(self, positions):
+        return positions is self._positions
 
     def tilts_in_view(self):
         return np.zeros_like(self._positions)
@@ -403,3 +410,66 @@ def test_tilt_sparse_rows_with_duplicate_entries_match_stacked_reference():
 
     assert np.allclose(got_in, ref_in, atol=1e-12, rtol=0.0)
     assert np.allclose(got_out, ref_out, atol=1e-12, rtol=0.0)
+
+
+def test_tilt_sparse_projection_operator_cache_reuse_and_invalidation(
+    monkeypatch,
+) -> None:
+    cm = ConstraintModuleManager([])
+    cm.modules = {
+        "rows": DummyTiltRowConstraint(
+            [
+                (
+                    (
+                        np.asarray([0, 1], dtype=int),
+                        np.asarray([[1.0, 0.0, 0.0], [0.0, 0.5, 0.0]], dtype=float),
+                    ),
+                    None,
+                ),
+                (
+                    None,
+                    (
+                        np.asarray([1, 2], dtype=int),
+                        np.asarray([[0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], dtype=float),
+                    ),
+                ),
+            ]
+        )
+    }
+    mesh = DummyMesh(3)
+
+    build_calls = {"n": 0}
+    real_build = ConstraintModuleManager._build_leaflet_sparse_projection_operator
+
+    def _counted_build(*args, **kwargs):
+        build_calls["n"] += 1
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(
+        ConstraintModuleManager,
+        "_build_leaflet_sparse_projection_operator",
+        staticmethod(_counted_build),
+    )
+
+    gp = {}
+    g_in = np.asarray([[2.0, -1.0, 0.5], [0.1, 0.2, 0.3], [0.0, 0.0, 0.0]], dtype=float)
+    g_out = np.asarray(
+        [[0.0, 0.0, 0.0], [1.0, -2.0, 0.0], [0.4, 0.5, 0.6]], dtype=float
+    )
+
+    cm.apply_tilt_gradient_modifications_array(g_in, g_out, mesh=mesh, global_params=gp)
+    assert build_calls["n"] == 1
+
+    g_in2 = g_in.copy()
+    g_out2 = g_out.copy()
+    cm.apply_tilt_gradient_modifications_array(
+        g_in2, g_out2, mesh=mesh, global_params=gp
+    )
+    # Cache hit should avoid rebuilding the operator.
+    assert build_calls["n"] == 1
+
+    mesh._version += 1
+    cm.apply_tilt_gradient_modifications_array(
+        g_in2.copy(), g_out2.copy(), mesh=mesh, global_params=gp
+    )
+    assert build_calls["n"] == 2
