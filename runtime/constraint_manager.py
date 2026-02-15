@@ -101,6 +101,19 @@ class ConstraintModuleManager:
                 logger.warning(f"Could not load constraint module '{name}': {e}")
         return loaded
 
+    @staticmethod
+    def _solve_kkt_system(A: np.ndarray, b: np.ndarray) -> np.ndarray | None:
+        """Solve regularized KKT normal equations with SPD fast path."""
+        try:
+            L = np.linalg.cholesky(A)
+            y = np.linalg.solve(L, b)
+            return np.linalg.solve(L.T, y)
+        except np.linalg.LinAlgError:
+            try:
+                return np.linalg.solve(A, b)
+            except np.linalg.LinAlgError:
+                return None
+
     def apply_gradient_modifications(self, grad, mesh, global_params):
         """Apply KKT-style gradient projection from constraint modules.
 
@@ -179,9 +192,8 @@ class ConstraintModuleManager:
                         A[j, i] += val
 
         A[np.diag_indices_from(A)] += 1e-18
-        try:
-            lam = np.linalg.solve(A, b)
-        except np.linalg.LinAlgError:
+        lam = self._solve_kkt_system(A, b)
+        if lam is None:
             return
 
         for gCi, lam_i in zip(all_constraints, lam):
@@ -358,9 +370,8 @@ class ConstraintModuleManager:
         b = C @ grad_flat
         A = C @ C.T
         A[np.diag_indices_from(A)] += 1e-18
-        try:
-            lam = np.linalg.solve(A, b)
-        except np.linalg.LinAlgError:
+        lam = ConstraintModuleManager._solve_kkt_system(A, b)
+        if lam is None:
             return
         grad_flat -= C.T @ lam
 
@@ -390,9 +401,8 @@ class ConstraintModuleManager:
         b = C @ grad_flat
         A = C @ C.T
         A[np.diag_indices_from(A)] += 1e-18
-        try:
-            lam = np.linalg.solve(A, b)
-        except np.linalg.LinAlgError:
+        lam = ConstraintModuleManager._solve_kkt_system(A, b)
+        if lam is None:
             return
         grad_flat -= C.T @ lam
 
@@ -457,6 +467,11 @@ class ConstraintModuleManager:
         active_cols = np.unique(np.concatenate(cols_chunks))
         col_to_comp = np.full(n_total, -1, dtype=int)
         col_to_comp[active_cols] = np.arange(active_cols.size, dtype=int)
+        in_mask = active_cols < n_single
+        in_pos = np.nonzero(in_mask)[0]
+        out_pos = np.nonzero(~in_mask)[0]
+        active_in_cols = active_cols[in_pos]
+        active_out_cols = active_cols[out_pos] - n_single
 
         C = np.zeros((k, active_cols.size), dtype=float)
         for i, (in_part, out_part) in enumerate(row_constraints):
@@ -474,17 +489,41 @@ class ConstraintModuleManager:
         A = C @ C.T
         A[np.diag_indices_from(A)] += 1e-18
         chol_L = None
+        solve_mat = None
         try:
             chol_L = np.linalg.cholesky(A)
+            ident = np.eye(A.shape[0], dtype=float)
+            y = np.linalg.solve(chol_L, ident)
+            solve_mat = np.linalg.solve(chol_L.T, y)
         except np.linalg.LinAlgError:
             pass
-        return {"active_cols": active_cols, "C": C, "A": A, "chol_L": chol_L}
+        if solve_mat is None:
+            try:
+                solve_mat = np.linalg.inv(A)
+            except np.linalg.LinAlgError:
+                solve_mat = None
+        return {
+            "active_cols": active_cols,
+            "active_in_pos": in_pos,
+            "active_in_rows": active_in_cols // 3,
+            "active_in_comp": active_in_cols % 3,
+            "active_out_pos": out_pos,
+            "active_out_rows": active_out_cols // 3,
+            "active_out_comp": active_out_cols % 3,
+            "C": C,
+            "A": A,
+            "chol_L": chol_L,
+            "solve_mat": solve_mat,
+        }
 
     @staticmethod
     def _solve_leaflet_sparse_kkt(
         operator_cache: dict[str, np.ndarray], b: np.ndarray
     ) -> np.ndarray | None:
         """Solve ``A * lam = b`` from cached operator payload."""
+        solve_mat = operator_cache.get("solve_mat")
+        if solve_mat is not None:
+            return solve_mat @ b
         chol_L = operator_cache.get("chol_L")
         if chol_L is not None:
             try:
@@ -496,10 +535,7 @@ class ConstraintModuleManager:
         A = operator_cache.get("A")
         if A is None:
             return None
-        try:
-            return np.linalg.solve(A, b)
-        except np.linalg.LinAlgError:
-            return None
+        return ConstraintModuleManager._solve_kkt_system(A, b)
 
     @staticmethod
     def _project_leaflet_sparse_rows_against_constraints(
@@ -557,30 +593,33 @@ class ConstraintModuleManager:
         if operator_cache is None:
             return
         active_cols = operator_cache["active_cols"]
+        active_in_pos = operator_cache["active_in_pos"]
+        active_in_rows = operator_cache["active_in_rows"]
+        active_in_comp = operator_cache["active_in_comp"]
+        active_out_pos = operator_cache["active_out_pos"]
+        active_out_rows = operator_cache["active_out_rows"]
+        active_out_comp = operator_cache["active_out_comp"]
         C = operator_cache["C"]
 
-        grad_flat = np.concatenate(
-            [tilt_in_grad_arr.reshape(-1), tilt_out_grad_arr.reshape(-1)]
-        )
-        grad_active = grad_flat[active_cols].copy()
+        grad_active = np.empty(active_cols.shape[0], dtype=float)
+        if active_in_pos.shape[0]:
+            grad_active[active_in_pos] = tilt_in_grad_arr[
+                active_in_rows, active_in_comp
+            ]
+        if active_out_rows.shape[0]:
+            grad_active[active_out_pos] = tilt_out_grad_arr[
+                active_out_rows, active_out_comp
+            ]
         b = C @ grad_active
         lam = ConstraintModuleManager._solve_leaflet_sparse_kkt(operator_cache, b)
         if lam is None:
             return
         delta = C.T @ lam
 
-        in_mask = active_cols < n_single
-        if np.any(in_mask):
-            in_cols = active_cols[in_mask]
-            in_rows = in_cols // 3
-            in_comp = in_cols % 3
-            tilt_in_grad_arr[in_rows, in_comp] -= delta[in_mask]
-        out_mask = ~in_mask
-        if np.any(out_mask):
-            out_cols = active_cols[out_mask] - n_single
-            out_rows = out_cols // 3
-            out_comp = out_cols % 3
-            tilt_out_grad_arr[out_rows, out_comp] -= delta[out_mask]
+        if active_in_pos.shape[0]:
+            tilt_in_grad_arr[active_in_rows, active_in_comp] -= delta[active_in_pos]
+        if active_out_rows.shape[0]:
+            tilt_out_grad_arr[active_out_rows, active_out_comp] -= delta[active_out_pos]
 
     def apply_tilt_gradient_modifications_array(
         self,
@@ -750,9 +789,8 @@ class ConstraintModuleManager:
         b = C @ stacked_grad
         A = C @ C.T
         A[np.diag_indices_from(A)] += 1e-18
-        try:
-            lam = np.linalg.solve(A, b)
-        except np.linalg.LinAlgError:
+        lam = ConstraintModuleManager._solve_kkt_system(A, b)
+        if lam is None:
             return
         stacked_grad -= C.T @ lam
         n_in = tilt_in_grad_arr.size
