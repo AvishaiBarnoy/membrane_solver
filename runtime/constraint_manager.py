@@ -370,8 +370,9 @@ class ConstraintModuleManager:
         b = C @ grad_flat
         A = C @ C.T
         A[np.diag_indices_from(A)] += 1e-18
-        lam = ConstraintModuleManager._solve_kkt_system(A, b)
-        if lam is None:
+        try:
+            lam = np.linalg.solve(A, b)
+        except np.linalg.LinAlgError:
             return
         grad_flat -= C.T @ lam
 
