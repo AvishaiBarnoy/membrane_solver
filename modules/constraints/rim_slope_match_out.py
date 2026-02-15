@@ -124,6 +124,8 @@ def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
     cache_attr = "_rim_slope_match_group_rows_cache"
     cached = getattr(mesh, cache_attr, None)
     if isinstance(cached, dict) and "entries" in cached:
+        if cached.get("key") == cache_key and "rows" in cached:
+            return cached["rows"]
         entries = cached["entries"]
         rows = entries.get(cache_key)
         if rows is not None:
@@ -145,7 +147,7 @@ def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
     if len(entries) > 32:
         # Keep the cache bounded while preserving recent keys.
         entries = dict(list(entries.items())[-16:])
-    setattr(mesh, cache_attr, {"entries": entries})
+    setattr(mesh, cache_attr, {"entries": entries, "key": cache_key, "rows": out})
     return out
 
 
