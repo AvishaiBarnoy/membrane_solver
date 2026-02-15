@@ -57,6 +57,9 @@ def test_set_tilts_leaflets_reuses_existing_row_bindings() -> None:
     tin_a = rng.normal(size=(n, 3))
     tin_b = rng.normal(size=(n, 3))
     mesh.set_tilts_in_from_array(tin_a)
+    probe_row = n // 4
+    probe_vid = int(mesh.vertex_ids[probe_row])
+    probe_before = object.__getattribute__(mesh.vertices[probe_vid], "tilt_in")
     # After first set call, row bindings are established for this vertex order.
     assert mesh._vertex_row_binding_version == mesh._vertex_ids_version
     mesh.set_tilts_in_from_array(tin_b)
@@ -65,6 +68,9 @@ def test_set_tilts_leaflets_reuses_existing_row_bindings() -> None:
     # same binding version token.
     assert mesh._vertex_row_binding_version == mesh._vertex_ids_version
     np.testing.assert_allclose(mesh.tilts_in_view(), tin_b, rtol=0.0, atol=0.0)
+    probe_after = object.__getattribute__(mesh.vertices[probe_vid], "tilt_in")
+    assert probe_after is probe_before
+    np.testing.assert_allclose(probe_after, tin_b[probe_row], rtol=0.0, atol=0.0)
 
 
 def test_set_tilts_leaflets_keeps_vertex_attrs_in_sync_after_rebind_fastpath() -> None:
@@ -78,9 +84,11 @@ def test_set_tilts_leaflets_keeps_vertex_attrs_in_sync_after_rebind_fastpath() -
     tout_a = rng.normal(size=(n, 3))
     tout_b = rng.normal(size=(n, 3))
     mesh.set_tilts_out_from_array(tout_a)
-    mesh.set_tilts_out_from_array(tout_b)  # should use the rebind fast path
-
     row = n // 3
     vid = int(mesh.vertex_ids[row])
+    raw_before = object.__getattribute__(mesh.vertices[vid], "tilt_out")
+    mesh.set_tilts_out_from_array(tout_b)  # should use the rebind fast path
+
     raw = object.__getattribute__(mesh.vertices[vid], "tilt_out")
+    assert raw is raw_before
     np.testing.assert_allclose(raw, tout_b[row], rtol=0.0, atol=0.0)
