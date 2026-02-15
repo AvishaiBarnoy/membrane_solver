@@ -473,11 +473,33 @@ class ConstraintModuleManager:
 
         A = C @ C.T
         A[np.diag_indices_from(A)] += 1e-18
+        chol_L = None
         try:
-            A_inv = np.linalg.inv(A)
+            chol_L = np.linalg.cholesky(A)
+        except np.linalg.LinAlgError:
+            pass
+        return {"active_cols": active_cols, "C": C, "A": A, "chol_L": chol_L}
+
+    @staticmethod
+    def _solve_leaflet_sparse_kkt(
+        operator_cache: dict[str, np.ndarray], b: np.ndarray
+    ) -> np.ndarray | None:
+        """Solve ``A * lam = b`` from cached operator payload."""
+        chol_L = operator_cache.get("chol_L")
+        if chol_L is not None:
+            try:
+                y = np.linalg.solve(chol_L, b)
+                return np.linalg.solve(chol_L.T, y)
+            except np.linalg.LinAlgError:
+                # Fall back to direct solve below if triangular solve fails.
+                pass
+        A = operator_cache.get("A")
+        if A is None:
+            return None
+        try:
+            return np.linalg.solve(A, b)
         except np.linalg.LinAlgError:
             return None
-        return {"active_cols": active_cols, "C": C, "A_inv": A_inv}
 
     @staticmethod
     def _project_leaflet_sparse_rows_against_constraints(
@@ -536,14 +558,15 @@ class ConstraintModuleManager:
             return
         active_cols = operator_cache["active_cols"]
         C = operator_cache["C"]
-        A_inv = operator_cache["A_inv"]
 
         grad_flat = np.concatenate(
             [tilt_in_grad_arr.reshape(-1), tilt_out_grad_arr.reshape(-1)]
         )
         grad_active = grad_flat[active_cols].copy()
         b = C @ grad_active
-        lam = A_inv @ b
+        lam = ConstraintModuleManager._solve_leaflet_sparse_kkt(operator_cache, b)
+        if lam is None:
+            return
         delta = C.T @ lam
 
         in_mask = active_cols < n_single

@@ -72,6 +72,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Cached ordered boundary geometry payloads in `modules/energy/tilt_thetaB_contact_in.py` when geometry cache is active, reducing repeated angle ordering and arc-length setup in inner θ_B contact energy evaluations.
 - Cached sparse leaflet tilt KKT projection operators (`active_cols`, compressed `C`, and `A^{-1}`) in `runtime/constraint_manager.py` across geometry-cache-active iterations to avoid rebuilding/factorizing the same constraint system every inner loop call.
 - Refined sparse leaflet KKT operator cache invalidation in `runtime/constraint_manager.py` to key on sparse row-payload content (instead of full global-parameter state), improving cache-hit stability while preserving correctness on payload changes.
+- Sparse leaflet KKT operator caches now store a Cholesky factorization of the compressed Gram matrix (`A = C C^T`) with direct-solve fallback, avoiding repeated explicit matrix inversion in operator builds.
 - `energy` breakdown output now separates internal energy vs external work terms (sources) and supports `energy ref` for reference-state deltas.
 - **Tilt Persistence**: Corrected `save_geometry` to persist `tilt` and `tilt_fixed` vertex properties to output JSON files.
 - **Live-Vis Warnings**: Silenced `plt.pause` warnings on headless CI backends.
