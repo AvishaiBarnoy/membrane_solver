@@ -494,3 +494,19 @@ def test_tilt_sparse_projection_operator_cache_reuse_and_invalidation(
         g_in2.copy(), g_out2.copy(), mesh=mesh, global_params=gp
     )
     assert build_calls["n"] == 3
+
+
+def test_leaflet_sparse_kkt_solver_cholesky_and_fallback_match() -> None:
+    A = np.asarray([[3.0, 1.0], [1.0, 2.0]], dtype=float)
+    b = np.asarray([2.0, -1.0], dtype=float)
+    chol = np.linalg.cholesky(A)
+
+    op_chol = {"A": A, "chol_L": chol}
+    lam_chol = ConstraintModuleManager._solve_leaflet_sparse_kkt(op_chol, b)
+
+    op_fallback = {"A": A, "chol_L": None}
+    lam_fallback = ConstraintModuleManager._solve_leaflet_sparse_kkt(op_fallback, b)
+
+    ref = np.linalg.solve(A, b)
+    assert np.allclose(lam_chol, ref, atol=1e-12, rtol=0.0)
+    assert np.allclose(lam_fallback, ref, atol=1e-12, rtol=0.0)
