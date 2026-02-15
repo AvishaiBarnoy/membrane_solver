@@ -523,9 +523,16 @@ def compute_energy_and_gradient_array_leaflet(
         )
     else:
         div_eff_num = np.zeros_like(base_term)
-    np.add.at(div_eff_num, tri_rows[:, 0], va0_eff * div_term)
-    np.add.at(div_eff_num, tri_rows[:, 1], va1_eff * div_term)
-    np.add.at(div_eff_num, tri_rows[:, 2], va2_eff * div_term)
+    n_verts = int(base_term.shape[0])
+    div_eff_num += np.bincount(
+        tri_rows[:, 0], weights=va0_eff * div_term, minlength=n_verts
+    )
+    div_eff_num += np.bincount(
+        tri_rows[:, 1], weights=va1_eff * div_term, minlength=n_verts
+    )
+    div_eff_num += np.bincount(
+        tri_rows[:, 2], weights=va2_eff * div_term, minlength=n_verts
+    )
     if ctx is not None:
         div_eff = ctx.scratch_array(
             f"btl_{cache_tag}_div_eff",
