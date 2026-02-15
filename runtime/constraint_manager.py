@@ -2,6 +2,7 @@
 
 import importlib
 import logging
+import math
 
 import numpy as np
 
@@ -55,6 +56,7 @@ class ConstraintModuleManager:
     def __init__(self, module_names):
         self.modules = {}
         self._warned_no_grad = set()
+        self._leaflet_sparse_projection_cache: dict[str, object] | None = None
         for name in module_names:
             try:
                 self.modules[name] = importlib.import_module(
@@ -395,6 +397,100 @@ class ConstraintModuleManager:
         grad_flat -= C.T @ lam
 
     @staticmethod
+    def _global_params_cache_token(global_params) -> int:
+        """Return a hash token that changes when global params content changes."""
+        if global_params is None:
+            return 0
+        to_dict = getattr(global_params, "to_dict", None)
+        if not callable(to_dict):
+            return hash(repr(global_params))
+        data = to_dict()
+        items: list[tuple[str, str]] = []
+        for key in sorted(data.keys()):
+            val = data[key]
+            if isinstance(val, float) and math.isnan(val):
+                val_repr = "nan"
+            else:
+                val_repr = repr(val)
+            items.append((str(key), val_repr))
+        return hash(tuple(items))
+
+    @staticmethod
+    def _row_constraints_structure_token(
+        row_constraints: list[
+            tuple[
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+            ]
+        ],
+    ) -> tuple[tuple[int, int], ...]:
+        """Return a lightweight structural token for row constraints."""
+        out: list[tuple[int, int]] = []
+        for in_part, out_part in row_constraints:
+            n_in = -1 if in_part is None else int(in_part[0].size)
+            n_out = -1 if out_part is None else int(out_part[0].size)
+            out.append((n_in, n_out))
+        return tuple(out)
+
+    @staticmethod
+    def _build_leaflet_sparse_projection_operator(
+        *,
+        row_constraints: list[
+            tuple[
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+            ]
+        ],
+        n_single: int,
+    ) -> dict[str, np.ndarray] | None:
+        """Build a reusable sparse leaflet projection operator payload."""
+        k = len(row_constraints)
+        if k == 0:
+            return None
+        if k == 1:
+            return None
+
+        n_total = 2 * n_single
+        axes = np.asarray([0, 1, 2], dtype=int)
+        cols_chunks: list[np.ndarray] = []
+        for in_part, out_part in row_constraints:
+            if in_part is not None:
+                in_rows, _ = in_part
+                cols_chunks.append((3 * in_rows[:, None] + axes[None, :]).reshape(-1))
+            if out_part is not None:
+                out_rows, _ = out_part
+                cols_chunks.append(
+                    (n_single + 3 * out_rows[:, None] + axes[None, :]).reshape(-1)
+                )
+        if not cols_chunks:
+            return None
+
+        active_cols = np.unique(np.concatenate(cols_chunks))
+        col_to_comp = np.full(n_total, -1, dtype=int)
+        col_to_comp[active_cols] = np.arange(active_cols.size, dtype=int)
+
+        C = np.zeros((k, active_cols.size), dtype=float)
+        for i, (in_part, out_part) in enumerate(row_constraints):
+            if in_part is not None:
+                in_rows, in_vecs = in_part
+                in_cols = (3 * in_rows[:, None] + axes[None, :]).reshape(-1)
+                C[i, col_to_comp[in_cols]] = in_vecs.reshape(-1)
+            if out_part is not None:
+                out_rows, out_vecs = out_part
+                out_cols = (n_single + 3 * out_rows[:, None] + axes[None, :]).reshape(
+                    -1
+                )
+                C[i, col_to_comp[out_cols]] = out_vecs.reshape(-1)
+
+        A = C @ C.T
+        A[np.diag_indices_from(A)] += 1e-18
+        try:
+            A_inv = np.linalg.inv(A)
+        except np.linalg.LinAlgError:
+            return None
+        return {"active_cols": active_cols, "C": C, "A_inv": A_inv}
+
+    @staticmethod
     def _project_leaflet_sparse_rows_against_constraints(
         tilt_in_grad_arr: np.ndarray,
         tilt_out_grad_arr: np.ndarray,
@@ -404,6 +500,8 @@ class ConstraintModuleManager:
                 tuple[np.ndarray, np.ndarray] | None,
             ]
         ],
+        *,
+        operator_cache: dict[str, np.ndarray] | None = None,
     ) -> None:
         """Project leaflet gradients using sparse row constraints only.
 
@@ -438,52 +536,26 @@ class ConstraintModuleManager:
             return
 
         n_single = int(tilt_in_grad_arr.size)
-        n_total = 2 * n_single
-
-        cols_chunks: list[np.ndarray] = []
-        axes = np.asarray([0, 1, 2], dtype=int)
-        for in_part, out_part in row_constraints:
-            if in_part is not None:
-                in_rows, _ = in_part
-                cols_chunks.append((3 * in_rows[:, None] + axes[None, :]).reshape(-1))
-            if out_part is not None:
-                out_rows, _ = out_part
-                cols_chunks.append(
-                    (n_single + 3 * out_rows[:, None] + axes[None, :]).reshape(-1)
+        if operator_cache is None:
+            operator_cache = (
+                ConstraintModuleManager._build_leaflet_sparse_projection_operator(
+                    row_constraints=row_constraints,
+                    n_single=n_single,
                 )
-
-        if not cols_chunks:
+            )
+        if operator_cache is None:
             return
-        active_cols = np.unique(np.concatenate(cols_chunks))
-        col_to_comp = np.full(n_total, -1, dtype=int)
-        col_to_comp[active_cols] = np.arange(active_cols.size, dtype=int)
-
-        C = np.zeros((k, active_cols.size), dtype=float)
-        for i, (in_part, out_part) in enumerate(row_constraints):
-            if in_part is not None:
-                in_rows, in_vecs = in_part
-                in_cols = (3 * in_rows[:, None] + axes[None, :]).reshape(-1)
-                C[i, col_to_comp[in_cols]] = in_vecs.reshape(-1)
-            if out_part is not None:
-                out_rows, out_vecs = out_part
-                out_cols = (n_single + 3 * out_rows[:, None] + axes[None, :]).reshape(
-                    -1
-                )
-                C[i, col_to_comp[out_cols]] = out_vecs.reshape(-1)
+        active_cols = operator_cache["active_cols"]
+        C = operator_cache["C"]
+        A_inv = operator_cache["A_inv"]
 
         grad_flat = np.concatenate(
             [tilt_in_grad_arr.reshape(-1), tilt_out_grad_arr.reshape(-1)]
         )
-        grad_active = grad_flat[active_cols]
+        grad_active = grad_flat[active_cols].copy()
         b = C @ grad_active
-        A = C @ C.T
-        A[np.diag_indices_from(A)] += 1e-18
-        try:
-            lam = np.linalg.solve(A, b)
-        except np.linalg.LinAlgError:
-            return
-        grad_active -= C.T @ lam
-        delta = grad_flat[active_cols] - grad_active
+        lam = A_inv @ b
+        delta = C.T @ lam
 
         in_mask = active_cols < n_single
         if np.any(in_mask):
@@ -598,8 +670,35 @@ class ConstraintModuleManager:
             return
 
         if not all_constraints:
+            operator_cache = None
+            if mesh._geometry_cache_active(positions):
+                cache_key = (
+                    int(mesh._version),
+                    int(mesh._vertex_ids_version),
+                    int(getattr(mesh, "_facet_loops_version", -1)),
+                    int(getattr(mesh, "_tilt_fixed_flags_version", -1)),
+                    id(positions),
+                    tilt_in_grad_arr.size,
+                    self._global_params_cache_token(global_params),
+                    self._row_constraints_structure_token(row_constraints),
+                )
+                cached = self._leaflet_sparse_projection_cache
+                if cached is not None and cached.get("key") == cache_key:
+                    operator_cache = cached.get("operator")
+                else:
+                    operator_cache = self._build_leaflet_sparse_projection_operator(
+                        row_constraints=row_constraints,
+                        n_single=int(tilt_in_grad_arr.size),
+                    )
+                    self._leaflet_sparse_projection_cache = {
+                        "key": cache_key,
+                        "operator": operator_cache,
+                    }
             self._project_leaflet_sparse_rows_against_constraints(
-                tilt_in_grad_arr, tilt_out_grad_arr, row_constraints
+                tilt_in_grad_arr,
+                tilt_out_grad_arr,
+                row_constraints,
+                operator_cache=operator_cache,
             )
             return
 
