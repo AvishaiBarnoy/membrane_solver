@@ -472,6 +472,9 @@ class Minimizer:
                 else:
                     gp.unset(key)
 
+        guard_factor = float(gp.get("tilt_relax_energy_guard_factor", 0.0) or 0.0)
+        guard_min = float(gp.get("tilt_relax_energy_guard_min", 0.0) or 0.0)
+
         def energy_fn() -> float:
             tilt_mode = str(gp.get("tilt_solve_mode", "fixed") or "fixed")
             mode_norm = tilt_mode.strip().lower()
@@ -484,12 +487,36 @@ class Minimizer:
                 gp.set("tilt_coupled_steps", reduced_steps)
                 gp.set("tilt_cg_max_iters", reduced_steps)
 
+                if guard_factor > 0.0:
+                    # Guard against tilt divergence during line search.
+                    pre_tin = self.mesh.tilts_in_view().copy(order="F")
+                    pre_tout = self.mesh.tilts_out_view().copy(order="F")
+                    pre_e = float(self.compute_energy())
+
                 if uses_leaflet:
                     self._relax_leaflet_tilts(positions=positions, mode=tilt_mode)
                 else:
                     self._relax_tilts(positions=positions, mode=tilt_mode)
 
-                return float(_projected_energy())
+                e = float(_projected_energy())
+
+                if guard_factor > 0.0:
+                    threshold = max(guard_min, abs(pre_e) * guard_factor)
+                    if e > threshold:
+                        # Roll back tilts; return pre-relaxation energy so
+                        # the line search sees an unchanged objective.
+                        self._set_leaflet_tilts_from_arrays_fast(pre_tin, pre_tout)
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug(
+                                "Line-search tilt guard: E %.6g -> %.6g "
+                                "(threshold %.6g); rolling back tilts.",
+                                pre_e,
+                                e,
+                                threshold,
+                            )
+                        return float(pre_e)
+
+                return e
             finally:
                 _restore_overrides()
 
@@ -2048,6 +2075,11 @@ STEP SIZE:\t {self.step_size}
             scan_steps = 1
         self.global_params.set("tilt_inner_steps", scan_steps)
 
+        # Guard threshold prevents thetaB scan candidates from diverging.
+        scan_guard_factor = float(
+            self.global_params.get("tilt_relax_energy_guard_factor", 0.0) or 0.0
+        )
+
         def eval_candidate(thetaB_val: float) -> tuple[float, np.ndarray, np.ndarray]:
             self.global_params.set("tilt_thetaB_value", float(thetaB_val))
             self._set_leaflet_tilts_from_arrays_fast(base_tin, base_tout)
@@ -2056,6 +2088,29 @@ STEP SIZE:\t {self.step_size}
                 positions=self.mesh.positions_view(), mode=tilt_mode
             )
             e = float(self.compute_energy())
+            # If the candidate's energy is much worse than the baseline,
+            # discard it to prevent tilt divergence from corrupting
+            # the selection.
+            if scan_guard_factor > 0.0:
+                scan_threshold = max(
+                    float(
+                        self.global_params.get("tilt_relax_energy_guard_min", 1e-4)
+                        or 1e-4
+                    ),
+                    abs(e0) * scan_guard_factor,
+                )
+                if e > scan_threshold:
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logger.debug(
+                            "thetaB scan: thetaB=%.6g candidate E=%.6g "
+                            "exceeds guard threshold %.6g; discarding.",
+                            thetaB_val,
+                            e,
+                            scan_threshold,
+                        )
+                    # Return sentinel: restore base tilts and flag as bad.
+                    self._set_leaflet_tilts_from_arrays_fast(base_tin, base_tout)
+                    return (float("inf"), base_tin, base_tout)
             return (
                 e,
                 self.mesh.tilts_in_view().copy(order="F"),
@@ -2084,16 +2139,33 @@ STEP SIZE:\t {self.step_size}
         )
 
         best_e, best_thetaB, best_tin, best_tout = best
-        # Always restore the chosen candidate state (including "no change").
-        self.global_params.set("tilt_thetaB_value", float(best_thetaB))
-        self._set_leaflet_tilts_from_arrays_fast(best_tin, best_tout)
+        # Guard: if the best candidate is worse than the starting state,
+        # roll back to the original thetaB and tilts to prevent the
+        # optimizer from pushing the system into an unstable configuration
+        # (e.g. after mesh refinement when the tilt eigenvalue spectrum
+        # has changed).
+        if best_e > e0:
+            self.global_params.set("tilt_thetaB_value", float(base_thetaB))
+            self._set_leaflet_tilts_from_arrays_fast(base_tin, base_tout)
+            if logger.isEnabledFor(logging.WARNING):
+                logger.warning(
+                    "thetaB optimize: i=%d rollback (best E %.6g > base E %.6g); "
+                    "keeping thetaB=%.6g.",
+                    int(iteration),
+                    best_e,
+                    e0,
+                    base_thetaB,
+                )
+        else:
+            self.global_params.set("tilt_thetaB_value", float(best_thetaB))
+            self._set_leaflet_tilts_from_arrays_fast(best_tin, best_tout)
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(
                 "thetaB optimize: i=%d thetaB %.6g -> %.6g (E %.6g -> %.6g)",
                 int(iteration),
                 base_thetaB,
-                best_thetaB,
+                float(self.global_params.get("tilt_thetaB_value") or 0.0),
                 e0,
                 best_e,
             )
@@ -2173,24 +2245,55 @@ STEP SIZE:\t {self.step_size}
                     pre_energy = float(self.compute_energy())
                     pre_tin = self.mesh.tilts_in_view().copy(order="F")
                     pre_tout = self.mesh.tilts_out_view().copy(order="F")
-                    self._relax_leaflet_tilts(
-                        positions=self.mesh.positions_view(), mode=tilt_mode
+                    threshold = max(guard_min, abs(pre_energy) * guard_factor)
+                    max_retries = int(
+                        self.global_params.get("tilt_relax_energy_guard_retries", 4)
+                        or 4
                     )
-                    post_energy = float(self.compute_energy())
-                    threshold = max(guard_min, pre_energy * guard_factor)
-                    if post_energy > threshold:
+                    orig_tilt_step = float(
+                        self.global_params.get("tilt_step_size", 0.0) or 0.0
+                    )
+                    trial_step = orig_tilt_step
+                    accepted = False
+                    for attempt in range(max_retries + 1):
+                        self._relax_leaflet_tilts(
+                            positions=self.mesh.positions_view(), mode=tilt_mode
+                        )
+                        post_energy = float(self.compute_energy())
+                        if post_energy <= threshold:
+                            accepted = True
+                            self.mesh.project_tilts_to_tangent()
+                            break
+                        # Roll back and retry with a smaller tilt step.
+                        self._set_leaflet_tilts_from_arrays_fast(pre_tin, pre_tout)
+                        trial_step *= 0.5
+                        self.global_params.set("tilt_step_size", trial_step)
+                        if logger.isEnabledFor(logging.DEBUG):
+                            logger.debug(
+                                "Tilt guard retry %d/%d: E %.6g -> %.6g "
+                                "(threshold %.6g); trying tilt_step=%.3e",
+                                attempt + 1,
+                                max_retries,
+                                pre_energy,
+                                post_energy,
+                                threshold,
+                                trial_step,
+                            )
+                    # Restore the original tilt step size.
+                    self.global_params.set("tilt_step_size", orig_tilt_step)
+                    if not accepted:
                         self._set_leaflet_tilts_from_arrays_fast(pre_tin, pre_tout)
                         if logger.isEnabledFor(logging.WARNING):
                             logger.warning(
-                                "Tilt relaxation energy spike: %.6g -> %.6g (threshold %.6g). "
-                                "Rolling back tilts for iteration %d.",
+                                "Tilt relaxation energy spike: %.6g -> %.6g "
+                                "(threshold %.6g). Rolling back tilts for "
+                                "iteration %d after %d retries.",
                                 pre_energy,
                                 post_energy,
                                 threshold,
                                 i,
+                                max_retries,
                             )
-                    else:
-                        self.mesh.project_tilts_to_tangent()
                 else:
                     self._relax_leaflet_tilts(
                         positions=self.mesh.positions_view(), mode=tilt_mode
