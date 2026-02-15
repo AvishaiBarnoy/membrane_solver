@@ -1,8 +1,8 @@
 # runtime/constraint_manager.py
 
+import hashlib
 import importlib
 import logging
-import math
 
 import numpy as np
 
@@ -397,40 +397,29 @@ class ConstraintModuleManager:
         grad_flat -= C.T @ lam
 
     @staticmethod
-    def _global_params_cache_token(global_params) -> int:
-        """Return a hash token that changes when global params content changes."""
-        if global_params is None:
-            return 0
-        to_dict = getattr(global_params, "to_dict", None)
-        if not callable(to_dict):
-            return hash(repr(global_params))
-        data = to_dict()
-        items: list[tuple[str, str]] = []
-        for key in sorted(data.keys()):
-            val = data[key]
-            if isinstance(val, float) and math.isnan(val):
-                val_repr = "nan"
-            else:
-                val_repr = repr(val)
-            items.append((str(key), val_repr))
-        return hash(tuple(items))
-
-    @staticmethod
-    def _row_constraints_structure_token(
+    def _row_constraints_payload_token(
         row_constraints: list[
             tuple[
                 tuple[np.ndarray, np.ndarray] | None,
                 tuple[np.ndarray, np.ndarray] | None,
             ]
         ],
-    ) -> tuple[tuple[int, int], ...]:
-        """Return a lightweight structural token for row constraints."""
-        out: list[tuple[int, int]] = []
+    ) -> int:
+        """Return a content hash token for sparse row constraints."""
+        h = hashlib.blake2b(digest_size=16)
         for in_part, out_part in row_constraints:
-            n_in = -1 if in_part is None else int(in_part[0].size)
-            n_out = -1 if out_part is None else int(out_part[0].size)
-            out.append((n_in, n_out))
-        return tuple(out)
+            for tag, part in ((b"i", in_part), (b"o", out_part)):
+                h.update(tag)
+                if part is None:
+                    h.update(b"\x00")
+                    continue
+                rows, vecs = part
+                h.update(b"\x01")
+                rows64 = np.ascontiguousarray(rows, dtype=np.int64)
+                vecs64 = np.ascontiguousarray(vecs, dtype=np.float64)
+                h.update(rows64.tobytes())
+                h.update(vecs64.tobytes())
+        return int.from_bytes(h.digest(), "little")
 
     @staticmethod
     def _build_leaflet_sparse_projection_operator(
@@ -679,8 +668,7 @@ class ConstraintModuleManager:
                     int(getattr(mesh, "_tilt_fixed_flags_version", -1)),
                     id(positions),
                     tilt_in_grad_arr.size,
-                    self._global_params_cache_token(global_params),
-                    self._row_constraints_structure_token(row_constraints),
+                    self._row_constraints_payload_token(row_constraints),
                 )
                 cached = self._leaflet_sparse_projection_cache
                 if cached is not None and cached.get("key") == cache_key:
