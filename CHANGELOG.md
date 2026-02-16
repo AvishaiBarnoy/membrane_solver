@@ -12,6 +12,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Performance tooling: `tools/profile_tilt.py` to profile tilt relaxation hot-loops.
 - Performance tooling: `tools/profile_macro_hotspots.py` for per-step macro timing plus optional `cProfile` capture of a selected command.
 - New benchmark case: `benchmarks/benchmark_tilt_relaxation.py` (tilt relaxation hot-loop timing).
+- Docs: clarified tilt controls (`tilt_solve_mode`, `tilt_solver`, inner-step knobs), documented `show_edges`, and clarified torus local-vs-integrated Gaussian curvature interpretation.
 - Rim source energies now follow fitted pin-to-circle rims (`pin_to_circle_mode: fit`) as they translate in space.
 - KH-pure tilt benchmark variants without smoothness regularization (`meshes/tilt_benchmarks/kh_pure_*`).
 - Tilt benchmark runner script (`tools/tilt_benchmark_runner.py`) for energy/tilt/divergence summaries.

@@ -275,6 +275,10 @@ Interactive commands:
   Toggle live visualization during minimization; accepts the same scalar modes
   as `s` (including `bilayer`).
 
+- `show_edges [on|off|toggle]`
+  Control whether mesh edges are drawn in `s`/`lv` plots. With no argument, it
+  toggles the current state.
+
 - `energy`
   Print the per-module energy breakdown. When source modules are present, also
   prints internal energy (no sources) vs external work (sources).
@@ -350,6 +354,9 @@ Override with `expression_measure` or `constraint_measure`.
   `gaussian_curvature_strict_topology=true` to raise on non-manifold edges,
   invalid boundary loops, or defect mismatches (tune with
   `gaussian_curvature_defect_tol`).
+  On a closed torus, local Gaussian curvature can vary in sign across the
+  surface while the integrated Gauss-Bonnet invariant remains zero; this is
+  expected and should not be interpreted as a topology regression.
 
 ## 4.1 Interactive command highlights
 
@@ -788,8 +795,28 @@ You can switch to Conjugate Gradient with `cg` in interactive mode.
 
 ### 7.1 Tilt relaxation parameters
 
-These settings control the inner tilt relaxation loop (single-tilt or leaflet
-tilt) when `tilt_solve_mode` is `"nested"` or `"coupled"`:
+These settings control how shape updates and tilt updates are scheduled:
+
+- `tilt_solve_mode`
+  - `"off"`: disable tilt relaxation.
+  - `"nested"`: run tilt-only relaxation blocks inside each shape step.
+  - `"coupled"`: interleave shape and tilt updates in a coupled loop.
+
+For `nested` and `coupled`, the following iteration controls apply:
+
+- `tilt_inner_steps`
+  Number of tilt-only updates per nested relaxation block.
+
+- `tilt_coupled_steps`
+  Number of tilt updates per coupled outer step.
+
+- `tilt_step_size`
+  Initial line-search step size used by the tilt optimizer.
+
+- `tilt_tol`
+  Relative tolerance used to stop inner tilt iterations early when converged.
+
+Tilt optimizer selection:
 
 - `tilt_solver`
   - `"gd"` (default): gradient descent tilt relaxation.
