@@ -38,6 +38,61 @@ class CurvatureFields:
     principal_curvatures: np.ndarray  # (N, 2) (k1,k2)
 
 
+def _call_fortran_curvature_kernel(
+    kernel,
+    *,
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+    k_vecs: np.ndarray,
+    vertex_areas: np.ndarray,
+    weights: np.ndarray,
+    va0: np.ndarray,
+    va1: np.ndarray,
+    va2: np.ndarray,
+    zero_based: int,
+) -> bool:
+    """Call curvature kernel across legacy and optional-output signatures.
+
+    Returns ``True`` when optional per-triangle area outputs (va0/va1/va2)
+    were populated by the kernel call.
+    """
+    try:
+        kernel(
+            positions,
+            tri_rows,
+            k_vecs,
+            vertex_areas,
+            weights,
+            zero_based,
+            va0,
+            va1,
+            va2,
+        )
+        return True
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        # Some wrappers may place optional outputs before ``zero_based``.
+        kernel(
+            positions,
+            tri_rows,
+            k_vecs,
+            vertex_areas,
+            weights,
+            va0,
+            va1,
+            va2,
+            zero_based,
+        )
+        return True
+    except (TypeError, ValueError):
+        pass
+
+    kernel(positions, tri_rows, k_vecs, vertex_areas, weights, zero_based)
+    return False
+
+
 def compute_curvature_data(
     mesh: Mesh, positions: np.ndarray, index_map: Dict[int, int]
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -95,13 +150,27 @@ def compute_curvature_data(
 
     if kernel_spec is not None:
         nf = tri_rows.shape[0]
+        va0 = np.zeros(nf, dtype=np.float64, order="F")
+        va1 = np.zeros(nf, dtype=np.float64, order="F")
+        va2 = np.zeros(nf, dtype=np.float64, order="F")
         if kernel_spec.expects_transpose:
             pos_t = positions.T
             tri_t = tri_rows.T
             k_vecs = np.zeros((3, n_verts), dtype=np.float64, order="F")
             vertex_areas = np.zeros(n_verts, dtype=np.float64, order="F")
             weights = np.zeros((3, nf), dtype=np.float64, order="F")
-            kernel_spec.func(pos_t, tri_t, k_vecs, vertex_areas, weights, 1)
+            has_optional_areas = _call_fortran_curvature_kernel(
+                kernel_spec.func,
+                positions=pos_t,
+                tri_rows=tri_t,
+                k_vecs=k_vecs,
+                vertex_areas=vertex_areas,
+                weights=weights,
+                va0=va0,
+                va1=va1,
+                va2=va2,
+                zero_based=1,
+            )
             k_vecs = np.asarray(k_vecs).T
             vertex_areas = np.asarray(vertex_areas)
             weights = np.asarray(weights).T
@@ -109,13 +178,28 @@ def compute_curvature_data(
             k_vecs = np.zeros((n_verts, 3), dtype=np.float64, order="F")
             vertex_areas = np.zeros(n_verts, dtype=np.float64, order="F")
             weights = np.zeros((nf, 3), dtype=np.float64, order="F")
-            kernel_spec.func(positions, tri_rows, k_vecs, vertex_areas, weights, 1)
+            has_optional_areas = _call_fortran_curvature_kernel(
+                kernel_spec.func,
+                positions=positions,
+                tri_rows=tri_rows,
+                k_vecs=k_vecs,
+                vertex_areas=vertex_areas,
+                weights=weights,
+                va0=va0,
+                va1=va1,
+                va2=va2,
+                zero_based=1,
+            )
 
         if use_cache:
             mesh._curvature_cache["k_vecs"] = k_vecs
             mesh._curvature_cache["vertex_areas"] = vertex_areas
             mesh._curvature_cache["weights"] = weights
             mesh._curvature_cache["tri_rows"] = tri_rows
+            if has_optional_areas:
+                mesh._curvature_cache["va0_raw"] = np.asarray(va0)
+                mesh._curvature_cache["va1_raw"] = np.asarray(va1)
+                mesh._curvature_cache["va2_raw"] = np.asarray(va2)
             mesh._curvature_cache["curvature_rows_version"] = mesh._facet_loops_version
             mesh._curvature_version = mesh._version
         return k_vecs, vertex_areas, weights, tri_rows
