@@ -10,8 +10,8 @@ from geometry.bending_derivatives import grad_triangle_area
 from geometry.curvature import compute_curvature_data
 from geometry.entities import Mesh
 from geometry.tilt_operators import (
+    compute_divergence_from_basis,
     p1_triangle_divergence,
-    p1_triangle_divergence_from_shape_gradients,
 )
 from modules.energy.bending import (  # noqa: PLC0415
     _apply_beltrami_laplacian,
@@ -446,7 +446,7 @@ def compute_energy_and_gradient_array_leaflet(
             g0_use = g0_use[tri_keep]
             g1_use = g1_use[tri_keep]
             g2_use = g2_use[tri_keep]
-        div_tri = p1_triangle_divergence_from_shape_gradients(
+        div_tri = compute_divergence_from_basis(
             tilts=tilts, tri_rows=tri_rows, g0=g0_use, g1=g1_use, g2=g2_use
         )
         # Keep using the standard divergence routine for gradients (g0,g1,g2)
