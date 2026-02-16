@@ -85,7 +85,7 @@ contains
     end do
   end subroutine p1_triangle_divergence
 
-  subroutine compute_curvature_data(nv, nf, positions, tri, k_vecs, vertex_areas, weights, zero_based)
+  subroutine compute_curvature_data(nv, nf, positions, tri, k_vecs, vertex_areas, weights, zero_based, va0_out, va1_out, va2_out)
     integer(c_int), intent(in) :: nv, nf
     real(c_double), intent(in) :: positions(3, nv)
     integer(c_int), intent(in) :: tri(3, nf)
@@ -93,6 +93,7 @@ contains
     real(c_double), intent(inout) :: vertex_areas(nv)
     real(c_double), intent(inout) :: weights(3, nf)
     integer(c_int), intent(in) :: zero_based
+    real(c_double), intent(inout), optional :: va0_out(nf), va1_out(nf), va2_out(nf)
 
     integer :: f
     integer :: v0, v1, v2, shift
@@ -108,6 +109,9 @@ contains
     k_vecs = 0.0d0
     vertex_areas = 0.0d0
     weights = 0.0d0
+    if (present(va0_out)) va0_out = 0.0d0
+    if (present(va1_out)) va1_out = 0.0d0
+    if (present(va2_out)) va2_out = 0.0d0
 
     if (zero_based /= 0_c_int) then
       shift = 1
@@ -179,6 +183,9 @@ contains
       vertex_areas(v0) = vertex_areas(v0) + va0
       vertex_areas(v1) = vertex_areas(v1) + va1
       vertex_areas(v2) = vertex_areas(v2) + va2
+      if (present(va0_out)) va0_out(f) = va0
+      if (present(va1_out)) va1_out(f) = va1
+      if (present(va2_out)) va2_out(f) = va2
     end do
   end subroutine compute_curvature_data
 

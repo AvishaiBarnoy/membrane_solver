@@ -224,7 +224,7 @@ def _curvature_data_reference(positions: np.ndarray, tri_rows: np.ndarray):
     weights[:, 1] = c1
     weights[:, 2] = c2
 
-    return k_vecs, vertex_areas, weights
+    return k_vecs, vertex_areas, weights, va0, va1, va2
 
 
 def test_p1_triangle_divergence_kernel_matches_numpy():
@@ -325,31 +325,52 @@ def test_curvature_data_kernel_matches_numpy():
     positions = rng.normal(size=(nv, 3)).astype(np.float64)
     tri = rng.integers(0, nv, size=(nf, 3), dtype=np.int32)
 
-    k_ref, areas_ref, weights_ref = _curvature_data_reference(positions, tri)
+    k_ref, areas_ref, weights_ref, va0_ref, va1_ref, va2_ref = (
+        _curvature_data_reference(positions, tri)
+    )
+    va0 = va1 = va2 = None
 
     if expects_transpose:
         pos_in = np.asfortranarray(positions.T, dtype=np.float64)
         tri_in = np.asfortranarray(tri.T, dtype=np.int32)
         try:
-            k_vecs, vertex_areas, weights = fn(pos_in, tri_in, 1)
+            k_vecs, vertex_areas, weights, va0, va1, va2 = fn(pos_in, tri_in, 1)
         except Exception:
             k_vecs = np.zeros((3, nv), dtype=np.float64, order="F")
             vertex_areas = np.zeros(nv, dtype=np.float64, order="F")
             weights = np.zeros((3, nf), dtype=np.float64, order="F")
-            fn(pos_in, tri_in, k_vecs, vertex_areas, weights, 1)
+            try:
+                va0 = np.zeros(nf, dtype=np.float64, order="F")
+                va1 = np.zeros(nf, dtype=np.float64, order="F")
+                va2 = np.zeros(nf, dtype=np.float64, order="F")
+                fn(pos_in, tri_in, k_vecs, vertex_areas, weights, 1, va0, va1, va2)
+            except Exception:
+                fn(pos_in, tri_in, k_vecs, vertex_areas, weights, 1)
+                va0 = va1 = va2 = None
         k_vecs = np.asarray(k_vecs).T
         weights = np.asarray(weights).T
     else:
         pos_in = np.asfortranarray(positions, dtype=np.float64)
         tri_in = np.asfortranarray(tri, dtype=np.int32)
         try:
-            k_vecs, vertex_areas, weights = fn(pos_in, tri_in, 1)
+            k_vecs, vertex_areas, weights, va0, va1, va2 = fn(pos_in, tri_in, 1)
         except Exception:
             k_vecs = np.zeros((nv, 3), dtype=np.float64, order="F")
             vertex_areas = np.zeros(nv, dtype=np.float64, order="F")
             weights = np.zeros((nf, 3), dtype=np.float64, order="F")
-            fn(pos_in, tri_in, k_vecs, vertex_areas, weights, 1)
+            try:
+                va0 = np.zeros(nf, dtype=np.float64, order="F")
+                va1 = np.zeros(nf, dtype=np.float64, order="F")
+                va2 = np.zeros(nf, dtype=np.float64, order="F")
+                fn(pos_in, tri_in, k_vecs, vertex_areas, weights, 1, va0, va1, va2)
+            except Exception:
+                fn(pos_in, tri_in, k_vecs, vertex_areas, weights, 1)
+                va0 = va1 = va2 = None
 
     assert np.allclose(np.asarray(k_vecs), k_ref, atol=1e-10, rtol=1e-10)
     assert np.allclose(np.asarray(vertex_areas), areas_ref, atol=1e-10, rtol=1e-10)
     assert np.allclose(np.asarray(weights), weights_ref, atol=1e-10, rtol=1e-10)
+    if va0 is not None and va1 is not None and va2 is not None:
+        assert np.allclose(np.asarray(va0), va0_ref, atol=1e-10, rtol=1e-10)
+        assert np.allclose(np.asarray(va1), va1_ref, atol=1e-10, rtol=1e-10)
+        assert np.allclose(np.asarray(va2), va2_ref, atol=1e-10, rtol=1e-10)
