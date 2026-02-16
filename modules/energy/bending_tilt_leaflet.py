@@ -40,6 +40,18 @@ _BASE_TERM_BOUNDARY_OPTION_KEYS = (
 _ASSUME_J0_PRESETS_KEY = "bending_tilt_assume_J0_presets"
 
 
+def _scatter_add_vec_bincount(
+    dest: np.ndarray, rows: np.ndarray, values: np.ndarray
+) -> None:
+    """Accumulate ``values`` into ``dest[rows]`` using component-wise bincount."""
+    if rows.size == 0:
+        return
+    n_rows = int(dest.shape[0])
+    dest[:, 0] += np.bincount(rows, weights=values[:, 0], minlength=n_rows)
+    dest[:, 1] += np.bincount(rows, weights=values[:, 1], minlength=n_rows)
+    dest[:, 2] += np.bincount(rows, weights=values[:, 2], minlength=n_rows)
+
+
 def _assume_J0_presets(global_params, *, cache_tag: str) -> tuple[str, ...]:
     """Optional config: presets for which the Helfrich base term is set to zero.
 
@@ -560,9 +572,9 @@ def compute_energy_and_gradient_array_leaflet(
             )
             factor = dE_ddiv[:, None]
 
-            np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
-            np.add.at(tilt_grad_arr, tri_rows[:, 1], factor * g1)
-            np.add.at(tilt_grad_arr, tri_rows[:, 2], factor * g2)
+            _scatter_add_vec_bincount(tilt_grad_arr, tri_rows[:, 0], factor * g0)
+            _scatter_add_vec_bincount(tilt_grad_arr, tri_rows[:, 1], factor * g1)
+            _scatter_add_vec_bincount(tilt_grad_arr, tri_rows[:, 2], factor * g2)
         return float(total_energy)
 
     mode = _gradient_mode(global_params)
@@ -662,15 +674,15 @@ def compute_energy_and_gradient_array_leaflet(
         else:
             grad_cot = np.zeros_like(positions)
         val0, val1, val2 = dE_dc0[:, None], dE_dc1[:, None], dE_dc2[:, None]
-        np.add.at(grad_cot, v1_idxs, val0 * g_c0_u)
-        np.add.at(grad_cot, v2_idxs, val0 * g_c0_v)
-        np.add.at(grad_cot, v0_idxs, val0 * -(g_c0_u + g_c0_v))
-        np.add.at(grad_cot, v2_idxs, val1 * g_c1_u)
-        np.add.at(grad_cot, v0_idxs, val1 * g_c1_v)
-        np.add.at(grad_cot, v1_idxs, val1 * -(g_c1_u + g_c1_v))
-        np.add.at(grad_cot, v0_idxs, val2 * g_c2_u)
-        np.add.at(grad_cot, v1_idxs, val2 * g_c2_v)
-        np.add.at(grad_cot, v2_idxs, val2 * -(g_c2_u + g_c2_v))
+        _scatter_add_vec_bincount(grad_cot, v1_idxs, val0 * g_c0_u)
+        _scatter_add_vec_bincount(grad_cot, v2_idxs, val0 * g_c0_v)
+        _scatter_add_vec_bincount(grad_cot, v0_idxs, val0 * -(g_c0_u + g_c0_v))
+        _scatter_add_vec_bincount(grad_cot, v2_idxs, val1 * g_c1_u)
+        _scatter_add_vec_bincount(grad_cot, v0_idxs, val1 * g_c1_v)
+        _scatter_add_vec_bincount(grad_cot, v1_idxs, val1 * -(g_c1_u + g_c1_v))
+        _scatter_add_vec_bincount(grad_cot, v0_idxs, val2 * g_c2_u)
+        _scatter_add_vec_bincount(grad_cot, v1_idxs, val2 * g_c2_v)
+        _scatter_add_vec_bincount(grad_cot, v2_idxs, val2 * -(g_c2_u + g_c2_v))
 
         # --- Area Gradients (Step 2: Propagate area reassignment) ---
 
@@ -716,23 +728,23 @@ def compute_energy_and_gradient_array_leaflet(
             v0s, v1s, v2s = v0_idxs[m_std], v1_idxs[m_std], v2_idxs[m_std]
 
             coeff = 0.25 * c1s * C0s
-            np.add.at(grad_area, v0s, coeff[:, None] * e1s)
-            np.add.at(grad_area, v2s, -coeff[:, None] * e1s)
+            _scatter_add_vec_bincount(grad_area, v0s, coeff[:, None] * e1s)
+            _scatter_add_vec_bincount(grad_area, v2s, -coeff[:, None] * e1s)
             coeff = 0.25 * c2s * C0s
-            np.add.at(grad_area, v1s, coeff[:, None] * e2s)
-            np.add.at(grad_area, v0s, -coeff[:, None] * e2s)
+            _scatter_add_vec_bincount(grad_area, v1s, coeff[:, None] * e2s)
+            _scatter_add_vec_bincount(grad_area, v0s, -coeff[:, None] * e2s)
             coeff = 0.25 * c2s * C1s
-            np.add.at(grad_area, v1s, coeff[:, None] * e2s)
-            np.add.at(grad_area, v0s, -coeff[:, None] * e2s)
+            _scatter_add_vec_bincount(grad_area, v1s, coeff[:, None] * e2s)
+            _scatter_add_vec_bincount(grad_area, v0s, -coeff[:, None] * e2s)
             coeff = 0.25 * c0s * C1s
-            np.add.at(grad_area, v2s, coeff[:, None] * e0s)
-            np.add.at(grad_area, v1s, -coeff[:, None] * e0s)
+            _scatter_add_vec_bincount(grad_area, v2s, coeff[:, None] * e0s)
+            _scatter_add_vec_bincount(grad_area, v1s, -coeff[:, None] * e0s)
             coeff = 0.25 * c0s * C2s
-            np.add.at(grad_area, v2s, coeff[:, None] * e0s)
-            np.add.at(grad_area, v1s, -coeff[:, None] * e0s)
+            _scatter_add_vec_bincount(grad_area, v2s, coeff[:, None] * e0s)
+            _scatter_add_vec_bincount(grad_area, v1s, -coeff[:, None] * e0s)
             coeff = 0.25 * c1s * C2s
-            np.add.at(grad_area, v0s, coeff[:, None] * e1s)
-            np.add.at(grad_area, v2s, -coeff[:, None] * e1s)
+            _scatter_add_vec_bincount(grad_area, v0s, coeff[:, None] * e1s)
+            _scatter_add_vec_bincount(grad_area, v2s, -coeff[:, None] * e1s)
 
             l0sq = np.einsum("ij,ij->i", e0s, e0s)
             l1sq = np.einsum("ij,ij->i", e1s, e1s)
@@ -756,15 +768,15 @@ def compute_energy_and_gradient_array_leaflet(
                 coeff_c1[:, None],
                 coeff_c2[:, None],
             )
-            np.add.at(grad_area, v1s, v_c0 * gc0u)
-            np.add.at(grad_area, v2s, v_c0 * gc0v)
-            np.add.at(grad_area, v0s, v_c0 * -(gc0u + gc0v))
-            np.add.at(grad_area, v2s, v_c1 * gc1u)
-            np.add.at(grad_area, v0s, v_c1 * gc1v)
-            np.add.at(grad_area, v1s, v_c1 * -(gc1u + gc1v))
-            np.add.at(grad_area, v0s, v_c2 * gc2u)
-            np.add.at(grad_area, v1s, v_c2 * gc2v)
-            np.add.at(grad_area, v2s, v_c2 * -(gc2u + gc2v))
+            _scatter_add_vec_bincount(grad_area, v1s, v_c0 * gc0u)
+            _scatter_add_vec_bincount(grad_area, v2s, v_c0 * gc0v)
+            _scatter_add_vec_bincount(grad_area, v0s, v_c0 * -(gc0u + gc0v))
+            _scatter_add_vec_bincount(grad_area, v2s, v_c1 * gc1u)
+            _scatter_add_vec_bincount(grad_area, v0s, v_c1 * gc1v)
+            _scatter_add_vec_bincount(grad_area, v1s, v_c1 * -(gc1u + gc1v))
+            _scatter_add_vec_bincount(grad_area, v0s, v_c2 * gc2u)
+            _scatter_add_vec_bincount(grad_area, v1s, v_c2 * gc2v)
+            _scatter_add_vec_bincount(grad_area, v2s, v_c2 * -(gc2u + gc2v))
 
         if np.any(is_obtuse):
             for i, m_sub in enumerate([(c0 < 0), (c1 < 0), (c2 < 0)]):
@@ -784,9 +796,9 @@ def compute_energy_and_gradient_array_leaflet(
                     else:
                         factor = (0.5 * C2o + 0.25 * C0o + 0.25 * C1o)[:, None]
 
-                    np.add.at(grad_area, v1o, factor * gT_u)
-                    np.add.at(grad_area, v2o, factor * gT_v)
-                    np.add.at(grad_area, v0o, factor * -(gT_u + gT_v))
+                    _scatter_add_vec_bincount(grad_area, v1o, factor * gT_u)
+                    _scatter_add_vec_bincount(grad_area, v2o, factor * gT_v)
+                    _scatter_add_vec_bincount(grad_area, v0o, factor * -(gT_u + gT_v))
 
         grad_arr[:] += grad_linear
         grad_arr[:] += grad_cot
@@ -804,9 +816,9 @@ def compute_energy_and_gradient_array_leaflet(
         )
         factor = dE_ddiv[:, None]
 
-        np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
-        np.add.at(tilt_grad_arr, tri_rows[:, 1], factor * g1)
-        np.add.at(tilt_grad_arr, tri_rows[:, 2], factor * g2)
+        _scatter_add_vec_bincount(tilt_grad_arr, tri_rows[:, 0], factor * g0)
+        _scatter_add_vec_bincount(tilt_grad_arr, tri_rows[:, 1], factor * g1)
+        _scatter_add_vec_bincount(tilt_grad_arr, tri_rows[:, 2], factor * g2)
 
     return total_energy
 
