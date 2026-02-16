@@ -59,6 +59,7 @@ def compute_curvature_data(
         cached = mesh._curvature_cache
         if (
             cached.get("curvature_rows_version") == mesh._facet_loops_version
+            and cached.get("curvature_positions_id") == id(positions)
             and "k_vecs" in cached
             and "vertex_areas" in cached
             and "weights" in cached
@@ -117,6 +118,7 @@ def compute_curvature_data(
             mesh._curvature_cache["weights"] = weights
             mesh._curvature_cache["tri_rows"] = tri_rows
             mesh._curvature_cache["curvature_rows_version"] = mesh._facet_loops_version
+            mesh._curvature_cache["curvature_positions_id"] = id(positions)
             mesh._curvature_version = mesh._version
         return k_vecs, vertex_areas, weights, tri_rows
 
@@ -197,6 +199,7 @@ def compute_curvature_data(
         mesh._curvature_cache["weights"] = weights
         mesh._curvature_cache["tri_rows"] = tri_rows
         mesh._curvature_cache["curvature_rows_version"] = mesh._facet_loops_version
+        mesh._curvature_cache["curvature_positions_id"] = id(positions)
         mesh._curvature_version = mesh._version
     return k_vecs, vertex_areas, weights, tri_rows
 

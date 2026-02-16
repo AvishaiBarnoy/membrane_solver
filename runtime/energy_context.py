@@ -13,6 +13,7 @@ class GeometryCache:
     """Version-bound cache storage for geometry-derived arrays."""
 
     _bound_mesh_version: int = -1
+    _bound_mesh_id: int = -1
     _bound_vertex_ids_version: int = -1
     _bound_topology_version: int = -1
     _soa_mesh_version: int = -1
@@ -40,6 +41,7 @@ class GeometryCache:
 
     def bind(self, mesh: Mesh) -> None:
         """Bind cache metadata to the current mesh version tuple."""
+        self._bound_mesh_id = id(mesh)
         self._bound_mesh_version = int(mesh._version)
         self._bound_vertex_ids_version = int(mesh._vertex_ids_version)
         self._bound_topology_version = int(mesh._topology_version)
@@ -67,11 +69,16 @@ class GeometryCache:
         the resulting views inside the context cache.
         """
         self.bind(mesh)
+        # Keep vertex_ids/index_map consistent with current mesh dictionaries.
+        # Some line-search rollback paths mutate vertices directly; ensure we do
+        # not trust stale vertex_ids lengths from prior topology states.
+        mesh.build_position_cache()
         positions = self.get("positions")
         index_map = self.get("index_map")
         if (
             positions is None
             or index_map is None
+            or positions.shape[0] != len(mesh.vertex_ids)
             or self._soa_mesh_version != int(mesh._version)
             or self._soa_vertex_ids_version != int(mesh._vertex_ids_version)
         ):
@@ -286,6 +293,12 @@ class EnergyContext:
 
     def ensure_for_mesh(self, mesh: Mesh) -> None:
         """Ensure cache validity for the current mesh state."""
+        mesh_id = id(mesh)
+        prev_mesh_id = self.metadata.get("mesh_id")
+        if prev_mesh_id is not None and prev_mesh_id != mesh_id:
+            self.geometry.clear()
+            self.scratch.clear()
+        self.metadata["mesh_id"] = mesh_id
         self.geometry.ensure_for_mesh(mesh)
 
     def scratch_array(
