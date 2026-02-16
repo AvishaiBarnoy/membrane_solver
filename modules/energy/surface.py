@@ -2,6 +2,7 @@
 # Here goes energy functions relevant for area of facets
 
 import logging
+import os
 from typing import Dict
 
 import numpy as np
@@ -118,15 +119,44 @@ def compute_energy_and_gradient_array(
             expects_transpose = kernel_spec.expects_transpose
             nv = positions.shape[0]
             nf = tri_rows_arr.shape[0]
-            gamma = np.ascontiguousarray(gammas_arr, dtype=np.float64)
+            strict = os.environ.get("MEMBRANE_FORTRAN_STRICT_NOCOPY") in {
+                "1",
+                "true",
+                "TRUE",
+            }
             if expects_transpose:
-                pos_f = np.asfortranarray(positions.T, dtype=np.float64)
-                tri_f = np.asfortranarray(tri_rows_arr.T, dtype=np.int32)
+                pos_f = positions.T
+                tri_f = tri_rows_arr.T
                 grad_f = np.zeros((3, nv), dtype=np.float64, order="F")
             else:
-                pos_f = np.asfortranarray(positions, dtype=np.float64)
-                tri_f = np.asfortranarray(tri_rows_arr, dtype=np.int32)
+                pos_f = positions
+                tri_f = tri_rows_arr
                 grad_f = grad_arr
+            gamma = np.asarray(gammas_arr)
+
+            if strict:
+                if (
+                    pos_f.dtype != np.float64
+                    or tri_f.dtype != np.int32
+                    or gamma.dtype != np.float64
+                    or grad_f.dtype != np.float64
+                ):
+                    raise TypeError(
+                        "Fortran surface kernel requires float64 positions/gamma/gradient and int32 tri_rows."
+                    )
+                if not (
+                    pos_f.flags["F_CONTIGUOUS"]
+                    and tri_f.flags["F_CONTIGUOUS"]
+                    and grad_f.flags["F_CONTIGUOUS"]
+                    and gamma.flags["C_CONTIGUOUS"]
+                ):
+                    raise ValueError(
+                        "Fortran surface kernel requires F-contiguous positions/tri_rows/gradient and C-contiguous gamma (to avoid hidden copies)."
+                    )
+            else:
+                gamma = np.ascontiguousarray(gamma, dtype=np.float64)
+                pos_f = np.asfortranarray(pos_f, dtype=np.float64)
+                tri_f = np.asfortranarray(tri_f, dtype=np.int32)
 
             try:
                 energy = _call_fortran_surface_kernel(
