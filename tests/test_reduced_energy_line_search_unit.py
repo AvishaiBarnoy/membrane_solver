@@ -64,6 +64,7 @@ def test_line_search_reduced_energy_relaxes_tilts_and_restores_param_overrides()
             "tilt_tol": 0.0,
             "line_search_reduced_energy": True,
             "line_search_reduced_tilt_inner_steps": 5,
+            "tilt_backtracking_warm_start": False,
         }
     )
     minim = _build_minimizer(mesh, gp)
@@ -83,6 +84,7 @@ def test_line_search_reduced_energy_relaxes_tilts_and_restores_param_overrides()
 
     # Parameter overrides must be restored (no state leakage into outer loop).
     assert int(gp.get("tilt_inner_steps")) == 10
+    assert bool(gp.get("tilt_backtracking_warm_start")) is False
 
 
 def test_line_search_energy_fn_projects_leaflet_tilts_to_tangent() -> None:

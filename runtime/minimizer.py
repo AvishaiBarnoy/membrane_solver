@@ -461,7 +461,12 @@ class Minimizer:
         uses_leaflet = self._uses_leaflet_tilts()
         gp = self.global_params
 
-        override_keys = ("tilt_inner_steps", "tilt_coupled_steps", "tilt_cg_max_iters")
+        override_keys = (
+            "tilt_inner_steps",
+            "tilt_coupled_steps",
+            "tilt_cg_max_iters",
+            "tilt_backtracking_warm_start",
+        )
         override_present = {key: (key in gp) for key in override_keys}
         override_old = {key: gp.get(key) for key in override_keys}
 
@@ -486,6 +491,12 @@ class Minimizer:
                 gp.set("tilt_inner_steps", reduced_steps)
                 gp.set("tilt_coupled_steps", reduced_steps)
                 gp.set("tilt_cg_max_iters", reduced_steps)
+                gp.set(
+                    "tilt_backtracking_warm_start",
+                    bool(
+                        gp.get("line_search_reduced_tilt_backtracking_warm_start", True)
+                    ),
+                )
 
                 if guard_factor > 0.0:
                     # Guard against tilt divergence during line search.
@@ -1456,6 +1467,12 @@ class Minimizer:
                 if preconditioner in ("none", "off", "false"):
                     preconditioner = None
 
+            bt_warm_start = bool(
+                self.global_params.get("tilt_backtracking_warm_start", False)
+            )
+            bt_shrink = 0.5
+            bt_step_hint = float(step_size)
+
             if solver == "gd":
                 for _ in range(max_iters):
                     E0, gnorm = _leaflet_tilt_gradients()
@@ -1464,7 +1481,7 @@ class Minimizer:
                     if tol > 0.0 and gnorm < tol:
                         break
 
-                    step = step_size
+                    step = bt_step_hint if bt_warm_start else step_size
                     accepted = False
                     for _bt in range(12):
                         trial_in = tilts_in - step * tilt_in_grad
@@ -1490,13 +1507,17 @@ class Minimizer:
                         if E1 <= E0:
                             tilts_in = trial_in
                             tilts_out = trial_out
+                            if bt_warm_start:
+                                bt_step_hint = min(step_size, step / bt_shrink)
                             accepted = True
                             break
-                        step *= 0.5
+                        step *= bt_shrink
                         if step < 1e-16:
                             break
 
                     if not accepted:
+                        if bt_warm_start:
+                            bt_step_hint = max(step, 1e-16)
                         break
 
                     if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
@@ -1576,7 +1597,7 @@ class Minimizer:
                     if tol > 0.0 and gnorm < tol:
                         break
 
-                    step = step_size
+                    step = bt_step_hint if bt_warm_start else step_size
                     accepted = False
                     for _bt in range(12):
                         trial_in = tilts_in + step * dir_in
@@ -1603,13 +1624,17 @@ class Minimizer:
                             tilts_in = trial_in
                             tilts_out = trial_out
                             E0 = E1
+                            if bt_warm_start:
+                                bt_step_hint = min(step_size, step / bt_shrink)
                             accepted = True
                             break
-                        step *= 0.5
+                        step *= bt_shrink
                         if step < 1e-16:
                             break
 
                     if not accepted:
+                        if bt_warm_start:
+                            bt_step_hint = max(step, 1e-16)
                         break
 
                     if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
