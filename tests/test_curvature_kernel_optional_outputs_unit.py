@@ -75,6 +75,9 @@ def test_curvature_kernel_legacy_signature_still_supported(
     mesh = _single_triangle_mesh()
     pos = mesh.positions_view()
     idx = mesh.vertex_index_to_row
+    mesh._curvature_cache["va0_raw"] = np.array([9.0], dtype=np.float64)
+    mesh._curvature_cache["va1_raw"] = np.array([8.0], dtype=np.float64)
+    mesh._curvature_cache["va2_raw"] = np.array([7.0], dtype=np.float64)
 
     def _kernel(pos_in, tri_in, k_vecs, vertex_areas, weights, zero_based):
         assert zero_based == 1
@@ -96,3 +99,28 @@ def test_curvature_kernel_legacy_signature_still_supported(
     assert "va0_raw" not in mesh._curvature_cache
     assert "va1_raw" not in mesh._curvature_cache
     assert "va2_raw" not in mesh._curvature_cache
+
+
+def test_curvature_numpy_fallback_populates_raw_area_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mesh = _single_triangle_mesh()
+    pos = mesh.positions_view()
+    idx = mesh.vertex_index_to_row
+
+    monkeypatch.setattr(loader, "get_tilt_curvature_kernel", lambda: None)
+
+    _k_vecs, vertex_areas, _weights, tri_rows = compute_curvature_data(mesh, pos, idx)
+
+    va0 = np.asarray(mesh._curvature_cache["va0_raw"])
+    va1 = np.asarray(mesh._curvature_cache["va1_raw"])
+    va2 = np.asarray(mesh._curvature_cache["va2_raw"])
+    assert va0.shape == (tri_rows.shape[0],)
+    assert va1.shape == (tri_rows.shape[0],)
+    assert va2.shape == (tri_rows.shape[0],)
+
+    areas_from_raw = np.zeros(len(mesh.vertex_ids), dtype=float)
+    np.add.at(areas_from_raw, tri_rows[:, 0], va0)
+    np.add.at(areas_from_raw, tri_rows[:, 1], va1)
+    np.add.at(areas_from_raw, tri_rows[:, 2], va2)
+    assert np.allclose(areas_from_raw, vertex_areas, atol=1e-12, rtol=1e-12)
