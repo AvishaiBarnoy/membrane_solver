@@ -2219,6 +2219,7 @@ STEP SIZE:\t {self.step_size}
         if self._has_enforceable_constraints:
             self.enforce_constraints_after_mesh_ops(self.mesh)
             self.mesh.project_tilts_to_tangent()
+            self.mesh.increment_version()
 
         self._check_gauss_bonnet()
         last_grad_arr = None
@@ -2263,6 +2264,7 @@ STEP SIZE:\t {self.step_size}
                         if post_energy <= threshold:
                             accepted = True
                             self.mesh.project_tilts_to_tangent()
+                            self.mesh.increment_version()
                             break
                         # Roll back and retry with a smaller tilt step.
                         self._set_leaflet_tilts_from_arrays_fast(pre_tin, pre_tout)
@@ -2381,10 +2383,15 @@ STEP SIZE:\t {self.step_size}
                 self._log_energy_phase(i, "post_step", float(last_state_energy))
             # Keep any stored 3D tilt field tangent to the updated surface.
             self.mesh.project_tilts_to_tangent()
+            self.mesh.increment_version()
             if not self.quiet:
                 # User-visible step diagnostics should report the same total
                 # energy definition as `energy` / final summaries.
                 total_area = self.mesh.compute_total_surface_area()
+                # Clear curvature cache before reporting to avoid leaking
+                # stale tilt-dependent intermediates across iterations.
+                self.mesh._curvature_cache = {}
+                self.mesh._curvature_version = -1
                 reported_energy = float(self.compute_energy())
                 print(
                     f"Step {i:4d}: Area = {total_area:.5f}, Energy = {reported_energy:.5f}, Step Size  = {step_size_in:.2e}"
@@ -2524,6 +2531,7 @@ STEP SIZE:\t {self.step_size}
                         )
                         self.enforce_constraints_after_mesh_ops(self.mesh)
                         self.mesh.project_tilts_to_tangent()
+                        self.mesh.increment_version()
                         if logger.isEnabledFor(logging.DEBUG):
                             # Avoid debug-only energy probes here as well.
                             self._log_energy_phase(
@@ -2543,8 +2551,14 @@ STEP SIZE:\t {self.step_size}
                 context="finalize",
             )
             self.mesh.project_tilts_to_tangent()
+            # Finalize projections mutate positions/tilts in-place; bump the
+            # mesh version so subsequent energy evaluations rebuild geometry-
+            # versioned caches from the finalized state.
+            self.mesh.increment_version()
 
         self._log_energy_consistency("finalize")
+        self.mesh._curvature_cache = {}
+        self.mesh._curvature_version = -1
         final_energy = float(self.compute_energy())
         return {
             "energy": final_energy,
