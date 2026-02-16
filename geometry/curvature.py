@@ -200,6 +200,10 @@ def compute_curvature_data(
                 mesh._curvature_cache["va0_raw"] = np.asarray(va0)
                 mesh._curvature_cache["va1_raw"] = np.asarray(va1)
                 mesh._curvature_cache["va2_raw"] = np.asarray(va2)
+            else:
+                mesh._curvature_cache.pop("va0_raw", None)
+                mesh._curvature_cache.pop("va1_raw", None)
+                mesh._curvature_cache.pop("va2_raw", None)
             mesh._curvature_cache["curvature_rows_version"] = mesh._facet_loops_version
             mesh._curvature_version = mesh._version
         return k_vecs, vertex_areas, weights, tri_rows
@@ -280,6 +284,9 @@ def compute_curvature_data(
         mesh._curvature_cache["vertex_areas"] = vertex_areas
         mesh._curvature_cache["weights"] = weights
         mesh._curvature_cache["tri_rows"] = tri_rows
+        mesh._curvature_cache["va0_raw"] = va0
+        mesh._curvature_cache["va1_raw"] = va1
+        mesh._curvature_cache["va2_raw"] = va2
         mesh._curvature_cache["curvature_rows_version"] = mesh._facet_loops_version
         mesh._curvature_version = mesh._version
     return k_vecs, vertex_areas, weights, tri_rows

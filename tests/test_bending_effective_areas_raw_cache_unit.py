@@ -4,9 +4,11 @@ import os
 import sys
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+import fortran_kernels.loader as loader
 from geometry.curvature import compute_curvature_data
 from geometry.entities import Edge, Facet, Mesh, Vertex
 from modules.energy.bending import _compute_effective_areas
@@ -121,3 +123,35 @@ def test_effective_areas_ignore_mismatched_raw_cache_shape() -> None:
     assert np.allclose(va0_eff, va0_ref)
     assert np.allclose(va1_eff, va1_ref)
     assert np.allclose(va2_eff, va2_ref)
+
+
+def test_effective_areas_reuse_numpy_curvature_raw_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mesh = _closed_tetra_mesh()
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    monkeypatch.setattr(loader, "get_tilt_curvature_kernel", lambda: None)
+
+    _k, _a, weights, tri_rows = compute_curvature_data(mesh, positions, index_map)
+    va0_raw = np.asarray(mesh._curvature_cache["va0_raw"])
+    va1_raw = np.asarray(mesh._curvature_cache["va1_raw"])
+    va2_raw = np.asarray(mesh._curvature_cache["va2_raw"])
+
+    vertex_eff, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
+        mesh,
+        positions,
+        tri_rows,
+        weights,
+        index_map,
+        cache_token="raw_cache_from_numpy",
+    )
+
+    assert np.allclose(va0_eff, va0_raw)
+    assert np.allclose(va1_eff, va1_raw)
+    assert np.allclose(va2_eff, va2_raw)
+    expected_vertex = _accumulate_vertex_areas(
+        len(mesh.vertex_ids), tri_rows, np.stack([va0_raw, va1_raw, va2_raw], axis=1)
+    )
+    assert np.allclose(vertex_eff, expected_vertex)
