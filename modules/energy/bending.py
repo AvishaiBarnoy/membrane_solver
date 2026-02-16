@@ -204,45 +204,59 @@ def _compute_effective_areas(
             np.zeros(0),
         )
 
-    v0 = positions[tri_rows[:, 0]]
-    v1 = positions[tri_rows[:, 1]]
-    v2 = positions[tri_rows[:, 2]]
+    use_raw_area_cache = False
+    if is_cached_pos and mesh._curvature_version == mesh._version:
+        c = mesh._curvature_cache
+        va0_raw = np.asarray(c.get("va0_raw", ()), dtype=float)
+        va1_raw = np.asarray(c.get("va1_raw", ()), dtype=float)
+        va2_raw = np.asarray(c.get("va2_raw", ()), dtype=float)
+        nf = int(tri_rows.shape[0])
+        if va0_raw.shape == (nf,) and va1_raw.shape == (nf,) and va2_raw.shape == (nf,):
+            use_raw_area_cache = True
+            va0 = va0_raw
+            va1 = va1_raw
+            va2 = va2_raw
 
-    e0 = v2 - v1
-    e1 = v0 - v2
-    e2 = v1 - v0
+    if not use_raw_area_cache:
+        v0 = positions[tri_rows[:, 0]]
+        v1 = positions[tri_rows[:, 1]]
+        v2 = positions[tri_rows[:, 2]]
 
-    l0_sq = np.einsum("ij,ij->i", e0, e0)
-    l1_sq = np.einsum("ij,ij->i", e1, e1)
-    l2_sq = np.einsum("ij,ij->i", e2, e2)
+        e0 = v2 - v1
+        e1 = v0 - v2
+        e2 = v1 - v0
 
-    c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
+        l0_sq = np.einsum("ij,ij->i", e0, e0)
+        l1_sq = np.einsum("ij,ij->i", e1, e1)
+        l2_sq = np.einsum("ij,ij->i", e2, e2)
 
-    # Triangle areas for the provided tri_rows subset.
-    # (Do not call mesh.triangle_areas here: that routine operates on the full
-    # triangle cache, while leaflet masking may pass a subset of tri_rows.)
-    n = np.cross(v1 - v0, v2 - v0)
-    tri_areas = 0.5 * np.linalg.norm(n, axis=1)
-    tri_areas = np.maximum(tri_areas, 1e-12)
+        c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
 
-    # Check for obtuse angles
-    is_obtuse_v0 = c0 < 0
-    is_obtuse_v1 = c1 < 0
-    is_obtuse_v2 = c2 < 0
-    any_obtuse = is_obtuse_v0 | is_obtuse_v1 | is_obtuse_v2
+        # Triangle areas for the provided tri_rows subset.
+        # (Do not call mesh.triangle_areas here: that routine operates on the full
+        # triangle cache, while leaflet masking may pass a subset of tri_rows.)
+        n = np.cross(v1 - v0, v2 - v0)
+        tri_areas = 0.5 * np.linalg.norm(n, axis=1)
+        tri_areas = np.maximum(tri_areas, 1e-12)
 
-    # Standard Voronoi contributions
-    va0 = np.where(~any_obtuse, (l1_sq * c1 + l2_sq * c2) / 8.0, 0.0)
-    va1 = np.where(~any_obtuse, (l2_sq * c2 + l0_sq * c0) / 8.0, 0.0)
-    va2 = np.where(~any_obtuse, (l0_sq * c0 + l1_sq * c1) / 8.0, 0.0)
+        # Check for obtuse angles
+        is_obtuse_v0 = c0 < 0
+        is_obtuse_v1 = c1 < 0
+        is_obtuse_v2 = c2 < 0
+        any_obtuse = is_obtuse_v0 | is_obtuse_v1 | is_obtuse_v2
 
-    # Obtuse contributions
-    va0 = np.where(is_obtuse_v0, tri_areas / 2.0, va0)
-    va0 = np.where(is_obtuse_v1 | is_obtuse_v2, tri_areas / 4.0, va0)
-    va1 = np.where(is_obtuse_v1, tri_areas / 2.0, va1)
-    va1 = np.where(is_obtuse_v0 | is_obtuse_v2, tri_areas / 4.0, va1)
-    va2 = np.where(is_obtuse_v2, tri_areas / 2.0, va2)
-    va2 = np.where(is_obtuse_v0 | is_obtuse_v1, tri_areas / 4.0, va2)
+        # Standard Voronoi contributions
+        va0 = np.where(~any_obtuse, (l1_sq * c1 + l2_sq * c2) / 8.0, 0.0)
+        va1 = np.where(~any_obtuse, (l2_sq * c2 + l0_sq * c0) / 8.0, 0.0)
+        va2 = np.where(~any_obtuse, (l0_sq * c0 + l1_sq * c1) / 8.0, 0.0)
+
+        # Obtuse contributions
+        va0 = np.where(is_obtuse_v0, tri_areas / 2.0, va0)
+        va0 = np.where(is_obtuse_v1 | is_obtuse_v2, tri_areas / 4.0, va0)
+        va1 = np.where(is_obtuse_v1, tri_areas / 2.0, va1)
+        va1 = np.where(is_obtuse_v0 | is_obtuse_v2, tri_areas / 4.0, va1)
+        va2 = np.where(is_obtuse_v2, tri_areas / 2.0, va2)
+        va2 = np.where(is_obtuse_v0 | is_obtuse_v1, tri_areas / 4.0, va2)
 
     # Redistribution logic
     boundary_rows = np.array(
