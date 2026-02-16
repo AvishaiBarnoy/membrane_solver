@@ -27,6 +27,7 @@ from modules.energy.leaflet_presence import (
     leaflet_absent_vertex_mask,
     leaflet_present_triangle_mask,
 )
+from modules.energy.scatter import scatter_triangle_scalar_to_vertices
 
 _BASE_TERM_BOUNDARY_OPTION_KEYS = (
     # Most configs tag the disk interface ring via the rim-slope match group.
@@ -523,15 +524,13 @@ def compute_energy_and_gradient_array_leaflet(
         )
     else:
         div_eff_num = np.zeros_like(base_term)
-    n_verts = int(base_term.shape[0])
-    div_eff_num += np.bincount(
-        tri_rows[:, 0], weights=va0_eff * div_term, minlength=n_verts
-    )
-    div_eff_num += np.bincount(
-        tri_rows[:, 1], weights=va1_eff * div_term, minlength=n_verts
-    )
-    div_eff_num += np.bincount(
-        tri_rows[:, 2], weights=va2_eff * div_term, minlength=n_verts
+    div_eff_num = scatter_triangle_scalar_to_vertices(
+        tri_rows=tri_rows,
+        w0=va0_eff * div_term,
+        w1=va1_eff * div_term,
+        w2=va2_eff * div_term,
+        n_vertices=base_term.shape[0],
+        out=div_eff_num,
     )
     if ctx is not None:
         div_eff = ctx.scratch_array(
