@@ -81,6 +81,19 @@ def p1_triangle_shape_gradients(
     return area, g0, g1, g2
 
 
+def compute_p1_basis(
+    *,
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Compute and return P1 basis data for divergence evaluation.
+
+    This is the canonical API for callers that want to reuse basis gradients
+    across repeated divergence evaluations at fixed geometry.
+    """
+    return p1_triangle_shape_gradients(positions=positions, tri_rows=tri_rows)
+
+
 def p1_triangle_divergence(
     *,
     positions: np.ndarray,
@@ -230,6 +243,20 @@ def p1_triangle_divergence_from_shape_gradients(
     )
 
 
+def compute_divergence_from_basis(
+    *,
+    tilts: np.ndarray,
+    tri_rows: np.ndarray,
+    g0: np.ndarray,
+    g1: np.ndarray,
+    g2: np.ndarray,
+) -> np.ndarray:
+    """Compute triangle-wise P1 divergence from precomputed basis gradients."""
+    return p1_triangle_divergence_from_shape_gradients(
+        tilts=tilts, tri_rows=tri_rows, g0=g0, g1=g1, g2=g2
+    )
+
+
 def p1_vertex_divergence(
     *,
     n_vertices: int,
@@ -277,6 +304,8 @@ def p1_vertex_divergence(
 
 
 __all__ = [
+    "compute_p1_basis",
+    "compute_divergence_from_basis",
     "p1_triangle_divergence",
     "p1_triangle_shape_gradients",
     "p1_triangle_divergence_from_shape_gradients",

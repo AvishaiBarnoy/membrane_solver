@@ -8,6 +8,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from geometry.entities import Edge, Facet, Mesh, Vertex
 from geometry.tilt_operators import (
+    compute_divergence_from_basis,
+    compute_p1_basis,
     p1_triangle_divergence,
     p1_triangle_divergence_from_shape_gradients,
 )
@@ -59,6 +61,27 @@ def test_p1_triangle_divergence_matches_cached_shape_gradients() -> None:
         tilts=tilts, tri_rows=tri_rows, g0=g0, g1=g1, g2=g2
     )
     assert np.allclose(div_cached, div_ref, atol=1e-12, rtol=1e-12)
+
+
+def test_compute_p1_basis_and_divergence_from_basis_match_reference() -> None:
+    mesh = _build_two_triangle_mesh()
+    positions = mesh.positions_view()
+    tri_rows, _ = mesh.triangle_row_cache()
+    assert tri_rows is not None and tri_rows.size > 0
+
+    rng = np.random.default_rng(13)
+    tilts = rng.normal(size=(len(mesh.vertex_ids), 3))
+
+    div_ref, area_ref, *_ = p1_triangle_divergence(
+        positions=positions, tilts=tilts, tri_rows=tri_rows
+    )
+    area, g0, g1, g2 = compute_p1_basis(positions=positions, tri_rows=tri_rows)
+    div_basis = compute_divergence_from_basis(
+        tilts=tilts, tri_rows=tri_rows, g0=g0, g1=g1, g2=g2
+    )
+
+    assert np.allclose(area, area_ref, atol=1e-12, rtol=1e-12)
+    assert np.allclose(div_basis, div_ref, atol=1e-12, rtol=1e-12)
 
 
 def test_bending_tilt_leaflet_uses_cached_shape_gradients_without_changing_results(
