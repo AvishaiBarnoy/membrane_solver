@@ -11,6 +11,7 @@ from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
 from geometry.geom_io import parse_geometry
 from modules.energy import bending
+from modules.energy import bending_tilt_leaflet as bt_leaflet
 from tests.sample_meshes import SAMPLE_GEOMETRY
 
 
@@ -203,3 +204,39 @@ def test_bending_tilt_leaflet_uses_leaflet_bending_modulus() -> None:
     )
 
     assert float(e_out) == pytest.approx(2.0 * float(e_in), rel=1e-6, abs=1e-12)
+
+
+def test_bending_tilt_leaflet_uses_scalar_scatter_helper(monkeypatch) -> None:
+    module = importlib.import_module("modules.energy.bending_tilt_in")
+    mesh = parse_geometry(_planar_patch_with_center())
+    gp = GlobalParameters(
+        {
+            "bending_modulus": 1.0,
+            "spontaneous_curvature": 0.0,
+            "bending_energy_model": "helfrich",
+        }
+    )
+    resolver = ParameterResolver(gp)
+
+    positions = mesh.positions_view()
+    idx_map = mesh.vertex_index_to_row
+    grad = np.zeros_like(positions)
+
+    called = {"count": 0}
+    original = bt_leaflet.scatter_triangle_scalar_to_vertices
+
+    def _wrapped(*args, **kwargs):
+        called["count"] += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(bt_leaflet, "scatter_triangle_scalar_to_vertices", _wrapped)
+
+    _ = module.compute_energy_and_gradient_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=idx_map,
+        grad_arr=grad,
+    )
+    assert called["count"] >= 1

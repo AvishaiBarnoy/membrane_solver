@@ -138,3 +138,38 @@ def test_bending_tilt_tilt_gradient_matches_directional_derivative():
     analytic = float(np.sum(tilt_grad * direction))
     scale = max(1.0, abs(analytic), abs(numeric))
     assert abs(analytic - numeric) / scale < 5e-5
+
+
+def test_bending_tilt_uses_scalar_scatter_helper(monkeypatch) -> None:
+    mesh = parse_geometry(_planar_patch_with_center())
+    gp = GlobalParameters(
+        {
+            "bending_modulus": 1.0,
+            "spontaneous_curvature": 0.0,
+            "bending_energy_model": "helfrich",
+        }
+    )
+    resolver = ParameterResolver(gp)
+
+    positions = mesh.positions_view()
+    idx_map = mesh.vertex_index_to_row
+    grad = np.zeros_like(positions)
+
+    called = {"count": 0}
+    original = bending_tilt.scatter_triangle_scalar_to_vertices
+
+    def _wrapped(*args, **kwargs):
+        called["count"] += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(bending_tilt, "scatter_triangle_scalar_to_vertices", _wrapped)
+
+    _ = bending_tilt.compute_energy_and_gradient_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=idx_map,
+        grad_arr=grad,
+    )
+    assert called["count"] >= 1
