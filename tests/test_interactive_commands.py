@@ -1,6 +1,8 @@
 import os
 import sys
 
+import numpy as np
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from sample_meshes import cube_soft_volume_input
@@ -11,7 +13,7 @@ from commands.io import PropertiesCommand
 from commands.mesh_ops import RefineCommand
 from commands.meta import TiltStatsCommand
 from commands.registry import get_command
-from geometry.geom_io import parse_geometry
+from geometry.geom_io import load_data, parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
@@ -77,6 +79,37 @@ def test_tilt_stats_accepts_leaflet_args(capsys):
     cmd.execute(ctx, ["out"])
     out = capsys.readouterr().out
     assert "tilt_out" in out
+
+
+def test_tilt_stats_is_read_only_on_leaflet_fixture() -> None:
+    mesh = parse_geometry(
+        load_data("tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml")
+    )
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        ConjugateGradient(),
+        EnergyModuleManager(mesh.energy_modules),
+        ConstraintModuleManager(mesh.constraint_modules),
+        quiet=True,
+    )
+    ctx = CommandContext(mesh, minim, minim.stepper)
+
+    e0 = float(minim.compute_energy())
+    p0 = mesh.positions_view().copy()
+    tin0 = mesh.tilts_in_view().copy()
+    tout0 = mesh.tilts_out_view().copy()
+    versions0 = (mesh._version, mesh._tilts_in_version, mesh._tilts_out_version)
+
+    execute_command_line(ctx, "tstat in")
+    execute_command_line(ctx, "tstat out")
+
+    e1 = float(minim.compute_energy())
+    np.testing.assert_allclose(mesh.positions_view(), p0, rtol=0, atol=0)
+    np.testing.assert_allclose(mesh.tilts_in_view(), tin0, rtol=0, atol=0)
+    np.testing.assert_allclose(mesh.tilts_out_view(), tout0, rtol=0, atol=0)
+    assert e1 == e0
+    assert (mesh._version, mesh._tilts_in_version, mesh._tilts_out_version) == versions0
 
 
 def test_execute_refine_command():

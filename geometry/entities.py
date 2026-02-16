@@ -942,6 +942,7 @@ class Mesh:
     _facet_loops_version: int = 0
     _facet_to_row_cache: Dict[int, int] = field(default_factory=dict)
     _facet_to_row_version: int = -1
+    _vertex_ids_topology_version: int = -1
 
     # Topology-only versioning for caches that depend on edges/facets adjacency.
     # This should only be incremented when discrete mesh operations change
@@ -1039,7 +1040,6 @@ class Mesh:
             self._geometry_freeze_version = self._version
             self._geometry_freeze_loops_version = self._facet_loops_version
             self._geometry_freeze_positions_id = id(positions)
-            self._curvature_version = self._version
 
         self._geometry_freeze_depth += 1
         try:
@@ -1597,10 +1597,16 @@ class Mesh:
         """
         import numpy as np
 
-        if self.vertex_ids is None or len(self.vertex_ids) != len(self.vertices):
+        if (
+            self.vertex_ids is None
+            or len(self.vertex_ids) != len(self.vertices)
+            or self._vertex_ids_topology_version != self._topology_version
+        ):
             ids = np.array(sorted(self.vertices.keys()), dtype=int)
             self.vertex_ids = ids
             self.vertex_index_to_row = {vid: i for i, vid in enumerate(ids)}
+            self._vertex_ids_topology_version = self._topology_version
+            self._vertex_row_binding_version = -1
             self._vertex_ids_version += 1
 
     def positions_view(self) -> "np.ndarray":

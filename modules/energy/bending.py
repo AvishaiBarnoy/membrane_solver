@@ -178,6 +178,7 @@ def _compute_effective_areas(
     key_va0 = f"va0_eff::{cache_token}"
     key_va1 = f"va1_eff::{cache_token}"
     key_va2 = f"va2_eff::{cache_token}"
+    key_rows = f"tri_rows_eff::{cache_token}"
     if (
         is_cached_pos
         and mesh._curvature_version == mesh._version
@@ -186,8 +187,14 @@ def _compute_effective_areas(
         c = mesh._curvature_cache
         # The cache is keyed to the full triangle set. Leaflet masking can
         # request effective areas on a triangle subset, so only reuse the cache
-        # when the triangle count matches.
-        if len(c.get(key_va0, ())) == int(tri_rows.shape[0]):
+        # when the exact row set matches.
+        cached_rows = c.get(key_rows)
+        if (
+            cached_rows is not None
+            and cached_rows.shape == tri_rows.shape
+            and np.array_equal(cached_rows, tri_rows)
+            and len(c.get(key_va0, ())) == int(tri_rows.shape[0])
+        ):
             return (
                 c[key_vertex],
                 c[key_va0],
@@ -295,6 +302,7 @@ def _compute_effective_areas(
         mesh._curvature_cache[key_va0] = va_eff[:, 0]
         mesh._curvature_cache[key_va1] = va_eff[:, 1]
         mesh._curvature_cache[key_va2] = va_eff[:, 2]
+        mesh._curvature_cache[key_rows] = tri_rows.copy()
 
     return vertex_areas_eff, va_eff[:, 0], va_eff[:, 1], va_eff[:, 2]
 
