@@ -8,6 +8,19 @@ The benchmarks are designed to:
 - detect discretization / BC / sign / tangency errors,
 - remain meaningful on evolving 3D meshes.
 
+## Performance Guardrail Protocol
+
+For performance-related PRs touching tilt paths, run the reproducible hotspot
+harness and attach the JSON report:
+
+`python tools/tilt_perf_guardrails.py --pin-threads --warmups 1 --runs 5 --output-json benchmarks/outputs/tilt_perf_baseline.json`
+
+For candidate changes, compare against the saved baseline:
+
+`python tools/tilt_perf_guardrails.py --pin-threads --warmups 1 --runs 5 --baseline-json benchmarks/outputs/tilt_perf_baseline.json --output-json benchmarks/outputs/tilt_perf_candidate.json`
+
+Keep the same case list, warmups, and runs for before/after comparisons.
+
 ---
 
 ## 1) KH Core Identities (do not violate)
