@@ -120,7 +120,7 @@ def p1_triangle_divergence(
     g0, g1, g2:
         Arrays of shape ``(N_triangles, 3)`` with P1 basis gradients.
     """
-    tri_rows = np.asarray(tri_rows, dtype=np.int32)
+    tri_rows = np.asarray(tri_rows)
     if tri_rows.size == 0:
         zeros1 = np.zeros(0, dtype=float)
         zeros3 = np.zeros((0, 3), dtype=float)
@@ -133,26 +133,36 @@ def p1_triangle_divergence(
             "true",
             "TRUE",
         }
-        if (
-            positions.dtype != np.float64
-            or tilts.dtype != np.float64
-            or tri_rows.dtype != np.int32
-        ):
-            if strict:
+        if strict:
+            if (
+                positions.dtype != np.float64
+                or tilts.dtype != np.float64
+                or tri_rows.dtype != np.int32
+            ):
                 raise TypeError(
                     "Fortran tilt kernels require float64 positions/tilts and int32 tri_rows."
                 )
-            kernel_spec = None
-        elif not (
-            positions.flags["F_CONTIGUOUS"]
-            and tilts.flags["F_CONTIGUOUS"]
-            and tri_rows.flags["F_CONTIGUOUS"]
-        ):
-            if strict:
+            if not (
+                positions.flags["F_CONTIGUOUS"]
+                and tilts.flags["F_CONTIGUOUS"]
+                and tri_rows.flags["F_CONTIGUOUS"]
+            ):
                 raise ValueError(
                     "Fortran tilt kernels require F-contiguous positions/tilts/tri_rows (to avoid hidden copies)."
                 )
-            kernel_spec = None
+        else:
+            if (
+                positions.dtype != np.float64
+                or tilts.dtype != np.float64
+                or tri_rows.dtype != np.int32
+            ):
+                kernel_spec = None
+            elif not (
+                positions.flags["F_CONTIGUOUS"]
+                and tilts.flags["F_CONTIGUOUS"]
+                and tri_rows.flags["F_CONTIGUOUS"]
+            ):
+                kernel_spec = None
 
     if kernel_spec is not None:
         nf = tri_rows.shape[0]
@@ -188,6 +198,7 @@ def p1_triangle_divergence(
             np.asarray(g2),
         )
 
+    tri_rows = np.asarray(tri_rows, dtype=np.int32)
     area, g0, g1, g2 = p1_triangle_shape_gradients(
         positions=positions, tri_rows=tri_rows
     )

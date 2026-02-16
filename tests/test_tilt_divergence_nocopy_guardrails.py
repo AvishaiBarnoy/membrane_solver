@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -67,7 +68,7 @@ def test_strict_nocopy_rejects_non_fortran_layout(
     monkeypatch.setattr(
         tilt_ops,
         "get_tilt_divergence_kernel",
-        lambda: type("K", (), {"func": _kernel, "expects_transpose": False})(),
+        lambda: SimpleNamespace(func=_kernel, expects_transpose=False),
     )
 
     with pytest.raises(ValueError, match="F-contiguous"):
@@ -83,29 +84,22 @@ def test_strict_nocopy_rejects_wrong_dtype(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(
         tilt_ops,
         "get_tilt_divergence_kernel",
-        lambda: type(
-            "K", (), {"func": lambda *args, **kwargs: None, "expects_transpose": False}
-        )(),
+        lambda: SimpleNamespace(
+            func=(lambda *args, **kwargs: None), expects_transpose=False
+        ),
     )
 
     with pytest.raises(TypeError, match="float64"):
         p1_triangle_divergence(positions=positions, tilts=tilts, tri_rows=tri_rows)
 
 
-def test_non_strict_falls_back_to_numpy_when_layout_mismatch(
+def test_non_strict_falls_back_to_numpy_when_no_kernel_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     positions, tilts, tri_rows = _sample_inputs()
 
-    def _kernel(*args, **kwargs):
-        raise AssertionError("Fortran kernel should not be called in fallback path")
-
     monkeypatch.delenv("MEMBRANE_FORTRAN_STRICT_NOCOPY", raising=False)
-    monkeypatch.setattr(
-        tilt_ops,
-        "get_tilt_divergence_kernel",
-        lambda: type("K", (), {"func": _kernel, "expects_transpose": False})(),
-    )
+    monkeypatch.setattr(tilt_ops, "get_tilt_divergence_kernel", lambda: None)
 
     div_tri, _area, _g0, _g1, _g2 = p1_triangle_divergence(
         positions=positions, tilts=tilts, tri_rows=tri_rows
@@ -113,3 +107,27 @@ def test_non_strict_falls_back_to_numpy_when_layout_mismatch(
     ref = _reference_divergence(positions=positions, tilts=tilts, tri_rows=tri_rows)
 
     assert np.allclose(div_tri, ref, atol=1e-12, rtol=1e-12)
+
+
+def test_strict_nocopy_rejects_non_int32_tri_rows_without_casting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    positions, tilts, _tri_rows = _sample_inputs()
+    positions = np.asfortranarray(positions, dtype=np.float64)
+    tilts = np.asfortranarray(tilts, dtype=np.float64)
+    tri_rows = np.asfortranarray(np.array([[0, 1, 2], [0, 1, 3]], dtype=np.int64))
+    called = {"kernel": False}
+
+    def _kernel(*args, **kwargs):
+        called["kernel"] = True
+
+    monkeypatch.setenv("MEMBRANE_FORTRAN_STRICT_NOCOPY", "1")
+    monkeypatch.setattr(
+        tilt_ops,
+        "get_tilt_divergence_kernel",
+        lambda: SimpleNamespace(func=_kernel, expects_transpose=False),
+    )
+
+    with pytest.raises(TypeError, match="int32 tri_rows"):
+        p1_triangle_divergence(positions=positions, tilts=tilts, tri_rows=tri_rows)
+    assert called["kernel"] is False
