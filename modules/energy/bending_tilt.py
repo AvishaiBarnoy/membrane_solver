@@ -47,6 +47,7 @@ from modules.energy.bending import (  # noqa: PLC0415
     _per_vertex_params,
     _vertex_normals,
 )
+from modules.energy.scatter import scatter_triangle_scalar_to_vertices
 
 USES_TILT = True
 
@@ -230,10 +231,13 @@ def compute_energy_and_gradient_array(
 
     # Shape gradient uses a per-vertex effective divergence average (treating
     # div(t) as constant w.r.t. geometry; see module docstring).
-    div_eff_num = np.zeros_like(base_term)
-    np.add.at(div_eff_num, tri_rows[:, 0], va0_eff * div_tri)
-    np.add.at(div_eff_num, tri_rows[:, 1], va1_eff * div_tri)
-    np.add.at(div_eff_num, tri_rows[:, 2], va2_eff * div_tri)
+    div_eff_num = scatter_triangle_scalar_to_vertices(
+        tri_rows=tri_rows,
+        w0=va0_eff * div_tri,
+        w1=va1_eff * div_tri,
+        w2=va2_eff * div_tri,
+        n_vertices=base_term.shape[0],
+    )
     div_eff = np.zeros_like(base_term)
     mask_eff = vertex_areas_eff > 1e-20
     div_eff[mask_eff] = div_eff_num[mask_eff] / vertex_areas_eff[mask_eff]
