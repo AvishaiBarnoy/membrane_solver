@@ -48,7 +48,7 @@ global_parameters:
   tilt_inner_steps: 3
   tilt_tol: 1.0e-10
   line_search_reduced_energy: true
-  line_search_reduced_tilt_inner_steps: 10
+  line_search_reduced_tilt_inner_steps: 0
   step_size: 0.01
   step_size_mode: fixed
   pin_to_plane_normal:
