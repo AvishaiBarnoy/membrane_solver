@@ -23,6 +23,7 @@ Commands:
 - `tilt_stats` / `tstat` (`in`/`out`): Print |tilt| and div(tilt) summaries (e.g., `tstat out`).
 - `lv` / `live_vis`: Toggle live 3D visualization during minimization.
 - `s tilt arrows` / `s bilayer`: One-shot visualization with the same scalar modes as `lv`.
+- `show_edges [on|off|toggle]`: Control edge visibility for `s`/`lv` plots.
 - `history`: Show commands entered in the current session.
 - `quit` / `exit`: Stop the loop and save the final mesh.
 
@@ -30,6 +31,12 @@ When running in a real terminal (TTY), pressing `TAB` autocompletes command and 
 
 The default minimization stepper is Gradient Descent; switch to Conjugate Gradient
 with the `cg` command if needed.
+
+Tilt solve controls:
+- `tilt_solve_mode`: `off`, `nested`, or `coupled`.
+- `tilt_solver`: `gd` (default) or `cg`.
+- Iteration controls: `tilt_inner_steps`, `tilt_coupled_steps`, `tilt_step_size`, `tilt_tol`.
+- CG-specific controls: `tilt_cg_max_iters`, `tilt_cg_preconditioner`.
 
 If no input file is specified on the command line you will be prompted for the
 path. File names may be given with or without the `.json` suffix.
@@ -158,6 +165,8 @@ turning) and multiplies by `gaussian_modulus`. To exclude facets from this
 sum, set `gauss_bonnet_exclude: true` in facet options. Enable
 `gaussian_curvature_strict_topology=true` to raise on non-manifold edges or
 invalid boundary loops (tolerance via `gaussian_curvature_defect_tol`).
+On a closed torus, local Gaussian curvature may be non-zero (and sign-changing)
+even though the integrated Gauss-Bonnet invariant is zero.
 
 ## Geometry loading and Input Formats
 
