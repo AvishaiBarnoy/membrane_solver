@@ -1,0 +1,151 @@
+meta:
+  version: v1
+items:
+  - id: tensionless_gamma_zero
+    required: true
+    theory_statement: "Tensionless lane assumes gamma = 0."
+    tex_markers:
+      - "gamma=0"
+    code_refs:
+      - path: modules/constraints/rim_slope_match_out.py
+        contains: "(gamma=0)"
+    yaml_checks:
+      - kind: path_equals
+        path: global_parameters.surface_tension
+        expected: 0.0
+
+  - id: inner_disk_flat_model
+    required: true
+    theory_statement: "Disk-covered region is constrained to be flat."
+    tex_markers:
+      - "Over the disk (\\(0\\le r\\le R\\)) the membrane is flat."
+    code_refs:
+      - path: modules/constraints/pin_to_plane.py
+      - path: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml
+        contains: "pin_to_plane_mode: slide"
+    yaml_checks:
+      - kind: list_contains
+        path: constraint_modules
+        expected: pin_to_plane
+      - kind: list_contains
+        path: definitions.disk.constraints
+        expected: pin_to_plane
+
+  - id: inner_leaflet_elastic_terms
+    required: true
+    theory_statement: "Inner-region elastic contributions are represented."
+    tex_markers:
+      - "F_{\\rm in}"
+    code_refs:
+      - path: modules/energy/tilt_in.py
+        contains: "tilt_modulus_in"
+      - path: modules/energy/bending_tilt_in.py
+        contains: "bending_modulus_in"
+    yaml_checks:
+      - kind: list_contains
+        path: energy_modules
+        expected: tilt_in
+      - kind: list_contains
+        path: energy_modules
+        expected: bending_tilt_in
+      - kind: path_exists
+        path: global_parameters.tilt_modulus_in
+      - kind: path_exists
+        path: global_parameters.bending_modulus_in
+
+  - id: outer_leaflet_elastic_terms
+    required: true
+    theory_statement: "Outer-region elastic contributions are represented."
+    tex_markers:
+      - "F_{\\rm out}"
+    code_refs:
+      - path: modules/energy/tilt_out.py
+        contains: "tilt_modulus_out"
+      - path: modules/energy/bending_tilt_out.py
+        contains: "bending_modulus_out"
+    yaml_checks:
+      - kind: list_contains
+        path: energy_modules
+        expected: tilt_out
+      - kind: list_contains
+        path: energy_modules
+        expected: bending_tilt_out
+      - kind: path_exists
+        path: global_parameters.tilt_modulus_out
+      - kind: path_exists
+        path: global_parameters.bending_modulus_out
+
+  - id: boundary_thetaB_constraint
+    required: true
+    theory_statement: "Boundary scalar thetaB is enforced as a hard constraint."
+    tex_markers:
+      - "Director continuity at the rim implies"
+    code_refs:
+      - path: modules/constraints/tilt_thetaB_boundary_in.py
+        contains: "t_in · r_hat = thetaB"
+    yaml_checks:
+      - kind: list_contains
+        path: constraint_modules
+        expected: tilt_thetaB_boundary_in
+      - kind: path_exists
+        path: global_parameters.tilt_thetaB_value
+      - kind: path_exists
+        path: global_parameters.tilt_thetaB_group_in
+
+  - id: rim_slope_matching
+    required: true
+    theory_statement: "Rim matching couples slope and leaflet tilts at the interface."
+    tex_markers:
+      - "Boundary matching (1D-style continuation)."
+    code_refs:
+      - path: modules/constraints/rim_slope_match_out.py
+        contains: "t_out · r_hat = phi"
+    yaml_checks:
+      - kind: list_contains
+        path: constraint_modules
+        expected: rim_slope_match_out
+      - kind: path_exists
+        path: global_parameters.rim_slope_match_group
+      - kind: path_exists
+        path: global_parameters.rim_slope_match_outer_group
+      - kind: path_exists
+        path: global_parameters.rim_slope_match_disk_group
+
+  - id: linear_contact_work_term
+    required: true
+    theory_statement: "Contact term is linear in thetaB and uses gamma coefficient."
+    tex_markers:
+      - "F_{\\rm cont}=-2\\pi R"
+    code_refs:
+      - path: modules/energy/tilt_thetaB_contact_in.py
+        contains: "-2.0 * np.pi * R_eff * gamma * theta_B"
+      - path: modules/energy/tilt_thetaB_contact_in.py
+        contains: "IS_EXTERNAL_WORK = True"
+    yaml_checks:
+      - kind: list_contains
+        path: energy_modules
+        expected: tilt_thetaB_contact_in
+      - kind: path_equals
+        path: global_parameters.tilt_thetaB_contact_penalty_mode
+        expected: "off"
+      - kind: path_exists
+        path: global_parameters.tilt_thetaB_contact_strength_in
+
+  - id: analytical_theta_optimum_reporting
+    required: true
+    theory_statement: "Parity report computes analytical theta_B optimum and ratios."
+    tex_markers:
+      - "theta_B^{\\rm opt}"
+    code_refs:
+      - path: tools/reproduce_theory_parity.py
+        contains: "thetaB_star"
+      - path: tools/reproduce_theory_parity.py
+        contains: "special.iv(0, x) / special.iv(1, x)"
+      - path: tools/reproduce_theory_parity.py
+        contains: "special.kv(0, x) / special.kv(1, x)"
+    yaml_checks:
+      - kind: path_equals
+        path: global_parameters.tilt_thetaB_optimize
+        expected: true
+      - kind: path_exists
+        path: global_parameters.tilt_thetaB_optimize_inner_steps

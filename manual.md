@@ -283,6 +283,16 @@ Interactive commands:
   - if rollback is needed during incident response, temporarily disable strict
     mode (`PARITY_GUARDED_GATE` not `true`), fix/tune, then re-enable.
 
+- `python tools/audit_theory_coverage.py`
+  Generate `benchmarks/outputs/diagnostics/theory_coverage_audit.yaml` by
+  checking required theory items (from
+  `tests/fixtures/theory_coverage_manifest.yaml`) against:
+  - `docs/tex/1_disk_3d.tex` markers
+  - concrete code references
+  - fixture YAML keys/list memberships
+  Use `--fail-on-required-not-present` to return non-zero when any required
+  item is not fully mapped.
+
 - `python tools/tilt_benchmark_runner.py`
   Run `meshes/tilt_benchmarks/*.yaml` and print energy/tilt/divergence summaries
   (optionally writing JSON/CSV and plots).
