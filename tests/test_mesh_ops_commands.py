@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from commands.mesh_ops import EquiangulateCommand, RefineCommand, VertexAverageCommand
 
 
-def test_refine_command_runs_requested_passes(monkeypatch):
+def test_refine_command_runs_requested_passes_without_enforcement(monkeypatch):
     mesh = object()
     ctx = SimpleNamespace(mesh=mesh, minimizer=SimpleNamespace(mesh=mesh))
     calls = {"poly": 0, "tri": 0, "enforce": 0}
@@ -29,7 +29,7 @@ def test_refine_command_runs_requested_passes(monkeypatch):
     monkeypatch.setattr("commands.mesh_ops.refine_triangle_mesh", fake_refine_tri)
 
     RefineCommand().execute(ctx, ["3"])
-    assert calls == {"poly": 3, "tri": 3, "enforce": 3}
+    assert calls == {"poly": 3, "tri": 3, "enforce": 0}
 
 
 def test_vertex_average_command_runs_n_passes_and_enforces(monkeypatch):

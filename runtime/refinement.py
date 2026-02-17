@@ -294,6 +294,10 @@ def refine_triangle_mesh(mesh):
     edge_lookup = {}  # (min_idx, max_idx) → Edge
     facet_to_new_facets = {}  # facet.index → [Facet, ...]
     next_facet_idx = max(mesh.facets.keys()) + 1 if mesh.facets else 0
+    mesh.build_connectivity_maps()
+    boundary_edge_ids = {
+        int(eid) for eid, facets in mesh.edge_to_facets.items() if len(facets) == 1
+    }
 
     def _merge_constraints(options: dict, additions: list[str]) -> None:
         if not additions:
@@ -310,6 +314,18 @@ def refine_triangle_mesh(mesh):
             if item not in merged:
                 merged.append(item)
         options["constraints"] = merged
+
+    def _has_fixed_constraint(options: dict | None) -> bool:
+        if not options:
+            return False
+        if bool(options.get("fixed", False)):
+            return True
+        constraints = options.get("constraints")
+        if constraints == "fixed":
+            return True
+        if isinstance(constraints, list):
+            return "fixed" in constraints
+        return False
 
     def _apply_preset_definitions(options: dict) -> tuple[dict, bool]:
         preset = options.get("preset")
@@ -339,7 +355,10 @@ def refine_triangle_mesh(mesh):
             merged.pop("constraints", None)
         if "preset" not in merged:
             merged["preset"] = preset
-        return merged, bool(defaults.get("fixed", False))
+        preset_fixed = bool(defaults.get("fixed", False)) or _has_fixed_constraint(
+            merged
+        )
+        return merged, preset_fixed
 
     def _maybe_inherit_pin_to_circle_options(
         v1_options: dict, v2_options: dict
@@ -584,6 +603,22 @@ def refine_triangle_mesh(mesh):
         # Mixed presets: prefer v1 for determinism.
         return p1, True
 
+    def _is_ring_like_preset(preset: object) -> bool:
+        if preset is None:
+            return False
+        definitions = getattr(mesh, "definitions", {}) or {}
+        opts = definitions.get(preset)
+        if not isinstance(opts, dict):
+            return False
+        return any(
+            key in opts
+            for key in (
+                "pin_to_circle_group",
+                "rim_slope_match_group",
+                "tilt_thetaB_group_in",
+            )
+        )
+
     def get_or_create_edge(v_from, v_to, parent_edge=None, parent_facet=None):
         key = (min(v_from, v_to), max(v_from, v_to))
         if key in edge_lookup:
@@ -672,42 +707,62 @@ def refine_triangle_mesh(mesh):
                 and getattr(mesh.vertices[v2], "tilt_fixed_out", False)
             )
             midpoint_options = edge.options.copy()
-            inherited_circle = _maybe_inherit_pin_to_circle_options(
-                getattr(mesh.vertices[v1], "options", {}) or {},
-                getattr(mesh.vertices[v2], "options", {}) or {},
-            )
+            v1_options = getattr(mesh.vertices[v1], "options", {}) or {}
+            v2_options = getattr(mesh.vertices[v2], "options", {}) or {}
+            both_endpoints_fixed = _has_fixed_constraint(
+                v1_options
+            ) and _has_fixed_constraint(v2_options)
+            inherit_circle_on_midpoint = True
+            if (int(edge_idx) not in boundary_edge_ids) and both_endpoints_fixed:
+                inherit_circle_on_midpoint = False
+            inherited_circle = None
+            if inherit_circle_on_midpoint:
+                inherited_circle = _maybe_inherit_pin_to_circle_options(
+                    v1_options,
+                    v2_options,
+                )
             if inherited_circle is not None:
                 _merge_constraints(midpoint_options, ["pin_to_circle"])
                 midpoint_options.update(inherited_circle)
-            inherited_plane = _maybe_inherit_pin_to_plane_options(
-                getattr(mesh.vertices[v1], "options", {}) or {},
-                getattr(mesh.vertices[v2], "options", {}) or {},
-            )
+            inherited_plane = None
+            if inherit_circle_on_midpoint:
+                inherited_plane = _maybe_inherit_pin_to_plane_options(
+                    v1_options,
+                    v2_options,
+                )
             if inherited_plane is not None:
                 _merge_constraints(midpoint_options, ["pin_to_plane"])
                 midpoint_options.update(inherited_plane)
             inherited_target = _maybe_inherit_disk_target_options(
-                getattr(mesh.vertices[v1], "options", {}) or {},
-                getattr(mesh.vertices[v2], "options", {}) or {},
+                v1_options,
+                v2_options,
             )
             if inherited_target is not None:
                 midpoint_options.update(inherited_target)
             inherited_interface = _maybe_inherit_disk_interface_vertex_tags(
-                getattr(mesh.vertices[v1], "options", {}) or {},
-                getattr(mesh.vertices[v2], "options", {}) or {},
+                v1_options,
+                v2_options,
             )
             if inherited_interface is not None:
                 midpoint_options.update(inherited_interface)
             inherited_rigid = _maybe_inherit_rigid_disk_group(
-                getattr(mesh.vertices[v1], "options", {}) or {},
-                getattr(mesh.vertices[v2], "options", {}) or {},
+                v1_options,
+                v2_options,
             )
             if inherited_rigid is not None:
                 midpoint_options.update(inherited_rigid)
             inherited_preset, apply_defaults = _maybe_inherit_preset(
-                getattr(mesh.vertices[v1], "options", {}) or {},
-                getattr(mesh.vertices[v2], "options", {}) or {},
+                v1_options,
+                v2_options,
             )
+            if (
+                inherited_preset is not None
+                and not inherit_circle_on_midpoint
+                and _is_ring_like_preset(inherited_preset)
+            ):
+                # Do not leak ring-like presets (e.g. outer rim) onto interior
+                # edges; this can project interior midpoints onto boundary circles.
+                apply_defaults = False
             preset_fixed = False
             if inherited_preset is not None:
                 midpoint_options["preset"] = inherited_preset
@@ -718,7 +773,9 @@ def refine_triangle_mesh(mesh):
             midpoint = Vertex(
                 midpoint_idx,
                 np.asarray(midpoint_position, dtype=float),
-                fixed=edge.fixed or preset_fixed,
+                fixed=edge.fixed
+                or preset_fixed
+                or _has_fixed_constraint(midpoint_options),
                 options=midpoint_options,
                 tilt=midpoint_tilt,
                 tilt_fixed=midpoint_tilt_fixed,

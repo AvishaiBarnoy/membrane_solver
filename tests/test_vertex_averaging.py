@@ -60,3 +60,36 @@ def test_vertex_averaging_smooths_mesh():
 
     # Check that apex moved downward
     assert new_z < original_z, "Apex vertex should move downward to smooth the surface"
+
+
+def test_vertex_averaging_skips_pin_to_circle_vertices():
+    mesh = Mesh()
+    mesh.vertices = {
+        0: Vertex(
+            0,
+            np.array([0.0, 0.0, 0.0]),
+            options={"constraints": ["pin_to_circle"], "pin_to_circle_group": "rim"},
+        ),
+        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
+        2: Vertex(2, np.array([0.0, 1.0, 0.0])),
+        3: Vertex(3, np.array([0.4, 0.4, 0.2])),
+    }
+    mesh.edges = {
+        1: Edge(1, 0, 1),
+        2: Edge(2, 1, 3),
+        3: Edge(3, 3, 0),
+        4: Edge(4, 0, 2),
+        5: Edge(5, 2, 3),
+        6: Edge(6, 3, 0),
+    }
+    mesh.facets = {
+        0: Facet(0, [1, 2, 3]),
+        1: Facet(1, [4, 5, 6]),
+    }
+
+    original_pinned = mesh.vertices[0].position.copy()
+    original_interior = mesh.vertices[3].position.copy()
+    vertex_average(mesh)
+
+    assert np.allclose(mesh.vertices[0].position, original_pinned)
+    assert not np.allclose(mesh.vertices[3].position, original_interior)

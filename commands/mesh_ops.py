@@ -21,7 +21,6 @@ class RefineCommand(Command):
             context.mesh = refine_polygonal_facets(context.mesh)
             context.mesh = refine_triangle_mesh(context.mesh)
             context.minimizer.mesh = context.mesh
-            context.minimizer.enforce_constraints_after_mesh_ops(context.mesh)
             if getattr(context.minimizer, "live_vis", False):
                 from visualization.plotting import update_live_vis
 
