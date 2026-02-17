@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from runtime.minimizer import Minimizer
 from runtime.tilt_projection import (
+    project_leaflet_tilts_with_optional_axisymmetry,
     project_tilts_axisymmetric_about_center,
     project_tilts_to_tangent_array,
 )
@@ -57,3 +58,42 @@ def test_project_tilts_axisymmetric_about_center_matches_minimizer_static():
         fixed_mask=fixed_mask,
     )
     assert np.allclose(got, ref)
+
+
+def test_project_leaflet_tilts_with_optional_axisymmetry_enabled_and_disabled():
+    positions = np.array(
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+        dtype=float,
+        order="F",
+    )
+    normals = np.tile(np.array([[0.0, 0.0, 1.0]], dtype=float), (2, 1))
+    tilts_in = np.array([[1.0, 2.0, 0.0], [3.0, 4.0, 0.0]], dtype=float, order="F")
+    tilts_out = np.array([[-1.0, -2.0, 0.0], [-3.0, -4.0, 0.0]], dtype=float, order="F")
+
+    gp_off = {"tilt_axisymmetric_about_thetaB_center": False}
+    out_in, out_out = project_leaflet_tilts_with_optional_axisymmetry(
+        global_params=gp_off,
+        positions=positions,
+        normals=normals,
+        tilts_in=tilts_in,
+        tilts_out=tilts_out,
+    )
+    assert out_in is tilts_in
+    assert out_out is tilts_out
+
+    gp_on = {
+        "tilt_axisymmetric_about_thetaB_center": True,
+        "tilt_thetaB_center": [0.0, 0.0, 0.0],
+        "tilt_thetaB_normal": [0.0, 0.0, 1.0],
+    }
+    proj_in, proj_out = project_leaflet_tilts_with_optional_axisymmetry(
+        global_params=gp_on,
+        positions=positions,
+        normals=normals,
+        tilts_in=tilts_in,
+        tilts_out=tilts_out,
+        fixed_mask_in=np.array([False, True], dtype=bool),
+        fixed_mask_out=np.array([False, False], dtype=bool),
+    )
+    assert np.allclose(proj_in[1], tilts_in[1])
+    assert np.allclose(proj_out[:, 2], np.zeros(2))
