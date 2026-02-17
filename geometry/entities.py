@@ -24,6 +24,7 @@ from geometry.triangle_ops import (
     triangle_normals_and_areas,
     vertex_unit_normals_from_triangles,
 )
+from geometry.triangle_rows import triangle_facets_from_loops, triangle_rows_from_loops
 
 logger = logging.getLogger("membrane_solver")
 
@@ -1882,7 +1883,6 @@ class Mesh:
 
         The cache is rebuilt only when facet loops are rebuilt.
         """
-        import numpy as np
 
         if (
             self._triangle_rows_cache is not None
@@ -1895,11 +1895,7 @@ class Mesh:
 
         self.build_position_cache()
 
-        tri_facets: list[int] = []
-        for fid in sorted(self.facet_vertex_loops):
-            loop = self.facet_vertex_loops[fid]
-            if len(loop) == 3:
-                tri_facets.append(fid)
+        tri_facets = triangle_facets_from_loops(self.facet_vertex_loops)
 
         if not tri_facets:
             self._triangle_rows_cache = None
@@ -1907,12 +1903,11 @@ class Mesh:
             self._triangle_rows_cache_version = self._facet_loops_version
             return None, []
 
-        tri_rows = np.empty((len(tri_facets), 3), dtype=np.int32, order="F")
-        for idx, fid in enumerate(tri_facets):
-            loop = self.facet_vertex_loops[fid]
-            tri_rows[idx, 0] = self.vertex_index_to_row[int(loop[0])]
-            tri_rows[idx, 1] = self.vertex_index_to_row[int(loop[1])]
-            tri_rows[idx, 2] = self.vertex_index_to_row[int(loop[2])]
+        tri_rows = triangle_rows_from_loops(
+            tri_facets=tri_facets,
+            facet_vertex_loops=self.facet_vertex_loops,
+            vertex_index_to_row=self.vertex_index_to_row,
+        )
 
         self._triangle_rows_cache = tri_rows
         self._triangle_row_facets = tri_facets

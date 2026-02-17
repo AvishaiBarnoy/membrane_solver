@@ -19,6 +19,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Refactor: extracted reusable triangle-array math helpers from `geometry/entities.py` into `geometry/triangle_ops.py` (behavior-preserving maintainability split).
 - Refactor: extracted geometry cache-validity predicates from `geometry/entities.py` into `geometry/cache_checks.py` (behavior-preserving maintainability split).
 - Refactor: extracted tilt-projection math helpers from `runtime/minimizer.py` into `runtime/tilt_projection.py` (behavior-preserving maintainability split).
+- Refactor: extracted triangle-row cache construction helpers from `geometry/entities.py` into `geometry/triangle_rows.py` (behavior-preserving maintainability split).
 - Rim source energies now follow fitted pin-to-circle rims (`pin_to_circle_mode: fit`) as they translate in space.
 - KH-pure tilt benchmark variants without smoothness regularization (`meshes/tilt_benchmarks/kh_pure_*`).
 - Tilt benchmark runner script (`tools/tilt_benchmark_runner.py`) for energy/tilt/divergence summaries.
