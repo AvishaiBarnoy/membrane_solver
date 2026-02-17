@@ -181,6 +181,12 @@ Reproduce parity metrics into YAML:
 python tools/reproduce_theory_parity.py
 ```
 
+Optional fixed-lane convergence polish:
+
+```bash
+python tools/reproduce_theory_parity.py --fixed-polish-steps 2
+```
+
 Acceptance lanes:
 
 - Regression lane (implementation drift guard):

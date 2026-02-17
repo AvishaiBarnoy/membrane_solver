@@ -87,6 +87,12 @@ def _parse_args() -> argparse.Namespace:
         default=DEFAULT_OUT,
         help="Write intermediate fixed-lane parity report to this YAML path.",
     )
+    parser.add_argument(
+        "--fixed-polish-steps",
+        type=int,
+        default=0,
+        help="Forwarded to fixed-lane reproducer (default: 0).",
+    )
     parser.add_argument("--targets", type=Path, default=DEFAULT_TARGETS)
     parser.add_argument("--out", type=Path, default=DEFAULT_TREND_OUT)
     return parser.parse_args()
@@ -95,7 +101,11 @@ def _parse_args() -> argparse.Namespace:
 def main() -> int:
     args = _parse_args()
     protocol = tuple(str(x) for x in args.protocol)
-    report = _collect_report(mesh_path=Path(args.mesh), protocol=protocol)
+    report = _collect_report(
+        mesh_path=Path(args.mesh),
+        protocol=protocol,
+        fixed_polish_steps=int(args.fixed_polish_steps),
+    )
 
     report_out = Path(args.report_out)
     report_out.parent.mkdir(parents=True, exist_ok=True)

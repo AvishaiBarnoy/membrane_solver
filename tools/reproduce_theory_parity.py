@@ -193,11 +193,19 @@ def _collect_report_from_context(
     return report
 
 
-def _collect_report(mesh_path: Path, protocol: tuple[str, ...]) -> dict[str, Any]:
+def _collect_report(
+    mesh_path: Path, protocol: tuple[str, ...], fixed_polish_steps: int = 0
+) -> dict[str, Any]:
     ctx = _build_context(mesh_path)
     for cmd in protocol:
         execute_command_line(ctx, cmd)
-    return _collect_report_from_context(ctx=ctx, mesh_path=mesh_path, protocol=protocol)
+    for _ in range(int(fixed_polish_steps)):
+        execute_command_line(ctx, "g1")
+    report = _collect_report_from_context(
+        ctx=ctx, mesh_path=mesh_path, protocol=protocol
+    )
+    report["meta"]["fixed_polish_steps"] = int(fixed_polish_steps)
+    return report
 
 
 def _load_yaml(path: Path, default: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -383,6 +391,12 @@ def _parse_args() -> argparse.Namespace:
         default=DEFAULT_EXPANSION_STATE,
         help="Persistent YAML state file for expansion mode.",
     )
+    parser.add_argument(
+        "--fixed-polish-steps",
+        type=int,
+        default=0,
+        help="Additional trailing g1 steps for fixed mode only (default: 0).",
+    )
     return parser.parse_args()
 
 
@@ -391,9 +405,16 @@ def main() -> int:
     mesh_path = Path(args.mesh)
     out_path = Path(args.out)
     protocol = tuple(str(x) for x in args.protocol)
+    fixed_polish_steps = int(args.fixed_polish_steps)
+    if fixed_polish_steps < 0:
+        raise ValueError("--fixed-polish-steps must be >= 0")
 
     if str(args.protocol_mode) == "fixed":
-        report = _collect_report(mesh_path=mesh_path, protocol=protocol)
+        report = _collect_report(
+            mesh_path=mesh_path,
+            protocol=protocol,
+            fixed_polish_steps=fixed_polish_steps,
+        )
     else:
         policy = _load_yaml(Path(args.expansion_policy))
         state_path = Path(args.state_file)
