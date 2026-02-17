@@ -21,6 +21,7 @@ from runtime.energy_manager import EnergyModuleManager
 from runtime.interface_validation import validate_disk_interface_topology
 from runtime.leaflet_validation import validate_leaflet_absence_topology
 from runtime.minimizer_helpers import (
+    build_reduced_line_search_energy_fn,
     capture_diagnostic_state,
     get_cached_tilt_fixed_mask,
     restore_diagnostic_state,
@@ -420,69 +421,18 @@ class Minimizer:
         if reduced_steps <= 0:
             return _projected_energy
 
-        uses_leaflet = self._uses_leaflet_tilts()
-        gp = self.global_params
-
-        override_keys = ("tilt_inner_steps", "tilt_coupled_steps", "tilt_cg_max_iters")
-        override_present = {key: (key in gp) for key in override_keys}
-        override_old = {key: gp.get(key) for key in override_keys}
-
-        def _restore_overrides() -> None:
-            for key in override_keys:
-                if override_present.get(key, False):
-                    gp.set(key, override_old[key])
-                else:
-                    gp.unset(key)
-
-        guard_factor = float(gp.get("tilt_relax_energy_guard_factor", 0.0) or 0.0)
-        guard_min = float(gp.get("tilt_relax_energy_guard_min", 0.0) or 0.0)
-
-        def energy_fn() -> float:
-            tilt_mode = str(gp.get("tilt_solve_mode", "fixed") or "fixed")
-            mode_norm = tilt_mode.strip().lower()
-            if mode_norm in ("", "none", "off", "false", "fixed"):
-                return float(_projected_energy())
-
-            positions = self.mesh.positions_view()
-            try:
-                gp.set("tilt_inner_steps", reduced_steps)
-                gp.set("tilt_coupled_steps", reduced_steps)
-                gp.set("tilt_cg_max_iters", reduced_steps)
-
-                if guard_factor > 0.0:
-                    # Guard against tilt divergence during line search.
-                    pre_tin = self.mesh.tilts_in_view().copy(order="F")
-                    pre_tout = self.mesh.tilts_out_view().copy(order="F")
-                    pre_e = float(self.compute_energy())
-
-                if uses_leaflet:
-                    self._relax_leaflet_tilts(positions=positions, mode=tilt_mode)
-                else:
-                    self._relax_tilts(positions=positions, mode=tilt_mode)
-
-                e = float(_projected_energy())
-
-                if guard_factor > 0.0:
-                    threshold = max(guard_min, abs(pre_e) * guard_factor)
-                    if e > threshold:
-                        # Roll back tilts; return pre-relaxation energy so
-                        # the line search sees an unchanged objective.
-                        self._set_leaflet_tilts_from_arrays_fast(pre_tin, pre_tout)
-                        if logger.isEnabledFor(logging.DEBUG):
-                            logger.debug(
-                                "Line-search tilt guard: E %.6g -> %.6g "
-                                "(threshold %.6g); rolling back tilts.",
-                                pre_e,
-                                e,
-                                threshold,
-                            )
-                        return float(pre_e)
-
-                return e
-            finally:
-                _restore_overrides()
-
-        return energy_fn
+        return build_reduced_line_search_energy_fn(
+            mesh=self.mesh,
+            global_params=self.global_params,
+            reduced_steps=reduced_steps,
+            uses_leaflet_tilts=self._uses_leaflet_tilts(),
+            projected_energy_fn=_projected_energy,
+            compute_energy_fn=self.compute_energy,
+            relax_tilts_fn=self._relax_tilts,
+            relax_leaflet_tilts_fn=self._relax_leaflet_tilts,
+            set_leaflet_tilts_fast_fn=self._set_leaflet_tilts_from_arrays_fast,
+            logger_obj=logger,
+        )
 
     def _compute_energy_array_with_tilts(
         self,

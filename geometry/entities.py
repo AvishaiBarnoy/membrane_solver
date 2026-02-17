@@ -10,6 +10,13 @@ import numpy as np
 from core.exceptions import BodyOrientationError, InvalidEdgeIndexError
 from core.ordered_unique_list import OrderedUniqueList
 from core.parameters.global_parameters import GlobalParameters
+from geometry.triangle_ops import (
+    barycentric_vertex_areas_from_triangles,
+    p1_triangle_shape_gradients,
+    triangle_normals,
+    triangle_normals_and_areas,
+    vertex_unit_normals_from_triangles,
+)
 
 logger = logging.getLogger("membrane_solver")
 
@@ -1924,12 +1931,7 @@ class Mesh:
         if positions is None:
             positions = self.positions_view()
 
-        v0 = positions[tri_rows[:, 0]]
-        v1 = positions[tri_rows[:, 1]]
-        v2 = positions[tri_rows[:, 2]]
-
-        normals = _fast_cross(v1 - v0, v2 - v0)
-        areas = 0.5 * np.linalg.norm(normals, axis=1)
+        normals, areas = triangle_normals_and_areas(positions, tri_rows)
 
         if is_cached_pos:
             self._cached_tri_areas = areas
@@ -1959,10 +1961,7 @@ class Mesh:
         if positions is None:
             positions = self.positions_view()
         tri_rows, _ = self.triangle_row_cache()
-        v0 = positions[tri_rows[:, 0]]
-        v1 = positions[tri_rows[:, 1]]
-        v2 = positions[tri_rows[:, 2]]
-        return _fast_cross(v1 - v0, v2 - v0)
+        return triangle_normals(positions, tri_rows)
 
     def barycentric_vertex_areas(
         self,
@@ -2007,11 +2006,7 @@ class Mesh:
             return self._cached_barycentric_vertex_areas
 
         if areas is None:
-            v0 = positions[tri_rows[:, 0]]
-            v1 = positions[tri_rows[:, 1]]
-            v2 = positions[tri_rows[:, 2]]
-
-            n = _fast_cross(v1 - v0, v2 - v0)
+            n, _ = triangle_normals_and_areas(positions, tri_rows)
             n_norm = np.linalg.norm(n, axis=1)
             mask = n_norm >= 1e-12
             areas = 0.5 * n_norm[mask]
@@ -2022,12 +2017,9 @@ class Mesh:
                 tri_rows = tri_rows[mask]
                 areas = areas[mask]
 
-        vertex_areas = np.zeros(n_verts, dtype=float)
-        if areas.size:
-            area_thirds = areas / 3.0
-            np.add.at(vertex_areas, tri_rows[:, 0], area_thirds)
-            np.add.at(vertex_areas, tri_rows[:, 1], area_thirds)
-            np.add.at(vertex_areas, tri_rows[:, 2], area_thirds)
+        vertex_areas = barycentric_vertex_areas_from_triangles(
+            n_verts=n_verts, tri_rows=tri_rows, areas=areas
+        )
 
         if use_cache:
             self._cached_barycentric_vertex_areas = vertex_areas
@@ -2071,19 +2063,10 @@ class Mesh:
         if positions is None:
             positions = self.positions_view()
 
-        v0 = positions[tri_rows[:, 0]]
-        v1 = positions[tri_rows[:, 1]]
-        v2 = positions[tri_rows[:, 2]]
-        tri_normals = _fast_cross(v1 - v0, v2 - v0)
-
-        normals = np.zeros((n_verts, 3), dtype=float)
-        np.add.at(normals, tri_rows[:, 0], tri_normals)
-        np.add.at(normals, tri_rows[:, 1], tri_normals)
-        np.add.at(normals, tri_rows[:, 2], tri_normals)
-
-        lens = np.linalg.norm(normals, axis=1)
-        mask = lens >= 1e-12
-        normals[mask] /= lens[mask][:, None]
+        tri_normals = triangle_normals(positions, tri_rows)
+        normals = vertex_unit_normals_from_triangles(
+            n_verts=n_verts, tri_rows=tri_rows, tri_normals=tri_normals
+        )
 
         if is_cached_pos:
             self._cached_vertex_normals = normals
@@ -2131,22 +2114,7 @@ class Mesh:
                 tri_rows,
             )
 
-        v0 = positions[tri_rows[:, 0]]
-        v1 = positions[tri_rows[:, 1]]
-        v2 = positions[tri_rows[:, 2]]
-
-        n = _fast_cross(v1 - v0, v2 - v0)
-        n2 = np.einsum("ij,ij->i", n, n)
-        denom = np.maximum(n2, 1e-20)
-
-        e0 = v2 - v1
-        e1 = v0 - v2
-        e2 = v1 - v0
-
-        g0 = _fast_cross(n, e0) / denom[:, None]
-        g1 = _fast_cross(n, e1) / denom[:, None]
-        g2 = _fast_cross(n, e2) / denom[:, None]
-        area = 0.5 * np.sqrt(np.maximum(n2, 0.0))
+        area, g0, g1, g2 = p1_triangle_shape_gradients(positions, tri_rows)
 
         if use_cache:
             self._cached_p1_tri_areas = area
