@@ -237,6 +237,9 @@ Interactive commands:
     `tests/fixtures/theory_parity_expansion_policy.yaml`, with persistent state
     in `benchmarks/outputs/diagnostics/theory_parity_expansion_state.yaml`.
   - Stage 4 in the expansion ladder is explicitly `r; g10`.
+  Optional fixed-lane polish:
+  - `--fixed-polish-steps N` appends `N` trailing `g1` steps in fixed mode only.
+    Default is `0` (no behavior change).
 
 - Theory parity YAML fixtures:
   - `tests/fixtures/theory_parity_baseline.yaml`:

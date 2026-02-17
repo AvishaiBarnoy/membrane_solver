@@ -1,9 +1,12 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 import yaml
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "theory_parity_trend.py"
@@ -62,6 +65,32 @@ def test_theory_parity_trend_script_writes_yaml_artifact(tmp_path) -> None:
     assert trend_out.exists()
 
     trend = yaml.safe_load(trend_out.read_text(encoding="utf-8"))
+    report = yaml.safe_load(report_out.read_text(encoding="utf-8"))
+    assert int(report["meta"]["fixed_polish_steps"]) == 0
     assert trend["meta"]["format"] == "yaml"
     assert trend["summary"]["ratio_count"] == 4
     assert trend["summary"]["all_within_tolerance"] is True
+
+
+@pytest.mark.acceptance
+def test_theory_parity_trend_script_forwards_fixed_polish_steps(tmp_path) -> None:
+    report_out = tmp_path / "theory_parity_report.yaml"
+    trend_out = tmp_path / "theory_parity_trend.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--fixed-polish-steps",
+            "2",
+            "--report-out",
+            str(report_out),
+            "--out",
+            str(trend_out),
+            "--targets",
+            str(TARGETS),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+    report = yaml.safe_load(report_out.read_text(encoding="utf-8"))
+    assert int(report["meta"]["fixed_polish_steps"]) == 2
