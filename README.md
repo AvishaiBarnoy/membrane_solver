@@ -195,6 +195,7 @@ Exploratory expansion lane (non-blocking policy checks):
 - `tests/test_theory_parity_expansion_exploratory.py`
 - expansion policy fixture: `tests/fixtures/theory_parity_expansion_policy.yaml`
 - Stage 4 is explicitly `r; g10` with rollback lockout rules.
+- fixed-lane trend + guarded-gate runbook: see `manual.md`.
 
 The loader automatically triangulates any facet with more than three edges
 using `refine_polygonal_facets`. Triangular facets remain unchanged. The

@@ -253,6 +253,33 @@ Interactive commands:
     are intentionally redefined or tightened.
   - Keep fixed-protocol acceptance checks green before promoting expanded mode.
 
+- `python tools/theory_parity_trend.py`
+  Generate fixed-lane parity trend diagnostics in YAML:
+  `benchmarks/outputs/diagnostics/theory_parity_trend.yaml`.
+  The artifact records per-ratio fields:
+  - `actual`, `expected`, `abs_tol`, `abs_delta`, `within_tolerance`
+  - summary fields:
+    `ratio_count`, `within_tolerance_count`, `all_within_tolerance`
+
+- `python tools/theory_parity_guarded_gate.py`
+  Apply the fixed-lane guarded gate from trend output and persist streak state:
+  `benchmarks/outputs/diagnostics/theory_parity_ci_state.yaml`.
+  Gate rule:
+  - fail only after 2 consecutive runs where `all_within_tolerance: false`
+  - any passing run resets the streak to zero
+  - missing prior state is treated as streak zero
+
+- Guarded gate operations (CI runbook):
+  - default mode in CI is non-blocking (informational signal).
+  - set repository variable `PARITY_GUARDED_GATE=true` to make guarded gate
+    blocking in pull requests.
+  - unset the variable (or set anything else) to return to non-blocking mode.
+  - when a guarded failure occurs, inspect uploaded artifacts first:
+    `theory_parity_trend.yaml`, `theory_parity_report.yaml`,
+    `theory_parity_ci_state.yaml`.
+  - if rollback is needed during incident response, temporarily disable strict
+    mode (`PARITY_GUARDED_GATE` not `true`), fix/tune, then re-enable.
+
 - `python tools/tilt_benchmark_runner.py`
   Run `meshes/tilt_benchmarks/*.yaml` and print energy/tilt/divergence summaries
   (optionally writing JSON/CSV and plots).
