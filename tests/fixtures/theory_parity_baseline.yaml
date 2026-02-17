@@ -1,0 +1,36 @@
+meta:
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml
+  protocol:
+    - g10
+    - r
+    - V2
+    - t5e-3
+    - g8
+    - t2e-3
+    - g12
+  baseline_version: v1
+  format: yaml
+metrics:
+  final_energy: -0.5591799783212776
+  thetaB_value: 0.09
+  breakdown:
+    bending_tilt_in: 0.07633301472246795
+    bending_tilt_out: 4.351117335303224e-09
+    tilt_in: 0.49553575610911593
+    tilt_out: 1.2033478798842349e-11
+    tilt_thetaB_contact_in: -1.1310487535160123
+  tilt_stats:
+    tstat_in_p90_norm: 0.0027253970719953555
+    tstat_out_p90_norm: 2.0758989030491304e-08
+tolerances:
+  final_energy: 5.0e-4
+  thetaB_value: 1.0e-3
+  breakdown:
+    bending_tilt_in: 1.0e-3
+    bending_tilt_out: 1.0e-6
+    tilt_in: 1.0e-3
+    tilt_out: 1.0e-6
+    tilt_thetaB_contact_in: 1.0e-3
+  tilt_stats:
+    tstat_in_p90_norm: 5.0e-4
+    tstat_out_p90_norm: 1.0e-6
