@@ -277,6 +277,8 @@ to keep the rim circular while letting the circle translate/rotate with the mesh
 with a shared `pin_to_plane_group` to keep a group planar while allowing the
 plane to translate along its normal. Use `pin_to_plane_mode: "fit"` to let the
 group’s best-fit plane tilt/translate.
+Constraint alias `pin_surface_group_to_shape` is accepted and normalized to
+`pin_to_plane` (including `pin_surface_group_to_shape_*` option aliases).
 
 The new regression tests in `tests/test_perimeter_minimization.py` load the same
 square loop (see `tests/sample_meshes.square_perimeter_input`) to verify that
