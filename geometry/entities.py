@@ -10,6 +10,13 @@ import numpy as np
 from core.exceptions import BodyOrientationError, InvalidEdgeIndexError
 from core.ordered_unique_list import OrderedUniqueList
 from core.parameters.global_parameters import GlobalParameters
+from geometry.cache_checks import (
+    barycentric_cache_valid,
+    is_cached_positions,
+    p1_triangle_cache_valid,
+    triangle_areas_cache_valid,
+    vertex_normals_cache_valid,
+)
 from geometry.triangle_ops import (
     barycentric_vertex_areas_from_triangles,
     p1_triangle_shape_gradients,
@@ -1914,13 +1921,14 @@ class Mesh:
 
     def triangle_areas(self, positions: Optional[np.ndarray] = None) -> np.ndarray:
         """Return a cached array of triangle areas for facets in triangle_row_cache."""
-        is_cached_pos = positions is None or positions is getattr(
-            self, "_positions_cache", None
+        is_cached_pos = is_cached_positions(
+            positions, getattr(self, "_positions_cache", None)
         )
-        if (
-            is_cached_pos
-            and self._cached_tri_areas_version == self._version
-            and self._cached_tri_areas is not None
+        if triangle_areas_cache_valid(
+            is_cached_pos=is_cached_pos,
+            cached_version=self._cached_tri_areas_version,
+            mesh_version=self._version,
+            cached_areas=self._cached_tri_areas,
         ):
             return self._cached_tri_areas
 
@@ -1941,12 +1949,16 @@ class Mesh:
 
     def triangle_normals(self, positions: Optional[np.ndarray] = None) -> np.ndarray:
         """Return a cached array of unnormalized triangle normals."""
-        is_cached_pos = positions is None or positions is getattr(
-            self, "_positions_cache", None
+        is_cached_pos = is_cached_positions(
+            positions, getattr(self, "_positions_cache", None)
         )
         if (
-            is_cached_pos
-            and self._cached_tri_areas_version == self._version
+            triangle_areas_cache_valid(
+                is_cached_pos=is_cached_pos,
+                cached_version=self._cached_tri_areas_version,
+                mesh_version=self._version,
+                cached_areas=self._cached_tri_areas,
+            )
             and self._cached_tri_normals is not None
         ):
             return self._cached_tri_normals
@@ -1995,13 +2007,14 @@ class Mesh:
             cache = areas is None
 
         use_cache = cache and self._geometry_cache_active(positions)
-        if (
-            use_cache
-            and self._cached_barycentric_vertex_areas_version == self._version
-            and self._cached_barycentric_vertex_areas_rows_version
-            == self._facet_loops_version
-            and self._cached_barycentric_vertex_areas is not None
-            and len(self._cached_barycentric_vertex_areas) == n_verts
+        if barycentric_cache_valid(
+            use_cache=use_cache,
+            cached_version=self._cached_barycentric_vertex_areas_version,
+            mesh_version=self._version,
+            cached_rows_version=self._cached_barycentric_vertex_areas_rows_version,
+            loops_version=self._facet_loops_version,
+            cached_values=self._cached_barycentric_vertex_areas,
+            expected_size=n_verts,
         ):
             return self._cached_barycentric_vertex_areas
 
@@ -2038,14 +2051,16 @@ class Mesh:
         """
         import numpy as np
 
-        is_cached_pos = positions is None or positions is getattr(
-            self, "_positions_cache", None
+        is_cached_pos = is_cached_positions(
+            positions, getattr(self, "_positions_cache", None)
         )
-        if (
-            is_cached_pos
-            and self._cached_vertex_normals is not None
-            and self._cached_vertex_normals_version == self._version
-            and self._cached_vertex_normals_loops_version == self._facet_loops_version
+        if vertex_normals_cache_valid(
+            is_cached_pos=is_cached_pos,
+            cached_values=self._cached_vertex_normals,
+            cached_version=self._cached_vertex_normals_version,
+            mesh_version=self._version,
+            cached_loops_version=self._cached_vertex_normals_loops_version,
+            loops_version=self._facet_loops_version,
         ):
             return self._cached_vertex_normals
 
@@ -2097,14 +2112,16 @@ class Mesh:
             positions = self.positions_view()
 
         use_cache = self._geometry_cache_active(positions)
-        if (
-            use_cache
-            and self._cached_p1_tri_grads_version == self._version
-            and self._cached_p1_tri_grads_rows_version == self._facet_loops_version
-            and self._cached_p1_tri_areas is not None
-            and self._cached_p1_tri_g0 is not None
-            and self._cached_p1_tri_g1 is not None
-            and self._cached_p1_tri_g2 is not None
+        if p1_triangle_cache_valid(
+            use_cache=use_cache,
+            cached_version=self._cached_p1_tri_grads_version,
+            mesh_version=self._version,
+            cached_rows_version=self._cached_p1_tri_grads_rows_version,
+            loops_version=self._facet_loops_version,
+            cached_area=self._cached_p1_tri_areas,
+            cached_g0=self._cached_p1_tri_g0,
+            cached_g1=self._cached_p1_tri_g1,
+            cached_g2=self._cached_p1_tri_g2,
         ):
             return (
                 self._cached_p1_tri_areas,
