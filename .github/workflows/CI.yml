@@ -157,6 +157,38 @@ jobs:
         run: |
           pytest -q tests/test_theory_parity_expansion_exploratory.py
 
+  parity-fixed-trend:
+    name: Theory parity fixed trend (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e .
+
+      - name: Generate fixed-lane parity trend artifact
+        run: |
+          python tools/theory_parity_trend.py
+
+      - name: Upload fixed-lane parity trend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: theory-parity-trend-${{ github.run_id }}
+          path: |
+            benchmarks/outputs/diagnostics/theory_parity_report.yaml
+            benchmarks/outputs/diagnostics/theory_parity_trend.yaml
+
   benchmarks-full:
     name: Full benchmarks + profiles
     runs-on: ubuntu-latest
