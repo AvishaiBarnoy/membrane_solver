@@ -17,6 +17,12 @@ from geometry.cache_checks import (
     triangle_areas_cache_valid,
     vertex_normals_cache_valid,
 )
+from geometry.cache_writes import (
+    store_barycentric_vertex_areas_cache,
+    store_p1_triangle_grad_cache,
+    store_triangle_area_normals_cache,
+    store_vertex_normals_cache,
+)
 from geometry.triangle_ops import (
     barycentric_vertex_areas_from_triangles,
     p1_triangle_shape_gradients,
@@ -1942,9 +1948,7 @@ class Mesh:
         normals, areas = triangle_normals_and_areas(positions, tri_rows)
 
         if is_cached_pos:
-            self._cached_tri_areas = areas
-            self._cached_tri_normals = normals
-            self._cached_tri_areas_version = self._version
+            store_triangle_area_normals_cache(self, areas=areas, normals=normals)
         return areas
 
     def triangle_normals(self, positions: Optional[np.ndarray] = None) -> np.ndarray:
@@ -2035,11 +2039,7 @@ class Mesh:
         )
 
         if use_cache:
-            self._cached_barycentric_vertex_areas = vertex_areas
-            self._cached_barycentric_vertex_areas_version = self._version
-            self._cached_barycentric_vertex_areas_rows_version = (
-                self._facet_loops_version
-            )
+            store_barycentric_vertex_areas_cache(self, vertex_areas=vertex_areas)
 
         return vertex_areas
 
@@ -2070,9 +2070,7 @@ class Mesh:
         if tri_rows is None or len(tri_rows) == 0:
             normals = np.zeros((n_verts, 3), dtype=float)
             if is_cached_pos:
-                self._cached_vertex_normals = normals
-                self._cached_vertex_normals_version = self._version
-                self._cached_vertex_normals_loops_version = self._facet_loops_version
+                store_vertex_normals_cache(self, normals=normals)
             return normals
 
         if positions is None:
@@ -2084,9 +2082,7 @@ class Mesh:
         )
 
         if is_cached_pos:
-            self._cached_vertex_normals = normals
-            self._cached_vertex_normals_version = self._version
-            self._cached_vertex_normals_loops_version = self._facet_loops_version
+            store_vertex_normals_cache(self, normals=normals)
         return normals
 
     def p1_triangle_shape_gradient_cache(
@@ -2134,12 +2130,7 @@ class Mesh:
         area, g0, g1, g2 = p1_triangle_shape_gradients(positions, tri_rows)
 
         if use_cache:
-            self._cached_p1_tri_areas = area
-            self._cached_p1_tri_g0 = g0
-            self._cached_p1_tri_g1 = g1
-            self._cached_p1_tri_g2 = g2
-            self._cached_p1_tri_grads_version = self._version
-            self._cached_p1_tri_grads_rows_version = self._facet_loops_version
+            store_p1_triangle_grad_cache(self, area=area, g0=g0, g1=g1, g2=g2)
 
         return area, g0, g1, g2, tri_rows
 
