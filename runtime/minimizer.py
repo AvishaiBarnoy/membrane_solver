@@ -20,6 +20,12 @@ from runtime.energy_context import EnergyContext
 from runtime.energy_manager import EnergyModuleManager
 from runtime.interface_validation import validate_disk_interface_topology
 from runtime.leaflet_validation import validate_leaflet_absence_topology
+from runtime.minimizer_helpers import (
+    build_reduced_line_search_energy_fn,
+    capture_diagnostic_state,
+    get_cached_tilt_fixed_mask,
+    restore_diagnostic_state,
+)
 from runtime.steppers.base import BaseStepper
 
 logger = logging.getLogger("membrane_solver")
@@ -196,31 +202,15 @@ class Minimizer:
 
     def _diagnostic_snapshot(self) -> dict:
         """Capture mutable state that must not change in debug diagnostics."""
-        snapshot: dict = {
-            "global_params": dict(self.global_params.to_dict()),
-            "tilts": None,
-            "tilts_in": None,
-            "tilts_out": None,
-        }
-        if self._uses_leaflet_tilts():
-            snapshot["tilts_in"] = self.mesh.tilts_in_view().copy(order="F")
-            snapshot["tilts_out"] = self.mesh.tilts_out_view().copy(order="F")
-        else:
-            snapshot["tilts"] = self.mesh.tilts_view().copy(order="F")
-        return snapshot
+        return capture_diagnostic_state(
+            self.mesh,
+            self.global_params,
+            uses_leaflet_tilts=self._uses_leaflet_tilts(),
+        )
 
     def _diagnostic_restore(self, snapshot: dict) -> None:
         """Restore mutable state after debug diagnostics."""
-        if snapshot.get("tilts_in") is not None:
-            if not np.array_equal(self.mesh.tilts_in_view(), snapshot["tilts_in"]):
-                self.mesh.set_tilts_in_from_array(snapshot["tilts_in"])
-            if not np.array_equal(self.mesh.tilts_out_view(), snapshot["tilts_out"]):
-                self.mesh.set_tilts_out_from_array(snapshot["tilts_out"])
-        elif snapshot.get("tilts") is not None:
-            if not np.array_equal(self.mesh.tilts_view(), snapshot["tilts"]):
-                self.mesh.set_tilts_from_array(snapshot["tilts"])
-        if snapshot.get("global_params") != self.global_params.to_dict():
-            self.global_params._params = dict(snapshot["global_params"])
+        restore_diagnostic_state(self.mesh, self.global_params, snapshot)
 
     def _run_debug_diagnostic(self, fn):
         """Run a diagnostic without mutating the live simulation state.
@@ -294,21 +284,12 @@ class Minimizer:
 
         The mask is in ``mesh.vertex_ids`` row order.
         """
-        flags_version = self.mesh._tilt_fixed_flags_version
-        vertex_version = self.mesh._vertex_ids_version
-        if (
-            self._tilt_fixed_mask_cache is not None
-            and self._tilt_fixed_mask_version == flags_version
-            and self._tilt_fixed_mask_vertex_version == vertex_version
-            and len(self._tilt_fixed_mask_cache) == len(self.mesh.vertices)
-        ):
-            return self._tilt_fixed_mask_cache
-        mask = np.array(
-            [
-                bool(getattr(self.mesh.vertices[int(vid)], "tilt_fixed", False))
-                for vid in self.mesh.vertex_ids
-            ],
-            dtype=bool,
+        mask, flags_version, vertex_version = get_cached_tilt_fixed_mask(
+            mesh=self.mesh,
+            flag_attr="tilt_fixed",
+            cached_mask=self._tilt_fixed_mask_cache,
+            cached_flags_version=self._tilt_fixed_mask_version,
+            cached_vertex_version=self._tilt_fixed_mask_vertex_version,
         )
         self._tilt_fixed_mask_cache = mask
         self._tilt_fixed_mask_version = flags_version
@@ -317,21 +298,12 @@ class Minimizer:
 
     def _tilt_fixed_mask_in(self) -> np.ndarray:
         """Return a boolean mask for vertices whose inner-leaflet tilt is clamped."""
-        flags_version = self.mesh._tilt_fixed_flags_version
-        vertex_version = self.mesh._vertex_ids_version
-        if (
-            self._tilt_fixed_mask_in_cache is not None
-            and self._tilt_fixed_mask_in_version == flags_version
-            and self._tilt_fixed_mask_in_vertex_version == vertex_version
-            and len(self._tilt_fixed_mask_in_cache) == len(self.mesh.vertices)
-        ):
-            return self._tilt_fixed_mask_in_cache
-        mask = np.array(
-            [
-                bool(getattr(self.mesh.vertices[int(vid)], "tilt_fixed_in", False))
-                for vid in self.mesh.vertex_ids
-            ],
-            dtype=bool,
+        mask, flags_version, vertex_version = get_cached_tilt_fixed_mask(
+            mesh=self.mesh,
+            flag_attr="tilt_fixed_in",
+            cached_mask=self._tilt_fixed_mask_in_cache,
+            cached_flags_version=self._tilt_fixed_mask_in_version,
+            cached_vertex_version=self._tilt_fixed_mask_in_vertex_version,
         )
         self._tilt_fixed_mask_in_cache = mask
         self._tilt_fixed_mask_in_version = flags_version
@@ -340,21 +312,12 @@ class Minimizer:
 
     def _tilt_fixed_mask_out(self) -> np.ndarray:
         """Return a boolean mask for vertices whose outer-leaflet tilt is clamped."""
-        flags_version = self.mesh._tilt_fixed_flags_version
-        vertex_version = self.mesh._vertex_ids_version
-        if (
-            self._tilt_fixed_mask_out_cache is not None
-            and self._tilt_fixed_mask_out_version == flags_version
-            and self._tilt_fixed_mask_out_vertex_version == vertex_version
-            and len(self._tilt_fixed_mask_out_cache) == len(self.mesh.vertices)
-        ):
-            return self._tilt_fixed_mask_out_cache
-        mask = np.array(
-            [
-                bool(getattr(self.mesh.vertices[int(vid)], "tilt_fixed_out", False))
-                for vid in self.mesh.vertex_ids
-            ],
-            dtype=bool,
+        mask, flags_version, vertex_version = get_cached_tilt_fixed_mask(
+            mesh=self.mesh,
+            flag_attr="tilt_fixed_out",
+            cached_mask=self._tilt_fixed_mask_out_cache,
+            cached_flags_version=self._tilt_fixed_mask_out_version,
+            cached_vertex_version=self._tilt_fixed_mask_out_vertex_version,
         )
         self._tilt_fixed_mask_out_cache = mask
         self._tilt_fixed_mask_out_version = flags_version
@@ -458,69 +421,18 @@ class Minimizer:
         if reduced_steps <= 0:
             return _projected_energy
 
-        uses_leaflet = self._uses_leaflet_tilts()
-        gp = self.global_params
-
-        override_keys = ("tilt_inner_steps", "tilt_coupled_steps", "tilt_cg_max_iters")
-        override_present = {key: (key in gp) for key in override_keys}
-        override_old = {key: gp.get(key) for key in override_keys}
-
-        def _restore_overrides() -> None:
-            for key in override_keys:
-                if override_present.get(key, False):
-                    gp.set(key, override_old[key])
-                else:
-                    gp.unset(key)
-
-        guard_factor = float(gp.get("tilt_relax_energy_guard_factor", 0.0) or 0.0)
-        guard_min = float(gp.get("tilt_relax_energy_guard_min", 0.0) or 0.0)
-
-        def energy_fn() -> float:
-            tilt_mode = str(gp.get("tilt_solve_mode", "fixed") or "fixed")
-            mode_norm = tilt_mode.strip().lower()
-            if mode_norm in ("", "none", "off", "false", "fixed"):
-                return float(_projected_energy())
-
-            positions = self.mesh.positions_view()
-            try:
-                gp.set("tilt_inner_steps", reduced_steps)
-                gp.set("tilt_coupled_steps", reduced_steps)
-                gp.set("tilt_cg_max_iters", reduced_steps)
-
-                if guard_factor > 0.0:
-                    # Guard against tilt divergence during line search.
-                    pre_tin = self.mesh.tilts_in_view().copy(order="F")
-                    pre_tout = self.mesh.tilts_out_view().copy(order="F")
-                    pre_e = float(self.compute_energy())
-
-                if uses_leaflet:
-                    self._relax_leaflet_tilts(positions=positions, mode=tilt_mode)
-                else:
-                    self._relax_tilts(positions=positions, mode=tilt_mode)
-
-                e = float(_projected_energy())
-
-                if guard_factor > 0.0:
-                    threshold = max(guard_min, abs(pre_e) * guard_factor)
-                    if e > threshold:
-                        # Roll back tilts; return pre-relaxation energy so
-                        # the line search sees an unchanged objective.
-                        self._set_leaflet_tilts_from_arrays_fast(pre_tin, pre_tout)
-                        if logger.isEnabledFor(logging.DEBUG):
-                            logger.debug(
-                                "Line-search tilt guard: E %.6g -> %.6g "
-                                "(threshold %.6g); rolling back tilts.",
-                                pre_e,
-                                e,
-                                threshold,
-                            )
-                        return float(pre_e)
-
-                return e
-            finally:
-                _restore_overrides()
-
-        return energy_fn
+        return build_reduced_line_search_energy_fn(
+            mesh=self.mesh,
+            global_params=self.global_params,
+            reduced_steps=reduced_steps,
+            uses_leaflet_tilts=self._uses_leaflet_tilts(),
+            projected_energy_fn=_projected_energy,
+            compute_energy_fn=self.compute_energy,
+            relax_tilts_fn=self._relax_tilts,
+            relax_leaflet_tilts_fn=self._relax_leaflet_tilts,
+            set_leaflet_tilts_fast_fn=self._set_leaflet_tilts_from_arrays_fast,
+            logger_obj=logger,
+        )
 
     def _compute_energy_array_with_tilts(
         self,
