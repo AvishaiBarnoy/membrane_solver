@@ -11,6 +11,7 @@ from typing import Any
 
 import numpy as np
 import yaml
+from scipy import special
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -31,6 +32,7 @@ DEFAULT_OUT = (
     ROOT / "benchmarks" / "outputs" / "diagnostics" / "theory_parity_report.yaml"
 )
 DEFAULT_PROTOCOL = ("g10", "r", "V2", "t5e-3", "g8", "t2e-3", "g12")
+DEFAULT_THEORY_RADIUS = 7.0 / 15.0
 
 
 def _build_context(mesh_path: Path) -> CommandContext:
@@ -90,6 +92,50 @@ def _collect_report(mesh_path: Path, protocol: tuple[str, ...]) -> dict[str, Any
 
     breakdown = minim.compute_energy_breakdown()
     tilt_stats = _tilt_stats_quantiles(ctx.mesh)
+    gp = ctx.mesh.global_parameters
+
+    kappa = float(
+        (gp.get("bending_modulus_in") or 0.0) + (gp.get("bending_modulus_out") or 0.0)
+    )
+    kappa_t = float(
+        (gp.get("tilt_modulus_in") or 0.0) + (gp.get("tilt_modulus_out") or 0.0)
+    )
+    drive = float(gp.get("tilt_thetaB_contact_strength_in") or 0.0)
+    r_theory = float(gp.get("theory_radius") or DEFAULT_THEORY_RADIUS)
+
+    theta_meas = float(gp.get("tilt_thetaB_value") or 0.0)
+    contact_meas = float(breakdown.get("tilt_thetaB_contact_in") or 0.0)
+    elastic_meas = float(
+        (breakdown.get("tilt_in") or 0.0)
+        + (breakdown.get("tilt_out") or 0.0)
+        + (breakdown.get("bending_tilt_in") or 0.0)
+        + (breakdown.get("bending_tilt_out") or 0.0)
+    )
+    total_meas = float(minim.compute_energy())
+
+    theta_star = 0.0
+    elastic_star = 0.0
+    contact_star = 0.0
+    total_star = 0.0
+    if kappa > 0.0 and kappa_t > 0.0 and drive != 0.0 and r_theory > 0.0:
+        lam = float(np.sqrt(kappa_t / kappa))
+        x = float(lam * r_theory)
+        ratio_i = float(special.iv(0, x) / special.iv(1, x))
+        ratio_k = float(special.kv(0, x) / special.kv(1, x))
+        den = float(ratio_i + 0.5 * ratio_k)
+        theta_star = float(drive / (np.sqrt(kappa * kappa_t) * den))
+        fin_star = float(np.pi * kappa * r_theory * lam * ratio_i * theta_star**2)
+        fout_star = float(
+            np.pi * kappa * r_theory * lam * 0.5 * ratio_k * theta_star**2
+        )
+        elastic_star = float(fin_star + fout_star)
+        contact_star = float(-2.0 * np.pi * r_theory * drive * theta_star)
+        total_star = float(elastic_star + contact_star)
+
+    def _ratio(meas: float, theory: float) -> float:
+        if abs(theory) < 1e-16:
+            return 0.0
+        return float(meas / theory)
 
     report = {
         "meta": {
@@ -98,10 +144,8 @@ def _collect_report(mesh_path: Path, protocol: tuple[str, ...]) -> dict[str, Any
             "format": "yaml",
         },
         "metrics": {
-            "final_energy": float(minim.compute_energy()),
-            "thetaB_value": float(
-                ctx.mesh.global_parameters.get("tilt_thetaB_value") or 0.0
-            ),
+            "final_energy": total_meas,
+            "thetaB_value": theta_meas,
             "breakdown": {
                 "bending_tilt_in": float(breakdown.get("bending_tilt_in") or 0.0),
                 "bending_tilt_out": float(breakdown.get("bending_tilt_out") or 0.0),
@@ -112,6 +156,27 @@ def _collect_report(mesh_path: Path, protocol: tuple[str, ...]) -> dict[str, Any
                 ),
             },
             "tilt_stats": tilt_stats,
+            "reduced_terms": {
+                "elastic_measured": elastic_meas,
+                "contact_measured": contact_meas,
+                "total_measured": total_meas,
+            },
+            "theory": {
+                "radius": r_theory,
+                "kappa": kappa,
+                "kappa_t": kappa_t,
+                "drive": drive,
+                "thetaB_star": theta_star,
+                "elastic_star": elastic_star,
+                "contact_star": contact_star,
+                "total_star": total_star,
+                "ratios": {
+                    "theta_ratio": _ratio(theta_meas, theta_star),
+                    "elastic_ratio": _ratio(elastic_meas, elastic_star),
+                    "contact_ratio": _ratio(contact_meas, contact_star),
+                    "total_ratio": _ratio(total_meas, total_star),
+                },
+            },
         },
     }
     return report

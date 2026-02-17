@@ -1,0 +1,30 @@
+meta:
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml
+  protocol:
+    - g10
+    - r
+    - V2
+    - t5e-3
+    - g8
+    - t2e-3
+    - g12
+  baseline_version: v1
+  format: yaml
+targets:
+  ratios:
+    theta_ratio:
+      expected: 2.0
+      abs_tol: 0.3
+    elastic_ratio:
+      expected: 2.0
+      abs_tol: 0.3
+    contact_ratio:
+      expected: 2.0
+      abs_tol: 0.3
+    total_ratio:
+      expected: 2.0
+      abs_tol: 0.3
+  relations:
+    contact_measured_negative: true
+    elastic_measured_positive: true
+    total_measured_negative: true
