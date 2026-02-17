@@ -133,6 +133,30 @@ jobs:
         run: |
           python benchmarks/benchmark_dented_cube.py
 
+  parity-exploratory:
+    name: Theory parity exploratory (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e .
+
+      - name: Run exploratory parity checks
+        run: |
+          pytest -q tests/test_theory_parity_expansion_exploratory.py
+
   benchmarks-full:
     name: Full benchmarks + profiles
     runs-on: ubuntu-latest

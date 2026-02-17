@@ -173,6 +173,29 @@ even though the integrated Gauss-Bonnet invariant is zero.
 `parse_geometry` supports both JSON (`.json`) and YAML (`.yaml`, `.yml`) formats.
 YAML is recommended for adding comments and using anchors/aliases.
 
+## Theory parity workflow (YAML-first)
+
+Reproduce parity metrics into YAML:
+
+```bash
+python tools/reproduce_theory_parity.py
+```
+
+Acceptance lanes:
+
+- Regression lane (implementation drift guard):
+  `tests/test_reproduce_theory_parity_acceptance.py`
+  compares output against `tests/fixtures/theory_parity_baseline.yaml`.
+- TeX-target lane (theory relation/ratio checks):
+  `tests/test_theory_parity_against_tex_acceptance.py`
+  compares output against `tests/fixtures/theory_parity_targets.yaml`.
+
+Exploratory expansion lane (non-blocking policy checks):
+
+- `tests/test_theory_parity_expansion_exploratory.py`
+- expansion policy fixture: `tests/fixtures/theory_parity_expansion_policy.yaml`
+- Stage 4 is explicitly `r; g10` with rollback lockout rules.
+
 The loader automatically triangulates any facet with more than three edges
 using `refine_polygonal_facets`. Triangular facets remain unchanged. The
 returned mesh is therefore ready for optimization without further refinement.

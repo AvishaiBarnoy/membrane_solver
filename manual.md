@@ -227,6 +227,32 @@ Interactive commands:
   Profile macro runs step-by-step and optionally capture one command
   (for example `g1`) with `cProfile` to emit `.pstats` and a text summary.
 
+- `python tools/reproduce_theory_parity.py`
+  Reproduce theory parity metrics and write a YAML report (default output:
+  `benchmarks/outputs/diagnostics/theory_parity_report.yaml`).
+  Modes:
+  - `--protocol-mode fixed` (default): canonical acceptance protocol
+    `g10 r V2 t5e-3 g8 t2e-3 g12`.
+  - `--protocol-mode expanded`: convergence-gated exploratory ladder driven by
+    `tests/fixtures/theory_parity_expansion_policy.yaml`, with persistent state
+    in `benchmarks/outputs/diagnostics/theory_parity_expansion_state.yaml`.
+  - Stage 4 in the expansion ladder is explicitly `r; g10`.
+
+- Theory parity YAML fixtures:
+  - `tests/fixtures/theory_parity_baseline.yaml`:
+    implementation-regression lane (protects against accidental drift).
+  - `tests/fixtures/theory_parity_targets.yaml`:
+    TeX-target lane (ratio/relationship validation).
+  - `tests/fixtures/theory_parity_expansion_policy.yaml`:
+    exploratory expansion policy and Stage 4 safety/rollback thresholds.
+
+- Baseline/target refresh policy:
+  - Update `theory_parity_baseline.yaml` only when intended implementation
+    behavior changes (or deterministic protocol changes), and document why.
+  - Update `theory_parity_targets.yaml` only when theory-alignment expectations
+    are intentionally redefined or tightened.
+  - Keep fixed-protocol acceptance checks green before promoting expanded mode.
+
 - `python tools/tilt_benchmark_runner.py`
   Run `meshes/tilt_benchmarks/*.yaml` and print energy/tilt/divergence summaries
   (optionally writing JSON/CSV and plots).
