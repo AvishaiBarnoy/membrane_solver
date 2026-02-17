@@ -27,7 +27,7 @@ def _pin_to_circle_group(options: dict | None) -> str | None:
 
 def vertex_average(mesh):
     """
-    Perform Evolver-style vertex averaging on all non-fixed vertices.
+    Perform Evolver-style vertex averaging on movable interior vertices.
 
     This follows the "soapfilm" averaging behavior in Surface Evolver
     (`vertex_average` / `find_vertex_average` in `src/veravg.c`):
@@ -64,7 +64,10 @@ def vertex_average(mesh):
     new_positions = {}
 
     for v_id, vertex in mesh.vertices.items():
-        if vertex.fixed:
+        # Keep pin-to-circle vertices anchored during smoothing. Repeated
+        # averaging can otherwise collapse constrained disk/outer rings before
+        # projection is re-applied.
+        if vertex.fixed or _has_pin_to_circle(getattr(vertex, "options", None)):
             continue
 
         edge_ids = mesh.vertex_to_edges.get(v_id, set())
