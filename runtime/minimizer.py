@@ -28,6 +28,8 @@ from runtime.minimizer_helpers import (
 )
 from runtime.steppers.base import BaseStepper
 from runtime.tilt_projection import (
+    build_leaflet_trial_tilts,
+    project_leaflet_tilts_with_optional_axisymmetry,
     project_tilts_axisymmetric_about_center,
     project_tilts_to_tangent_array,
 )
@@ -1230,33 +1232,15 @@ class Minimizer:
             tilts_in = self._project_tilts_to_tangent_array(tilts_in, normals)
             tilts_out = self._project_tilts_to_tangent_array(tilts_out, normals)
 
-            if bool(
-                self.global_params.get("tilt_axisymmetric_about_thetaB_center", False)
-            ):
-                center = np.asarray(
-                    self.global_params.get("tilt_thetaB_center") or [0.0, 0.0, 0.0],
-                    dtype=float,
-                ).reshape(3)
-                axis = np.asarray(
-                    self.global_params.get("tilt_thetaB_normal") or [0.0, 0.0, 1.0],
-                    dtype=float,
-                ).reshape(3)
-                tilts_in = self._project_tilts_axisymmetric_about_center(
-                    positions=positions,
-                    tilts=tilts_in,
-                    normals=normals,
-                    center=center,
-                    axis=axis,
-                    fixed_mask=fixed_mask_in,
-                )
-                tilts_out = self._project_tilts_axisymmetric_about_center(
-                    positions=positions,
-                    tilts=tilts_out,
-                    normals=normals,
-                    center=center,
-                    axis=axis,
-                    fixed_mask=fixed_mask_out,
-                )
+            tilts_in, tilts_out = project_leaflet_tilts_with_optional_axisymmetry(
+                global_params=self.global_params,
+                positions=positions,
+                normals=normals,
+                tilts_in=tilts_in,
+                tilts_out=tilts_out,
+                fixed_mask_in=fixed_mask_in,
+                fixed_mask_out=fixed_mask_out,
+            )
             grad_dummy = np.zeros_like(positions)
 
             tri_rows, _ = self._triangle_rows()
@@ -1359,18 +1343,17 @@ class Minimizer:
                     step = step_size
                     accepted = False
                     for _bt in range(12):
-                        trial_in = tilts_in - step * tilt_in_grad
-                        trial_out = tilts_out - step * tilt_out_grad
-                        trial_in = self._project_tilts_to_tangent_array(
-                            trial_in, normals
+                        trial_in, trial_out = build_leaflet_trial_tilts(
+                            base_in=tilts_in,
+                            base_out=tilts_out,
+                            delta_in=-step * tilt_in_grad,
+                            delta_out=-step * tilt_out_grad,
+                            normals=normals,
+                            fixed_mask_in=fixed_mask_in,
+                            fixed_mask_out=fixed_mask_out,
+                            fixed_vals_in=tilt_fixed_vals_in,
+                            fixed_vals_out=tilt_fixed_vals_out,
                         )
-                        trial_out = self._project_tilts_to_tangent_array(
-                            trial_out, normals
-                        )
-                        if tilt_fixed_vals_in is not None:
-                            trial_in[fixed_mask_in] = tilt_fixed_vals_in
-                        if tilt_fixed_vals_out is not None:
-                            trial_out[fixed_mask_out] = tilt_fixed_vals_out
                         E1 = self._compute_tilt_dependent_energy_with_leaflet_tilts(
                             positions=positions,
                             tilts_in=trial_in,
@@ -1407,27 +1390,17 @@ class Minimizer:
                         tilts_out = self._project_tilts_to_tangent_array(
                             tilts_out, normals
                         )
-                        if bool(
-                            self.global_params.get(
-                                "tilt_axisymmetric_about_thetaB_center", False
-                            )
-                        ):
-                            tilts_in = self._project_tilts_axisymmetric_about_center(
+                        tilts_in, tilts_out = (
+                            project_leaflet_tilts_with_optional_axisymmetry(
+                                global_params=self.global_params,
                                 positions=positions,
-                                tilts=tilts_in,
                                 normals=normals,
-                                center=center,
-                                axis=axis,
-                                fixed_mask=fixed_mask_in,
+                                tilts_in=tilts_in,
+                                tilts_out=tilts_out,
+                                fixed_mask_in=fixed_mask_in,
+                                fixed_mask_out=fixed_mask_out,
                             )
-                            tilts_out = self._project_tilts_axisymmetric_about_center(
-                                positions=positions,
-                                tilts=tilts_out,
-                                normals=normals,
-                                center=center,
-                                axis=axis,
-                                fixed_mask=fixed_mask_out,
-                            )
+                        )
             else:
                 M_inv_in = None
                 M_inv_out = None
@@ -1471,18 +1444,17 @@ class Minimizer:
                     step = step_size
                     accepted = False
                     for _bt in range(12):
-                        trial_in = tilts_in + step * dir_in
-                        trial_out = tilts_out + step * dir_out
-                        trial_in = self._project_tilts_to_tangent_array(
-                            trial_in, normals
+                        trial_in, trial_out = build_leaflet_trial_tilts(
+                            base_in=tilts_in,
+                            base_out=tilts_out,
+                            delta_in=step * dir_in,
+                            delta_out=step * dir_out,
+                            normals=normals,
+                            fixed_mask_in=fixed_mask_in,
+                            fixed_mask_out=fixed_mask_out,
+                            fixed_vals_in=tilt_fixed_vals_in,
+                            fixed_vals_out=tilt_fixed_vals_out,
                         )
-                        trial_out = self._project_tilts_to_tangent_array(
-                            trial_out, normals
-                        )
-                        if tilt_fixed_vals_in is not None:
-                            trial_in[fixed_mask_in] = tilt_fixed_vals_in
-                        if tilt_fixed_vals_out is not None:
-                            trial_out[fixed_mask_out] = tilt_fixed_vals_out
                         E1 = self._compute_tilt_dependent_energy_with_leaflet_tilts(
                             positions=positions,
                             tilts_in=trial_in,
@@ -1517,27 +1489,17 @@ class Minimizer:
                         tilts_out = self._project_tilts_to_tangent_array(
                             tilts_out, normals
                         )
-                        if bool(
-                            self.global_params.get(
-                                "tilt_axisymmetric_about_thetaB_center", False
-                            )
-                        ):
-                            tilts_in = self._project_tilts_axisymmetric_about_center(
+                        tilts_in, tilts_out = (
+                            project_leaflet_tilts_with_optional_axisymmetry(
+                                global_params=self.global_params,
                                 positions=positions,
-                                tilts=tilts_in,
                                 normals=normals,
-                                center=center,
-                                axis=axis,
-                                fixed_mask=fixed_mask_in,
+                                tilts_in=tilts_in,
+                                tilts_out=tilts_out,
+                                fixed_mask_in=fixed_mask_in,
+                                fixed_mask_out=fixed_mask_out,
                             )
-                            tilts_out = self._project_tilts_axisymmetric_about_center(
-                                positions=positions,
-                                tilts=tilts_out,
-                                normals=normals,
-                                center=center,
-                                axis=axis,
-                                fixed_mask=fixed_mask_out,
-                            )
+                        )
 
                     E0, gnorm = _leaflet_tilt_gradients()
                     if gnorm == 0.0 or (tol > 0.0 and gnorm < tol):
