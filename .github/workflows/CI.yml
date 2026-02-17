@@ -158,9 +158,9 @@ jobs:
           pytest -q tests/test_theory_parity_expansion_exploratory.py
 
   parity-fixed-trend:
-    name: Theory parity fixed trend (non-blocking)
+    name: Theory parity fixed trend (guarded gate)
     runs-on: ubuntu-latest
-    continue-on-error: true
+    continue-on-error: ${{ vars.PARITY_GUARDED_GATE != 'true' }}
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
@@ -181,13 +181,35 @@ jobs:
         run: |
           python tools/theory_parity_trend.py
 
+      - name: Restore guarded-gate state cache
+        id: restore-guarded-state
+        uses: actions/cache/restore@v4
+        with:
+          path: benchmarks/outputs/diagnostics/theory_parity_ci_state.yaml
+          key: theory-parity-ci-state-${{ github.base_ref || github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            theory-parity-ci-state-${{ github.base_ref || github.ref_name }}-
+
+      - name: Apply guarded gate (2 consecutive failures)
+        run: |
+          python tools/theory_parity_guarded_gate.py --required-consecutive-failures 2
+
       - name: Upload fixed-lane parity trend artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: theory-parity-trend-${{ github.run_id }}
           path: |
             benchmarks/outputs/diagnostics/theory_parity_report.yaml
             benchmarks/outputs/diagnostics/theory_parity_trend.yaml
+            benchmarks/outputs/diagnostics/theory_parity_ci_state.yaml
+
+      - name: Save guarded-gate state cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: benchmarks/outputs/diagnostics/theory_parity_ci_state.yaml
+          key: theory-parity-ci-state-${{ github.base_ref || github.ref_name }}-${{ github.run_id }}
 
   benchmarks-full:
     name: Full benchmarks + profiles
