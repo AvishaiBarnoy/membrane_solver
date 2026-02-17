@@ -14,6 +14,7 @@ from sample_meshes import write_sample_geometry
 
 from geometry.entities import Mesh
 from geometry.geom_io import load_data, parse_geometry, save_geometry
+from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_polygonal_facets
 
 
@@ -212,6 +213,62 @@ def test_parse_geometry_preserves_module_order_and_dedupes():
     mesh = parse_geometry(data)
     assert mesh.energy_modules == ["tilt_out", "tilt_in", "bending_tilt_in"]
     assert mesh.constraint_modules == ["pin_to_plane", "pin_to_circle", "global_area"]
+
+
+def test_parse_geometry_normalizes_pin_surface_group_aliases():
+    data = {
+        "global_parameters": {"pin_surface_group_to_shape_mode": "fixed"},
+        "vertices": [
+            [
+                0.0,
+                0.0,
+                1.0,
+                {
+                    "constraints": ["pin_surface_group_to_shape"],
+                    "pin_surface_group_to_shape_normal": [0.0, 0.0, 1.0],
+                    "pin_surface_group_to_shape_point": [0.0, 0.0, 0.0],
+                },
+            ],
+            [1.0, 0.0, 0.0],
+        ],
+        "edges": [[0, 1]],
+        "constraint_modules": ["pin_surface_group_to_shape"],
+    }
+    mesh = parse_geometry(data)
+
+    assert mesh.constraint_modules == ["pin_to_plane"]
+    assert mesh.vertices[0].options["constraints"] == ["pin_to_plane"]
+    assert "pin_surface_group_to_shape_normal" not in mesh.vertices[0].options
+    assert "pin_surface_group_to_shape_point" not in mesh.vertices[0].options
+    assert mesh.vertices[0].options["pin_to_plane_normal"] == [0.0, 0.0, 1.0]
+    assert mesh.vertices[0].options["pin_to_plane_point"] == [0.0, 0.0, 0.0]
+    assert mesh.global_parameters.get("pin_to_plane_mode") == "fixed"
+    assert mesh.global_parameters.get("pin_surface_group_to_shape_mode") is None
+
+
+def test_pin_surface_group_alias_enforces_pin_to_plane_projection():
+    data = {
+        "vertices": [
+            [
+                0.0,
+                0.0,
+                1.0,
+                {
+                    "constraints": ["pin_surface_group_to_shape"],
+                    "pin_surface_group_to_shape_normal": [0.0, 0.0, 1.0],
+                    "pin_surface_group_to_shape_point": [0.0, 0.0, 0.0],
+                },
+            ],
+            [1.0, 0.0, 0.0],
+        ],
+        "edges": [[0, 1]],
+        "constraint_modules": ["pin_surface_group_to_shape"],
+    }
+    mesh = parse_geometry(data)
+    cm = ConstraintModuleManager(mesh.constraint_modules)
+    cm.enforce_all(mesh, context="mesh_operation", global_params=mesh.global_parameters)
+
+    assert mesh.vertices[0].position[2] == pytest.approx(0.0)
 
 
 def test_tilt_in_out_roundtrip(tmp_path):

@@ -707,6 +707,9 @@ vertices:
   0: [0, 0, 1, {constraints: ["pin_to_plane"]}]
 ```
 
+Alias support: `constraints: ["pin_surface_group_to_shape"]` maps to the same
+module for non-breaking migration.
+
 The module enforces the projection geometrically during minimization and after
 mesh operations. Because it does not supply constraint gradients, it does not
 participate in KKT projection and will emit a warning when gradients are
@@ -717,6 +720,8 @@ Optional modes:
   to the group centroid (lets the plane translate along its normal).
 - `pin_to_plane_mode: "fit"` fits both normal and point from the tagged group.
 - Use `pin_to_plane_group` to define which tagged vertices share the same plane.
+- Alias keys `pin_surface_group_to_shape_mode/group/normal/point` are also
+  accepted and mapped to the corresponding `pin_to_plane_*` keys.
 
 ### 6.6 Tilt-vector rim continuity (`modules/constraints/tilt_vector_match_rim.py`)
 
