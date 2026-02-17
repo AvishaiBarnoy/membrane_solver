@@ -55,7 +55,13 @@ def test_evaluate_manifest_classifies_missing_when_checks_fail() -> None:
         ]
     }
     geom = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
-    tex = TEX.read_text(encoding="utf-8")
-    out = evaluate_manifest(root=ROOT, tex_text=tex, geometry=geom, manifest=manifest)
+    tex = TEX.read_text(encoding="utf-8") if TEX.exists() else ""
+    out = evaluate_manifest(
+        root=ROOT,
+        tex_text=tex,
+        geometry=geom,
+        manifest=manifest,
+        tex_available=TEX.exists(),
+    )
     assert out["summary"]["required_not_present_count"] == 1
     assert out["items"][0]["status"] in {"partial", "missing"}

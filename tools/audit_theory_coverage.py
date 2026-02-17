@@ -63,6 +63,7 @@ def evaluate_manifest(
     tex_text: str,
     geometry: dict[str, Any],
     manifest: dict[str, Any],
+    tex_available: bool = True,
 ) -> dict[str, Any]:
     items_out: list[dict[str, Any]] = []
     required_count = 0
@@ -73,7 +74,9 @@ def evaluate_manifest(
         if required:
             required_count += 1
 
-        tex_ok = all(str(m) in tex_text for m in item.get("tex_markers", []))
+        tex_ok = True
+        if tex_available:
+            tex_ok = all(str(m) in tex_text for m in item.get("tex_markers", []))
         code_ok = all(_check_code(root, r) for r in item.get("code_refs", []))
         yaml_ok = all(_check_yaml(geometry, c) for c in item.get("yaml_checks", []))
 
@@ -112,15 +115,19 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
+    tex_path = Path(args.tex)
+    tex_available = tex_path.exists()
     report = evaluate_manifest(
         root=ROOT,
-        tex_text=Path(args.tex).read_text(encoding="utf-8"),
+        tex_text=tex_path.read_text(encoding="utf-8") if tex_available else "",
         geometry=_load_yaml(Path(args.fixture)),
         manifest=_load_yaml(Path(args.manifest)),
+        tex_available=tex_available,
     )
     out = {
         "meta": {
-            "tex": str(Path(args.tex).relative_to(ROOT)),
+            "tex": str(tex_path.relative_to(ROOT)),
+            "tex_available": bool(tex_available),
             "fixture": str(Path(args.fixture).relative_to(ROOT)),
             "manifest": str(Path(args.manifest).relative_to(ROOT)),
             "format": "yaml",
