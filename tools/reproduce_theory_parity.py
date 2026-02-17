@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import os
 import sys
 from pathlib import Path
@@ -30,6 +31,16 @@ DEFAULT_MESH = (
 )
 DEFAULT_OUT = (
     ROOT / "benchmarks" / "outputs" / "diagnostics" / "theory_parity_report.yaml"
+)
+DEFAULT_EXPANSION_POLICY = (
+    ROOT / "tests" / "fixtures" / "theory_parity_expansion_policy.yaml"
+)
+DEFAULT_EXPANSION_STATE = (
+    ROOT
+    / "benchmarks"
+    / "outputs"
+    / "diagnostics"
+    / "theory_parity_expansion_state.yaml"
 )
 DEFAULT_PROTOCOL = ("g10", "r", "V2", "t5e-3", "g8", "t2e-3", "g12")
 DEFAULT_THEORY_RADIUS = 7.0 / 15.0
@@ -83,13 +94,13 @@ def _tilt_stats_quantiles(mesh) -> dict[str, float]:
     }
 
 
-def _collect_report(mesh_path: Path, protocol: tuple[str, ...]) -> dict[str, Any]:
-    ctx = _build_context(mesh_path)
+def _collect_report_from_context(
+    *,
+    ctx: CommandContext,
+    mesh_path: Path,
+    protocol: tuple[str, ...],
+) -> dict[str, Any]:
     minim = ctx.minimizer
-
-    for cmd in protocol:
-        execute_command_line(ctx, cmd)
-
     breakdown = minim.compute_energy_breakdown()
     tilt_stats = _tilt_stats_quantiles(ctx.mesh)
     gp = ctx.mesh.global_parameters
@@ -182,15 +193,195 @@ def _collect_report(mesh_path: Path, protocol: tuple[str, ...]) -> dict[str, Any
     return report
 
 
+def _collect_report(mesh_path: Path, protocol: tuple[str, ...]) -> dict[str, Any]:
+    ctx = _build_context(mesh_path)
+    for cmd in protocol:
+        execute_command_line(ctx, cmd)
+    return _collect_report_from_context(ctx=ctx, mesh_path=mesh_path, protocol=protocol)
+
+
+def _load_yaml(path: Path, default: dict[str, Any] | None = None) -> dict[str, Any]:
+    if not path.exists():
+        return copy.deepcopy(default) if default is not None else {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+def _save_yaml(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+
+
+def _max_ratio_drift(
+    cur_ratios: dict[str, float], prev_ratios: dict[str, float]
+) -> float:
+    keys = sorted(set(cur_ratios.keys()) & set(prev_ratios.keys()))
+    if not keys:
+        return 0.0
+    return float(max(abs(float(cur_ratios[k]) - float(prev_ratios[k])) for k in keys))
+
+
+def _is_finite_metrics(report: dict[str, Any]) -> bool:
+    vals = [
+        float(report["metrics"]["final_energy"]),
+        float(report["metrics"]["reduced_terms"]["elastic_measured"]),
+        float(report["metrics"]["reduced_terms"]["contact_measured"]),
+        float(report["metrics"]["reduced_terms"]["total_measured"]),
+    ]
+    vals.extend(float(v) for v in report["metrics"]["theory"]["ratios"].values())
+    return all(np.isfinite(v) for v in vals)
+
+
+def _default_state() -> dict[str, Any]:
+    return {
+        "current_stage": 0,
+        "stage3_pass_streak": 0,
+        "stage4_fail_streak": 0,
+        "stage4_locked": False,
+        "last_stage3_ratios": {},
+        "last_stage3_energy": None,
+        "stage3_anchor_ratios": {},
+        "stage3_anchor_energy": None,
+        "history": [],
+    }
+
+
+def update_expansion_state(
+    *,
+    state: dict[str, Any],
+    report: dict[str, Any],
+    policy: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Update expansion state from one run and return (new_state, decisions)."""
+    new_state = copy.deepcopy(state) if state else _default_state()
+    thresholds = policy["thresholds"]
+    stage = int(new_state.get("current_stage", 0))
+    ratios = {
+        str(k): float(v) for k, v in report["metrics"]["theory"]["ratios"].items()
+    }
+    energy = float(report["metrics"]["final_energy"])
+    decisions: dict[str, Any] = {
+        "stage_before": stage,
+        "promoted_to_stage4": False,
+        "rolled_back_to_stage3": False,
+        "stage4_validation_passed": None,
+    }
+
+    finite_ok = _is_finite_metrics(report)
+    if stage == 3:
+        prev_ratios = new_state.get("last_stage3_ratios") or {}
+        prev_energy = new_state.get("last_stage3_energy")
+        if prev_ratios and prev_energy is not None:
+            ratio_drift = _max_ratio_drift(ratios, prev_ratios)
+            energy_drift = abs(energy - float(prev_energy))
+            pass_ok = (
+                finite_ok
+                and ratio_drift <= float(thresholds["ratio_drift_max"])
+                and energy_drift <= float(thresholds["energy_drift_max"])
+            )
+        else:
+            pass_ok = finite_ok
+        if pass_ok:
+            new_state["stage3_pass_streak"] = (
+                int(new_state.get("stage3_pass_streak", 0)) + 1
+            )
+        else:
+            new_state["stage3_pass_streak"] = 0
+        new_state["last_stage3_ratios"] = ratios
+        new_state["last_stage3_energy"] = energy
+        if not bool(new_state.get("stage4_locked", False)) and int(
+            new_state["stage3_pass_streak"]
+        ) >= int(thresholds["consecutive_passes_to_promote"]):
+            new_state["current_stage"] = 4
+            new_state["stage4_fail_streak"] = 0
+            new_state["stage3_anchor_ratios"] = ratios
+            new_state["stage3_anchor_energy"] = energy
+            decisions["promoted_to_stage4"] = True
+
+    elif stage == 4:
+        stage4_cfg = thresholds["stage4"]
+        anchor_ratios = new_state.get("stage3_anchor_ratios") or {}
+        ratio_delta = _max_ratio_drift(ratios, anchor_ratios) if anchor_ratios else 0.0
+        pass_ok = (
+            finite_ok
+            and ratio_delta <= float(stage4_cfg["ratio_delta_vs_stage3_max"])
+            and np.isfinite(energy)
+        )
+        decisions["stage4_validation_passed"] = bool(pass_ok)
+        if pass_ok:
+            new_state["stage4_fail_streak"] = 0
+        else:
+            new_state["stage4_fail_streak"] = (
+                int(new_state.get("stage4_fail_streak", 0)) + 1
+            )
+            if int(new_state["stage4_fail_streak"]) >= int(
+                stage4_cfg["max_consecutive_failures_before_rollback"]
+            ):
+                new_state["current_stage"] = 3
+                new_state["stage4_locked"] = True
+                new_state["stage3_pass_streak"] = 0
+                new_state["stage4_fail_streak"] = 0
+                decisions["rolled_back_to_stage3"] = True
+
+    decisions["stage_after"] = int(new_state.get("current_stage", stage))
+    new_state.setdefault("history", []).append(
+        {
+            "stage_before": int(stage),
+            "stage_after": int(new_state.get("current_stage", stage)),
+            "energy": float(energy),
+            "ratios": ratios,
+            "decisions": decisions,
+        }
+    )
+    return new_state, decisions
+
+
+def _stage_suffix(policy: dict[str, Any], stage: int) -> list[str]:
+    stages = policy["stages"]
+    key = f"stage_{stage}"
+    return [str(x) for x in stages.get(key, [])]
+
+
+def _attach_stage_metadata(
+    report: dict[str, Any], *, stage: int, suffix: list[str], ctx: CommandContext
+) -> None:
+    report["meta"]["expansion"] = {
+        "stage": int(stage),
+        "stage_suffix": list(suffix),
+    }
+    if stage == 4:
+        report["meta"]["expansion"]["post_refine_mesh"] = {
+            "vertex_count": int(len(ctx.mesh.vertices)),
+            "triangle_count": int(len(ctx.mesh.facets)),
+        }
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mesh", type=Path, default=DEFAULT_MESH)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument(
+        "--protocol-mode",
+        choices=("fixed", "expanded"),
+        default="fixed",
+        help="Use fixed protocol or convergence-gated expansion ladder.",
+    )
+    parser.add_argument(
         "--protocol",
         nargs="+",
         default=list(DEFAULT_PROTOCOL),
         help="Command sequence to reproduce parity metrics.",
+    )
+    parser.add_argument(
+        "--expansion-policy",
+        type=Path,
+        default=DEFAULT_EXPANSION_POLICY,
+        help="YAML policy for expanded protocol stages and gates.",
+    )
+    parser.add_argument(
+        "--state-file",
+        type=Path,
+        default=DEFAULT_EXPANSION_STATE,
+        help="Persistent YAML state file for expansion mode.",
     )
     return parser.parse_args()
 
@@ -201,7 +392,32 @@ def main() -> int:
     out_path = Path(args.out)
     protocol = tuple(str(x) for x in args.protocol)
 
-    report = _collect_report(mesh_path=mesh_path, protocol=protocol)
+    if str(args.protocol_mode) == "fixed":
+        report = _collect_report(mesh_path=mesh_path, protocol=protocol)
+    else:
+        policy = _load_yaml(Path(args.expansion_policy))
+        state_path = Path(args.state_file)
+        state = _load_yaml(state_path, default=_default_state())
+        stage = int(state.get("current_stage", 0))
+        suffix = _stage_suffix(policy, stage)
+        full_protocol = protocol + tuple(suffix)
+        ctx = _build_context(mesh_path)
+        for cmd in full_protocol:
+            execute_command_line(ctx, cmd)
+        report = _collect_report_from_context(
+            ctx=ctx,
+            mesh_path=mesh_path,
+            protocol=full_protocol,
+        )
+        _attach_stage_metadata(report, stage=stage, suffix=suffix, ctx=ctx)
+        new_state, decisions = update_expansion_state(
+            state=state,
+            report=report,
+            policy=policy,
+        )
+        report["meta"]["expansion"]["decisions"] = decisions
+        _save_yaml(state_path, new_state)
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(yaml.safe_dump(report, sort_keys=False), encoding="utf-8")
     print(f"wrote: {out_path}")

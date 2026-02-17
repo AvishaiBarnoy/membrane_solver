@@ -1,0 +1,13 @@
+stages:
+  stage_0: []
+  stage_1: ["g4"]
+  stage_2: ["g8"]
+  stage_3: ["g12"]
+  stage_4: ["r", "g10"]
+thresholds:
+  consecutive_passes_to_promote: 3
+  ratio_drift_max: 0.10
+  energy_drift_max: 0.10
+  stage4:
+    ratio_delta_vs_stage3_max: 0.40
+    max_consecutive_failures_before_rollback: 2
