@@ -130,6 +130,28 @@ def test_flat_disk_theta_mode_optimize_runs_and_reports_result() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_reports_rim_continuity_and_contact_diagnostics() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=2,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+    )
+
+    rim = report["mesh"]["rim_continuity"]
+    assert int(rim["matched_bins"]) > 0
+    assert np.isfinite(float(rim["jump_abs_median"]))
+    assert np.isfinite(float(rim["jump_abs_max"]))
+
+    contact = report["diagnostics"]["contact"]
+    assert np.isfinite(float(contact["mesh_contact_energy"]))
+    assert np.isfinite(float(contact["theory_contact_energy"]))
+    assert np.isfinite(float(contact["mesh_contact_per_length"]))
+    assert np.isfinite(float(contact["theory_contact_per_length"]))
+
+
+@pytest.mark.regression
 def test_flat_disk_optimize_mode_enforces_thetaB_on_full_disk_radius_ring() -> None:
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import tex_reference_params

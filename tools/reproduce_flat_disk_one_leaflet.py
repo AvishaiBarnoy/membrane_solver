@@ -306,6 +306,79 @@ def _profile_metrics(mesh, *, radius: float) -> dict[str, float]:
     }
 
 
+def _rim_continuity_metrics(
+    mesh,
+    *,
+    radius: float,
+) -> dict[str, float]:
+    """Compute rim continuity diagnostics by matching nearest angles across r=R."""
+    positions = mesh.positions_view()
+    r, r_hat = _radial_unit_vectors(positions)
+    phi = np.mod(np.arctan2(positions[:, 1], positions[:, 0]), 2.0 * np.pi)
+    t_in_rad = np.einsum("ij,ij->i", mesh.tilts_in_view(), r_hat)
+
+    inner_candidates = r < (float(radius) - 1e-12)
+    outer_candidates = r > (float(radius) + 1e-12)
+    if not np.any(inner_candidates) or not np.any(outer_candidates):
+        return {
+            "matched_bins": 0,
+            "jump_abs_median": float("nan"),
+            "jump_abs_max": float("nan"),
+            "jump_signed_mean": float("nan"),
+        }
+
+    r_in_shell = float(np.max(r[inner_candidates]))
+    r_out_shell = float(np.min(r[outer_candidates]))
+    tol_in = max(1e-9, 1e-5 * max(1.0, abs(r_in_shell)))
+    tol_out = max(1e-9, 1e-5 * max(1.0, abs(r_out_shell)))
+    inner_mask = np.abs(r - r_in_shell) <= tol_in
+    outer_mask = np.abs(r - r_out_shell) <= tol_out
+    inner_rows = np.flatnonzero(inner_mask)
+    outer_rows = np.flatnonzero(outer_mask)
+    if inner_rows.size == 0 or outer_rows.size == 0:
+        return {
+            "matched_bins": 0,
+            "jump_abs_median": float("nan"),
+            "jump_abs_max": float("nan"),
+            "jump_signed_mean": float("nan"),
+        }
+
+    phi_in = phi[inner_rows]
+    phi_out = phi[outer_rows]
+    dphi = np.abs(phi_out[:, None] - phi_in[None, :])
+    dphi = np.minimum(dphi, 2.0 * np.pi - dphi)
+    nearest_in = np.argmin(dphi, axis=1)
+    jumps = t_in_rad[outer_rows] - t_in_rad[inner_rows[nearest_in]]
+    arr = np.asarray(jumps, dtype=float)
+    return {
+        "matched_bins": int(arr.size),
+        "jump_abs_median": float(np.median(np.abs(arr))),
+        "jump_abs_max": float(np.max(np.abs(arr))),
+        "jump_signed_mean": float(np.mean(arr)),
+    }
+
+
+def _contact_diagnostics(
+    *,
+    breakdown: dict[str, float],
+    theory,
+    radius: float,
+) -> dict[str, float]:
+    """Return contact energy diagnostics in both absolute and per-length units."""
+    perimeter = 2.0 * np.pi * float(radius)
+    if perimeter <= 0.0:
+        raise ValueError("radius must be > 0 for contact diagnostics.")
+    mesh_contact = float(breakdown.get("tilt_thetaB_contact_in", 0.0))
+    theory_contact = float(theory.contact)
+    return {
+        "mesh_contact_energy": mesh_contact,
+        "theory_contact_energy": theory_contact,
+        "mesh_contact_per_length": float(mesh_contact / perimeter),
+        "theory_contact_per_length": float(theory_contact / perimeter),
+        "contact_factor": float(_factor_difference(mesh_contact, theory_contact)),
+    }
+
+
 def run_flat_disk_one_leaflet_benchmark(
     *,
     fixture: Path | str = DEFAULT_FIXTURE,
@@ -445,6 +518,7 @@ def run_flat_disk_one_leaflet_benchmark(
     breakdown = minim.compute_energy_breakdown()
 
     profile = _profile_metrics(mesh, radius=float(theory.radius))
+    rim_continuity = _rim_continuity_metrics(mesh, radius=float(theory.radius))
     positions = mesh.positions_view()
     z_span = float(np.ptp(positions[:, 2]))
     t_out = mesh.tilts_out_view()
@@ -522,10 +596,18 @@ def run_flat_disk_one_leaflet_benchmark(
             "energy_breakdown": {str(k): float(v) for k, v in breakdown.items()},
             "planarity_z_span": z_span,
             "profile": profile,
+            "rim_continuity": rim_continuity,
             "outer_tilt_max_free_rows": outer_max,
             "outer_tilt_mean_free_rows": outer_mean,
             "outer_decay_probe_max_before": outer_decay_probe_before,
             "outer_decay_probe_max_after": outer_decay_probe_after,
+        },
+        "diagnostics": {
+            "contact": _contact_diagnostics(
+                breakdown={str(k): float(v) for k, v in breakdown.items()},
+                theory=theory,
+                radius=float(theory.radius),
+            )
         },
         "parity": {
             "theta_factor": float(theta_factor),
