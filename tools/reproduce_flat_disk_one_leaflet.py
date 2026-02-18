@@ -317,10 +317,10 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_count: int = 8,
     theta_mode: str = "scan",
     theta_initial: float = 0.0,
-    theta_optimize_steps: int = 60,
+    theta_optimize_steps: int = 20,
     theta_optimize_every: int = 1,
     theta_optimize_delta: float = 2.0e-4,
-    theta_optimize_inner_steps: int = 60,
+    theta_optimize_inner_steps: int = 20,
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
@@ -556,10 +556,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--theta-max", type=float, default=0.0014)
     ap.add_argument("--theta-count", type=int, default=8)
     ap.add_argument("--theta-initial", type=float, default=0.0)
-    ap.add_argument("--theta-optimize-steps", type=int, default=60)
+    ap.add_argument("--theta-optimize-steps", type=int, default=20)
     ap.add_argument("--theta-optimize-every", type=int, default=1)
     ap.add_argument("--theta-optimize-delta", type=float, default=2.0e-4)
-    ap.add_argument("--theta-optimize-inner-steps", type=int, default=60)
+    ap.add_argument("--theta-optimize-inner-steps", type=int, default=20)
     ap.add_argument("--output", default=str(DEFAULT_OUT))
     args = ap.parse_args(list(argv) if argv is not None else None)
 
