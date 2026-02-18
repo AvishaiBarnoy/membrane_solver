@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import TYPE_CHECKING, Any, Iterable
 
 import numpy as np
@@ -73,6 +74,32 @@ class BenchmarkOptimizeConfig:
             raise ValueError("theta_optimize_delta must be > 0.")
         if int(self.optimize_inner_steps) < 1:
             raise ValueError("theta_optimize_inner_steps must be >= 1.")
+
+
+def _resolve_optimize_preset(
+    *,
+    optimize_preset: str,
+    refine_level: int,
+    optimize_cfg: BenchmarkOptimizeConfig,
+) -> tuple[BenchmarkOptimizeConfig, str]:
+    """Resolve benchmark optimize controls from a named preset."""
+    preset = str(optimize_preset).lower()
+    if preset == "none":
+        return optimize_cfg, "none"
+    if preset == "fast_r3":
+        if int(refine_level) >= 3:
+            return (
+                BenchmarkOptimizeConfig(
+                    theta_initial=float(optimize_cfg.theta_initial),
+                    optimize_steps=10,
+                    optimize_every=1,
+                    optimize_delta=float(optimize_cfg.optimize_delta),
+                    optimize_inner_steps=10,
+                ),
+                "fast_r3",
+            )
+        return optimize_cfg, "fast_r3_inactive"
+    raise ValueError("optimize_preset must be 'none' or 'fast_r3'.")
 
 
 def _load_mesh_from_fixture(path: Path):
@@ -394,6 +421,7 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_optimize_every: int = 1,
     theta_optimize_delta: float = 2.0e-4,
     theta_optimize_inner_steps: int = 20,
+    optimize_preset: str = "none",
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
@@ -422,6 +450,7 @@ def run_flat_disk_one_leaflet_benchmark(
 
     scan_cfg = None
     optimize_cfg = None
+    effective_optimize_preset = "none"
     if theta_mode_str == "scan":
         scan_cfg = BenchmarkScanConfig(
             theta_min=float(theta_min),
@@ -436,6 +465,12 @@ def run_flat_disk_one_leaflet_benchmark(
             optimize_every=int(theta_optimize_every),
             optimize_delta=float(theta_optimize_delta),
             optimize_inner_steps=int(theta_optimize_inner_steps),
+        )
+        optimize_cfg.validate()
+        optimize_cfg, effective_optimize_preset = _resolve_optimize_preset(
+            optimize_preset=str(optimize_preset),
+            refine_level=int(refine_level),
+            optimize_cfg=optimize_cfg,
         )
         optimize_cfg.validate()
 
@@ -496,17 +531,21 @@ def run_flat_disk_one_leaflet_benchmark(
         }
     else:
         assert optimize_cfg is not None
+        t0 = perf_counter()
         theta_star = _run_theta_optimize(
             minim,
             optimize_cfg=optimize_cfg,
             reset_outer=True,
         )
+        optimize_seconds = float(perf_counter() - t0)
         optimize_report = {
             "theta_initial": float(optimize_cfg.theta_initial),
             "optimize_steps": int(optimize_cfg.optimize_steps),
             "optimize_every": int(optimize_cfg.optimize_every),
             "optimize_delta": float(optimize_cfg.optimize_delta),
             "optimize_inner_steps": int(optimize_cfg.optimize_inner_steps),
+            "optimize_seconds": optimize_seconds,
+            "optimize_preset_effective": str(effective_optimize_preset),
             "theta_star": float(theta_star),
         }
 
@@ -585,6 +624,8 @@ def run_flat_disk_one_leaflet_benchmark(
             "outer_mode": str(outer_mode),
             "smoothness_model": str(smoothness_model),
             "theta_mode": str(theta_mode_str),
+            "optimize_preset": str(optimize_preset).lower(),
+            "optimize_preset_effective": str(effective_optimize_preset),
             "theory_source": "docs/tex/1_disk_flat.tex",
         },
         "theory": theory.to_dict(),
@@ -642,6 +683,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--theta-optimize-every", type=int, default=1)
     ap.add_argument("--theta-optimize-delta", type=float, default=2.0e-4)
     ap.add_argument("--theta-optimize-inner-steps", type=int, default=20)
+    ap.add_argument(
+        "--optimize-preset",
+        choices=("none", "fast_r3"),
+        default="none",
+    )
     ap.add_argument("--output", default=str(DEFAULT_OUT))
     args = ap.parse_args(list(argv) if argv is not None else None)
 
@@ -659,6 +705,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         theta_optimize_every=args.theta_optimize_every,
         theta_optimize_delta=args.theta_optimize_delta,
         theta_optimize_inner_steps=args.theta_optimize_inner_steps,
+        optimize_preset=args.optimize_preset,
     )
 
     out_path = Path(args.output)

@@ -122,11 +122,33 @@ def test_flat_disk_theta_mode_optimize_runs_and_reports_result() -> None:
     )
 
     assert report["meta"]["theta_mode"] == "optimize"
+    assert report["meta"]["optimize_preset"] == "none"
+    assert report["meta"]["optimize_preset_effective"] == "none"
     assert report["scan"] is None
     assert report["optimize"] is not None
     assert float(report["mesh"]["theta_star"]) > 0.0
     assert float(report["parity"]["theta_factor"]) <= 2.0
     assert float(report["parity"]["energy_factor"]) <= 2.0
+
+
+@pytest.mark.regression
+def test_flat_disk_optimize_preset_fast_r3_is_noop_below_refine3() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        optimize_preset="fast_r3",
+    )
+
+    assert report["meta"]["optimize_preset"] == "fast_r3"
+    assert report["meta"]["optimize_preset_effective"] == "fast_r3_inactive"
+    opt = report["optimize"]
+    assert opt is not None
+    assert int(opt["optimize_steps"]) == 20
+    assert int(opt["optimize_inner_steps"]) == 20
+    assert float(opt["optimize_seconds"]) > 0.0
 
 
 @pytest.mark.regression
