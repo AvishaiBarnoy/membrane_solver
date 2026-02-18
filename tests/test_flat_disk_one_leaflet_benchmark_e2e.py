@@ -83,6 +83,26 @@ def test_outer_free_mode_does_not_shift_inner_theta_star() -> None:
     assert rel_shift < 0.10
 
 
+@pytest.mark.regression
+def test_flat_disk_splay_twist_mode_runs_with_zero_twist_default() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_min=0.0,
+        theta_max=0.0014,
+        theta_count=8,
+    )
+
+    assert report["meta"]["smoothness_model"] == "splay_twist"
+    breakdown = report["mesh"]["energy_breakdown"]
+    assert "tilt_splay_twist_in" in breakdown
+    assert float(report["mesh"]["planarity_z_span"]) < 1e-12
+    assert float(report["parity"]["theta_factor"]) <= 2.0
+    assert float(report["parity"]["energy_factor"]) <= 2.0
+
+
 @pytest.mark.acceptance
 def test_reproduce_flat_disk_one_leaflet_script_smoke(tmp_path) -> None:
     out_yaml = tmp_path / "flat_disk_one_leaflet_report.yaml"

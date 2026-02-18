@@ -220,8 +220,12 @@ python tools/reproduce_flat_disk_one_leaflet.py --outer-mode free
 Useful options:
 - `--fixture` (defaults to `tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml`)
 - `--refine-level` (default `1`)
+- `--smoothness-model` (`dirichlet|splay_twist`, default `dirichlet`)
 - `--theta-min`, `--theta-max`, `--theta-count`
 - `--output` (YAML report path)
+
+`splay_twist` uses `tilt_splay_twist_in` (Kozlov–Hamm-style split). The twist
+modulus defaults to zero via `tilt_twist_modulus_in=0` unless overridden.
 
 Acceptance/baseline coverage:
 - `tests/test_flat_disk_one_leaflet_benchmark_e2e.py`

@@ -18,6 +18,7 @@ from modules.energy import (
     tilt_smoothness,  # noqa: E402
     tilt_smoothness_in,  # noqa: E402
     tilt_smoothness_out,  # noqa: E402
+    tilt_splay_twist_in,  # noqa: E402
 )
 
 
@@ -242,3 +243,36 @@ def test_tilt_smoothness_leaflet_energy_array_matches_gradient_path():
         tilts_out=tilts_out,
     )
     assert e_out_only == pytest.approx(e_out_grad, rel=1e-12, abs=1e-12)
+
+
+def test_tilt_splay_twist_in_energy_array_matches_gradient_path():
+    mesh = _build_mesh()
+    mesh.global_parameters.set("tilt_splay_modulus_in", 0.6)
+    mesh.global_parameters.set("tilt_twist_modulus_in", 0.2)
+    param_resolver = ParameterResolver(mesh.global_parameters)
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    tilts_in = _rng_tilts(mesh.tilts_in_view().shape, 8)
+    grad_dummy = np.zeros_like(positions)
+    tilt_grad_in = np.zeros_like(positions)
+
+    e_in_grad = tilt_splay_twist_in.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_in=tilts_in,
+        tilt_in_grad_arr=tilt_grad_in,
+    )
+    e_in_only = tilt_splay_twist_in.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=tilts_in,
+    )
+    assert e_in_only == pytest.approx(e_in_grad, rel=1e-12, abs=1e-12)

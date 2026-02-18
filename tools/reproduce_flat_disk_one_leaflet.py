@@ -104,6 +104,7 @@ def _configure_benchmark_mesh(
     *,
     theory_params: FlatDiskTheoryParams,
     outer_mode: str,
+    smoothness_model: str,
 ) -> None:
     _ensure_repo_root_on_sys_path()
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -135,11 +136,21 @@ def _configure_benchmark_mesh(
 
     gp.set("bending_modulus_in", float(mapping["bending_modulus_in"]))
     gp.set("tilt_modulus_in", float(mapping["tilt_modulus_in"]))
+    gp.set("tilt_twist_modulus_in", 0.0)
+
+    if smoothness_model == "dirichlet":
+        smoothness_in_module = "tilt_smoothness_in"
+        smoothness_out_module = "tilt_smoothness_out"
+    elif smoothness_model == "splay_twist":
+        smoothness_in_module = "tilt_splay_twist_in"
+        smoothness_out_module = "tilt_smoothness_out"
+    else:
+        raise ValueError("smoothness_model must be 'dirichlet' or 'splay_twist'.")
 
     if outer_mode == "disabled":
         mesh.energy_modules = [
             "tilt_in",
-            "tilt_smoothness_in",
+            smoothness_in_module,
             "tilt_thetaB_contact_in",
         ]
         for vid in mesh.vertex_ids:
@@ -149,13 +160,14 @@ def _configure_benchmark_mesh(
     elif outer_mode == "free":
         mesh.energy_modules = [
             "tilt_in",
-            "tilt_smoothness_in",
+            smoothness_in_module,
             "tilt_out",
-            "tilt_smoothness_out",
+            smoothness_out_module,
             "tilt_thetaB_contact_in",
         ]
         gp.set("bending_modulus_out", float(mapping["bending_modulus_in"]))
         gp.set("tilt_modulus_out", float(mapping["tilt_modulus_in"]))
+        gp.set("tilt_twist_modulus_out", 0.0)
         for vid in mesh.vertex_ids:
             v = mesh.vertices[int(vid)]
             v.tilt_out = np.zeros(3, dtype=float)
@@ -245,6 +257,7 @@ def run_flat_disk_one_leaflet_benchmark(
     fixture: Path | str = DEFAULT_FIXTURE,
     refine_level: int = 1,
     outer_mode: str = "disabled",
+    smoothness_model: str = "dirichlet",
     theta_min: float = 0.0,
     theta_max: float = 0.0014,
     theta_count: int = 8,
@@ -281,7 +294,12 @@ def run_flat_disk_one_leaflet_benchmark(
     for _ in range(int(refine_level)):
         mesh = refine_triangle_mesh(mesh)
 
-    _configure_benchmark_mesh(mesh, theory_params=params, outer_mode=outer_mode)
+    _configure_benchmark_mesh(
+        mesh,
+        theory_params=params,
+        outer_mode=outer_mode,
+        smoothness_model=smoothness_model,
+    )
     _collect_disk_boundary_rows(mesh, group="disk")
 
     minim = _build_minimizer(mesh)
@@ -384,6 +402,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "fixture": str(fixture_path.relative_to(ROOT)),
             "refine_level": int(refine_level),
             "outer_mode": str(outer_mode),
+            "smoothness_model": str(smoothness_model),
             "theory_source": "docs/tex/1_disk_flat.tex",
         },
         "theory": theory.to_dict(),
@@ -427,6 +446,11 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--fixture", default=str(DEFAULT_FIXTURE))
     ap.add_argument("--refine-level", type=int, default=1)
     ap.add_argument("--outer-mode", choices=("disabled", "free"), default="disabled")
+    ap.add_argument(
+        "--smoothness-model",
+        choices=("dirichlet", "splay_twist"),
+        default="dirichlet",
+    )
     ap.add_argument("--theta-min", type=float, default=0.0)
     ap.add_argument("--theta-max", type=float, default=0.0014)
     ap.add_argument("--theta-count", type=int, default=8)
@@ -437,6 +461,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         fixture=args.fixture,
         refine_level=args.refine_level,
         outer_mode=args.outer_mode,
+        smoothness_model=args.smoothness_model,
         theta_min=args.theta_min,
         theta_max=args.theta_max,
         theta_count=args.theta_count,
