@@ -6,26 +6,25 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 
 import numpy as np
 import yaml
 
-from geometry.geom_io import load_data, parse_geometry
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.refinement import refine_triangle_mesh
-from runtime.steppers.gradient_descent import GradientDescent
-from tools.diagnostics.flat_disk_one_leaflet_theory import (
-    FlatDiskTheoryParams,
-    compute_flat_disk_theory,
-    quadratic_min_from_scan,
-    solver_mapping_from_theory,
-    tex_reference_params,
-)
-
 ROOT = Path(__file__).resolve().parent.parent
+
+if TYPE_CHECKING:
+    from runtime.minimizer import Minimizer
+    from tools.diagnostics.flat_disk_one_leaflet_theory import FlatDiskTheoryParams
+
+
+def _ensure_repo_root_on_sys_path() -> None:
+    import sys
+
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+
+
 DEFAULT_FIXTURE = (
     ROOT / "tests" / "fixtures" / "kozlov_1disk_3d_free_disk_theory_parity.yaml"
 )
@@ -55,6 +54,9 @@ class BenchmarkScanConfig:
 
 
 def _load_mesh_from_fixture(path: Path):
+    _ensure_repo_root_on_sys_path()
+    from geometry.geom_io import load_data, parse_geometry
+
     data = load_data(str(path))
     return parse_geometry(data)
 
@@ -103,6 +105,11 @@ def _configure_benchmark_mesh(
     theory_params: FlatDiskTheoryParams,
     outer_mode: str,
 ) -> None:
+    _ensure_repo_root_on_sys_path()
+    from tools.diagnostics.flat_disk_one_leaflet_theory import (
+        solver_mapping_from_theory,
+    )
+
     gp = mesh.global_parameters
     mapping = solver_mapping_from_theory(theory_params)
 
@@ -163,6 +170,12 @@ def _configure_benchmark_mesh(
 
 
 def _build_minimizer(mesh) -> Minimizer:
+    _ensure_repo_root_on_sys_path()
+    from runtime.constraint_manager import ConstraintModuleManager
+    from runtime.energy_manager import EnergyModuleManager
+    from runtime.minimizer import Minimizer
+    from runtime.steppers.gradient_descent import GradientDescent
+
     return Minimizer(
         mesh,
         mesh.global_parameters,
@@ -238,6 +251,14 @@ def run_flat_disk_one_leaflet_benchmark(
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
+    _ensure_repo_root_on_sys_path()
+    from runtime.refinement import refine_triangle_mesh
+    from tools.diagnostics.flat_disk_one_leaflet_theory import (
+        compute_flat_disk_theory,
+        quadratic_min_from_scan,
+        tex_reference_params,
+    )
+
     fixture_path = Path(fixture)
     if not fixture_path.is_absolute():
         fixture_path = (ROOT / fixture_path).resolve()
