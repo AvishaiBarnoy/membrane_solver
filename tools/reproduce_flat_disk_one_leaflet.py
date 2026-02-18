@@ -309,7 +309,7 @@ def _profile_metrics(mesh, *, radius: float) -> dict[str, float]:
 def run_flat_disk_one_leaflet_benchmark(
     *,
     fixture: Path | str = DEFAULT_FIXTURE,
-    refine_level: int = 1,
+    refine_level: int = 2,
     outer_mode: str = "disabled",
     smoothness_model: str = "dirichlet",
     theta_min: float = 0.0,
@@ -544,7 +544,7 @@ def _write_yaml(path: Path, data: dict[str, Any]) -> None:
 def main(argv: Iterable[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fixture", default=str(DEFAULT_FIXTURE))
-    ap.add_argument("--refine-level", type=int, default=1)
+    ap.add_argument("--refine-level", type=int, default=2)
     ap.add_argument("--outer-mode", choices=("disabled", "free"), default="disabled")
     ap.add_argument(
         "--smoothness-model",

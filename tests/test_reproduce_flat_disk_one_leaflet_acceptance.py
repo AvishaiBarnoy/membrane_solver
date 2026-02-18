@@ -85,8 +85,4 @@ def test_reproduce_flat_disk_one_leaflet_matches_yaml_baseline_with_tolerances(
             f"{mode}:{path}: expected {expected} +/- {tol}, got {actual}"
         )
 
-    expected_meets_factor_2 = bool(
-        float(baseline["metrics"]["parity"]["theta_factor"]) <= 2.0
-        and float(baseline["metrics"]["parity"]["energy_factor"]) <= 2.0
-    )
-    assert bool(report["parity"]["meets_factor_2"]) == expected_meets_factor_2
+    assert bool(report["parity"]["meets_factor_2"]) is True
