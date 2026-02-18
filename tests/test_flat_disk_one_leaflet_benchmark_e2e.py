@@ -215,6 +215,8 @@ def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize(tmp_path) -
             str(out_yaml),
             "--outer-mode",
             "disabled",
+            "--refine-level",
+            "1",
             "--smoothness-model",
             "splay_twist",
             "--theta-mode",

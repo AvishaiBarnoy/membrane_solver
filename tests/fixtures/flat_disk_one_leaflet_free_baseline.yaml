@@ -1,6 +1,6 @@
 meta:
   fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml
-  refine_level: 1
+  refine_level: 2
   outer_mode: free
   theory_source: docs/tex/1_disk_flat.tex
   theta_min: 0.0
@@ -19,18 +19,18 @@ metrics:
     theta_star: 0.0006366042172889616
     total: -0.003999902265110932
   mesh:
-    theta_star: 0.00028947113566363513
-    total_energy: -0.0018188007865755978
+    theta_star: 0.0004391698789162366
+    total_energy: -0.0027593857307462912
     planarity_z_span: 0.0
     outer_tilt_max_free_rows: 0.0
-    outer_decay_probe_max_before: 0.0038106668473338176
-    outer_decay_probe_max_after: 1.0760068202559832e-11
+    outer_decay_probe_max_before: 0.004333990734774178
+    outer_decay_probe_max_after: 1.1908729540726538e-08
     profile:
-      rim_abs_median: 0.00028947113566363513
-      outer_abs_median: 5.325908469819765e-11
+      rim_abs_median: 0.00021958759574139462
+      outer_abs_median: 6.493749269575801e-14
   parity:
-    theta_factor: 2.1991975670717454
-    energy_factor: 2.1991975672288273
+    theta_factor: 1.4495625675876143
+    energy_factor: 1.4495625676911563
 tolerances:
   theory:
     lambda_value: 1.0e-12

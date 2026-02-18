@@ -225,7 +225,7 @@ python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled --smoothne
 
 Useful options:
 - `--fixture` (defaults to `tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml`)
-- `--refine-level` (default `1`)
+- `--refine-level` (default `2`)
 - `--smoothness-model` (`dirichlet|splay_twist`, default `dirichlet`)
 - `--theta-mode` (`scan|optimize`, default `scan`)
 - Scan mode: `--theta-min`, `--theta-max`, `--theta-count`

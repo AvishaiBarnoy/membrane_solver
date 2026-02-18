@@ -316,7 +316,7 @@ Interactive commands:
   - Physical `theta_B` scalar optimization mode:
     `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled --smoothness-model splay_twist --theta-mode optimize`.
   - Common options:
-    `--fixture`, `--refine-level`, `--smoothness-model`, `--theta-mode`, `--output`.
+    `--fixture`, `--refine-level` (default `2`), `--smoothness-model`, `--theta-mode`, `--output`.
   - Scan controls (`--theta-mode scan`):
     `--theta-min`, `--theta-max`, `--theta-count`.
   - Optimize controls (`--theta-mode optimize`):
