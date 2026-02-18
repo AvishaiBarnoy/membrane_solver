@@ -5,6 +5,12 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 ## [Unreleased]
 ### Added
 - CI now runs categorized test subsets via pytest markers: `unit`, `regression`, and `e2e`.
+- Flat one-leaflet disk benchmark reproduction tooling:
+  - Theory utility: `tools/diagnostics/flat_disk_one_leaflet_theory.py` (exact formulas from `docs/tex/1_disk_flat.tex`).
+  - Reproduction CLI: `tools/reproduce_flat_disk_one_leaflet.py` with `--outer-mode disabled|free`, refinement and theta-scan controls, and YAML reporting.
+  - Free-mode report now includes deterministic outer-leaflet perturbation-decay probe metrics (`outer_decay_probe_max_before/after`) to confirm undriven outer-tilt relaxation.
+  - Baseline acceptance fixtures and CLI parity test for both modes (`tests/fixtures/flat_disk_one_leaflet_disabled_baseline.yaml`, `tests/fixtures/flat_disk_one_leaflet_free_baseline.yaml`, `tests/test_reproduce_flat_disk_one_leaflet_acceptance.py`).
+  - Acceptance/unit/regression tests for TeX parity, planarity, one-leaflet decay profile, and free-outer-leaflet consistency (`tests/test_flat_disk_one_leaflet_theory_unit.py`, `tests/test_flat_disk_one_leaflet_benchmark_e2e.py`).
 - Interactive CLI:
   - Tab completion for command/macro names (TTY only).
   - Compound commands via semicolons (e.g. `g50; V3; g10`).

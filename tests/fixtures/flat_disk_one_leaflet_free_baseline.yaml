@@ -1,0 +1,57 @@
+meta:
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml
+  refine_level: 1
+  outer_mode: free
+  theory_source: docs/tex/1_disk_flat.tex
+  theta_min: 0.0
+  theta_max: 0.0014
+  theta_count: 8
+  format: yaml
+metrics:
+  theory:
+    lambda_value: 0.06666666666666667
+    lambda_inverse: 15.0
+    lambda_radius: 7.0000000005
+    ratio_i1_i0: 0.9255322107997379
+    ratio_k1_k0: 1.069178530096173
+    coeff_A: 9869.845560880503
+    coeff_B: 12.56637061609453
+    theta_star: 0.0006366042172889616
+    total: -0.003999902265110932
+  mesh:
+    theta_star: 0.0004543584771826882
+    total_energy: -0.0028548185082170816
+    planarity_z_span: 0.0
+    outer_tilt_max_free_rows: 0.0
+    outer_decay_probe_max_before: 0.0038106668473338176
+    outer_decay_probe_max_after: 4.1024963316178914e-12
+    profile:
+      rim_abs_median: 0.0003048154033917127
+      outer_abs_median: 6.172313861915238e-11
+  parity:
+    theta_factor: 1.4011056231113217
+    energy_factor: 1.4011056232113996
+tolerances:
+  theory:
+    lambda_value: 1.0e-12
+    lambda_inverse: 1.0e-10
+    lambda_radius: 1.0e-8
+    ratio_i1_i0: 1.0e-8
+    ratio_k1_k0: 1.0e-8
+    coeff_A: 1.0e-3
+    coeff_B: 1.0e-7
+    theta_star: 1.0e-10
+    total: 1.0e-8
+  mesh:
+    theta_star: 1.0e-9
+    total_energy: 1.0e-7
+    planarity_z_span: 1.0e-12
+    outer_tilt_max_free_rows: 1.0e-10
+    outer_decay_probe_max_before: 5.0e-6
+    outer_decay_probe_max_after: 1.0e-7
+    profile:
+      rim_abs_median: 1.0e-8
+      outer_abs_median: 1.0e-10
+  parity:
+    theta_factor: 1.0e-8
+    energy_factor: 1.0e-8

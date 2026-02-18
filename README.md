@@ -203,6 +203,31 @@ Exploratory expansion lane (non-blocking policy checks):
 - Stage 4 is explicitly `r; g10` with rollback lockout rules.
 - fixed-lane trend + guarded-gate runbook: see `manual.md`.
 
+## Flat 1-disk benchmark (`docs/tex/1_disk_flat.tex`)
+
+Reproduce the flat one-leaflet benchmark report (TeX-theory terms + mesh parity):
+
+```bash
+python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled
+```
+
+Validate the free-outer-leaflet variant (outer leaflet undriven, with perturbation-decay probe):
+
+```bash
+python tools/reproduce_flat_disk_one_leaflet.py --outer-mode free
+```
+
+Useful options:
+- `--fixture` (defaults to `tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml`)
+- `--refine-level` (default `1`)
+- `--theta-min`, `--theta-max`, `--theta-count`
+- `--output` (YAML report path)
+
+Acceptance/baseline coverage:
+- `tests/test_flat_disk_one_leaflet_benchmark_e2e.py`
+- `tests/test_flat_disk_one_leaflet_theory_unit.py`
+- `tests/test_reproduce_flat_disk_one_leaflet_acceptance.py`
+
 The loader automatically triangulates any facet with more than three edges
 using `refine_polygonal_facets`. Triangular facets remain unchanged. The
 returned mesh is therefore ready for optimization without further refinement.

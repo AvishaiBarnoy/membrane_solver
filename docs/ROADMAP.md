@@ -224,6 +224,13 @@ intended for development and planning; users should consult `README.md` and
           `modules/energy/tilt_disk_target_out.py`,
           `tests/test_kozlov_1disk_3d_single_leaflet_profile.py`,
           `tests/test_kozlov_1disk_3d_bilayer_profile.py`).
+    - [x] Flat one-leaflet TeX benchmark reproduction (`docs/tex/1_disk_flat.tex`)
+          with exact theory utility, CLI report generator, and acceptance/regression
+          coverage for both outer-leaflet-disabled and outer-leaflet-free modes
+          (`tools/diagnostics/flat_disk_one_leaflet_theory.py`,
+          `tools/reproduce_flat_disk_one_leaflet.py`,
+          `tests/test_flat_disk_one_leaflet_theory_unit.py`,
+          `tests/test_flat_disk_one_leaflet_benchmark_e2e.py`).
     - [ ] E2E regression: for γ=0, recover the 1_disk_3d predictions
           (`θ^p(r)=θ^d(r)` in the outer region and `φ*≈θ_B/2`).
      - [ ] Future: enforce/validate that interacting tilt sources on a given
