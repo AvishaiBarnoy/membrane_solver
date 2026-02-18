@@ -308,6 +308,21 @@ Interactive commands:
   `meshes/caveolin/kozlov_1disk_3d_tensionless_bilayer_profile.yaml`.
 - Diagnostics helper:
   `python tools/diagnose_1disk_3d_single_leaflet.py --steps 50`.
+- Flat one-leaflet TeX benchmark reproduction:
+  - Theory-only exact values from `docs/tex/1_disk_flat.tex`:
+    `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled`.
+  - Free-outer-leaflet validation run:
+    `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode free`.
+  - Common options:
+    `--fixture`, `--refine-level`, `--theta-min`, `--theta-max`, `--theta-count`, `--output`.
+  - Baseline acceptance fixtures:
+    - `tests/fixtures/flat_disk_one_leaflet_disabled_baseline.yaml`
+    - `tests/fixtures/flat_disk_one_leaflet_free_baseline.yaml`
+  - Baseline acceptance lane:
+    `tests/test_reproduce_flat_disk_one_leaflet_acceptance.py`
+  - Behavior/failure-mode tests:
+    `tests/test_flat_disk_one_leaflet_benchmark_e2e.py`
+    (including empty-scan-bracket and missing-disk-group error paths).
 - Kozlov Milestone-C mesh (3D shape coupling) lives under `meshes/caveolin/`:
   - `meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml` (bilayer tilt↔curvature coupling; use `break_symmetry` macro or `kick` if it stays flat)
 - Bilayer tilt energies use `tilt_in`, `tilt_out`, `tilt_smoothness_in`, `tilt_smoothness_out`,
