@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     name: Lint (ruff)
@@ -40,19 +44,16 @@ jobs:
 
 
   test:
-    name: Unit tests (py${{ matrix.python-version }})
+    name: Unit tests (py3.12)
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12"]
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
           cache: pip
 
       - name: Install dependencies
@@ -61,7 +62,33 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e .
 
-      - name: Run unit tests with coverage
+      - name: Run fast unit tests
+        run: |
+          pytest -q \
+            tests/test_thetaB_scalar_optimizer_unit.py \
+            tests/test_thetaB_optimizer_energy_guard.py \
+            tests/test_flat_disk_one_leaflet_theory_unit.py
+
+  test-unit-full:
+    name: Unit tests full + coverage (py3.12, non-PR)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e .
+
+      - name: Run full unit tests with coverage
         run: |
           pytest -q -m "unit" --cov=. --cov-report=xml
 
