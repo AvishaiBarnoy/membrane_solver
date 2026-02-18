@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from geometry.geom_io import load_data, parse_geometry
 from modules.constraints import tilt_thetaB_boundary_in
 from runtime.constraint_manager import ConstraintModuleManager
+from runtime.refinement import refine_triangle_mesh
 
 
 def _fixture_path(name: str) -> str:
@@ -231,3 +232,84 @@ def test_tilt_thetaB_boundary_in_shape_gradient_hooks_return_none() -> None:
         )
         is None
     )
+
+
+def test_tilt_thetaB_boundary_in_geometric_fallback_covers_unrefined_ring_tags() -> (
+    None
+):
+    mesh = parse_geometry(
+        load_data(_fixture_path("kozlov_1disk_3d_free_disk_theory_parity.yaml"))
+    )
+    mesh = refine_triangle_mesh(mesh)
+    gp = mesh.global_parameters
+    gp.set("tilt_thetaB_value", 0.05)
+    gp.set("tilt_thetaB_center", [0.0, 0.0, 0.0])
+    gp.set("tilt_thetaB_normal", [0.0, 0.0, 1.0])
+    gp.set("tilt_thetaB_group_in", "disk")
+
+    cm_circle = ConstraintModuleManager(["pin_to_circle"])
+    cm_circle.enforce_all(mesh, global_params=gp, context="mesh_operation")
+
+    positions = mesh.positions_view()
+    r = np.linalg.norm(positions[:, :2], axis=1)
+
+    tagged_rows = []
+    for vid in mesh.vertex_ids:
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if (
+            opts.get("rim_slope_match_group") == "disk"
+            or opts.get("tilt_thetaB_group_in") == "disk"
+            or opts.get("tilt_thetaB_group") == "disk"
+        ):
+            tagged_rows.append(mesh.vertex_index_to_row[int(vid)])
+    tagged_rows = np.asarray(tagged_rows, dtype=int)
+    assert tagged_rows.size > 0
+
+    target_radius = float(np.median(r[tagged_rows]))
+    rim_rows = np.flatnonzero(np.isclose(r, target_radius, atol=1e-6))
+    assert rim_rows.size > 0
+
+    stripped_rows = rim_rows[::2]
+    for row in stripped_rows:
+        vid = int(mesh.vertex_ids[int(row)])
+        opts = getattr(mesh.vertices[vid], "options", None) or {}
+        for key in (
+            "rim_slope_match_group",
+            "tilt_thetaB_group_in",
+            "tilt_thetaB_group",
+        ):
+            opts.pop(key, None)
+        mesh.vertices[vid].options = opts
+
+    tagged_rows_after = []
+    for vid in mesh.vertex_ids:
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if (
+            opts.get("rim_slope_match_group") == "disk"
+            or opts.get("tilt_thetaB_group_in") == "disk"
+            or opts.get("tilt_thetaB_group") == "disk"
+        ):
+            tagged_rows_after.append(mesh.vertex_index_to_row[int(vid)])
+    tagged_rows_after = np.asarray(tagged_rows_after, dtype=int)
+    assert tagged_rows_after.size < rim_rows.size
+
+    data = tilt_thetaB_boundary_in._boundary_directions(mesh, gp, positions=positions)
+    assert data is not None
+    selected_rows, _ = data
+    assert np.intersect1d(selected_rows, rim_rows).size == rim_rows.size
+    assert np.intersect1d(selected_rows, stripped_rows).size > 0
+
+    normals = mesh.vertex_normals(positions=positions)
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_in[:] = 0.0
+    tilts_in[:, 1] = 2e-3
+    tilts_in = tilts_in - np.einsum("ij,ij->i", tilts_in, normals)[:, None] * normals
+    mesh.set_tilts_in_from_array(tilts_in)
+
+    cm = ConstraintModuleManager(["tilt_thetaB_boundary_in"])
+    cm.enforce_tilt_constraints(mesh, global_params=gp)
+
+    enforced = mesh.tilts_in_view()
+    r_dir = _tangent_radial_directions(mesh, rim_rows)
+    theta_vals = np.einsum("ij,ij->i", enforced[rim_rows], r_dir)
+    assert float(np.max(np.abs(theta_vals - 0.05))) < 1e-10

@@ -109,6 +109,56 @@ def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
     return out
 
 
+def _augment_disk_ring_rows_geometrically(
+    rows: np.ndarray,
+    *,
+    positions: np.ndarray,
+    center: np.ndarray,
+    normal: np.ndarray,
+) -> np.ndarray:
+    """Expand tagged disk rows to include same-plane, same-radius ring vertices."""
+    if rows.size == 0:
+        return rows
+
+    pts = positions[rows]
+    rel = pts - center[None, :]
+    proj = rel - np.einsum("ij,j->i", rel, normal)[:, None] * normal[None, :]
+    radii = np.linalg.norm(proj, axis=1)
+    good = radii > 1e-12
+    if not np.any(good):
+        return rows
+
+    target_radius = float(np.median(radii[good]))
+    ring_pts = pts[good]
+    spacing = 0.0
+    if ring_pts.shape[0] >= 2:
+        diff = ring_pts[:, None, :] - ring_pts[None, :, :]
+        dmat = np.linalg.norm(diff, axis=2)
+        dmat[dmat < 1e-12] = np.inf
+        nearest = np.min(dmat, axis=1)
+        nearest = nearest[np.isfinite(nearest)]
+        if nearest.size:
+            spacing = float(np.median(nearest))
+
+    radial_tol = max(1e-8, 2e-3 * max(target_radius, 1.0), 0.2 * spacing)
+    plane_tol = max(1e-8, 0.2 * radial_tol)
+
+    all_rel = positions - center[None, :]
+    plane_dist = np.abs(np.einsum("ij,j->i", all_rel, normal))
+    all_proj = (
+        all_rel - np.einsum("ij,j->i", all_rel, normal)[:, None] * normal[None, :]
+    )
+    all_radii = np.linalg.norm(all_proj, axis=1)
+
+    candidate_mask = (np.abs(all_radii - target_radius) <= radial_tol) & (
+        plane_dist <= plane_tol
+    )
+    candidate_rows = np.flatnonzero(candidate_mask).astype(int, copy=False)
+    if candidate_rows.size == 0:
+        return rows
+    return np.unique(np.concatenate((rows.astype(int, copy=False), candidate_rows)))
+
+
 def _boundary_directions(
     mesh: Mesh,
     global_params,
@@ -146,8 +196,16 @@ def _boundary_directions(
     if rows.size == 0:
         return None
 
+    tagged_pts = positions[rows]
+    normal = _resolve_normal(global_params, tagged_pts)
+    if str(group) == "disk":
+        rows = _augment_disk_ring_rows_geometrically(
+            rows,
+            positions=positions,
+            center=center,
+            normal=normal,
+        )
     pts = positions[rows]
-    normal = _resolve_normal(global_params, pts)
 
     r_vec = pts - center[None, :]
     r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]

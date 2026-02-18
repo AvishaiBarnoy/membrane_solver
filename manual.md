@@ -313,8 +313,17 @@ Interactive commands:
     `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled`.
   - Free-outer-leaflet validation run:
     `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode free`.
+  - Physical `theta_B` scalar optimization mode:
+    `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled --smoothness-model splay_twist --theta-mode optimize`.
   - Common options:
-    `--fixture`, `--refine-level`, `--theta-min`, `--theta-max`, `--theta-count`, `--output`.
+    `--fixture`, `--refine-level`, `--smoothness-model`, `--theta-mode`, `--output`.
+  - Scan controls (`--theta-mode scan`):
+    `--theta-min`, `--theta-max`, `--theta-count`.
+  - Optimize controls (`--theta-mode optimize`):
+    `--theta-initial`, `--theta-optimize-steps`, `--theta-optimize-every`, `--theta-optimize-delta`, `--theta-optimize-inner-steps`.
+  - `--smoothness-model splay_twist` enables inner-leaflet KH-style
+    splay/twist splitting (`tilt_splay_twist_in`); by default
+    `tilt_twist_modulus_in` is zero unless explicitly set.
   - Baseline acceptance fixtures:
     - `tests/fixtures/flat_disk_one_leaflet_disabled_baseline.yaml`
     - `tests/fixtures/flat_disk_one_leaflet_free_baseline.yaml`

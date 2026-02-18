@@ -5,6 +5,8 @@ import numpy as np
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
+from geometry.geom_io import load_data, parse_geometry
+from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_polygonal_facets, refine_triangle_mesh
 
 
@@ -245,6 +247,47 @@ def test_midpoint_fixed_if_edge_fixed_even_if_vertices_not_fixed():
     assert midpoint.fixed, (
         "Midpoint should be fixed if edge is fixed, even if parent vertices are not"
     )
+
+
+def test_refine_triangle_mesh_inherits_disk_interface_tags_on_rim_midpoints():
+    fixture = os.path.join(
+        os.path.dirname(__file__),
+        "fixtures",
+        "kozlov_1disk_3d_free_disk_theory_parity.yaml",
+    )
+    mesh = parse_geometry(load_data(fixture))
+    old_ids = set(int(vid) for vid in mesh.vertex_ids)
+
+    disk_rows = []
+    for vid in mesh.vertex_ids:
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if opts.get("rim_slope_match_group") == "disk":
+            disk_rows.append(mesh.vertex_index_to_row[int(vid)])
+    disk_rows = np.asarray(disk_rows, dtype=int)
+    assert disk_rows.size > 0
+
+    positions = mesh.positions_view()
+    target_radius = float(np.median(np.linalg.norm(positions[disk_rows, :2], axis=1)))
+
+    refined = refine_triangle_mesh(mesh)
+    cm = ConstraintModuleManager(["pin_to_circle"])
+    cm.enforce_all(
+        refined, global_params=refined.global_parameters, context="mesh_operation"
+    )
+    new_ring_midpoints = []
+    for vid in refined.vertex_ids:
+        if int(vid) in old_ids:
+            continue
+        v = refined.vertices[int(vid)]
+        r = float(np.linalg.norm(np.asarray(v.position, dtype=float)[:2]))
+        if abs(r - target_radius) <= 1e-6:
+            new_ring_midpoints.append(v)
+
+    assert new_ring_midpoints, "Expected refined rim midpoint vertices at disk radius."
+    for vertex in new_ring_midpoints:
+        opts = getattr(vertex, "options", None) or {}
+        assert opts.get("rim_slope_match_group") == "disk"
+        assert opts.get("tilt_thetaB_group_in") == "disk"
 
 
 def test_connectivity_maps_after_polygonal_refinement():
