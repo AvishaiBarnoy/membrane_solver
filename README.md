@@ -217,11 +217,19 @@ Validate the free-outer-leaflet variant (outer leaflet undriven, with perturbati
 python tools/reproduce_flat_disk_one_leaflet.py --outer-mode free
 ```
 
+Run the physical scalar-DOF variant (optimize `theta_B` instead of scanning):
+
+```bash
+python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled --smoothness-model splay_twist --theta-mode optimize
+```
+
 Useful options:
 - `--fixture` (defaults to `tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml`)
 - `--refine-level` (default `1`)
 - `--smoothness-model` (`dirichlet|splay_twist`, default `dirichlet`)
-- `--theta-min`, `--theta-max`, `--theta-count`
+- `--theta-mode` (`scan|optimize`, default `scan`)
+- Scan mode: `--theta-min`, `--theta-max`, `--theta-count`
+- Optimize mode: `--theta-initial`, `--theta-optimize-steps`, `--theta-optimize-every`, `--theta-optimize-delta`, `--theta-optimize-inner-steps`
 - `--output` (YAML report path)
 
 `splay_twist` uses `tilt_splay_twist_in` (Kozlov–Hamm-style split). The twist

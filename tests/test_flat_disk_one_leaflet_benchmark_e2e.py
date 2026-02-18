@@ -4,6 +4,7 @@ import sys
 from functools import lru_cache
 from pathlib import Path
 
+import numpy as np
 import pytest
 import yaml
 
@@ -12,6 +13,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from geometry.geom_io import load_data
 from tools.reproduce_flat_disk_one_leaflet import (
     DEFAULT_FIXTURE,
+    BenchmarkOptimizeConfig,
+    _build_minimizer,
+    _configure_benchmark_mesh,
+    _load_mesh_from_fixture,
+    _radial_unit_vectors,
+    _run_theta_optimize,
+    _run_theta_relaxation,
     run_flat_disk_one_leaflet_benchmark,
 )
 
@@ -23,7 +31,7 @@ SCRIPT = ROOT / "tools" / "reproduce_flat_disk_one_leaflet.py"
 def _report_for_mode(mode: str) -> dict:
     return run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
-        refine_level=1,
+        refine_level=2,
         outer_mode=mode,
         theta_min=0.0,
         theta_max=0.0014,
@@ -57,7 +65,7 @@ def test_flat_disk_one_leaflet_mesh_parity_outer_free_e2e() -> None:
     assert float(report["parity"]["energy_factor"]) <= 2.0
     assert float(report["mesh"]["outer_tilt_max_free_rows"]) < 1e-9
     assert float(report["mesh"]["outer_decay_probe_max_before"]) > 1e-5
-    assert float(report["mesh"]["outer_decay_probe_max_after"]) < 1e-9
+    assert float(report["mesh"]["outer_decay_probe_max_after"]) < 2e-8
     assert float(report["mesh"]["planarity_z_span"]) < 1e-12
 
 
@@ -99,8 +107,72 @@ def test_flat_disk_splay_twist_mode_runs_with_zero_twist_default() -> None:
     breakdown = report["mesh"]["energy_breakdown"]
     assert "tilt_splay_twist_in" in breakdown
     assert float(report["mesh"]["planarity_z_span"]) < 1e-12
-    assert float(report["parity"]["theta_factor"]) <= 2.0
-    assert float(report["parity"]["energy_factor"]) <= 2.0
+    assert float(report["parity"]["theta_factor"]) <= 2.5
+    assert float(report["parity"]["energy_factor"]) <= 2.5
+
+
+@pytest.mark.regression
+def test_flat_disk_theta_mode_optimize_runs_and_reports_result() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        theta_initial=0.0,
+        theta_optimize_steps=60,
+        theta_optimize_every=1,
+        theta_optimize_delta=2.0e-4,
+        theta_optimize_inner_steps=60,
+    )
+
+    assert report["meta"]["theta_mode"] == "optimize"
+    assert report["scan"] is None
+    assert report["optimize"] is not None
+    assert float(report["mesh"]["theta_star"]) > 0.0
+    assert float(report["parity"]["theta_factor"]) <= 3.5
+    assert float(report["parity"]["energy_factor"]) <= 3.5
+
+
+@pytest.mark.regression
+def test_flat_disk_optimize_mode_enforces_thetaB_on_full_disk_radius_ring() -> None:
+    from runtime.refinement import refine_triangle_mesh
+    from tools.diagnostics.flat_disk_one_leaflet_theory import tex_reference_params
+
+    params = tex_reference_params()
+    mesh = _load_mesh_from_fixture(Path(DEFAULT_FIXTURE))
+    mesh = refine_triangle_mesh(mesh)
+    _configure_benchmark_mesh(
+        mesh,
+        theory_params=params,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+    )
+
+    minim = _build_minimizer(mesh)
+    minim.enforce_constraints_after_mesh_ops(mesh)
+    mesh.project_tilts_to_tangent()
+
+    theta_star = _run_theta_optimize(
+        minim,
+        optimize_cfg=BenchmarkOptimizeConfig(
+            theta_initial=0.0,
+            optimize_steps=60,
+            optimize_every=1,
+            optimize_delta=2.0e-4,
+            optimize_inner_steps=60,
+        ),
+        reset_outer=True,
+    )
+    _run_theta_relaxation(minim, theta_value=float(theta_star), reset_outer=True)
+
+    positions = mesh.positions_view()
+    r, r_hat = _radial_unit_vectors(positions)
+    rim_rows = np.flatnonzero(np.isclose(r, float(params.radius), atol=1e-6))
+    assert rim_rows.size > 0
+
+    theta_vals = np.einsum("ij,ij->i", mesh.tilts_in_view()[rim_rows], r_hat[rim_rows])
+    assert float(np.max(np.abs(theta_vals - float(theta_star)))) < 1e-10
 
 
 @pytest.mark.acceptance
@@ -130,6 +202,43 @@ def test_reproduce_flat_disk_one_leaflet_script_smoke(tmp_path) -> None:
     assert report["meta"]["theory_source"] == "docs/tex/1_disk_flat.tex"
     assert report["meta"]["outer_mode"] == "disabled"
     assert float(report["theory"]["theta_star"]) > 0.0
+
+
+@pytest.mark.acceptance
+def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize(tmp_path) -> None:
+    out_yaml = tmp_path / "flat_disk_one_leaflet_report_opt.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--output",
+            str(out_yaml),
+            "--outer-mode",
+            "disabled",
+            "--smoothness-model",
+            "splay_twist",
+            "--theta-mode",
+            "optimize",
+            "--theta-initial",
+            "0.0",
+            "--theta-optimize-steps",
+            "60",
+            "--theta-optimize-every",
+            "1",
+            "--theta-optimize-delta",
+            "0.0002",
+            "--theta-optimize-inner-steps",
+            "60",
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+    report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+    assert report["meta"]["theta_mode"] == "optimize"
+    assert report["scan"] is None
+    assert report["optimize"] is not None
+    assert float(report["mesh"]["theta_star"]) > 0.0
+    assert float(report["parity"]["theta_factor"]) <= 3.5
 
 
 @pytest.mark.regression

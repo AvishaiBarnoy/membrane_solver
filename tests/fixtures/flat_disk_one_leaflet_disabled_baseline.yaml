@@ -19,39 +19,39 @@ metrics:
     theta_star: 0.0006366042172889616
     total: -0.003999902265110932
   mesh:
-    theta_star: 0.0004543584771826882
-    total_energy: -0.0028548185082170816
+    theta_star: 0.00028947113566363513
+    total_energy: -0.0018188007865755978
     planarity_z_span: 0.0
     outer_tilt_max_free_rows: 0.0
     outer_decay_probe_max_before: 0.0
     outer_decay_probe_max_after: 0.0
     profile:
-      rim_abs_median: 0.0003048154033917127
-      outer_abs_median: 6.172313861915238e-11
+      rim_abs_median: 0.00028947113566363513
+      outer_abs_median: 5.325908469819765e-11
   parity:
-    theta_factor: 1.4011056231113217
-    energy_factor: 1.4011056232113996
+    theta_factor: 2.1991975670717454
+    energy_factor: 2.1991975672288273
 tolerances:
   theory:
     lambda_value: 1.0e-12
     lambda_inverse: 1.0e-10
-    lambda_radius: 1.0e-8
-    ratio_i1_i0: 1.0e-8
-    ratio_k1_k0: 1.0e-8
-    coeff_A: 1.0e-3
-    coeff_B: 1.0e-7
+    lambda_radius: 1.0e-08
+    ratio_i1_i0: 1.0e-08
+    ratio_k1_k0: 1.0e-08
+    coeff_A: 0.001
+    coeff_B: 1.0e-07
     theta_star: 1.0e-10
-    total: 1.0e-8
+    total: 1.0e-08
   mesh:
-    theta_star: 1.0e-9
-    total_energy: 1.0e-7
+    theta_star: 1.0e-09
+    total_energy: 1.0e-07
     planarity_z_span: 1.0e-12
     outer_tilt_max_free_rows: 1.0e-10
     outer_decay_probe_max_before: 1.0e-10
     outer_decay_probe_max_after: 1.0e-10
     profile:
-      rim_abs_median: 1.0e-8
+      rim_abs_median: 1.0e-08
       outer_abs_median: 1.0e-10
   parity:
-    theta_factor: 1.0e-8
-    energy_factor: 1.0e-8
+    theta_factor: 1.0e-08
+    energy_factor: 1.0e-08

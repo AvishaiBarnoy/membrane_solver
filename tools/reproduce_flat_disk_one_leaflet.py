@@ -53,6 +53,28 @@ class BenchmarkScanConfig:
             raise ValueError("theta_max must be > theta_min.")
 
 
+@dataclass(frozen=True)
+class BenchmarkOptimizeConfig:
+    """Configuration for scalar theta_B optimization mode."""
+
+    theta_initial: float
+    optimize_steps: int
+    optimize_every: int
+    optimize_delta: float
+    optimize_inner_steps: int
+
+    def validate(self) -> None:
+        """Validate optimizer controls."""
+        if int(self.optimize_steps) < 1:
+            raise ValueError("theta_optimize_steps must be >= 1.")
+        if int(self.optimize_every) < 1:
+            raise ValueError("theta_optimize_every must be >= 1.")
+        if float(self.optimize_delta) <= 0.0:
+            raise ValueError("theta_optimize_delta must be > 0.")
+        if int(self.optimize_inner_steps) < 1:
+            raise ValueError("theta_optimize_inner_steps must be >= 1.")
+
+
 def _load_mesh_from_fixture(path: Path):
     _ensure_repo_root_on_sys_path()
     from geometry.geom_io import load_data, parse_geometry
@@ -221,6 +243,38 @@ def _run_theta_relaxation(
     return energy
 
 
+def _run_theta_optimize(
+    minim: Minimizer,
+    *,
+    optimize_cfg: BenchmarkOptimizeConfig,
+    reset_outer: bool,
+) -> float:
+    mesh = minim.mesh
+    gp = mesh.global_parameters
+    gp.set("tilt_thetaB_optimize", True)
+    gp.set("tilt_thetaB_value", float(optimize_cfg.theta_initial))
+    gp.set("tilt_thetaB_optimize_every", int(optimize_cfg.optimize_every))
+    gp.set("tilt_thetaB_optimize_delta", float(optimize_cfg.optimize_delta))
+    gp.set("tilt_thetaB_optimize_inner_steps", int(optimize_cfg.optimize_inner_steps))
+
+    tin = np.zeros_like(mesh.tilts_in_view())
+    mesh.set_tilts_in_from_array(tin)
+    if reset_outer:
+        tout = np.zeros_like(mesh.tilts_out_view())
+        mesh.set_tilts_out_from_array(tout)
+
+    positions = mesh.positions_view()
+    tilt_mode = str(gp.get("tilt_solve_mode", "coupled") or "coupled")
+    for i in range(int(optimize_cfg.optimize_steps)):
+        minim._relax_leaflet_tilts(positions=positions, mode=tilt_mode)
+        minim._optimize_thetaB_scalar(tilt_mode=tilt_mode, iteration=i)
+
+    theta_opt = float(gp.get("tilt_thetaB_value") or 0.0)
+    if not np.isfinite(theta_opt):
+        raise ValueError("Non-finite optimized theta_B value.")
+    return theta_opt
+
+
 def _profile_metrics(mesh, *, radius: float) -> dict[str, float]:
     positions = mesh.positions_view()
     r, r_hat = _radial_unit_vectors(positions)
@@ -261,6 +315,12 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_min: float = 0.0,
     theta_max: float = 0.0014,
     theta_count: int = 8,
+    theta_mode: str = "scan",
+    theta_initial: float = 0.0,
+    theta_optimize_steps: int = 60,
+    theta_optimize_every: int = 1,
+    theta_optimize_delta: float = 2.0e-4,
+    theta_optimize_inner_steps: int = 60,
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
@@ -283,12 +343,28 @@ def run_flat_disk_one_leaflet_benchmark(
 
     params = theory_params if theory_params is not None else tex_reference_params()
     theory = compute_flat_disk_theory(params)
-    scan_cfg = BenchmarkScanConfig(
-        theta_min=float(theta_min),
-        theta_max=float(theta_max),
-        theta_count=int(theta_count),
-    )
-    scan_cfg.validate()
+    theta_mode_str = str(theta_mode).lower()
+    if theta_mode_str not in {"scan", "optimize"}:
+        raise ValueError("theta_mode must be 'scan' or 'optimize'.")
+
+    scan_cfg = None
+    optimize_cfg = None
+    if theta_mode_str == "scan":
+        scan_cfg = BenchmarkScanConfig(
+            theta_min=float(theta_min),
+            theta_max=float(theta_max),
+            theta_count=int(theta_count),
+        )
+        scan_cfg.validate()
+    else:
+        optimize_cfg = BenchmarkOptimizeConfig(
+            theta_initial=float(theta_initial),
+            optimize_steps=int(theta_optimize_steps),
+            optimize_every=int(theta_optimize_every),
+            optimize_delta=float(theta_optimize_delta),
+            optimize_inner_steps=int(theta_optimize_inner_steps),
+        )
+        optimize_cfg.validate()
 
     mesh = _load_mesh_from_fixture(fixture_path)
     for _ in range(int(refine_level)):
@@ -306,33 +382,64 @@ def run_flat_disk_one_leaflet_benchmark(
     minim.enforce_constraints_after_mesh_ops(mesh)
     mesh.project_tilts_to_tangent()
 
-    theta_values = np.linspace(
-        float(scan_cfg.theta_min),
-        float(scan_cfg.theta_max),
-        int(scan_cfg.theta_count),
-    )
-    energies = np.zeros_like(theta_values)
-    for i, theta_value in enumerate(theta_values):
-        energies[i] = _run_theta_relaxation(
+    scan_report: dict[str, Any] | None = None
+    optimize_report: dict[str, Any] | None = None
+    theta_star: float
+    if theta_mode_str == "scan":
+        assert scan_cfg is not None
+        theta_values = np.linspace(
+            float(scan_cfg.theta_min),
+            float(scan_cfg.theta_max),
+            int(scan_cfg.theta_count),
+        )
+        energies = np.zeros_like(theta_values)
+        for i, theta_value in enumerate(theta_values):
+            energies[i] = _run_theta_relaxation(
+                minim,
+                theta_value=float(theta_value),
+                reset_outer=True,
+            )
+
+        min_idx = int(np.argmin(energies))
+        if min_idx == 0 or min_idx == int(theta_values.size - 1):
+            raise ValueError(
+                "Empty interior scan bracket: minimum lies on theta scan boundary; "
+                "expand [theta_min, theta_max]."
+            )
+
+        local_theta = theta_values[min_idx - 1 : min_idx + 2]
+        local_energy = energies[min_idx - 1 : min_idx + 2]
+        qfit = quadratic_min_from_scan(local_theta, local_energy)
+        theta_star = float(qfit.theta_star)
+        scan_report = {
+            "theta_min": float(scan_cfg.theta_min),
+            "theta_max": float(scan_cfg.theta_max),
+            "theta_count": int(scan_cfg.theta_count),
+            "theta_values": [float(x) for x in theta_values.tolist()],
+            "energy_values": [float(x) for x in energies.tolist()],
+            "grid_min_theta": float(theta_values[min_idx]),
+            "grid_min_energy": float(energies[min_idx]),
+            "local_quadratic_fit": qfit.to_dict(),
+        }
+    else:
+        assert optimize_cfg is not None
+        theta_star = _run_theta_optimize(
             minim,
-            theta_value=float(theta_value),
+            optimize_cfg=optimize_cfg,
             reset_outer=True,
         )
-
-    min_idx = int(np.argmin(energies))
-    if min_idx == 0 or min_idx == int(theta_values.size - 1):
-        raise ValueError(
-            "Empty interior scan bracket: minimum lies on theta scan boundary; "
-            "expand [theta_min, theta_max]."
-        )
-
-    local_theta = theta_values[min_idx - 1 : min_idx + 2]
-    local_energy = energies[min_idx - 1 : min_idx + 2]
-    qfit = quadratic_min_from_scan(local_theta, local_energy)
+        optimize_report = {
+            "theta_initial": float(optimize_cfg.theta_initial),
+            "optimize_steps": int(optimize_cfg.optimize_steps),
+            "optimize_every": int(optimize_cfg.optimize_every),
+            "optimize_delta": float(optimize_cfg.optimize_delta),
+            "optimize_inner_steps": int(optimize_cfg.optimize_inner_steps),
+            "theta_star": float(theta_star),
+        }
 
     total_energy = _run_theta_relaxation(
         minim,
-        theta_value=float(qfit.theta_star),
+        theta_value=float(theta_star),
         reset_outer=True,
     )
     breakdown = minim.compute_energy_breakdown()
@@ -370,7 +477,7 @@ def run_flat_disk_one_leaflet_benchmark(
             np.max(np.linalg.norm(mesh.tilts_out_view()[outer_free_rows], axis=1))
         )
         gp = mesh.global_parameters
-        gp.set("tilt_thetaB_value", float(qfit.theta_star))
+        gp.set("tilt_thetaB_value", float(theta_star))
         orig_step = gp.get("tilt_step_size")
         orig_inner = gp.get("tilt_inner_steps")
         try:
@@ -392,7 +499,7 @@ def run_flat_disk_one_leaflet_benchmark(
             np.max(np.linalg.norm(mesh.tilts_out_view()[outer_free_rows], axis=1))
         )
 
-    theta_factor = _factor_difference(float(qfit.theta_star), float(theory.theta_star))
+    theta_factor = _factor_difference(float(theta_star), float(theory.theta_star))
     energy_factor = _factor_difference(
         float(abs(total_energy)), float(abs(theory.total))
     )
@@ -403,21 +510,14 @@ def run_flat_disk_one_leaflet_benchmark(
             "refine_level": int(refine_level),
             "outer_mode": str(outer_mode),
             "smoothness_model": str(smoothness_model),
+            "theta_mode": str(theta_mode_str),
             "theory_source": "docs/tex/1_disk_flat.tex",
         },
         "theory": theory.to_dict(),
-        "scan": {
-            "theta_min": float(scan_cfg.theta_min),
-            "theta_max": float(scan_cfg.theta_max),
-            "theta_count": int(scan_cfg.theta_count),
-            "theta_values": [float(x) for x in theta_values.tolist()],
-            "energy_values": [float(x) for x in energies.tolist()],
-            "grid_min_theta": float(theta_values[min_idx]),
-            "grid_min_energy": float(energies[min_idx]),
-            "local_quadratic_fit": qfit.to_dict(),
-        },
+        "scan": scan_report,
+        "optimize": optimize_report,
         "mesh": {
-            "theta_star": float(qfit.theta_star),
+            "theta_star": float(theta_star),
             "total_energy": float(total_energy),
             "energy_breakdown": {str(k): float(v) for k, v in breakdown.items()},
             "planarity_z_span": z_span,
@@ -451,9 +551,15 @@ def main(argv: Iterable[str] | None = None) -> int:
         choices=("dirichlet", "splay_twist"),
         default="dirichlet",
     )
+    ap.add_argument("--theta-mode", choices=("scan", "optimize"), default="scan")
     ap.add_argument("--theta-min", type=float, default=0.0)
     ap.add_argument("--theta-max", type=float, default=0.0014)
     ap.add_argument("--theta-count", type=int, default=8)
+    ap.add_argument("--theta-initial", type=float, default=0.0)
+    ap.add_argument("--theta-optimize-steps", type=int, default=60)
+    ap.add_argument("--theta-optimize-every", type=int, default=1)
+    ap.add_argument("--theta-optimize-delta", type=float, default=2.0e-4)
+    ap.add_argument("--theta-optimize-inner-steps", type=int, default=60)
     ap.add_argument("--output", default=str(DEFAULT_OUT))
     args = ap.parse_args(list(argv) if argv is not None else None)
 
@@ -462,9 +568,15 @@ def main(argv: Iterable[str] | None = None) -> int:
         refine_level=args.refine_level,
         outer_mode=args.outer_mode,
         smoothness_model=args.smoothness_model,
+        theta_mode=args.theta_mode,
         theta_min=args.theta_min,
         theta_max=args.theta_max,
         theta_count=args.theta_count,
+        theta_initial=args.theta_initial,
+        theta_optimize_steps=args.theta_optimize_steps,
+        theta_optimize_every=args.theta_optimize_every,
+        theta_optimize_delta=args.theta_optimize_delta,
+        theta_optimize_inner_steps=args.theta_optimize_inner_steps,
     )
 
     out_path = Path(args.output)

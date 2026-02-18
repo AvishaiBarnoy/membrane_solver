@@ -497,14 +497,16 @@ def refine_triangle_mesh(mesh):
         return merged if merged else None
 
     def _maybe_inherit_disk_interface_vertex_tags(
-        v1_options: dict, v2_options: dict
+        v1_options: dict,
+        v2_options: dict,
     ) -> dict | None:
         """Inherit disk-interface tags for mid-edge vertices on the pinned disk ring.
 
         For Kozlov-style one-disk setups the disk boundary ring is defined by
-        per-vertex `pin_to_circle` metadata (group "disk") plus additional tags
-        used by rim matching and thetaB coupling:
+        per-vertex metadata (group "disk") plus additional tags used by rim
+        matching and thetaB coupling:
           - rim_slope_match_group
+          - tilt_thetaB_group
           - tilt_thetaB_group_in
 
         Refinement introduces mid-edge vertices that must inherit these tags so
@@ -512,19 +514,35 @@ def refine_triangle_mesh(mesh):
         on the original coarse vertices.
         """
 
-        def has_disk_interface(options: dict) -> bool:
-            return (
-                str(options.get("rim_slope_match_group") or "") == "disk"
-                and str(options.get("tilt_thetaB_group_in") or "") == "disk"
-            )
+        def _disk_group_value(options: dict) -> str | None:
+            for key in (
+                "tilt_thetaB_group_in",
+                "tilt_thetaB_group",
+                "rim_slope_match_group",
+            ):
+                val = options.get(key)
+                if val is None:
+                    continue
+                sval = str(val).strip()
+                if sval == "disk":
+                    return sval
+            return None
 
-        merged: dict = {}
-        if has_disk_interface(v1_options) and has_disk_interface(v2_options):
-            merged["rim_slope_match_group"] = "disk"
-            merged["tilt_thetaB_group_in"] = "disk"
-            return merged
+        g1 = _disk_group_value(v1_options)
+        g2 = _disk_group_value(v2_options)
+        if g1 != "disk" or g2 != "disk":
+            return None
 
-        return None
+        merged = {
+            "rim_slope_match_group": "disk",
+            "tilt_thetaB_group_in": "disk",
+        }
+        if (
+            str(v1_options.get("tilt_thetaB_group") or "") == "disk"
+            or str(v2_options.get("tilt_thetaB_group") or "") == "disk"
+        ):
+            merged["tilt_thetaB_group"] = "disk"
+        return merged
 
     def _maybe_inherit_rigid_disk_group(
         v1_options: dict, v2_options: dict

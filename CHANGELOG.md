@@ -13,6 +13,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Acceptance/unit/regression tests for TeX parity, planarity, one-leaflet decay profile, and free-outer-leaflet consistency (`tests/test_flat_disk_one_leaflet_theory_unit.py`, `tests/test_flat_disk_one_leaflet_benchmark_e2e.py`).
   - Added inner-leaflet KH-style split smoothness energy `tilt_splay_twist_in` with explicit splay/twist moduli (`tilt_splay_modulus_in`, `tilt_twist_modulus_in`) and default zero twist modulus.
   - Flat disk reproduction CLI now supports `--smoothness-model dirichlet|splay_twist` (default `dirichlet`); `splay_twist` uses `tilt_splay_twist_in` in the benchmark harness.
+  - Flat disk reproduction CLI now supports `--theta-mode scan|optimize` (default `scan`) so `theta_B` can be either scanned or optimized as a scalar DOF from one command.
 - Interactive CLI:
   - Tab completion for command/macro names (TTY only).
   - Compound commands via semicolons (e.g. `g50; V3; g10`).
