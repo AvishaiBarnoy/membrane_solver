@@ -115,23 +115,18 @@ def test_flat_disk_splay_twist_mode_runs_with_zero_twist_default() -> None:
 def test_flat_disk_theta_mode_optimize_runs_and_reports_result() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
-        refine_level=1,
+        refine_level=2,
         outer_mode="disabled",
         smoothness_model="splay_twist",
         theta_mode="optimize",
-        theta_initial=0.0,
-        theta_optimize_steps=60,
-        theta_optimize_every=1,
-        theta_optimize_delta=2.0e-4,
-        theta_optimize_inner_steps=60,
     )
 
     assert report["meta"]["theta_mode"] == "optimize"
     assert report["scan"] is None
     assert report["optimize"] is not None
     assert float(report["mesh"]["theta_star"]) > 0.0
-    assert float(report["parity"]["theta_factor"]) <= 3.5
-    assert float(report["parity"]["energy_factor"]) <= 3.5
+    assert float(report["parity"]["theta_factor"]) <= 2.0
+    assert float(report["parity"]["energy_factor"]) <= 2.0
 
 
 @pytest.mark.regression
@@ -215,8 +210,6 @@ def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize(tmp_path) -
             str(out_yaml),
             "--outer-mode",
             "disabled",
-            "--refine-level",
-            "1",
             "--smoothness-model",
             "splay_twist",
             "--theta-mode",
@@ -224,13 +217,13 @@ def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize(tmp_path) -
             "--theta-initial",
             "0.0",
             "--theta-optimize-steps",
-            "60",
+            "20",
             "--theta-optimize-every",
             "1",
             "--theta-optimize-delta",
             "0.0002",
             "--theta-optimize-inner-steps",
-            "60",
+            "20",
         ],
         check=True,
         cwd=str(ROOT),
@@ -240,7 +233,7 @@ def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize(tmp_path) -
     assert report["scan"] is None
     assert report["optimize"] is not None
     assert float(report["mesh"]["theta_star"]) > 0.0
-    assert float(report["parity"]["theta_factor"]) <= 3.5
+    assert float(report["parity"]["theta_factor"]) <= 2.0
 
 
 @pytest.mark.regression
