@@ -116,7 +116,22 @@ def _resolve_optimize_preset(
                 "fast_r3",
             )
         return optimize_cfg, "fast_r3_inactive"
-    raise ValueError("optimize_preset must be 'none' or 'fast_r3'.")
+    if preset == "full_accuracy_r3":
+        if int(refine_level) >= 3:
+            return (
+                BenchmarkOptimizeConfig(
+                    theta_initial=float(optimize_cfg.theta_initial),
+                    optimize_steps=40,
+                    optimize_every=1,
+                    optimize_delta=1.0e-4,
+                    optimize_inner_steps=20,
+                ),
+                "full_accuracy_r3",
+            )
+        return optimize_cfg, "full_accuracy_r3_inactive"
+    raise ValueError(
+        "optimize_preset must be 'none', 'fast_r3', or 'full_accuracy_r3'."
+    )
 
 
 def _load_mesh_from_fixture(path: Path):
@@ -536,18 +551,23 @@ def run_flat_disk_one_leaflet_benchmark(
             optimize_inner_steps=int(theta_optimize_inner_steps),
         )
         optimize_cfg.validate()
-        if theta_mode_str == "optimize_full":
-            polish_cfg = BenchmarkPolishConfig(
-                polish_delta=float(theta_polish_delta),
-                polish_points=int(theta_polish_points),
-            )
-            polish_cfg.validate()
         optimize_cfg, effective_optimize_preset = _resolve_optimize_preset(
             optimize_preset=str(optimize_preset),
             refine_level=int(refine_level),
             optimize_cfg=optimize_cfg,
         )
         optimize_cfg.validate()
+        if theta_mode_str == "optimize_full":
+            polish_delta = float(theta_polish_delta)
+            polish_points = int(theta_polish_points)
+            if effective_optimize_preset == "full_accuracy_r3":
+                polish_delta = min(polish_delta, 5.0e-5)
+                polish_points = max(polish_points, 5)
+            polish_cfg = BenchmarkPolishConfig(
+                polish_delta=polish_delta,
+                polish_points=polish_points,
+            )
+            polish_cfg.validate()
 
     mesh = _load_mesh_from_fixture(fixture_path)
     for _ in range(int(refine_level)):
@@ -567,6 +587,8 @@ def run_flat_disk_one_leaflet_benchmark(
 
     scan_report: dict[str, Any] | None = None
     optimize_report: dict[str, Any] | None = None
+    theta_factor_raw: float | None = None
+    energy_factor_raw: float | None = None
     theta_star: float
     if theta_mode_str == "scan":
         assert scan_cfg is not None
@@ -622,6 +644,16 @@ def run_flat_disk_one_leaflet_benchmark(
                 polish_cfg=polish_cfg,
                 reset_outer=True,
             )
+            polish_theta = np.asarray(polish_report["theta_values"], dtype=float)
+            polish_energy = np.asarray(polish_report["energy_values"], dtype=float)
+            center_idx = int(np.argmin(np.abs(polish_theta - float(theta_opt_raw))))
+            raw_energy = float(polish_energy[center_idx])
+            theta_factor_raw = _factor_difference(
+                float(theta_opt_raw), float(theory.theta_star)
+            )
+            energy_factor_raw = _factor_difference(
+                float(abs(raw_energy)), float(abs(theory.total))
+            )
         optimize_seconds = float(perf_counter() - t0)
         optimize_report = {
             "theta_initial": float(optimize_cfg.theta_initial),
@@ -632,6 +664,12 @@ def run_flat_disk_one_leaflet_benchmark(
             "optimize_seconds": optimize_seconds,
             "optimize_preset_effective": str(effective_optimize_preset),
             "theta_star_raw": float(theta_opt_raw),
+            "theta_factor_raw": (
+                None if theta_factor_raw is None else float(theta_factor_raw)
+            ),
+            "energy_factor_raw": (
+                None if energy_factor_raw is None else float(energy_factor_raw)
+            ),
             "polish": polish_report,
             "theta_star": float(theta_star),
         }
@@ -703,6 +741,25 @@ def run_flat_disk_one_leaflet_benchmark(
     energy_factor = _factor_difference(
         float(abs(total_energy)), float(abs(theory.total))
     )
+    if theta_mode_str == "optimize_full":
+        assert theta_factor_raw is not None
+        assert energy_factor_raw is not None
+        raw_score = float(
+            np.hypot(
+                np.log(max(theta_factor_raw, 1e-18)),
+                np.log(max(energy_factor_raw, 1e-18)),
+            )
+        )
+        full_score = float(
+            np.hypot(
+                np.log(max(theta_factor, 1e-18)), np.log(max(energy_factor, 1e-18))
+            )
+        )
+        recommended_mode_for_theory = (
+            "optimize" if raw_score <= full_score else "optimize_full"
+        )
+    else:
+        recommended_mode_for_theory = "scan" if theta_mode_str == "scan" else "optimize"
 
     report = {
         "meta": {
@@ -741,6 +798,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "theta_factor": float(theta_factor),
             "energy_factor": float(energy_factor),
             "meets_factor_2": bool(theta_factor <= 2.0 and energy_factor <= 2.0),
+            "recommended_mode_for_theory": str(recommended_mode_for_theory),
         },
     }
     return report
@@ -776,7 +834,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--theta-polish-points", type=int, default=3)
     ap.add_argument(
         "--optimize-preset",
-        choices=("none", "fast_r3"),
+        choices=("none", "fast_r3", "full_accuracy_r3"),
         default="none",
     )
     ap.add_argument("--output", default=str(DEFAULT_OUT))
