@@ -265,8 +265,8 @@ def test_flat_disk_kh_consistent_mass_improves_parity_with_kh_wide() -> None:
     assert float(consistent["parity"]["energy_factor"]) < float(
         lumped["parity"]["energy_factor"]
     )
-    assert float(consistent["parity"]["theta_factor"]) <= 1.6
-    assert float(consistent["parity"]["energy_factor"]) <= 1.6
+    assert float(consistent["parity"]["theta_factor"]) <= 1.52
+    assert float(consistent["parity"]["energy_factor"]) <= 1.52
 
 
 @pytest.mark.acceptance
@@ -284,8 +284,8 @@ def test_flat_disk_kh_optimize_profile_and_continuity_e2e() -> None:
 
     assert report["meta"]["theta_mode"] == "optimize"
     assert report["meta"]["optimize_preset_effective"] == "kh_wide"
-    assert float(report["parity"]["theta_factor"]) <= 1.6
-    assert float(report["parity"]["energy_factor"]) <= 1.6
+    assert float(report["parity"]["theta_factor"]) <= 1.52
+    assert float(report["parity"]["energy_factor"]) <= 1.52
 
     profile = report["mesh"]["profile"]
     inner = float(profile["inner_abs_median"])
@@ -338,9 +338,9 @@ def test_flat_disk_reports_splay_modulus_scale_meta() -> None:
         outer_mode="disabled",
         smoothness_model="splay_twist",
         theta_mode="optimize",
-        splay_modulus_scale_in=0.5,
+        splay_modulus_scale_in=0.3,
     )
-    assert float(report["meta"]["splay_modulus_scale_in"]) == pytest.approx(0.5)
+    assert float(report["meta"]["splay_modulus_scale_in"]) == pytest.approx(0.3)
 
 
 @pytest.mark.regression
@@ -354,7 +354,7 @@ def test_flat_disk_kh_default_splay_scale_auto_calibrates() -> None:
         parameterization="kh_physical",
         optimize_preset="kh_wide",
     )
-    assert float(report["meta"]["splay_modulus_scale_in"]) == pytest.approx(0.5)
+    assert float(report["meta"]["splay_modulus_scale_in"]) == pytest.approx(0.3)
 
 
 @pytest.mark.regression

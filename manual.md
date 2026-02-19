@@ -345,6 +345,8 @@ Interactive commands:
     `python tools/diagnostics/flat_disk_kh_term_audit.py --refine-level 1 --theta-values 0 6.366e-4 0.004`.
   - KH audit refine sweep:
     `python tools/diagnostics/flat_disk_kh_term_audit.py --refine-levels 1 2 --theta-values 0 6.366e-4`.
+  - KH calibration sweep (optimize parity vs splay scale):
+    `python tools/diagnostics/flat_disk_kh_term_audit.py --calibration-sweep --refine-levels 1 --splay-scales 0.3 0.4 0.5 --output /tmp/kh_calibration_sweep.yaml`.
   - KH audit local rim-band refinement:
     add `--rim-local-refine-steps` and `--rim-local-refine-band-lambda`.
   - Scan controls (`--theta-mode scan`):
@@ -360,7 +362,7 @@ Interactive commands:
   - Splay calibration control (benchmark-local):
     `--splay-modulus-scale-in` scales inner `tilt_splay_modulus_in` when
     `--smoothness-model splay_twist` (for refine-3 parity tuning experiments).
-    In `kh_physical` + `splay_twist`, the benchmark auto-calibrates to `0.5`
+    In `kh_physical` + `splay_twist`, the benchmark auto-calibrates to `0.3`
     when this flag is left at `1.0`; pass an explicit value to override.
   - Inner tilt-mass discretization control:
     `--tilt-mass-mode-in auto|lumped|consistent` (default `auto`).
