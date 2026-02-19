@@ -69,3 +69,28 @@ def test_flat_disk_kh_term_audit_refine_sweep_shape() -> None:
         assert int(run["meta"]["refine_level"]) == (idx + 1)
         assert run["meta"]["theory_model"] == "kh_physical_strict_kh"
         assert len(run["rows"]) == 2
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_local_rim_refine_changes_resolution() -> None:
+    theta = 0.004
+    base = run_flat_disk_kh_term_audit(
+        refine_level=1,
+        theta_values=(theta,),
+        rim_local_refine_steps=0,
+        rim_local_refine_band_lambda=0.0,
+    )
+    local = run_flat_disk_kh_term_audit(
+        refine_level=1,
+        theta_values=(theta,),
+        rim_local_refine_steps=1,
+        rim_local_refine_band_lambda=4.0,
+    )
+
+    base_row = base["rows"][0]
+    local_row = local["rows"][0]
+    assert np.isfinite(float(base_row["internal_outer_ratio_mesh_over_theory"]))
+    assert np.isfinite(float(local_row["internal_outer_ratio_mesh_over_theory"]))
+    base_h = float(base["resolution"]["rim_h_over_lambda_median"])
+    local_h = float(local["resolution"]["rim_h_over_lambda_median"])
+    assert local_h < base_h

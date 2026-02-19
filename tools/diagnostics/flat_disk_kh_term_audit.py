@@ -323,6 +323,8 @@ def _run_single_level(
     length_scale_nm: float,
     drive_physical: float,
     theta_values: Sequence[float],
+    rim_local_refine_steps: int,
+    rim_local_refine_band_lambda: float,
 ) -> dict[str, Any]:
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -333,6 +335,7 @@ def _run_single_level(
         _build_minimizer,
         _configure_benchmark_mesh,
         _load_mesh_from_fixture,
+        _refine_mesh_locally_near_rim,
         _run_theta_relaxation,
     )
 
@@ -349,6 +352,14 @@ def _run_single_level(
     mesh = _load_mesh_from_fixture(fixture)
     for _ in range(int(refine_level)):
         mesh = refine_triangle_mesh(mesh)
+    if int(rim_local_refine_steps) > 0:
+        mesh = _refine_mesh_locally_near_rim(
+            mesh,
+            local_steps=int(rim_local_refine_steps),
+            rim_radius=float(theory.radius),
+            band_half_width=float(rim_local_refine_band_lambda)
+            * float(theory.lambda_value),
+        )
 
     _configure_benchmark_mesh(
         mesh,
@@ -456,6 +467,8 @@ def _run_single_level(
             "radius_nm": float(radius_nm),
             "length_scale_nm": float(length_scale_nm),
             "drive_physical": float(drive_physical),
+            "rim_local_refine_steps": int(rim_local_refine_steps),
+            "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
         },
         "theory": {
             "kappa": float(theory.kappa),
@@ -484,6 +497,8 @@ def run_flat_disk_kh_term_audit(
     length_scale_nm: float = 15.0,
     drive_physical: float = (2.0 / 0.7),
     theta_values: Sequence[float] = (0.0, 6.366e-4, 0.004),
+    rim_local_refine_steps: int = 0,
+    rim_local_refine_band_lambda: float = 0.0,
 ) -> dict[str, Any]:
     """Evaluate per-theta mesh/theory split terms in KH physical lane."""
     _ensure_repo_root_on_sys_path()
@@ -505,6 +520,8 @@ def run_flat_disk_kh_term_audit(
         length_scale_nm=float(length_scale_nm),
         drive_physical=float(drive_physical),
         theta_values=theta_values,
+        rim_local_refine_steps=int(rim_local_refine_steps),
+        rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
     )
 
 
@@ -520,6 +537,8 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     length_scale_nm: float = 15.0,
     drive_physical: float = (2.0 / 0.7),
     theta_values: Sequence[float] = (0.0, 6.366e-4, 0.004),
+    rim_local_refine_steps: int = 0,
+    rim_local_refine_band_lambda: float = 0.0,
 ) -> dict[str, Any]:
     """Run KH term audit across multiple refinement levels."""
     _ensure_repo_root_on_sys_path()
@@ -546,6 +565,8 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             length_scale_nm=float(length_scale_nm),
             drive_physical=float(drive_physical),
             theta_values=theta_values,
+            rim_local_refine_steps=int(rim_local_refine_steps),
+            rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
         )
         for level in levels
     ]
@@ -557,6 +578,8 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             "smoothness_model": str(smoothness_model),
             "parameterization": "kh_physical",
             "theory_model": "kh_physical_strict_kh",
+            "rim_local_refine_steps": int(rim_local_refine_steps),
+            "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
         },
         "runs": runs,
     }
@@ -579,6 +602,8 @@ def main() -> int:
     ap.add_argument("--radius-nm", type=float, default=7.0)
     ap.add_argument("--length-scale-nm", type=float, default=15.0)
     ap.add_argument("--drive-physical", type=float, default=(2.0 / 0.7))
+    ap.add_argument("--rim-local-refine-steps", type=int, default=0)
+    ap.add_argument("--rim-local-refine-band-lambda", type=float, default=0.0)
     ap.add_argument(
         "--theta-values", type=float, nargs="+", default=[0.0, 6.366e-4, 0.004]
     )
@@ -597,6 +622,8 @@ def main() -> int:
             length_scale_nm=args.length_scale_nm,
             drive_physical=args.drive_physical,
             theta_values=args.theta_values,
+            rim_local_refine_steps=args.rim_local_refine_steps,
+            rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
         )
     else:
         report = run_flat_disk_kh_term_audit(
@@ -610,6 +637,8 @@ def main() -> int:
             length_scale_nm=args.length_scale_nm,
             drive_physical=args.drive_physical,
             theta_values=args.theta_values,
+            rim_local_refine_steps=args.rim_local_refine_steps,
+            rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
         )
 
     out = Path(args.output)

@@ -322,6 +322,8 @@ Interactive commands:
     This writes both `legacy` and `kh_physical` reports plus a `comparison` summary.
   - Common options:
     `--fixture`, `--refine-level` (default `2`), `--smoothness-model`, `--theta-mode`, `--output`.
+    Optional local rim-band refinement controls:
+    `--rim-local-refine-steps`, `--rim-local-refine-band-lambda`.
   - Parameterization options:
     `--parameterization legacy|kh_physical` (default `legacy`).
     - `legacy` keeps the historical parity remap used by existing acceptance baselines.
@@ -341,6 +343,8 @@ Interactive commands:
     `python tools/diagnostics/flat_disk_kh_term_audit.py --refine-level 1 --theta-values 0 6.366e-4 0.004`.
   - KH audit refine sweep:
     `python tools/diagnostics/flat_disk_kh_term_audit.py --refine-levels 1 2 --theta-values 0 6.366e-4`.
+  - KH audit local rim-band refinement:
+    add `--rim-local-refine-steps` and `--rim-local-refine-band-lambda`.
   - Scan controls (`--theta-mode scan`):
     `--theta-min`, `--theta-max`, `--theta-count`.
   - Optimize controls (`--theta-mode optimize`):

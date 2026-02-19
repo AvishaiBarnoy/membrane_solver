@@ -142,6 +142,62 @@ def _load_mesh_from_fixture(path: Path):
     return parse_geometry(data)
 
 
+def _refine_mesh_locally_near_rim(
+    mesh,
+    *,
+    local_steps: int,
+    rim_radius: float,
+    band_half_width: float,
+):
+    """Refine only facets in a radial band around the disk rim.
+
+    This uses facet-level ``no_refine`` flags before each call to
+    ``refine_triangle_mesh``. It is benchmark-harness-only and does not modify
+    runtime refinement behavior.
+    """
+    _ensure_repo_root_on_sys_path()
+    from runtime.refinement import refine_triangle_mesh
+
+    steps = int(local_steps)
+    if steps <= 0:
+        return mesh
+    if float(band_half_width) <= 0.0:
+        raise ValueError("rim_local_refine_band_half_width must be > 0.")
+    if float(rim_radius) <= 0.0:
+        raise ValueError("rim_radius must be > 0 for local rim refinement.")
+
+    out = mesh
+    for _ in range(steps):
+        out.build_connectivity_maps()
+        out.build_facet_vertex_loops()
+        positions = out.positions_view()
+        selected = 0
+        for facet in out.facets.values():
+            loop = out.facet_vertex_loops.get(int(facet.index))
+            if loop is None or len(loop) == 0:
+                continue
+            rows = np.asarray(
+                [out.vertex_index_to_row[int(vid)] for vid in loop], dtype=int
+            )
+            centroid = np.mean(positions[rows], axis=0)
+            r_cent = float(np.linalg.norm(centroid[:2]))
+            if abs(r_cent - float(rim_radius)) <= float(band_half_width):
+                facet.options.pop("no_refine", None)
+                selected += 1
+            else:
+                facet.options["no_refine"] = True
+        if selected == 0:
+            raise AssertionError(
+                "Rim local refinement selected no facets. Increase "
+                "rim_local_refine_band_lambda."
+            )
+        out = refine_triangle_mesh(out)
+
+    for facet in out.facets.values():
+        facet.options.pop("no_refine", None)
+    return out
+
+
 def _collect_disk_boundary_rows(mesh, *, group: str = "disk") -> np.ndarray:
     rows: list[int] = []
     for vid in mesh.vertex_ids:
@@ -520,6 +576,8 @@ def run_flat_disk_one_leaflet_benchmark(
     kappa_t_physical: float = 10.0,
     drive_physical: float = (2.0 / 0.7),
     splay_modulus_scale_in: float = 1.0,
+    rim_local_refine_steps: int = 0,
+    rim_local_refine_band_lambda: float = 0.0,
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
@@ -541,6 +599,10 @@ def run_flat_disk_one_leaflet_benchmark(
 
     if int(refine_level) < 0:
         raise ValueError("refine_level must be >= 0.")
+    if int(rim_local_refine_steps) < 0:
+        raise ValueError("rim_local_refine_steps must be >= 0.")
+    if float(rim_local_refine_band_lambda) < 0.0:
+        raise ValueError("rim_local_refine_band_lambda must be >= 0.")
     if float(splay_modulus_scale_in) <= 0.0:
         raise ValueError("splay_modulus_scale_in must be > 0.")
     mode = str(parameterization).lower()
@@ -613,6 +675,16 @@ def run_flat_disk_one_leaflet_benchmark(
     mesh = _load_mesh_from_fixture(fixture_path)
     for _ in range(int(refine_level)):
         mesh = refine_triangle_mesh(mesh)
+    if int(rim_local_refine_steps) > 0:
+        band_half_width = float(rim_local_refine_band_lambda) * float(
+            theory.lambda_value
+        )
+        mesh = _refine_mesh_locally_near_rim(
+            mesh,
+            local_steps=int(rim_local_refine_steps),
+            rim_radius=float(theory.radius),
+            band_half_width=band_half_width,
+        )
 
     _configure_benchmark_mesh(
         mesh,
@@ -831,6 +903,8 @@ def run_flat_disk_one_leaflet_benchmark(
             "optimize_preset": str(optimize_preset).lower(),
             "optimize_preset_effective": str(effective_optimize_preset),
             "splay_modulus_scale_in": float(splay_modulus_scale_in),
+            "rim_local_refine_steps": int(rim_local_refine_steps),
+            "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
             "theory_model": theory_model,
             "theory_source": theory_source,
         },
@@ -1033,6 +1107,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--kappa-t-physical", type=float, default=10.0)
     ap.add_argument("--drive-physical", type=float, default=(2.0 / 0.7))
     ap.add_argument("--splay-modulus-scale-in", type=float, default=1.0)
+    ap.add_argument("--rim-local-refine-steps", type=int, default=0)
+    ap.add_argument("--rim-local-refine-band-lambda", type=float, default=0.0)
     ap.add_argument("--compare-lanes", action="store_true")
     ap.add_argument(
         "--compare-kh-smoothness-model",
@@ -1086,6 +1162,8 @@ def main(argv: Iterable[str] | None = None) -> int:
             kh_kappa_t_physical=args.kappa_t_physical,
             kh_drive_physical=args.drive_physical,
             splay_modulus_scale_in=args.splay_modulus_scale_in,
+            rim_local_refine_steps=args.rim_local_refine_steps,
+            rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
         )
     else:
         report = run_flat_disk_one_leaflet_benchmark(
@@ -1112,6 +1190,8 @@ def main(argv: Iterable[str] | None = None) -> int:
             kappa_t_physical=args.kappa_t_physical,
             drive_physical=args.drive_physical,
             splay_modulus_scale_in=args.splay_modulus_scale_in,
+            rim_local_refine_steps=args.rim_local_refine_steps,
+            rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
         )
 
     out_path = Path(args.output)
