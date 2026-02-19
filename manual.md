@@ -313,8 +313,8 @@ Interactive commands:
     `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled`.
   - Free-outer-leaflet validation run:
     `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode free`.
-  - Physical `theta_B` scalar optimization mode:
-    `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled --smoothness-model splay_twist --theta-mode optimize`.
+  - KH physical `theta_B` optimization mode (accuracy-first default path):
+    `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled --smoothness-model splay_twist --parameterization kh_physical --theta-mode optimize --optimize-preset kh_wide`.
   - Full local reduced-energy optimization mode (optimize + polish):
     `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled --smoothness-model splay_twist --theta-mode optimize_full`.
   - Side-by-side lane comparison from one command:
