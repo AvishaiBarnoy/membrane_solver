@@ -291,6 +291,8 @@ Interactive commands:
   outer vs inner leaflet), and the tilt benchmark runner supports
   `--color-by tilt_in|tilt_out|tilt_div_in|tilt_div_out` when present.
 - Tilt-source decay meshes are available under `meshes/tilt_benchmarks/` (rectangle source pair, annulus with inner-rim source).
+- Tilt mass-mode benchmark (`lumped` vs `consistent`) for flat KH reproduction:
+  `python benchmarks/benchmark_flat_disk_tilt_mass_mode.py --refine-level 1 --runs 2`.
 - Kozlov Milestone-B annulus meshes live under `meshes/caveolin/`:
   - `meshes/caveolin/kozlov_annulus_flat_hard_source.yaml` (hard clamped rim tilt)
   - `meshes/caveolin/kozlov_annulus_flat_soft_source.yaml` (soft rim source via `tilt_rim_source_in`)
