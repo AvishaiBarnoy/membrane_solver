@@ -858,6 +858,128 @@ def run_flat_disk_one_leaflet_benchmark(
     return report
 
 
+def run_flat_disk_lane_comparison(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    refine_level: int = 2,
+    outer_mode: str = "disabled",
+    legacy_smoothness_model: str = "dirichlet",
+    legacy_theta_mode: str = "scan",
+    legacy_theta_min: float = 0.0,
+    legacy_theta_max: float = 0.0014,
+    legacy_theta_count: int = 8,
+    legacy_theta_initial: float = 0.0,
+    legacy_theta_optimize_steps: int = 20,
+    legacy_theta_optimize_every: int = 1,
+    legacy_theta_optimize_delta: float = 2.0e-4,
+    legacy_theta_optimize_inner_steps: int = 20,
+    kh_smoothness_model: str = "splay_twist",
+    kh_theta_mode: str = "optimize",
+    kh_theta_min: float = 0.0,
+    kh_theta_max: float = 0.0014,
+    kh_theta_count: int = 8,
+    kh_theta_initial: float = 0.0,
+    kh_theta_optimize_steps: int = 20,
+    kh_theta_optimize_every: int = 1,
+    kh_theta_optimize_delta: float = 2.0e-4,
+    kh_theta_optimize_inner_steps: int = 20,
+    kh_length_scale_nm: float = 15.0,
+    kh_radius_nm: float = 7.0,
+    kh_kappa_physical: float = 10.0,
+    kh_kappa_t_physical: float = 10.0,
+    kh_drive_physical: float = (2.0 / 0.7),
+    splay_modulus_scale_in: float = 1.0,
+) -> dict[str, Any]:
+    """Run both legacy and kh_physical benchmark lanes and summarize differences."""
+    legacy = run_flat_disk_one_leaflet_benchmark(
+        fixture=fixture,
+        refine_level=refine_level,
+        outer_mode=outer_mode,
+        smoothness_model=legacy_smoothness_model,
+        theta_mode=legacy_theta_mode,
+        theta_min=legacy_theta_min,
+        theta_max=legacy_theta_max,
+        theta_count=legacy_theta_count,
+        theta_initial=legacy_theta_initial,
+        theta_optimize_steps=legacy_theta_optimize_steps,
+        theta_optimize_every=legacy_theta_optimize_every,
+        theta_optimize_delta=legacy_theta_optimize_delta,
+        theta_optimize_inner_steps=legacy_theta_optimize_inner_steps,
+        parameterization="legacy",
+        splay_modulus_scale_in=splay_modulus_scale_in,
+    )
+
+    kh = run_flat_disk_one_leaflet_benchmark(
+        fixture=fixture,
+        refine_level=refine_level,
+        outer_mode=outer_mode,
+        smoothness_model=kh_smoothness_model,
+        theta_mode=kh_theta_mode,
+        theta_min=kh_theta_min,
+        theta_max=kh_theta_max,
+        theta_count=kh_theta_count,
+        theta_initial=kh_theta_initial,
+        theta_optimize_steps=kh_theta_optimize_steps,
+        theta_optimize_every=kh_theta_optimize_every,
+        theta_optimize_delta=kh_theta_optimize_delta,
+        theta_optimize_inner_steps=kh_theta_optimize_inner_steps,
+        parameterization="kh_physical",
+        length_scale_nm=kh_length_scale_nm,
+        radius_nm=kh_radius_nm,
+        kappa_physical=kh_kappa_physical,
+        kappa_t_physical=kh_kappa_t_physical,
+        drive_physical=kh_drive_physical,
+        splay_modulus_scale_in=splay_modulus_scale_in,
+    )
+
+    legacy_theta = float(legacy["mesh"]["theta_star"])
+    kh_theta = float(kh["mesh"]["theta_star"])
+    legacy_energy = float(legacy["mesh"]["total_energy"])
+    kh_energy = float(kh["mesh"]["total_energy"])
+    legacy_contact = float(legacy["diagnostics"]["contact"]["mesh_contact_energy"])
+    kh_contact = float(kh["diagnostics"]["contact"]["mesh_contact_energy"])
+
+    theta_ratio = (
+        float(kh_theta / legacy_theta) if abs(legacy_theta) > 1e-18 else float("inf")
+    )
+    energy_ratio = (
+        float(abs(kh_energy) / abs(legacy_energy))
+        if abs(legacy_energy) > 1e-18
+        else float("inf")
+    )
+    contact_ratio = (
+        float(abs(kh_contact) / abs(legacy_contact))
+        if abs(legacy_contact) > 1e-18
+        else float("inf")
+    )
+
+    return {
+        "meta": {
+            "mode": "compare_lanes",
+            "fixture": legacy["meta"]["fixture"],
+            "refine_level": int(refine_level),
+            "outer_mode": str(outer_mode),
+        },
+        "legacy": legacy,
+        "kh_physical": kh,
+        "comparison": {
+            "legacy_theta_star": legacy_theta,
+            "kh_theta_star": kh_theta,
+            "kh_over_legacy_theta_star_ratio": theta_ratio,
+            "legacy_total_energy": legacy_energy,
+            "kh_total_energy": kh_energy,
+            "kh_over_legacy_abs_total_energy_ratio": energy_ratio,
+            "legacy_contact_energy": legacy_contact,
+            "kh_contact_energy": kh_contact,
+            "kh_over_legacy_abs_contact_energy_ratio": contact_ratio,
+            "legacy_theta_factor": float(legacy["parity"]["theta_factor"]),
+            "kh_theta_factor": float(kh["parity"]["theta_factor"]),
+            "legacy_energy_factor": float(legacy["parity"]["energy_factor"]),
+            "kh_energy_factor": float(kh["parity"]["energy_factor"]),
+        },
+    }
+
+
 def _write_yaml(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
@@ -902,34 +1024,86 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--kappa-t-physical", type=float, default=10.0)
     ap.add_argument("--drive-physical", type=float, default=(2.0 / 0.7))
     ap.add_argument("--splay-modulus-scale-in", type=float, default=1.0)
+    ap.add_argument("--compare-lanes", action="store_true")
+    ap.add_argument(
+        "--compare-kh-smoothness-model",
+        choices=("dirichlet", "splay_twist"),
+        default="splay_twist",
+    )
+    ap.add_argument(
+        "--compare-kh-theta-mode",
+        choices=("scan", "optimize", "optimize_full"),
+        default="optimize",
+    )
+    ap.add_argument("--compare-kh-theta-min", type=float, default=0.0)
+    ap.add_argument("--compare-kh-theta-max", type=float, default=0.0014)
+    ap.add_argument("--compare-kh-theta-count", type=int, default=8)
+    ap.add_argument("--compare-kh-theta-initial", type=float, default=0.0)
+    ap.add_argument("--compare-kh-theta-optimize-steps", type=int, default=20)
+    ap.add_argument("--compare-kh-theta-optimize-every", type=int, default=1)
+    ap.add_argument("--compare-kh-theta-optimize-delta", type=float, default=2.0e-4)
+    ap.add_argument("--compare-kh-theta-optimize-inner-steps", type=int, default=20)
     ap.add_argument("--output", default=str(DEFAULT_OUT))
     args = ap.parse_args(list(argv) if argv is not None else None)
 
-    report = run_flat_disk_one_leaflet_benchmark(
-        fixture=args.fixture,
-        refine_level=args.refine_level,
-        outer_mode=args.outer_mode,
-        smoothness_model=args.smoothness_model,
-        theta_mode=args.theta_mode,
-        theta_min=args.theta_min,
-        theta_max=args.theta_max,
-        theta_count=args.theta_count,
-        theta_initial=args.theta_initial,
-        theta_optimize_steps=args.theta_optimize_steps,
-        theta_optimize_every=args.theta_optimize_every,
-        theta_optimize_delta=args.theta_optimize_delta,
-        theta_optimize_inner_steps=args.theta_optimize_inner_steps,
-        theta_polish_delta=args.theta_polish_delta,
-        theta_polish_points=args.theta_polish_points,
-        optimize_preset=args.optimize_preset,
-        parameterization=args.parameterization,
-        length_scale_nm=args.length_scale_nm,
-        radius_nm=args.radius_nm,
-        kappa_physical=args.kappa_physical,
-        kappa_t_physical=args.kappa_t_physical,
-        drive_physical=args.drive_physical,
-        splay_modulus_scale_in=args.splay_modulus_scale_in,
-    )
+    if bool(args.compare_lanes):
+        report = run_flat_disk_lane_comparison(
+            fixture=args.fixture,
+            refine_level=args.refine_level,
+            outer_mode=args.outer_mode,
+            legacy_smoothness_model=args.smoothness_model,
+            legacy_theta_mode=args.theta_mode,
+            legacy_theta_min=args.theta_min,
+            legacy_theta_max=args.theta_max,
+            legacy_theta_count=args.theta_count,
+            legacy_theta_initial=args.theta_initial,
+            legacy_theta_optimize_steps=args.theta_optimize_steps,
+            legacy_theta_optimize_every=args.theta_optimize_every,
+            legacy_theta_optimize_delta=args.theta_optimize_delta,
+            legacy_theta_optimize_inner_steps=args.theta_optimize_inner_steps,
+            kh_smoothness_model=args.compare_kh_smoothness_model,
+            kh_theta_mode=args.compare_kh_theta_mode,
+            kh_theta_min=args.compare_kh_theta_min,
+            kh_theta_max=args.compare_kh_theta_max,
+            kh_theta_count=args.compare_kh_theta_count,
+            kh_theta_initial=args.compare_kh_theta_initial,
+            kh_theta_optimize_steps=args.compare_kh_theta_optimize_steps,
+            kh_theta_optimize_every=args.compare_kh_theta_optimize_every,
+            kh_theta_optimize_delta=args.compare_kh_theta_optimize_delta,
+            kh_theta_optimize_inner_steps=args.compare_kh_theta_optimize_inner_steps,
+            kh_length_scale_nm=args.length_scale_nm,
+            kh_radius_nm=args.radius_nm,
+            kh_kappa_physical=args.kappa_physical,
+            kh_kappa_t_physical=args.kappa_t_physical,
+            kh_drive_physical=args.drive_physical,
+            splay_modulus_scale_in=args.splay_modulus_scale_in,
+        )
+    else:
+        report = run_flat_disk_one_leaflet_benchmark(
+            fixture=args.fixture,
+            refine_level=args.refine_level,
+            outer_mode=args.outer_mode,
+            smoothness_model=args.smoothness_model,
+            theta_mode=args.theta_mode,
+            theta_min=args.theta_min,
+            theta_max=args.theta_max,
+            theta_count=args.theta_count,
+            theta_initial=args.theta_initial,
+            theta_optimize_steps=args.theta_optimize_steps,
+            theta_optimize_every=args.theta_optimize_every,
+            theta_optimize_delta=args.theta_optimize_delta,
+            theta_optimize_inner_steps=args.theta_optimize_inner_steps,
+            theta_polish_delta=args.theta_polish_delta,
+            theta_polish_points=args.theta_polish_points,
+            optimize_preset=args.optimize_preset,
+            parameterization=args.parameterization,
+            length_scale_nm=args.length_scale_nm,
+            radius_nm=args.radius_nm,
+            kappa_physical=args.kappa_physical,
+            kappa_t_physical=args.kappa_t_physical,
+            drive_physical=args.drive_physical,
+            splay_modulus_scale_in=args.splay_modulus_scale_in,
+        )
 
     out_path = Path(args.output)
     if not out_path.is_absolute():
