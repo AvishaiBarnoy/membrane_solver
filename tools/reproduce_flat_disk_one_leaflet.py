@@ -186,6 +186,7 @@ def _configure_benchmark_mesh(
     theory_params: FlatDiskTheoryParams,
     outer_mode: str,
     smoothness_model: str,
+    splay_modulus_scale_in: float,
 ) -> None:
     _ensure_repo_root_on_sys_path()
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -225,6 +226,10 @@ def _configure_benchmark_mesh(
     elif smoothness_model == "splay_twist":
         smoothness_in_module = "tilt_splay_twist_in"
         smoothness_out_module = "tilt_smoothness_out"
+        gp.set(
+            "tilt_splay_modulus_in",
+            float(mapping["bending_modulus_in"]) * float(splay_modulus_scale_in),
+        )
     else:
         raise ValueError("smoothness_model must be 'dirichlet' or 'splay_twist'.")
 
@@ -505,6 +510,7 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_polish_delta: float = 1.0e-4,
     theta_polish_points: int = 3,
     optimize_preset: str = "none",
+    splay_modulus_scale_in: float = 1.0,
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
@@ -524,6 +530,8 @@ def run_flat_disk_one_leaflet_benchmark(
 
     if int(refine_level) < 0:
         raise ValueError("refine_level must be >= 0.")
+    if float(splay_modulus_scale_in) <= 0.0:
+        raise ValueError("splay_modulus_scale_in must be > 0.")
 
     params = theory_params if theory_params is not None else tex_reference_params()
     theory = compute_flat_disk_theory(params)
@@ -578,6 +586,7 @@ def run_flat_disk_one_leaflet_benchmark(
         theory_params=params,
         outer_mode=outer_mode,
         smoothness_model=smoothness_model,
+        splay_modulus_scale_in=float(splay_modulus_scale_in),
     )
     _collect_disk_boundary_rows(mesh, group="disk")
 
@@ -770,6 +779,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "theta_mode": str(theta_mode_str),
             "optimize_preset": str(optimize_preset).lower(),
             "optimize_preset_effective": str(effective_optimize_preset),
+            "splay_modulus_scale_in": float(splay_modulus_scale_in),
             "theory_source": "docs/tex/1_disk_flat.tex",
         },
         "theory": theory.to_dict(),
@@ -837,6 +847,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         choices=("none", "fast_r3", "full_accuracy_r3"),
         default="none",
     )
+    ap.add_argument("--splay-modulus-scale-in", type=float, default=1.0)
     ap.add_argument("--output", default=str(DEFAULT_OUT))
     args = ap.parse_args(list(argv) if argv is not None else None)
 
@@ -857,6 +868,7 @@ def main(argv: Iterable[str] | None = None) -> int:
         theta_polish_delta=args.theta_polish_delta,
         theta_polish_points=args.theta_polish_points,
         optimize_preset=args.optimize_preset,
+        splay_modulus_scale_in=args.splay_modulus_scale_in,
     )
 
     out_path = Path(args.output)

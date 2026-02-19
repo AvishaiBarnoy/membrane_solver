@@ -207,6 +207,32 @@ def test_flat_disk_optimize_preset_full_accuracy_r3_is_noop_below_refine3() -> N
 
 
 @pytest.mark.regression
+def test_flat_disk_reports_splay_modulus_scale_meta() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        splay_modulus_scale_in=0.5,
+    )
+    assert float(report["meta"]["splay_modulus_scale_in"]) == pytest.approx(0.5)
+
+
+@pytest.mark.regression
+def test_flat_disk_invalid_splay_modulus_scale_raises() -> None:
+    with pytest.raises(ValueError, match="splay_modulus_scale_in must be > 0"):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            theta_mode="optimize",
+            splay_modulus_scale_in=0.0,
+        )
+
+
+@pytest.mark.regression
 def test_flat_disk_reports_rim_continuity_and_contact_diagnostics() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -241,6 +267,7 @@ def test_flat_disk_optimize_mode_enforces_thetaB_on_full_disk_radius_ring() -> N
         theory_params=params,
         outer_mode="disabled",
         smoothness_model="splay_twist",
+        splay_modulus_scale_in=1.0,
     )
 
     minim = _build_minimizer(mesh)
