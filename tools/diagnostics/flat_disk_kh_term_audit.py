@@ -29,16 +29,17 @@ DEFAULT_OUT = (
 
 def _theory_split_coeffs(theory: Any) -> tuple[float, float, float]:
     """Return (c_in, c_out, b_contact) for theory energy split at fixed theta."""
+    k_splay = float(theory.kappa)
     c_in = float(
         np.pi
-        * float(theory.kappa_t)
+        * k_splay
         * float(theory.radius)
         * float(theory.lambda_inverse)
         * float(theory.ratio_i1_i0)
     )
     c_out = float(
         np.pi
-        * float(theory.kappa_t)
+        * k_splay
         * float(theory.radius)
         * float(theory.lambda_inverse)
         * float(theory.ratio_k1_k0)
