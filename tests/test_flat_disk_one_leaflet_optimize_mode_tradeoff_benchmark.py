@@ -41,3 +41,33 @@ def test_flat_disk_optimize_vs_optimize_full_tradeoff_refine3() -> None:
 
     assert theta_opt <= theta_full
     assert energy_full <= energy_opt
+
+
+@pytest.mark.benchmark
+def test_flat_disk_splay_scale_half_improves_energy_parity_refine3() -> None:
+    baseline = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=3,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        optimize_preset="none",
+        splay_modulus_scale_in=1.0,
+    )
+    tuned = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=3,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        optimize_preset="none",
+        splay_modulus_scale_in=0.5,
+    )
+
+    theta_base = float(baseline["parity"]["theta_factor"])
+    theta_tuned = float(tuned["parity"]["theta_factor"])
+    energy_base = float(baseline["parity"]["energy_factor"])
+    energy_tuned = float(tuned["parity"]["energy_factor"])
+
+    assert theta_tuned <= 1.05 * theta_base
+    assert energy_tuned <= 0.90 * energy_base
