@@ -14,6 +14,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Added inner-leaflet KH-style split smoothness energy `tilt_splay_twist_in` with explicit splay/twist moduli (`tilt_splay_modulus_in`, `tilt_twist_modulus_in`) and default zero twist modulus.
   - Flat disk reproduction CLI now supports `--smoothness-model dirichlet|splay_twist` (default `dirichlet`); `splay_twist` uses `tilt_splay_twist_in` in the benchmark harness.
   - Flat disk reproduction CLI now supports `--theta-mode scan|optimize` (default `scan`) so `theta_B` can be either scanned or optimized as a scalar DOF from one command.
+  - Flat disk reproduction CLI now supports `--theta-mode optimize_full`, which performs optimize + local reduced-energy polish and reports both raw and polished `theta_B` values for deterministic “full optimization” reproducibility.
   - Flat disk reproduction CLI default refinement is now `--refine-level 2` (was `1`) to keep default parity in the `<2x` acceptance range with full rim continuity enforced.
   - Flat disk optimize-mode defaults are now lighter and parity-stable at the default refinement (`theta_optimize_steps=20`, `theta_optimize_inner_steps=20`, `theta_optimize_delta=2e-4`).
   - Flat disk reproduction CLI now supports `--optimize-preset fast_r3` for faster `refine_level>=3` optimize-mode runs, with report metadata indicating whether the preset was applied.

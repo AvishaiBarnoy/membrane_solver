@@ -132,6 +132,34 @@ def test_flat_disk_theta_mode_optimize_runs_and_reports_result() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_theta_mode_optimize_full_runs_and_reports_polish() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=2,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize_full",
+        theta_polish_delta=1.0e-4,
+        theta_polish_points=3,
+    )
+
+    assert report["meta"]["theta_mode"] == "optimize_full"
+    assert report["scan"] is None
+    assert report["optimize"] is not None
+    opt = report["optimize"]
+    polish = opt["polish"]
+    assert polish is not None
+    assert int(polish["polish_points"]) == 3
+    assert float(polish["polish_delta"]) > 0.0
+    assert len(polish["theta_values"]) == 3
+    assert len(polish["energy_values"]) == 3
+    assert opt["theta_star_raw"] is not None
+    assert float(report["mesh"]["theta_star"]) > 0.0
+    assert float(report["parity"]["theta_factor"]) <= 2.0
+    assert float(report["parity"]["energy_factor"]) <= 2.0
+
+
+@pytest.mark.regression
 def test_flat_disk_optimize_preset_fast_r3_is_noop_below_refine3() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -276,6 +304,50 @@ def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize(tmp_path) -
     assert report["meta"]["theta_mode"] == "optimize"
     assert report["scan"] is None
     assert report["optimize"] is not None
+    assert float(report["mesh"]["theta_star"]) > 0.0
+    assert float(report["parity"]["theta_factor"]) <= 2.0
+
+
+@pytest.mark.acceptance
+def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize_full(
+    tmp_path,
+) -> None:
+    out_yaml = tmp_path / "flat_disk_one_leaflet_report_opt_full.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--output",
+            str(out_yaml),
+            "--outer-mode",
+            "disabled",
+            "--smoothness-model",
+            "splay_twist",
+            "--theta-mode",
+            "optimize_full",
+            "--theta-initial",
+            "0.0",
+            "--theta-optimize-steps",
+            "20",
+            "--theta-optimize-every",
+            "1",
+            "--theta-optimize-delta",
+            "0.0002",
+            "--theta-optimize-inner-steps",
+            "20",
+            "--theta-polish-delta",
+            "0.0001",
+            "--theta-polish-points",
+            "3",
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+    report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+    assert report["meta"]["theta_mode"] == "optimize_full"
+    assert report["scan"] is None
+    assert report["optimize"] is not None
+    assert report["optimize"]["polish"] is not None
     assert float(report["mesh"]["theta_star"]) > 0.0
     assert float(report["parity"]["theta_factor"]) <= 2.0
 
