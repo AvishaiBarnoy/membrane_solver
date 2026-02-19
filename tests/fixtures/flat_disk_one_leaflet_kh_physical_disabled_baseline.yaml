@@ -9,15 +9,16 @@ meta:
   length_scale_nm: 15.0
   radius_nm: 7.0
   drive_physical: 2.857142857142857
+  optimize_preset: kh_wide
   tilt_mass_mode_in: consistent
   theta_mode: optimize
   theta_initial: 0.0
-  theta_optimize_steps: 20
+  theta_optimize_steps: 120
   theta_optimize_every: 1
-  theta_optimize_delta: 0.0002
+  theta_optimize_delta: 0.002
   theta_optimize_inner_steps: 20
   theory_source: kh_physical_closed_form
-  expect_meets_factor_2: false
+  expect_meets_factor_2: true
   format: yaml
 metrics:
   theory:
@@ -27,22 +28,27 @@ metrics:
     theta_star: 0.14323594888052385
     total: -0.8999780094660339
   optimize:
-    theta_star_raw: 0.004000000000000001
-    theta_star: 0.004000000000000001
-    optimize_theta_span: 0.004
+    theta_star_raw: 0.08200000000000006
+    theta_star: 0.08200000000000006
+    optimize_theta_span: 0.24
+    hit_step_limit: 0.0
   mesh:
-    theta_star: 0.004000000000000001
-    total_energy: -0.049026843315066376
+    theta_star: 0.08200000000000006
+    total_energy: -0.5099042911197564
     planarity_z_span: 0.0
     outer_tilt_max_free_rows: 0.0
     outer_decay_probe_max_before: 0.0
     outer_decay_probe_max_after: 0.0
     profile:
-      rim_abs_median: 0.004000000000000001
-      outer_abs_median: 4.680129237622149e-09
+      inner_abs_median: 0.0008771350984077602
+      rim_abs_median: 0.08200000000000006
+      outer_abs_median: 9.594253969429099e-08
+    rim_continuity:
+      matched_bins: 12.0
+      jump_abs_median: 8.041812394379623e-05
   parity:
-    theta_factor: 35.80898722013096
-    energy_factor: 18.35684185666228
+    theta_factor: 1.746779864396631
+    energy_factor: 1.7649939903225182
 tolerances:
   theory:
     lambda_value: 1.0e-12
@@ -51,19 +57,24 @@ tolerances:
     theta_star: 1.0e-10
     total: 1.0e-08
   optimize:
-    theta_star_raw: 1.0e-12
-    theta_star: 1.0e-12
+    theta_star_raw: 1.0e-10
+    theta_star: 1.0e-10
     optimize_theta_span: 1.0e-12
+    hit_step_limit: 1.0e-12
   mesh:
-    theta_star: 1.0e-12
+    theta_star: 1.0e-10
     total_energy: 1.0e-07
     planarity_z_span: 1.0e-12
     outer_tilt_max_free_rows: 1.0e-12
     outer_decay_probe_max_before: 1.0e-12
     outer_decay_probe_max_after: 1.0e-12
     profile:
-      rim_abs_median: 1.0e-12
-      outer_abs_median: 1.0e-10
+      inner_abs_median: 1.0e-9
+      rim_abs_median: 1.0e-10
+      outer_abs_median: 1.0e-9
+    rim_continuity:
+      matched_bins: 1.0e-12
+      jump_abs_median: 1.0e-8
   parity:
-    theta_factor: 1.0e-06
-    energy_factor: 1.0e-06
+    theta_factor: 1.0e-8
+    energy_factor: 1.0e-8

@@ -68,6 +68,14 @@ def test_reproduce_flat_disk_one_leaflet_matches_yaml_baseline_with_tolerances(
         cmd.extend(["--smoothness-model", str(meta["smoothness_model"])])
     if "parameterization" in meta:
         cmd.extend(["--parameterization", str(meta["parameterization"])])
+    if "optimize_preset" in meta:
+        cmd.extend(["--optimize-preset", str(meta["optimize_preset"])])
+    if "tilt_mass_mode_in" in meta:
+        cmd.extend(["--tilt-mass-mode-in", str(meta["tilt_mass_mode_in"])])
+    if "splay_modulus_scale_in" in meta:
+        cmd.extend(
+            ["--splay-modulus-scale-in", str(float(meta["splay_modulus_scale_in"]))]
+        )
     for key in (
         "kappa_physical",
         "kappa_t_physical",

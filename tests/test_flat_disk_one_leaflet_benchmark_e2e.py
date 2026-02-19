@@ -269,6 +269,38 @@ def test_flat_disk_kh_consistent_mass_improves_parity_with_kh_wide() -> None:
     assert float(consistent["parity"]["energy_factor"]) <= 2.0
 
 
+@pytest.mark.acceptance
+@pytest.mark.e2e
+def test_flat_disk_kh_optimize_profile_and_continuity_e2e() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_wide",
+    )
+
+    assert report["meta"]["theta_mode"] == "optimize"
+    assert report["meta"]["optimize_preset_effective"] == "kh_wide"
+    assert float(report["parity"]["theta_factor"]) <= 2.0
+    assert float(report["parity"]["energy_factor"]) <= 2.0
+
+    profile = report["mesh"]["profile"]
+    inner = float(profile["inner_abs_median"])
+    rim = float(profile["rim_abs_median"])
+    outer = float(profile["outer_abs_median"])
+    assert inner > 0.0
+    assert rim > inner
+    assert outer < inner
+
+    continuity = report["mesh"]["rim_continuity"]
+    assert int(continuity["matched_bins"]) > 0
+    assert float(continuity["jump_abs_median"]) < 0.01 * rim
+    assert float(report["mesh"]["planarity_z_span"]) < 1e-12
+
+
 @pytest.mark.regression
 def test_flat_disk_reports_splay_modulus_scale_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
