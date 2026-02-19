@@ -7,6 +7,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.flat_disk_kh_term_audit import (
+    run_flat_disk_kh_calibration_sweep,
     run_flat_disk_kh_term_audit,
     run_flat_disk_kh_term_audit_refine_sweep,
 )
@@ -98,3 +99,27 @@ def test_flat_disk_kh_term_audit_local_rim_refine_changes_resolution() -> None:
     base_h = float(base["resolution"]["rim_h_over_lambda_median"])
     local_h = float(local["resolution"]["rim_h_over_lambda_median"])
     assert local_h < base_h
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_calibration_sweep_reports_finite_rows() -> None:
+    report = run_flat_disk_kh_calibration_sweep(
+        refine_levels=(1,),
+        splay_scales=(0.4, 0.5),
+        tilt_mass_modes=("auto",),
+    )
+    assert report["meta"]["mode"] == "calibration_sweep"
+    rows = report["rows"]
+    assert len(rows) == 2
+    for row in rows:
+        assert np.isfinite(float(row["splay_modulus_scale_in"]))
+        assert int(row["refine_level"]) == 1
+        assert str(row["tilt_mass_mode_in"]) in {"consistent", "lumped"}
+        assert np.isfinite(float(row["theta_star"]))
+        assert np.isfinite(float(row["theta_factor"]))
+        assert np.isfinite(float(row["energy_factor"]))
+        assert np.isfinite(float(row["parity_score"]))
+    best = report["best_candidate"]
+    assert np.isfinite(float(best["splay_modulus_scale_in"]))
+    assert np.isfinite(float(best["worst_theta_factor"]))
+    assert np.isfinite(float(best["worst_energy_factor"]))

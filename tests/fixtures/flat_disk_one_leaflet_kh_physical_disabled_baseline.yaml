@@ -10,7 +10,7 @@ meta:
   radius_nm: 7.0
   drive_physical: 2.857142857142857
   optimize_preset: kh_wide
-  splay_modulus_scale_in: 0.5
+  splay_modulus_scale_in: 0.3
   tilt_mass_mode_in: consistent
   theta_mode: optimize
   theta_initial: 0.0
@@ -29,27 +29,27 @@ metrics:
     theta_star: 0.14323594888052385
     total: -0.8999780094660339
   optimize:
-    theta_star_raw: 0.09200000000000007
-    theta_star: 0.09200000000000007
+    theta_star_raw: 0.09600000000000007
+    theta_star: 0.09600000000000007
     optimize_theta_span: 0.24
     hit_step_limit: 0.0
   mesh:
-    theta_star: 0.09200000000000007
-    total_energy: -0.5752029989731495
+    theta_star: 0.09600000000000007
+    total_energy: -0.6079892736169625
     planarity_z_span: 0.0
     outer_tilt_max_free_rows: 0.0
     outer_decay_probe_max_before: 0.0
     outer_decay_probe_max_after: 0.0
     profile:
-      inner_abs_median: 0.0002469714960716966
-      rim_abs_median: 0.09200000000000007
-      outer_abs_median: 1.373384376460917e-08
+      inner_abs_median: 0.0003293251880035851
+      rim_abs_median: 0.09600000000000007
+      outer_abs_median: 2.6862211146591995e-09
     rim_continuity:
       matched_bins: 12.0
-      jump_abs_median: 6.788520486977203e-05
+      jump_abs_median: 3.982417485075439e-05
   parity:
-    theta_factor: 1.5569124878317797
-    energy_factor: 1.5646267684151014
+    theta_factor: 1.4920411341721223
+    energy_factor: 1.4802531039931246
 tolerances:
   theory:
     lambda_value: 1.0e-12

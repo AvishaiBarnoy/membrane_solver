@@ -630,7 +630,7 @@ def run_flat_disk_one_leaflet_benchmark(
         and str(smoothness_model) == "splay_twist"
         and abs(float(splay_modulus_scale_in) - 1.0) < 1e-15
     ):
-        effective_splay_modulus_scale_in = 0.5
+        effective_splay_modulus_scale_in = 0.3
     mass_mode_raw = str(tilt_mass_mode_in).strip().lower()
     if mass_mode_raw == "auto":
         mass_mode = "consistent" if mode == "kh_physical" else "lumped"

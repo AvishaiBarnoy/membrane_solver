@@ -337,6 +337,7 @@ def _run_single_level(
     drive_physical: float,
     theta_values: Sequence[float],
     tilt_mass_mode_in: str,
+    splay_modulus_scale_in: float,
     rim_local_refine_steps: int,
     rim_local_refine_band_lambda: float,
 ) -> dict[str, Any]:
@@ -389,7 +390,7 @@ def _run_single_level(
         parameterization="kh_physical",
         outer_mode=outer_mode,
         smoothness_model=smoothness_model,
-        splay_modulus_scale_in=1.0,
+        splay_modulus_scale_in=float(splay_modulus_scale_in),
         tilt_mass_mode_in=str(mass_mode),
     )
     minim = _build_minimizer(mesh)
@@ -491,6 +492,7 @@ def _run_single_level(
             "length_scale_nm": float(length_scale_nm),
             "drive_physical": float(drive_physical),
             "tilt_mass_mode_in": str(mass_mode),
+            "splay_modulus_scale_in": float(splay_modulus_scale_in),
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
         },
@@ -522,6 +524,7 @@ def run_flat_disk_kh_term_audit(
     drive_physical: float = (2.0 / 0.7),
     theta_values: Sequence[float] = (0.0, 6.366e-4, 0.004),
     tilt_mass_mode_in: str = "auto",
+    splay_modulus_scale_in: float = 1.0,
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
 ) -> dict[str, Any]:
@@ -546,6 +549,7 @@ def run_flat_disk_kh_term_audit(
         drive_physical=float(drive_physical),
         theta_values=theta_values,
         tilt_mass_mode_in=str(tilt_mass_mode_in),
+        splay_modulus_scale_in=float(splay_modulus_scale_in),
         rim_local_refine_steps=int(rim_local_refine_steps),
         rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
     )
@@ -564,6 +568,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     drive_physical: float = (2.0 / 0.7),
     theta_values: Sequence[float] = (0.0, 6.366e-4, 0.004),
     tilt_mass_mode_in: str = "auto",
+    splay_modulus_scale_in: float = 1.0,
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
 ) -> dict[str, Any]:
@@ -593,6 +598,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             drive_physical=float(drive_physical),
             theta_values=theta_values,
             tilt_mass_mode_in=str(tilt_mass_mode_in),
+            splay_modulus_scale_in=float(splay_modulus_scale_in),
             rim_local_refine_steps=int(rim_local_refine_steps),
             rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
         )
@@ -607,10 +613,156 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             "parameterization": "kh_physical",
             "theory_model": "kh_physical_strict_kh",
             "tilt_mass_mode_in": str(tilt_mass_mode_in).strip().lower(),
+            "splay_modulus_scale_in": float(splay_modulus_scale_in),
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
         },
         "runs": runs,
+    }
+
+
+def run_flat_disk_kh_calibration_sweep(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    refine_levels: Sequence[int] = (1, 2),
+    outer_mode: str = "disabled",
+    smoothness_model: str = "splay_twist",
+    kappa_physical: float = 10.0,
+    kappa_t_physical: float = 10.0,
+    radius_nm: float = 7.0,
+    length_scale_nm: float = 15.0,
+    drive_physical: float = (2.0 / 0.7),
+    splay_scales: Sequence[float] = (0.3, 0.4, 0.5, 0.6),
+    tilt_mass_modes: Sequence[str] = ("auto",),
+    optimize_preset: str = "kh_wide",
+) -> dict[str, Any]:
+    """Run KH optimize parity sweep over calibration controls."""
+    from tools.reproduce_flat_disk_one_leaflet import (
+        run_flat_disk_one_leaflet_benchmark,
+    )
+
+    fixture_path = Path(fixture)
+    if not fixture_path.is_absolute():
+        fixture_path = (ROOT / fixture_path).resolve()
+    if not fixture_path.exists():
+        raise FileNotFoundError(f"Fixture not found: {fixture_path}")
+
+    levels = [int(x) for x in refine_levels]
+    scales = [float(x) for x in splay_scales]
+    modes = [str(x).strip().lower() for x in tilt_mass_modes]
+    if len(levels) == 0:
+        raise ValueError("refine_levels must be non-empty.")
+    if len(scales) == 0:
+        raise ValueError("splay_scales must be non-empty.")
+    if len(modes) == 0:
+        raise ValueError("tilt_mass_modes must be non-empty.")
+
+    rows: list[dict[str, float | str | int | bool]] = []
+    grouped: dict[tuple[float, str], list[dict[str, float | str | int | bool]]] = {}
+
+    for mass_mode in modes:
+        if mass_mode not in {"auto", "lumped", "consistent"}:
+            raise ValueError(
+                "tilt_mass_modes entries must be 'auto', 'lumped', or 'consistent'."
+            )
+        for splay_scale in scales:
+            if splay_scale <= 0.0:
+                raise ValueError("splay_scales entries must be > 0.")
+            key = (float(splay_scale), str(mass_mode))
+            grouped[key] = []
+            for level in levels:
+                report = run_flat_disk_one_leaflet_benchmark(
+                    fixture=fixture_path,
+                    refine_level=int(level),
+                    outer_mode=outer_mode,
+                    smoothness_model=smoothness_model,
+                    theta_mode="optimize",
+                    parameterization="kh_physical",
+                    optimize_preset=str(optimize_preset),
+                    kappa_physical=float(kappa_physical),
+                    kappa_t_physical=float(kappa_t_physical),
+                    radius_nm=float(radius_nm),
+                    length_scale_nm=float(length_scale_nm),
+                    drive_physical=float(drive_physical),
+                    tilt_mass_mode_in=str(mass_mode),
+                    splay_modulus_scale_in=float(splay_scale),
+                )
+                theta_factor = float(report["parity"]["theta_factor"])
+                energy_factor = float(report["parity"]["energy_factor"])
+                if not (np.isfinite(theta_factor) and np.isfinite(energy_factor)):
+                    raise ValueError(
+                        "Non-finite parity in calibration sweep for "
+                        f"(scale={splay_scale}, mass_mode={mass_mode}, refine={level})."
+                    )
+                score = float(
+                    np.hypot(
+                        np.log(max(theta_factor, 1e-18)),
+                        np.log(max(energy_factor, 1e-18)),
+                    )
+                )
+                row: dict[str, float | str | int | bool] = {
+                    "refine_level": int(level),
+                    "splay_modulus_scale_in": float(splay_scale),
+                    "tilt_mass_mode_in": str(report["meta"]["tilt_mass_mode_in"]),
+                    "theta_star": float(report["mesh"]["theta_star"]),
+                    "theta_factor": theta_factor,
+                    "energy_factor": energy_factor,
+                    "parity_score": score,
+                    "meets_factor_2": bool(report["parity"]["meets_factor_2"]),
+                }
+                rows.append(row)
+                grouped[key].append(row)
+
+    candidates: list[dict[str, float | str | bool]] = []
+    for (splay_scale, mass_mode), vals in grouped.items():
+        by_level = sorted(vals, key=lambda x: int(x["refine_level"]))
+        theta_factors = [float(x["theta_factor"]) for x in by_level]
+        energy_factors = [float(x["energy_factor"]) for x in by_level]
+        scores = [float(x["parity_score"]) for x in by_level]
+        non_worsening = all(
+            theta_factors[i + 1] <= theta_factors[i]
+            and energy_factors[i + 1] <= energy_factors[i]
+            for i in range(len(by_level) - 1)
+        )
+        candidates.append(
+            {
+                "splay_modulus_scale_in": float(splay_scale),
+                "tilt_mass_mode_in": str(mass_mode),
+                "levels_evaluated": float(len(by_level)),
+                "mean_parity_score": float(np.mean(scores)),
+                "worst_parity_score": float(np.max(scores)),
+                "worst_theta_factor": float(np.max(theta_factors)),
+                "worst_energy_factor": float(np.max(energy_factors)),
+                "refine_non_worsening": bool(non_worsening),
+            }
+        )
+
+    if len(candidates) == 0:
+        raise ValueError("Calibration sweep produced no candidates.")
+    best = min(
+        candidates,
+        key=lambda c: (
+            float(c["worst_parity_score"]),
+            float(c["mean_parity_score"]),
+            float(c["splay_modulus_scale_in"]),
+        ),
+    )
+    return {
+        "meta": {
+            "mode": "calibration_sweep",
+            "parameterization": "kh_physical",
+            "theory_model": "kh_physical_strict_kh",
+            "fixture": str(fixture_path.relative_to(ROOT)),
+            "refine_levels": levels,
+            "outer_mode": str(outer_mode),
+            "smoothness_model": str(smoothness_model),
+            "splay_scales": scales,
+            "tilt_mass_modes": modes,
+            "optimize_preset": str(optimize_preset),
+        },
+        "rows": rows,
+        "candidates": candidates,
+        "best_candidate": best,
     }
 
 
@@ -639,12 +791,58 @@ def main() -> int:
     ap.add_argument("--rim-local-refine-steps", type=int, default=0)
     ap.add_argument("--rim-local-refine-band-lambda", type=float, default=0.0)
     ap.add_argument(
+        "--splay-modulus-scale-in",
+        type=float,
+        default=1.0,
+    )
+    ap.add_argument(
+        "--calibration-sweep",
+        action="store_true",
+        help="Run KH optimize calibration sweep instead of per-theta audit.",
+    )
+    ap.add_argument(
+        "--splay-scales",
+        type=float,
+        nargs="+",
+        default=[0.3, 0.4, 0.5, 0.6],
+    )
+    ap.add_argument(
+        "--sweep-tilt-mass-modes",
+        nargs="+",
+        default=["auto"],
+        choices=("auto", "lumped", "consistent"),
+    )
+    ap.add_argument(
+        "--optimize-preset",
+        default="kh_wide",
+    )
+    ap.add_argument(
         "--theta-values", type=float, nargs="+", default=[0.0, 6.366e-4, 0.004]
     )
     ap.add_argument("--output", default=str(DEFAULT_OUT))
     args = ap.parse_args()
 
-    if args.refine_levels is not None:
+    if args.calibration_sweep:
+        levels = (
+            tuple(int(x) for x in args.refine_levels)
+            if args.refine_levels is not None
+            else (int(args.refine_level),)
+        )
+        report = run_flat_disk_kh_calibration_sweep(
+            fixture=args.fixture,
+            refine_levels=levels,
+            outer_mode=args.outer_mode,
+            smoothness_model=args.smoothness_model,
+            kappa_physical=args.kappa_physical,
+            kappa_t_physical=args.kappa_t_physical,
+            radius_nm=args.radius_nm,
+            length_scale_nm=args.length_scale_nm,
+            drive_physical=args.drive_physical,
+            splay_scales=args.splay_scales,
+            tilt_mass_modes=args.sweep_tilt_mass_modes,
+            optimize_preset=args.optimize_preset,
+        )
+    elif args.refine_levels is not None:
         report = run_flat_disk_kh_term_audit_refine_sweep(
             fixture=args.fixture,
             refine_levels=tuple(int(x) for x in args.refine_levels),
@@ -657,6 +855,7 @@ def main() -> int:
             drive_physical=args.drive_physical,
             theta_values=args.theta_values,
             tilt_mass_mode_in=args.tilt_mass_mode_in,
+            splay_modulus_scale_in=args.splay_modulus_scale_in,
             rim_local_refine_steps=args.rim_local_refine_steps,
             rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
         )
@@ -673,6 +872,7 @@ def main() -> int:
             drive_physical=args.drive_physical,
             theta_values=args.theta_values,
             tilt_mass_mode_in=args.tilt_mass_mode_in,
+            splay_modulus_scale_in=args.splay_modulus_scale_in,
             rim_local_refine_steps=args.rim_local_refine_steps,
             rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
         )
