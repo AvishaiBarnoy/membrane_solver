@@ -20,6 +20,7 @@ from tools.reproduce_flat_disk_one_leaflet import (
     _radial_unit_vectors,
     _run_theta_optimize,
     _run_theta_relaxation,
+    run_flat_disk_lane_comparison,
     run_flat_disk_one_leaflet_benchmark,
 )
 
@@ -126,6 +127,9 @@ def test_flat_disk_theta_mode_optimize_runs_and_reports_result() -> None:
     assert report["meta"]["optimize_preset_effective"] == "none"
     assert report["scan"] is None
     assert report["optimize"] is not None
+    assert "optimize_theta_span" in report["optimize"]
+    assert "hit_step_limit" in report["optimize"]
+    assert isinstance(report["optimize"]["hit_step_limit"], bool)
     assert float(report["mesh"]["theta_star"]) > 0.0
     assert float(report["parity"]["theta_factor"]) <= 2.0
     assert float(report["parity"]["energy_factor"]) <= 2.0
@@ -157,6 +161,9 @@ def test_flat_disk_theta_mode_optimize_full_runs_and_reports_polish() -> None:
     assert opt["theta_star_raw"] is not None
     assert opt["theta_factor_raw"] is not None
     assert opt["energy_factor_raw"] is not None
+    assert "optimize_theta_span" in opt
+    assert "hit_step_limit" in opt
+    assert isinstance(opt["hit_step_limit"], bool)
     assert float(report["mesh"]["theta_star"]) > 0.0
     assert float(report["parity"]["theta_factor"]) <= 2.0
     assert float(report["parity"]["energy_factor"]) <= 2.0
@@ -233,6 +240,73 @@ def test_flat_disk_invalid_splay_modulus_scale_raises() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_invalid_parameterization_raises() -> None:
+    with pytest.raises(ValueError, match="parameterization must be"):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            parameterization="invalid_mode",
+        )
+
+
+@pytest.mark.regression
+def test_flat_disk_lane_comparison_reports_both_lanes() -> None:
+    report = run_flat_disk_lane_comparison(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        legacy_theta_mode="scan",
+        legacy_theta_min=0.0,
+        legacy_theta_max=0.0014,
+        legacy_theta_count=8,
+        kh_theta_mode="optimize",
+        kh_theta_initial=0.0,
+        kh_theta_optimize_steps=6,
+        kh_theta_optimize_every=1,
+        kh_theta_optimize_delta=2.0e-4,
+        kh_theta_optimize_inner_steps=5,
+        kh_smoothness_model="splay_twist",
+    )
+
+    assert report["meta"]["mode"] == "compare_lanes"
+    assert report["legacy"]["parity"]["lane"] == "legacy"
+    assert report["kh_physical"]["parity"]["lane"] == "kh_physical"
+    assert "comparison" in report
+    comp = report["comparison"]
+    assert float(comp["legacy_theta_star"]) > 0.0
+    assert float(comp["kh_theta_star"]) > 0.0
+    assert float(comp["kh_over_legacy_theta_star_ratio"]) > 1.0
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_physical_parameterization_reports_unit_scaling() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        kappa_physical=10.0,
+        kappa_t_physical=10.0,
+        length_scale_nm=15.0,
+        radius_nm=7.0,
+        drive_physical=(2.0 / 0.7),
+    )
+
+    meta = report["meta"]
+    theory = report["theory"]
+    assert meta["parameterization"] == "kh_physical"
+    assert bool(meta["using_physical_scaling"])
+    assert float(meta["length_scale_nm"]) == pytest.approx(15.0, abs=1e-12)
+    assert float(meta["radius_nm"]) == pytest.approx(7.0, abs=1e-12)
+    assert float(meta["radius_dimless"]) == pytest.approx(7.0 / 15.0, abs=1e-12)
+    assert float(theory["kappa"]) == pytest.approx(1.0, abs=1e-12)
+    assert float(theory["kappa_t"]) == pytest.approx(225.0, abs=1e-12)
+    assert float(theory["radius"]) == pytest.approx(7.0 / 15.0, abs=1e-12)
+
+
+@pytest.mark.regression
 def test_flat_disk_reports_rim_continuity_and_contact_diagnostics() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -265,6 +339,7 @@ def test_flat_disk_optimize_mode_enforces_thetaB_on_full_disk_radius_ring() -> N
     _configure_benchmark_mesh(
         mesh,
         theory_params=params,
+        parameterization="legacy",
         outer_mode="disabled",
         smoothness_model="splay_twist",
         splay_modulus_scale_in=1.0,

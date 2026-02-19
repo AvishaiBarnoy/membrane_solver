@@ -317,8 +317,26 @@ Interactive commands:
     `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled --smoothness-model splay_twist --theta-mode optimize`.
   - Full local reduced-energy optimization mode (optimize + polish):
     `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled --smoothness-model splay_twist --theta-mode optimize_full`.
+  - Side-by-side lane comparison from one command:
+    `python tools/reproduce_flat_disk_one_leaflet.py --compare-lanes --refine-level 1 --output /tmp/flat_compare.yaml`.
+    This writes both `legacy` and `kh_physical` reports plus a `comparison` summary.
   - Common options:
     `--fixture`, `--refine-level` (default `2`), `--smoothness-model`, `--theta-mode`, `--output`.
+  - Parameterization options:
+    `--parameterization legacy|kh_physical` (default `legacy`).
+    - `legacy` keeps the historical parity remap used by existing acceptance baselines.
+    - `kh_physical` uses direct KH-style dimensionless coefficients (`kappa`, `kappa_t`)
+      with explicit physical-to-dimensionless conversion.
+  - Physical scaling controls (used when `--parameterization kh_physical`):
+    `--kappa-physical`, `--kappa-t-physical`, `--length-scale-nm`,
+    `--radius-nm`, `--drive-physical`.
+    Example for the TeX physical scaling convention (`R=7 nm`, `L0=15 nm`,
+    `kappa=10 kBT`, `kappa_t=10 kBT/nm^2`):
+    `python tools/reproduce_flat_disk_one_leaflet.py --parameterization kh_physical --kappa-physical 10 --kappa-t-physical 10 --length-scale-nm 15 --radius-nm 7 --drive-physical 2.857142857142857 --outer-mode disabled --smoothness-model splay_twist --theta-mode optimize`.
+  - Notes on parity:
+    `kh_physical` currently enforces unit-consistent KH scaling in the harness and
+    report metadata, but legacy flat-theory parity thresholds were tuned against
+    the legacy remap; use `legacy` mode for strict baseline parity gating.
   - Scan controls (`--theta-mode scan`):
     `--theta-min`, `--theta-max`, `--theta-count`.
   - Optimize controls (`--theta-mode optimize`):

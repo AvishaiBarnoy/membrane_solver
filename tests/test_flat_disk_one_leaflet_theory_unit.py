@@ -9,7 +9,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from tools.diagnostics.flat_disk_one_leaflet_theory import (
     FlatDiskTheoryParams,
     compute_flat_disk_theory,
+    physical_to_dimensionless_theory_params,
     quadratic_min_from_scan,
+    solver_mapping_from_theory,
     tex_reference_params,
 )
 
@@ -64,3 +66,76 @@ def test_theta_scan_quadratic_fit_recovers_known_minimum() -> None:
     assert fit.coeff_b == pytest.approx(-1.2, rel=1e-10, abs=1e-12)
     assert fit.theta_star == pytest.approx(theta_star_exact, rel=1e-10, abs=1e-12)
     assert fit.energy_star == pytest.approx(energy_star_exact, rel=1e-10, abs=1e-12)
+
+
+@pytest.mark.unit
+def test_physical_to_dimensionless_theory_params_tex_scaling() -> None:
+    params = physical_to_dimensionless_theory_params(
+        kappa_physical=10.0,
+        kappa_t_physical=10.0,
+        radius_physical=7.0,
+        drive_physical=(2.0 / 0.7),
+        length_scale=15.0,
+    )
+
+    assert params.kappa == pytest.approx(1.0, abs=1e-12)
+    assert params.kappa_t == pytest.approx(225.0, abs=1e-12)
+    assert params.radius == pytest.approx(7.0 / 15.0, abs=1e-12)
+    assert params.drive == pytest.approx(4.285714286, rel=1e-9, abs=1e-12)
+
+
+@pytest.mark.unit
+def test_physical_to_dimensionless_theory_params_guards() -> None:
+    with pytest.raises(ValueError, match="kappa_physical must be > 0"):
+        physical_to_dimensionless_theory_params(
+            kappa_physical=0.0,
+            kappa_t_physical=10.0,
+            radius_physical=7.0,
+            drive_physical=1.0,
+            length_scale=15.0,
+        )
+
+    with pytest.raises(ValueError, match="kappa_t_physical must be > 0"):
+        physical_to_dimensionless_theory_params(
+            kappa_physical=10.0,
+            kappa_t_physical=0.0,
+            radius_physical=7.0,
+            drive_physical=1.0,
+            length_scale=15.0,
+        )
+
+    with pytest.raises(ValueError, match="radius_physical must be > 0"):
+        physical_to_dimensionless_theory_params(
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_physical=0.0,
+            drive_physical=1.0,
+            length_scale=15.0,
+        )
+
+    with pytest.raises(ValueError, match="length_scale must be > 0"):
+        physical_to_dimensionless_theory_params(
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_physical=7.0,
+            drive_physical=1.0,
+            length_scale=0.0,
+        )
+
+
+@pytest.mark.unit
+def test_solver_mapping_from_theory_supports_legacy_and_kh_physical() -> None:
+    params = FlatDiskTheoryParams(
+        kappa=1.0, kappa_t=225.0, radius=7.0 / 15.0, drive=1.0
+    )
+
+    legacy = solver_mapping_from_theory(params, parameterization="legacy")
+    assert legacy["bending_modulus_in"] == pytest.approx(225.0)
+    assert legacy["tilt_modulus_in"] == pytest.approx(50625.0)
+
+    kh = solver_mapping_from_theory(params, parameterization="kh_physical")
+    assert kh["bending_modulus_in"] == pytest.approx(1.0)
+    assert kh["tilt_modulus_in"] == pytest.approx(225.0)
+
+    with pytest.raises(ValueError, match="parameterization must be"):
+        solver_mapping_from_theory(params, parameterization="unknown_mode")

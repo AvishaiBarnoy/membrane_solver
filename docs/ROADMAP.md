@@ -231,6 +231,10 @@ intended for development and planning; users should consult `README.md` and
           `tools/reproduce_flat_disk_one_leaflet.py`,
           `tests/test_flat_disk_one_leaflet_theory_unit.py`,
           `tests/test_flat_disk_one_leaflet_benchmark_e2e.py`).
+    - [x] Added explicit flat-benchmark parameterization modes:
+          `legacy` parity remap and `kh_physical` unit-consistent scaling
+          (energy scaled by `kappa`, length scaled by user-selected `L0`,
+          including physical CLI inputs for `kappa`, `kappa_t`, `R`, and drive).
     - [ ] E2E regression: for γ=0, recover the 1_disk_3d predictions
           (`θ^p(r)=θ^d(r)` in the outer region and `φ*≈θ_B/2`).
      - [ ] Future: enforce/validate that interacting tilt sources on a given
