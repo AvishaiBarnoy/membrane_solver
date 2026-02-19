@@ -265,8 +265,8 @@ def test_flat_disk_kh_consistent_mass_improves_parity_with_kh_wide() -> None:
     assert float(consistent["parity"]["energy_factor"]) < float(
         lumped["parity"]["energy_factor"]
     )
-    assert float(consistent["parity"]["theta_factor"]) <= 2.0
-    assert float(consistent["parity"]["energy_factor"]) <= 2.0
+    assert float(consistent["parity"]["theta_factor"]) <= 1.9
+    assert float(consistent["parity"]["energy_factor"]) <= 1.9
 
 
 @pytest.mark.acceptance
@@ -284,8 +284,8 @@ def test_flat_disk_kh_optimize_profile_and_continuity_e2e() -> None:
 
     assert report["meta"]["theta_mode"] == "optimize"
     assert report["meta"]["optimize_preset_effective"] == "kh_wide"
-    assert float(report["parity"]["theta_factor"]) <= 2.0
-    assert float(report["parity"]["energy_factor"]) <= 2.0
+    assert float(report["parity"]["theta_factor"]) <= 1.9
+    assert float(report["parity"]["energy_factor"]) <= 1.9
 
     profile = report["mesh"]["profile"]
     inner = float(profile["inner_abs_median"])
@@ -299,6 +299,35 @@ def test_flat_disk_kh_optimize_profile_and_continuity_e2e() -> None:
     assert int(continuity["matched_bins"]) > 0
     assert float(continuity["jump_abs_median"]) < 0.01 * rim
     assert float(report["mesh"]["planarity_z_span"]) < 1e-12
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_optimize_parity_does_not_worsen_with_refinement() -> None:
+    refine1 = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_wide",
+    )
+    refine2 = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=2,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_wide",
+    )
+
+    t1 = float(refine1["parity"]["theta_factor"])
+    e1 = float(refine1["parity"]["energy_factor"])
+    t2 = float(refine2["parity"]["theta_factor"])
+    e2 = float(refine2["parity"]["energy_factor"])
+    assert t2 <= t1, (t1, t2)
+    assert e2 <= e1, (e1, e2)
 
 
 @pytest.mark.regression
