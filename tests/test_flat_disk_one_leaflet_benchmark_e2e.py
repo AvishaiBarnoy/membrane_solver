@@ -413,6 +413,20 @@ def test_flat_disk_kh_strict_refine_preset_improves_score_vs_baseline() -> None:
     assert score_strict <= score_base
     assert strict_runtime < refine2_runtime
 
+    rim = strict["mesh"]["rim_boundary_realization"]
+    assert int(rim["rim_samples"]) > 0
+    assert np.isfinite(float(rim["rim_theta_error_abs_median"]))
+    assert np.isfinite(float(rim["rim_theta_error_abs_max"]))
+    assert float(rim["rim_theta_error_abs_median"]) <= 1e-12
+    assert float(rim["rim_theta_error_abs_max"]) <= 1e-12
+
+    leakage = strict["mesh"]["leakage"]
+    assert np.isfinite(float(leakage["inner_tphi_over_trad_median"]))
+    assert np.isfinite(float(leakage["outer_tphi_over_trad_median"]))
+    # Regression caps from strict baseline (refine1 + rim-local step 1).
+    assert float(leakage["inner_tphi_over_trad_median"]) <= 0.03
+    assert float(leakage["outer_tphi_over_trad_median"]) <= 1.40
+
 
 @pytest.mark.regression
 def test_flat_disk_invalid_splay_modulus_scale_raises() -> None:
