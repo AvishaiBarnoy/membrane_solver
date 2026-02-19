@@ -182,6 +182,22 @@ def compute_flat_disk_theory(params: FlatDiskTheoryParams) -> FlatDiskTheoryResu
     )
 
 
+def compute_flat_disk_kh_physical_theory(
+    params: FlatDiskTheoryParams,
+) -> FlatDiskTheoryResult:
+    """Compute strict KH flat-disk closed-form values.
+
+    KH reference model (flat geometry, one leaflet, no curvature relaxation):
+      f = 0.5 * kappa * (div t)^2 + 0.5 * kappa_t * |t|^2
+
+    For the axially symmetric disk/outer-domain benchmark, the minimization in
+    theta_B has the same Bessel closed form as ``compute_flat_disk_theory``;
+    this helper exists to lock the kh_physical lane onto an explicit KH
+    reference model in diagnostics and acceptance tooling.
+    """
+    return compute_flat_disk_theory(params)
+
+
 def solver_mapping_from_theory(
     params: FlatDiskTheoryParams, *, parameterization: str = "legacy"
 ) -> dict[str, float]:
@@ -258,6 +274,7 @@ __all__ = [
     "FlatDiskTheoryResult",
     "QuadraticFitResult",
     "compute_flat_disk_theory",
+    "compute_flat_disk_kh_physical_theory",
     "physical_to_dimensionless_theory_params",
     "quadratic_min_from_scan",
     "solver_mapping_from_theory",

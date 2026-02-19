@@ -110,6 +110,10 @@ def test_reproduce_flat_disk_one_leaflet_matches_yaml_baseline_with_tolerances(
     assert report["meta"]["outer_mode"] == meta["outer_mode"]
     assert report["meta"]["theory_source"] == meta["theory_source"]
     assert report["parity"]["lane"] == str(meta.get("parameterization", "legacy"))
+    if str(meta.get("parameterization", "legacy")) == "kh_physical":
+        assert report["meta"]["theory_model"] == "kh_physical_strict_kh"
+    else:
+        assert report["meta"]["theory_model"] == "legacy_scalar_reduced"
     if theta_mode == "scan":
         assert float(report["scan"]["theta_min"]) == pytest.approx(
             float(meta["theta_min"]), abs=0.0

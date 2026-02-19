@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from tools.diagnostics.flat_disk_one_leaflet_theory import (
     FlatDiskTheoryParams,
+    compute_flat_disk_kh_physical_theory,
     compute_flat_disk_theory,
     physical_to_dimensionless_theory_params,
     quadratic_min_from_scan,
@@ -139,3 +140,22 @@ def test_solver_mapping_from_theory_supports_legacy_and_kh_physical() -> None:
 
     with pytest.raises(ValueError, match="parameterization must be"):
         solver_mapping_from_theory(params, parameterization="unknown_mode")
+
+
+@pytest.mark.unit
+def test_flat_disk_kh_physical_theory_reference_values() -> None:
+    """Lock kh_physical lane reference to strict KH closed form."""
+    params = physical_to_dimensionless_theory_params(
+        kappa_physical=10.0,
+        kappa_t_physical=10.0,
+        radius_physical=7.0,
+        drive_physical=(2.0 / 0.7),
+        length_scale=15.0,
+    )
+    result = compute_flat_disk_kh_physical_theory(params)
+
+    assert result.lambda_value == pytest.approx(1.0 / 15.0, abs=1e-12)
+    assert result.lambda_inverse == pytest.approx(15.0, abs=1e-12)
+    assert result.lambda_radius == pytest.approx(7.0, abs=1e-9)
+    assert result.theta_star == pytest.approx(6.366e-4, rel=5e-4, abs=1e-8)
+    assert result.total == pytest.approx(-3.9999e-3, rel=5e-4, abs=1e-8)
