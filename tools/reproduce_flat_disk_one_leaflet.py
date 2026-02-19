@@ -184,6 +184,7 @@ def _configure_benchmark_mesh(
     mesh,
     *,
     theory_params: FlatDiskTheoryParams,
+    parameterization: str,
     outer_mode: str,
     smoothness_model: str,
     splay_modulus_scale_in: float,
@@ -194,7 +195,9 @@ def _configure_benchmark_mesh(
     )
 
     gp = mesh.global_parameters
-    mapping = solver_mapping_from_theory(theory_params)
+    mapping = solver_mapping_from_theory(
+        theory_params, parameterization=str(parameterization)
+    )
 
     gp.set("surface_tension", 0.0)
     gp.set("step_size_mode", "fixed")
@@ -510,6 +513,12 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_polish_delta: float = 1.0e-4,
     theta_polish_points: int = 3,
     optimize_preset: str = "none",
+    parameterization: str = "legacy",
+    length_scale_nm: float = 15.0,
+    radius_nm: float = 7.0,
+    kappa_physical: float = 10.0,
+    kappa_t_physical: float = 10.0,
+    drive_physical: float = (2.0 / 0.7),
     splay_modulus_scale_in: float = 1.0,
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
@@ -518,6 +527,7 @@ def run_flat_disk_one_leaflet_benchmark(
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
         compute_flat_disk_theory,
+        physical_to_dimensionless_theory_params,
         quadratic_min_from_scan,
         tex_reference_params,
     )
@@ -532,8 +542,23 @@ def run_flat_disk_one_leaflet_benchmark(
         raise ValueError("refine_level must be >= 0.")
     if float(splay_modulus_scale_in) <= 0.0:
         raise ValueError("splay_modulus_scale_in must be > 0.")
+    mode = str(parameterization).lower()
+    if mode not in {"legacy", "kh_physical"}:
+        raise ValueError("parameterization must be 'legacy' or 'kh_physical'.")
 
-    params = theory_params if theory_params is not None else tex_reference_params()
+    using_physical_scaling = theory_params is None and mode == "kh_physical"
+    if theory_params is not None:
+        params = theory_params
+    elif using_physical_scaling:
+        params = physical_to_dimensionless_theory_params(
+            kappa_physical=float(kappa_physical),
+            kappa_t_physical=float(kappa_t_physical),
+            radius_physical=float(radius_nm),
+            drive_physical=float(drive_physical),
+            length_scale=float(length_scale_nm),
+        )
+    else:
+        params = tex_reference_params()
     theory = compute_flat_disk_theory(params)
     theta_mode_str = str(theta_mode).lower()
     if theta_mode_str not in {"scan", "optimize", "optimize_full"}:
@@ -584,6 +609,7 @@ def run_flat_disk_one_leaflet_benchmark(
     _configure_benchmark_mesh(
         mesh,
         theory_params=params,
+        parameterization=mode,
         outer_mode=outer_mode,
         smoothness_model=smoothness_model,
         splay_modulus_scale_in=float(splay_modulus_scale_in),
@@ -664,12 +690,21 @@ def run_flat_disk_one_leaflet_benchmark(
                 float(abs(raw_energy)), float(abs(theory.total))
             )
         optimize_seconds = float(perf_counter() - t0)
+        optimize_theta_span = float(
+            int(optimize_cfg.optimize_steps) * float(optimize_cfg.optimize_delta)
+        )
+        hit_step_limit = bool(
+            abs(float(theta_opt_raw) - float(optimize_cfg.theta_initial))
+            >= (optimize_theta_span - 1e-12)
+        )
         optimize_report = {
             "theta_initial": float(optimize_cfg.theta_initial),
             "optimize_steps": int(optimize_cfg.optimize_steps),
             "optimize_every": int(optimize_cfg.optimize_every),
             "optimize_delta": float(optimize_cfg.optimize_delta),
             "optimize_inner_steps": int(optimize_cfg.optimize_inner_steps),
+            "optimize_theta_span": optimize_theta_span,
+            "hit_step_limit": hit_step_limit,
             "optimize_seconds": optimize_seconds,
             "optimize_preset_effective": str(effective_optimize_preset),
             "theta_star_raw": float(theta_opt_raw),
@@ -776,6 +811,14 @@ def run_flat_disk_one_leaflet_benchmark(
             "refine_level": int(refine_level),
             "outer_mode": str(outer_mode),
             "smoothness_model": str(smoothness_model),
+            "parameterization": str(mode),
+            "using_physical_scaling": bool(using_physical_scaling),
+            "kappa_physical": float(kappa_physical),
+            "kappa_t_physical": float(kappa_t_physical),
+            "length_scale_nm": float(length_scale_nm),
+            "radius_nm": float(radius_nm),
+            "drive_physical": float(drive_physical),
+            "radius_dimless": float(params.radius),
             "theta_mode": str(theta_mode_str),
             "optimize_preset": str(optimize_preset).lower(),
             "optimize_preset_effective": str(effective_optimize_preset),
@@ -805,6 +848,7 @@ def run_flat_disk_one_leaflet_benchmark(
             )
         },
         "parity": {
+            "lane": str(mode),
             "theta_factor": float(theta_factor),
             "energy_factor": float(energy_factor),
             "meets_factor_2": bool(theta_factor <= 2.0 and energy_factor <= 2.0),
@@ -847,6 +891,16 @@ def main(argv: Iterable[str] | None = None) -> int:
         choices=("none", "fast_r3", "full_accuracy_r3"),
         default="none",
     )
+    ap.add_argument(
+        "--parameterization",
+        choices=("legacy", "kh_physical"),
+        default="legacy",
+    )
+    ap.add_argument("--length-scale-nm", type=float, default=15.0)
+    ap.add_argument("--radius-nm", type=float, default=7.0)
+    ap.add_argument("--kappa-physical", type=float, default=10.0)
+    ap.add_argument("--kappa-t-physical", type=float, default=10.0)
+    ap.add_argument("--drive-physical", type=float, default=(2.0 / 0.7))
     ap.add_argument("--splay-modulus-scale-in", type=float, default=1.0)
     ap.add_argument("--output", default=str(DEFAULT_OUT))
     args = ap.parse_args(list(argv) if argv is not None else None)
@@ -868,6 +922,12 @@ def main(argv: Iterable[str] | None = None) -> int:
         theta_polish_delta=args.theta_polish_delta,
         theta_polish_points=args.theta_polish_points,
         optimize_preset=args.optimize_preset,
+        parameterization=args.parameterization,
+        length_scale_nm=args.length_scale_nm,
+        radius_nm=args.radius_nm,
+        kappa_physical=args.kappa_physical,
+        kappa_t_physical=args.kappa_t_physical,
+        drive_physical=args.drive_physical,
         splay_modulus_scale_in=args.splay_modulus_scale_in,
     )
 

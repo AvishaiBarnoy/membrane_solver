@@ -9,11 +9,18 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "reproduce_flat_disk_one_leaflet.py"
 BASELINES = {
-    "disabled": ROOT
+    "legacy_disabled": ROOT
     / "tests"
     / "fixtures"
     / "flat_disk_one_leaflet_disabled_baseline.yaml",
-    "free": ROOT / "tests" / "fixtures" / "flat_disk_one_leaflet_free_baseline.yaml",
+    "legacy_free": ROOT
+    / "tests"
+    / "fixtures"
+    / "flat_disk_one_leaflet_free_baseline.yaml",
+    "kh_physical_disabled": ROOT
+    / "tests"
+    / "fixtures"
+    / "flat_disk_one_leaflet_kh_physical_disabled_baseline.yaml",
 }
 
 
@@ -34,55 +41,93 @@ def _get_path(dct: dict[str, Any], path: str) -> float:
 
 
 @pytest.mark.acceptance
-@pytest.mark.parametrize("mode", ["disabled", "free"])
+@pytest.mark.parametrize(
+    "case_name", ["legacy_disabled", "legacy_free", "kh_physical_disabled"]
+)
 def test_reproduce_flat_disk_one_leaflet_matches_yaml_baseline_with_tolerances(
-    tmp_path, mode: str
+    tmp_path, case_name: str
 ) -> None:
-    baseline_path = BASELINES[mode]
+    baseline_path = BASELINES[case_name]
     baseline = yaml.safe_load(baseline_path.read_text(encoding="utf-8"))
 
-    out_yaml = tmp_path / f"flat_disk_one_leaflet_{mode}.yaml"
-    subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--fixture",
-            str(ROOT / baseline["meta"]["fixture"]),
-            "--refine-level",
-            str(int(baseline["meta"]["refine_level"])),
-            "--outer-mode",
-            str(baseline["meta"]["outer_mode"]),
-            "--theta-min",
-            str(float(baseline["meta"]["theta_min"])),
-            "--theta-max",
-            str(float(baseline["meta"]["theta_max"])),
-            "--theta-count",
-            str(int(baseline["meta"]["theta_count"])),
-            "--output",
-            str(out_yaml),
-        ],
-        check=True,
-        cwd=str(ROOT),
-    )
+    meta = baseline["meta"]
+    out_yaml = tmp_path / f"flat_disk_one_leaflet_{case_name}.yaml"
+    cmd = [
+        sys.executable,
+        str(SCRIPT),
+        "--fixture",
+        str(ROOT / meta["fixture"]),
+        "--refine-level",
+        str(int(meta["refine_level"])),
+        "--outer-mode",
+        str(meta["outer_mode"]),
+        "--output",
+        str(out_yaml),
+    ]
+    if "smoothness_model" in meta:
+        cmd.extend(["--smoothness-model", str(meta["smoothness_model"])])
+    if "parameterization" in meta:
+        cmd.extend(["--parameterization", str(meta["parameterization"])])
+    for key in (
+        "kappa_physical",
+        "kappa_t_physical",
+        "length_scale_nm",
+        "radius_nm",
+        "drive_physical",
+    ):
+        if key in meta:
+            cmd.extend([f"--{key.replace('_', '-')}", str(float(meta[key]))])
+
+    theta_mode = str(meta.get("theta_mode", "scan"))
+    cmd.extend(["--theta-mode", theta_mode])
+    if theta_mode == "scan":
+        cmd.extend(
+            [
+                "--theta-min",
+                str(float(meta["theta_min"])),
+                "--theta-max",
+                str(float(meta["theta_max"])),
+                "--theta-count",
+                str(int(meta["theta_count"])),
+            ]
+        )
+    else:
+        for key in (
+            "theta_initial",
+            "theta_optimize_steps",
+            "theta_optimize_every",
+            "theta_optimize_delta",
+            "theta_optimize_inner_steps",
+        ):
+            if key in meta:
+                cmd.extend([f"--{key.replace('_', '-')}", str(meta[key])])
+
+    subprocess.run(cmd, check=True, cwd=str(ROOT))
     report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
 
-    assert report["meta"]["fixture"] == baseline["meta"]["fixture"]
-    assert int(report["meta"]["refine_level"]) == int(baseline["meta"]["refine_level"])
-    assert report["meta"]["outer_mode"] == baseline["meta"]["outer_mode"]
-    assert report["meta"]["theory_source"] == baseline["meta"]["theory_source"]
-    assert float(report["scan"]["theta_min"]) == pytest.approx(
-        float(baseline["meta"]["theta_min"]), abs=0.0
-    )
-    assert float(report["scan"]["theta_max"]) == pytest.approx(
-        float(baseline["meta"]["theta_max"]), abs=0.0
-    )
-    assert int(report["scan"]["theta_count"]) == int(baseline["meta"]["theta_count"])
+    assert report["meta"]["fixture"] == meta["fixture"]
+    assert int(report["meta"]["refine_level"]) == int(meta["refine_level"])
+    assert report["meta"]["outer_mode"] == meta["outer_mode"]
+    assert report["meta"]["theory_source"] == meta["theory_source"]
+    assert report["parity"]["lane"] == str(meta.get("parameterization", "legacy"))
+    if theta_mode == "scan":
+        assert float(report["scan"]["theta_min"]) == pytest.approx(
+            float(meta["theta_min"]), abs=0.0
+        )
+        assert float(report["scan"]["theta_max"]) == pytest.approx(
+            float(meta["theta_max"]), abs=0.0
+        )
+        assert int(report["scan"]["theta_count"]) == int(meta["theta_count"])
+    else:
+        assert report["scan"] is None
+        assert report["optimize"] is not None
 
     for path, expected in _iter_leaf_scalars(baseline["metrics"]):
         tol = _get_path(baseline["tolerances"], path)
         actual = _get_path(report, path)
         assert actual == pytest.approx(expected, abs=tol), (
-            f"{mode}:{path}: expected {expected} +/- {tol}, got {actual}"
+            f"{case_name}:{path}: expected {expected} +/- {tol}, got {actual}"
         )
 
-    assert bool(report["parity"]["meets_factor_2"]) is True
+    expect_meets_factor_2 = bool(meta.get("expect_meets_factor_2", True))
+    assert bool(report["parity"]["meets_factor_2"]) is expect_meets_factor_2

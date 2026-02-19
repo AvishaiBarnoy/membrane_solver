@@ -74,6 +74,44 @@ def tex_reference_params() -> FlatDiskTheoryParams:
     )
 
 
+def physical_to_dimensionless_theory_params(
+    *,
+    kappa_physical: float,
+    kappa_t_physical: float,
+    radius_physical: float,
+    drive_physical: float,
+    length_scale: float,
+) -> FlatDiskTheoryParams:
+    """Convert physical parameters to the dimensionless theory parameterization.
+
+    Scaling convention:
+      - energy unit E0 = kappa_physical
+      - length unit L0 = length_scale
+    so:
+      - kappa_dimless = 1
+      - kappa_t_dimless = (kappa_t_physical * L0^2) / E0
+      - radius_dimless = radius_physical / L0
+      - drive_dimless = (drive_physical * L0) / E0
+    """
+    if float(kappa_physical) <= 0.0:
+        raise ValueError("kappa_physical must be > 0.")
+    if float(kappa_t_physical) <= 0.0:
+        raise ValueError("kappa_t_physical must be > 0.")
+    if float(radius_physical) <= 0.0:
+        raise ValueError("radius_physical must be > 0.")
+    if float(length_scale) <= 0.0:
+        raise ValueError("length_scale must be > 0.")
+
+    e0 = float(kappa_physical)
+    l0 = float(length_scale)
+    return FlatDiskTheoryParams(
+        kappa=1.0,
+        kappa_t=float((float(kappa_t_physical) * l0 * l0) / e0),
+        radius=float(float(radius_physical) / l0),
+        drive=float((float(drive_physical) * l0) / e0),
+    )
+
+
 def validate_theory_params(params: FlatDiskTheoryParams) -> None:
     """Validate physical parameters for the flat benchmark."""
     if float(params.kappa) <= 0.0:
@@ -144,21 +182,34 @@ def compute_flat_disk_theory(params: FlatDiskTheoryParams) -> FlatDiskTheoryResu
     )
 
 
-def solver_mapping_from_theory(params: FlatDiskTheoryParams) -> dict[str, float]:
-    """Map TeX coefficients to the current vector-tilt solver coefficients.
+def solver_mapping_from_theory(
+    params: FlatDiskTheoryParams, *, parameterization: str = "legacy"
+) -> dict[str, float]:
+    """Map theory coefficients to solver coefficients.
 
-    The benchmark harness uses this mapping:
-      - bending_modulus_in = kappa_t
-      - tilt_modulus_in = kappa_t^2 / kappa
-    so the effective decay coefficient remains lambda^{-1}=sqrt(kappa_t / kappa).
+    Supported parameterizations:
+      - legacy:
+          bending_modulus_in = kappa_t
+          tilt_modulus_in = kappa_t^2 / kappa
+      - kh_physical:
+          bending_modulus_in = kappa
+          tilt_modulus_in = kappa_t
     """
     validate_theory_params(params)
     kappa = float(params.kappa)
     kappa_t = float(params.kappa_t)
-    return {
-        "bending_modulus_in": float(kappa_t),
-        "tilt_modulus_in": float((kappa_t * kappa_t) / kappa),
-    }
+    mode = str(parameterization).lower()
+    if mode == "legacy":
+        return {
+            "bending_modulus_in": float(kappa_t),
+            "tilt_modulus_in": float((kappa_t * kappa_t) / kappa),
+        }
+    if mode == "kh_physical":
+        return {
+            "bending_modulus_in": float(kappa),
+            "tilt_modulus_in": float(kappa_t),
+        }
+    raise ValueError("parameterization must be 'legacy' or 'kh_physical'.")
 
 
 def quadratic_min_from_scan(
@@ -207,6 +258,7 @@ __all__ = [
     "FlatDiskTheoryResult",
     "QuadraticFitResult",
     "compute_flat_disk_theory",
+    "physical_to_dimensionless_theory_params",
     "quadratic_min_from_scan",
     "solver_mapping_from_theory",
     "tex_reference_params",
