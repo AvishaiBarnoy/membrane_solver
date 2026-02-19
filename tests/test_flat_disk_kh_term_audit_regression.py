@@ -7,6 +7,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.flat_disk_kh_term_audit import (
+    run_flat_disk_kh_strict_refinement_characterization,
     run_flat_disk_kh_term_audit,
     run_flat_disk_kh_term_audit_refine_sweep,
 )
@@ -98,3 +99,23 @@ def test_flat_disk_kh_term_audit_local_rim_refine_changes_resolution() -> None:
     base_h = float(base["resolution"]["rim_h_over_lambda_median"])
     local_h = float(local["resolution"]["rim_h_over_lambda_median"])
     assert local_h < base_h
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_strict_refinement_characterization_emits_best() -> None:
+    report = run_flat_disk_kh_strict_refinement_characterization(
+        optimize_preset="kh_wide",
+        global_refine_levels=(1,),
+        rim_local_steps=(0, 1),
+    )
+    rows = report["rows"]
+    assert len(rows) == 2
+    for row in rows:
+        assert int(row["refine_level"]) >= 1
+        assert int(row["rim_local_refine_steps"]) >= 0
+        assert np.isfinite(float(row["theta_factor"]))
+        assert np.isfinite(float(row["energy_factor"]))
+        assert np.isfinite(float(row["balanced_parity_score"]))
+        assert np.isfinite(float(row["rim_h_over_lambda_median"]))
+    best = report["selected_best"]
+    assert np.isfinite(float(best["theta_factor"]))
