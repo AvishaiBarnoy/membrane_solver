@@ -360,8 +360,8 @@ Interactive commands:
   - Splay calibration control (benchmark-local):
     `--splay-modulus-scale-in` scales inner `tilt_splay_modulus_in` when
     `--smoothness-model splay_twist` (for refine-3 parity tuning experiments).
-    In `kh_physical` + `splay_twist`, the benchmark auto-calibrates to `0.5`
-    when this flag is left at `1.0`; pass an explicit value to override.
+    Use this flag explicitly for calibration experiments; defaults are not
+    auto-adjusted for KH parity.
   - Inner tilt-mass discretization control:
     `--tilt-mass-mode-in auto|lumped|consistent` (default `auto`).
     `auto` maps to `consistent` for `kh_physical` and `lumped` for `legacy`.
