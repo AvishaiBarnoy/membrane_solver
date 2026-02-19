@@ -129,6 +129,7 @@ def test_flat_disk_theta_mode_optimize_runs_and_reports_result() -> None:
     assert float(report["mesh"]["theta_star"]) > 0.0
     assert float(report["parity"]["theta_factor"]) <= 2.0
     assert float(report["parity"]["energy_factor"]) <= 2.0
+    assert report["parity"]["recommended_mode_for_theory"] == "optimize"
 
 
 @pytest.mark.regression
@@ -154,9 +155,15 @@ def test_flat_disk_theta_mode_optimize_full_runs_and_reports_polish() -> None:
     assert len(polish["theta_values"]) == 3
     assert len(polish["energy_values"]) == 3
     assert opt["theta_star_raw"] is not None
+    assert opt["theta_factor_raw"] is not None
+    assert opt["energy_factor_raw"] is not None
     assert float(report["mesh"]["theta_star"]) > 0.0
     assert float(report["parity"]["theta_factor"]) <= 2.0
     assert float(report["parity"]["energy_factor"]) <= 2.0
+    assert report["parity"]["recommended_mode_for_theory"] in {
+        "optimize",
+        "optimize_full",
+    }
 
 
 @pytest.mark.regression
@@ -177,6 +184,26 @@ def test_flat_disk_optimize_preset_fast_r3_is_noop_below_refine3() -> None:
     assert int(opt["optimize_steps"]) == 20
     assert int(opt["optimize_inner_steps"]) == 20
     assert float(opt["optimize_seconds"]) > 0.0
+
+
+@pytest.mark.regression
+def test_flat_disk_optimize_preset_full_accuracy_r3_is_noop_below_refine3() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize_full",
+        optimize_preset="full_accuracy_r3",
+    )
+
+    assert report["meta"]["optimize_preset"] == "full_accuracy_r3"
+    assert report["meta"]["optimize_preset_effective"] == "full_accuracy_r3_inactive"
+    opt = report["optimize"]
+    assert opt is not None
+    assert int(opt["optimize_steps"]) == 20
+    assert int(opt["optimize_inner_steps"]) == 20
+    assert opt["polish"] is not None
 
 
 @pytest.mark.regression

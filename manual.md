@@ -315,12 +315,22 @@ Interactive commands:
     `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode free`.
   - Physical `theta_B` scalar optimization mode:
     `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled --smoothness-model splay_twist --theta-mode optimize`.
+  - Full local reduced-energy optimization mode (optimize + polish):
+    `python tools/reproduce_flat_disk_one_leaflet.py --outer-mode disabled --smoothness-model splay_twist --theta-mode optimize_full`.
   - Common options:
     `--fixture`, `--refine-level` (default `2`), `--smoothness-model`, `--theta-mode`, `--output`.
   - Scan controls (`--theta-mode scan`):
     `--theta-min`, `--theta-max`, `--theta-count`.
   - Optimize controls (`--theta-mode optimize`):
     `--theta-initial`, `--theta-optimize-steps`, `--theta-optimize-every`, `--theta-optimize-delta`, `--theta-optimize-inner-steps`.
+  - Optimize-full polish controls (`--theta-mode optimize_full`):
+    `--theta-polish-delta`, `--theta-polish-points` (odd, >=3).
+  - Optimize presets:
+    `--optimize-preset fast_r3` for faster refine-3 iteration;
+    `--optimize-preset full_accuracy_r3` for heavier refine-3 optimize/full runs.
+  - Report parity now includes `recommended_mode_for_theory`:
+    this selects `optimize` or `optimize_full` by a balanced score over
+    `theta_factor` and `energy_factor` (defaults remain unchanged).
   - `--smoothness-model splay_twist` enables inner-leaflet KH-style
     splay/twist splitting (`tilt_splay_twist_in`); by default
     `tilt_twist_modulus_in` is zero unless explicitly set.
