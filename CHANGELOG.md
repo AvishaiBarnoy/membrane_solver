@@ -82,6 +82,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ### Fixed
 - Reduced repeated geometry work in `tilt_splay_twist_in` by reusing mesh-cached P1 triangle shape gradients and triangle normals during inner tilt loops, improving flat-disk `refine_level=3` optimize runtime while preserving parity.
+- Reduced sparse leaflet-KKT per-iteration overhead in `runtime/constraint_manager.py` by precomputing the active-space projection matrix when the cached solve operator is available, improving refine-3 flat optimize runtime with unchanged parity.
 - Reduced sparse-row KKT assembly overhead in `runtime/constraint_manager.py` by accumulating directly into a `(N,3)` reshaped view instead of constructing expanded flat-index buffers per constraint row.
 - Cached leaflet interior/base-term masks in `modules/energy/bending_tilt_leaflet.py` to avoid rebuilding boundary/group exclusions across repeated bending-tilt evaluations.
 - Cached geometry-derived tilt-constraint payloads for `rim_slope_match_out` and `tilt_thetaB_boundary_in` when geometry cache is active, reducing repeated per-call setup in inner KKT tilt projection loops.
