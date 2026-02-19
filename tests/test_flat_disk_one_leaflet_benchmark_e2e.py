@@ -20,6 +20,7 @@ from tools.reproduce_flat_disk_one_leaflet import (
     _radial_unit_vectors,
     _run_theta_optimize,
     _run_theta_relaxation,
+    run_flat_disk_lane_comparison,
     run_flat_disk_one_leaflet_benchmark,
 )
 
@@ -247,6 +248,35 @@ def test_flat_disk_invalid_parameterization_raises() -> None:
             outer_mode="disabled",
             parameterization="invalid_mode",
         )
+
+
+@pytest.mark.regression
+def test_flat_disk_lane_comparison_reports_both_lanes() -> None:
+    report = run_flat_disk_lane_comparison(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        legacy_theta_mode="scan",
+        legacy_theta_min=0.0,
+        legacy_theta_max=0.0014,
+        legacy_theta_count=8,
+        kh_theta_mode="optimize",
+        kh_theta_initial=0.0,
+        kh_theta_optimize_steps=6,
+        kh_theta_optimize_every=1,
+        kh_theta_optimize_delta=2.0e-4,
+        kh_theta_optimize_inner_steps=5,
+        kh_smoothness_model="splay_twist",
+    )
+
+    assert report["meta"]["mode"] == "compare_lanes"
+    assert report["legacy"]["parity"]["lane"] == "legacy"
+    assert report["kh_physical"]["parity"]["lane"] == "kh_physical"
+    assert "comparison" in report
+    comp = report["comparison"]
+    assert float(comp["legacy_theta_star"]) > 0.0
+    assert float(comp["kh_theta_star"]) > 0.0
+    assert float(comp["kh_over_legacy_theta_star_ratio"]) > 1.0
 
 
 @pytest.mark.regression
