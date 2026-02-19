@@ -346,20 +346,32 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
         return
     rows, r_dir = data
 
-    tilts_in = mesh.tilts_in_view().copy(order="F")
+    rows_i = np.asarray(rows, dtype=int)
+    if rows_i.size == 0:
+        return
 
-    for i, row in enumerate(rows):
-        row = int(row)
-        vid = int(mesh.vertex_ids[row])
-        if getattr(mesh.vertices[vid], "tilt_fixed_in", False):
-            continue
+    vids = mesh.vertex_ids[rows_i]
+    fixed_mask = np.fromiter(
+        (
+            bool(getattr(mesh.vertices[int(vid)], "tilt_fixed_in", False))
+            for vid in vids
+        ),
+        dtype=bool,
+        count=rows_i.size,
+    )
+    free = ~fixed_mask
+    if not np.any(free):
+        return
 
-        t = tilts_in[row]
-        dvec = r_dir[i]
-        t_rad = float(np.dot(t, dvec))
-        tilts_in[row] = t + (thetaB - t_rad) * dvec
+    rows_free = rows_i[free]
+    d_free = np.asarray(r_dir, dtype=float)[free]
 
-    mesh.set_tilts_in_from_array(tilts_in)
+    # Update in-place to avoid full-array copy + scatter-back each relaxation call.
+    tilts_in = mesh.tilts_in_view()
+    t_free = tilts_in[rows_free]
+    t_rad = np.einsum("ij,ij->i", t_free, d_free)
+    tilts_in[rows_free] = t_free + (thetaB - t_rad)[:, None] * d_free
+    mesh.touch_tilts_in()
 
 
 __all__ = [
