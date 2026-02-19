@@ -237,6 +237,39 @@ def test_flat_disk_optimize_preset_kh_wide_expands_theta_span_for_kh_lane() -> N
 
 
 @pytest.mark.regression
+def test_flat_disk_kh_consistent_mass_improves_parity_with_kh_wide() -> None:
+    lumped = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_wide",
+        tilt_mass_mode_in="lumped",
+    )
+    consistent = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_wide",
+        tilt_mass_mode_in="consistent",
+    )
+
+    assert float(consistent["parity"]["theta_factor"]) < float(
+        lumped["parity"]["theta_factor"]
+    )
+    assert float(consistent["parity"]["energy_factor"]) < float(
+        lumped["parity"]["energy_factor"]
+    )
+    assert float(consistent["parity"]["theta_factor"]) <= 2.0
+    assert float(consistent["parity"]["energy_factor"]) <= 2.0
+
+
+@pytest.mark.regression
 def test_flat_disk_reports_splay_modulus_scale_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -366,6 +399,7 @@ def test_flat_disk_optimize_mode_enforces_thetaB_on_full_disk_radius_ring() -> N
         outer_mode="disabled",
         smoothness_model="splay_twist",
         splay_modulus_scale_in=1.0,
+        tilt_mass_mode_in="lumped",
     )
 
     minim = _build_minimizer(mesh)
