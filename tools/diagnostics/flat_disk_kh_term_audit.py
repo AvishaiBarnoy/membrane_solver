@@ -375,6 +375,14 @@ def _run_single_level(
             * float(theory.lambda_value),
         )
 
+    mass_mode_raw = str(tilt_mass_mode_in).strip().lower()
+    if mass_mode_raw == "auto":
+        mass_mode = "consistent"
+    elif mass_mode_raw in {"lumped", "consistent"}:
+        mass_mode = mass_mode_raw
+    else:
+        raise ValueError("tilt_mass_mode_in must be 'auto', 'lumped', or 'consistent'.")
+
     _configure_benchmark_mesh(
         mesh,
         theory_params=params,
@@ -382,7 +390,7 @@ def _run_single_level(
         outer_mode=outer_mode,
         smoothness_model=smoothness_model,
         splay_modulus_scale_in=1.0,
-        tilt_mass_mode_in=str(tilt_mass_mode_in),
+        tilt_mass_mode_in=str(mass_mode),
     )
     minim = _build_minimizer(mesh)
     minim.enforce_constraints_after_mesh_ops(mesh)
@@ -482,7 +490,7 @@ def _run_single_level(
             "radius_nm": float(radius_nm),
             "length_scale_nm": float(length_scale_nm),
             "drive_physical": float(drive_physical),
-            "tilt_mass_mode_in": str(tilt_mass_mode_in),
+            "tilt_mass_mode_in": str(mass_mode),
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
         },
@@ -513,7 +521,7 @@ def run_flat_disk_kh_term_audit(
     length_scale_nm: float = 15.0,
     drive_physical: float = (2.0 / 0.7),
     theta_values: Sequence[float] = (0.0, 6.366e-4, 0.004),
-    tilt_mass_mode_in: str = "lumped",
+    tilt_mass_mode_in: str = "auto",
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
 ) -> dict[str, Any]:
@@ -555,7 +563,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     length_scale_nm: float = 15.0,
     drive_physical: float = (2.0 / 0.7),
     theta_values: Sequence[float] = (0.0, 6.366e-4, 0.004),
-    tilt_mass_mode_in: str = "lumped",
+    tilt_mass_mode_in: str = "auto",
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
 ) -> dict[str, Any]:
@@ -598,7 +606,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             "smoothness_model": str(smoothness_model),
             "parameterization": "kh_physical",
             "theory_model": "kh_physical_strict_kh",
-            "tilt_mass_mode_in": str(tilt_mass_mode_in),
+            "tilt_mass_mode_in": str(tilt_mass_mode_in).strip().lower(),
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
         },
@@ -624,7 +632,9 @@ def main() -> int:
     ap.add_argument("--length-scale-nm", type=float, default=15.0)
     ap.add_argument("--drive-physical", type=float, default=(2.0 / 0.7))
     ap.add_argument(
-        "--tilt-mass-mode-in", choices=("lumped", "consistent"), default="lumped"
+        "--tilt-mass-mode-in",
+        choices=("auto", "lumped", "consistent"),
+        default="auto",
     )
     ap.add_argument("--rim-local-refine-steps", type=int, default=0)
     ap.add_argument("--rim-local-refine-band-lambda", type=float, default=0.0)

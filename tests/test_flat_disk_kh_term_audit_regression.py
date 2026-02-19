@@ -19,6 +19,7 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
         outer_mode="disabled",
         smoothness_model="splay_twist",
         theta_values=(0.0, 6.366e-4, 0.004),
+        tilt_mass_mode_in="lumped",
     )
 
     assert report["meta"]["parameterization"] == "kh_physical"

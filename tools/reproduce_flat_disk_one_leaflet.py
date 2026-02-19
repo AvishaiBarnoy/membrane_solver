@@ -589,7 +589,7 @@ def run_flat_disk_one_leaflet_benchmark(
     kappa_t_physical: float = 10.0,
     drive_physical: float = (2.0 / 0.7),
     splay_modulus_scale_in: float = 1.0,
-    tilt_mass_mode_in: str = "lumped",
+    tilt_mass_mode_in: str = "auto",
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
     theory_params: FlatDiskTheoryParams | None = None,
@@ -619,12 +619,16 @@ def run_flat_disk_one_leaflet_benchmark(
         raise ValueError("rim_local_refine_band_lambda must be >= 0.")
     if float(splay_modulus_scale_in) <= 0.0:
         raise ValueError("splay_modulus_scale_in must be > 0.")
-    mass_mode = str(tilt_mass_mode_in).strip().lower()
-    if mass_mode not in {"lumped", "consistent"}:
-        raise ValueError("tilt_mass_mode_in must be 'lumped' or 'consistent'.")
     mode = str(parameterization).lower()
     if mode not in {"legacy", "kh_physical"}:
         raise ValueError("parameterization must be 'legacy' or 'kh_physical'.")
+    mass_mode_raw = str(tilt_mass_mode_in).strip().lower()
+    if mass_mode_raw == "auto":
+        mass_mode = "consistent" if mode == "kh_physical" else "lumped"
+    elif mass_mode_raw in {"lumped", "consistent"}:
+        mass_mode = mass_mode_raw
+    else:
+        raise ValueError("tilt_mass_mode_in must be 'auto', 'lumped', or 'consistent'.")
 
     using_physical_scaling = theory_params is None and mode == "kh_physical"
     if theory_params is not None:
@@ -991,7 +995,7 @@ def run_flat_disk_lane_comparison(
     kh_kappa_t_physical: float = 10.0,
     kh_drive_physical: float = (2.0 / 0.7),
     splay_modulus_scale_in: float = 1.0,
-    tilt_mass_mode_in: str = "lumped",
+    tilt_mass_mode_in: str = "auto",
 ) -> dict[str, Any]:
     """Run both legacy and kh_physical benchmark lanes and summarize differences."""
     legacy = run_flat_disk_one_leaflet_benchmark(
@@ -1130,7 +1134,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--drive-physical", type=float, default=(2.0 / 0.7))
     ap.add_argument("--splay-modulus-scale-in", type=float, default=1.0)
     ap.add_argument(
-        "--tilt-mass-mode-in", choices=("lumped", "consistent"), default="lumped"
+        "--tilt-mass-mode-in",
+        choices=("auto", "lumped", "consistent"),
+        default="auto",
     )
     ap.add_argument("--rim-local-refine-steps", type=int, default=0)
     ap.add_argument("--rim-local-refine-band-lambda", type=float, default=0.0)
