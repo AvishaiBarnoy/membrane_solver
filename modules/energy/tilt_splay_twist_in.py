@@ -7,7 +7,6 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh, _fast_cross
-from geometry.tilt_operators import p1_triangle_shape_gradients
 
 USES_TILT_LEAFLETS = True
 
@@ -93,7 +92,9 @@ def compute_energy_and_gradient_array(
     if k_splay == 0.0 and k_twist == 0.0:
         return 0.0
 
-    tri_rows, _ = mesh.triangle_row_cache()
+    area, g0, g1, g2, tri_rows = mesh.p1_triangle_shape_gradient_cache(
+        positions=positions
+    )
     if tri_rows is None or len(tri_rows) == 0:
         return 0.0
 
@@ -103,10 +104,6 @@ def compute_energy_and_gradient_array(
         tilts_in = np.asarray(tilts_in, dtype=float)
         if tilts_in.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_in must have shape (N_vertices, 3)")
-
-    area, g0, g1, g2 = p1_triangle_shape_gradients(
-        positions=positions, tri_rows=tri_rows
-    )
 
     t0 = tilts_in[tri_rows[:, 0]]
     t1 = tilts_in[tri_rows[:, 1]]
@@ -118,10 +115,12 @@ def compute_energy_and_gradient_array(
         + np.einsum("ij,ij->i", t2, g2)
     )
 
-    v0 = positions[tri_rows[:, 0]]
-    v1 = positions[tri_rows[:, 1]]
-    v2 = positions[tri_rows[:, 2]]
-    n = _fast_cross(v1 - v0, v2 - v0)
+    n = mesh.triangle_normals(positions=positions)
+    if n.shape[0] != tri_rows.shape[0]:
+        v0 = positions[tri_rows[:, 0]]
+        v1 = positions[tri_rows[:, 1]]
+        v2 = positions[tri_rows[:, 2]]
+        n = _fast_cross(v1 - v0, v2 - v0)
     n_norm = np.linalg.norm(n, axis=1)
     n_hat = np.zeros_like(n)
     good = n_norm > 1e-20
