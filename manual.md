@@ -361,7 +361,8 @@ Interactive commands:
     `--splay-modulus-scale-in` scales inner `tilt_splay_modulus_in` when
     `--smoothness-model splay_twist` (for refine-3 parity tuning experiments).
   - Inner tilt-mass discretization control:
-    `--tilt-mass-mode-in lumped|consistent` (default `lumped`).
+    `--tilt-mass-mode-in auto|lumped|consistent` (default `auto`).
+    `auto` maps to `consistent` for `kh_physical` and `lumped` for `legacy`.
   - Report parity now includes `recommended_mode_for_theory`:
     this selects `optimize` or `optimize_full` by a balanced score over
     `theta_factor` and `energy_factor` (defaults remain unchanged).
