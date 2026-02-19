@@ -44,6 +44,9 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
         assert np.isfinite(float(row["internal_outer_error"]))
         assert np.isfinite(float(row["inner_tphi_over_trad_median"]))
         assert np.isfinite(float(row["outer_tphi_over_trad_median"]))
+        assert float(row["mesh_internal_total_from_regions"]) == pytest.approx(
+            float(row["mesh_internal"]), rel=0.0, abs=1e-12
+        )
 
     theta0 = rows[0]
     assert float(theta0["theta"]) == pytest.approx(0.0, abs=1e-18)

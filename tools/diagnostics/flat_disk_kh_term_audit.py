@@ -73,6 +73,19 @@ def _triangle_centroid_radius(
     return np.linalg.norm(tri_cent[:, :2], axis=1)
 
 
+def _triangle_inside_fraction(
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+    *,
+    radius: float,
+) -> np.ndarray:
+    """Return per-triangle inside fraction by vertex count (<R)."""
+    tri_pos = positions[tri_rows]
+    tri_r = np.linalg.norm(tri_pos[:, :, :2], axis=2)
+    inside_counts = np.sum(tri_r <= float(radius), axis=1)
+    return np.asarray(inside_counts, dtype=float) / 3.0
+
+
 def _mesh_internal_region_split(
     mesh,
     *,
@@ -100,9 +113,8 @@ def _mesh_internal_region_split(
             "mesh_smooth_outer": 0.0,
         }
 
-    tri_r = _triangle_centroid_radius(positions, tri_rows)
-    disk_mask = tri_r <= float(radius)
-    outer_mask = ~disk_mask
+    disk_frac = _triangle_inside_fraction(positions, tri_rows, radius=float(radius))
+    outer_frac = 1.0 - disk_frac
 
     k_tilt = float(gp.get("tilt_modulus_in") or 0.0)
     tilt_sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
@@ -152,7 +164,7 @@ def _mesh_internal_region_split(
         )
         if smooth_tri_rows is None:
             smooth_tri = np.zeros_like(tilt_tri)
-            smooth_mask = np.zeros_like(disk_mask)
+            smooth_frac = np.zeros_like(smooth_tri)
         else:
             c0 = weights[:, 0]
             c1 = weights[:, 1]
@@ -172,13 +184,14 @@ def _mesh_internal_region_split(
                     + c2 * np.einsum("ij,ij->i", d01, d01)
                 )
             )
-            smooth_tri_r = _triangle_centroid_radius(positions, smooth_tri_rows)
-            smooth_mask = smooth_tri_r <= float(radius)
+            smooth_frac = _triangle_inside_fraction(
+                positions, smooth_tri_rows, radius=float(radius)
+            )
 
-        smooth_disk = float(np.sum(smooth_tri[smooth_mask]))
-        smooth_outer = float(np.sum(smooth_tri[~smooth_mask]))
-        tilt_disk = float(np.sum(tilt_tri[disk_mask]))
-        tilt_outer = float(np.sum(tilt_tri[outer_mask]))
+        smooth_disk = float(np.sum(smooth_tri * smooth_frac))
+        smooth_outer = float(np.sum(smooth_tri * (1.0 - smooth_frac)))
+        tilt_disk = float(np.sum(tilt_tri * disk_frac))
+        tilt_outer = float(np.sum(tilt_tri * outer_frac))
         return {
             "mesh_internal_disk": float(tilt_disk + smooth_disk),
             "mesh_internal_outer": float(tilt_outer + smooth_outer),
@@ -193,10 +206,10 @@ def _mesh_internal_region_split(
     else:
         raise ValueError("smoothness_model must be 'dirichlet' or 'splay_twist'.")
 
-    tilt_disk = float(np.sum(tilt_tri[disk_mask]))
-    tilt_outer = float(np.sum(tilt_tri[outer_mask]))
-    smooth_disk = float(np.sum(smooth_tri[disk_mask]))
-    smooth_outer = float(np.sum(smooth_tri[outer_mask]))
+    tilt_disk = float(np.sum(tilt_tri * disk_frac))
+    tilt_outer = float(np.sum(tilt_tri * outer_frac))
+    smooth_disk = float(np.sum(smooth_tri * disk_frac))
+    smooth_outer = float(np.sum(smooth_tri * outer_frac))
     return {
         "mesh_internal_disk": float(tilt_disk + smooth_disk),
         "mesh_internal_outer": float(tilt_outer + smooth_outer),
