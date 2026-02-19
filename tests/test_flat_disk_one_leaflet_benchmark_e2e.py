@@ -214,6 +214,29 @@ def test_flat_disk_optimize_preset_full_accuracy_r3_is_noop_below_refine3() -> N
 
 
 @pytest.mark.regression
+def test_flat_disk_optimize_preset_kh_wide_expands_theta_span_for_kh_lane() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_wide",
+    )
+
+    assert report["meta"]["optimize_preset"] == "kh_wide"
+    assert report["meta"]["optimize_preset_effective"] == "kh_wide"
+    opt = report["optimize"]
+    assert opt is not None
+    assert int(opt["optimize_steps"]) == 120
+    assert float(opt["optimize_delta"]) == pytest.approx(2.0e-3, abs=0.0)
+    assert float(opt["optimize_theta_span"]) == pytest.approx(0.24, abs=1e-12)
+    assert bool(opt["hit_step_limit"]) is False
+    assert float(report["mesh"]["theta_star"]) > 0.02
+
+
+@pytest.mark.regression
 def test_flat_disk_reports_splay_modulus_scale_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,

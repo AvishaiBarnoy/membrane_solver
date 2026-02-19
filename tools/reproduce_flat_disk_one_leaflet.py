@@ -129,8 +129,19 @@ def _resolve_optimize_preset(
                 "full_accuracy_r3",
             )
         return optimize_cfg, "full_accuracy_r3_inactive"
+    if preset == "kh_wide":
+        return (
+            BenchmarkOptimizeConfig(
+                theta_initial=float(optimize_cfg.theta_initial),
+                optimize_steps=120,
+                optimize_every=1,
+                optimize_delta=2.0e-3,
+                optimize_inner_steps=20,
+            ),
+            "kh_wide",
+        )
     raise ValueError(
-        "optimize_preset must be 'none', 'fast_r3', or 'full_accuracy_r3'."
+        "optimize_preset must be 'none', 'fast_r3', 'full_accuracy_r3', or 'kh_wide'."
     )
 
 
@@ -1093,7 +1104,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--theta-polish-points", type=int, default=3)
     ap.add_argument(
         "--optimize-preset",
-        choices=("none", "fast_r3", "full_accuracy_r3"),
+        choices=("none", "fast_r3", "full_accuracy_r3", "kh_wide"),
         default="none",
     )
     ap.add_argument(
