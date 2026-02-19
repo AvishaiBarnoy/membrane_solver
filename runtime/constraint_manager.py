@@ -515,6 +515,11 @@ class ConstraintModuleManager:
             "A": A,
             "chol_L": chol_L,
             "solve_mat": solve_mat,
+            "proj_active": (
+                None
+                if solve_mat is None
+                else np.asarray(C.T @ solve_mat @ C, dtype=float)
+            ),
         }
 
     @staticmethod
@@ -601,6 +606,7 @@ class ConstraintModuleManager:
         active_out_rows = operator_cache["active_out_rows"]
         active_out_comp = operator_cache["active_out_comp"]
         C = operator_cache["C"]
+        proj_active = operator_cache.get("proj_active")
 
         grad_active = np.empty(active_cols.shape[0], dtype=float)
         if active_in_pos.shape[0]:
@@ -611,11 +617,14 @@ class ConstraintModuleManager:
             grad_active[active_out_pos] = tilt_out_grad_arr[
                 active_out_rows, active_out_comp
             ]
-        b = C @ grad_active
-        lam = ConstraintModuleManager._solve_leaflet_sparse_kkt(operator_cache, b)
-        if lam is None:
-            return
-        delta = C.T @ lam
+        if proj_active is not None:
+            delta = proj_active @ grad_active
+        else:
+            b = C @ grad_active
+            lam = ConstraintModuleManager._solve_leaflet_sparse_kkt(operator_cache, b)
+            if lam is None:
+                return
+            delta = C.T @ lam
 
         if active_in_pos.shape[0]:
             tilt_in_grad_arr[active_in_rows, active_in_comp] -= delta[active_in_pos]
