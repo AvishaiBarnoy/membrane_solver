@@ -337,6 +337,8 @@ Interactive commands:
     `kh_physical` currently enforces unit-consistent KH scaling in the harness and
     report metadata, but legacy flat-theory parity thresholds were tuned against
     the legacy remap; use `legacy` mode for strict baseline parity gating.
+  - KH per-theta term audit (mesh vs analytic split):
+    `python tools/diagnostics/flat_disk_kh_term_audit.py --refine-level 1 --theta-values 0 6.366e-4 0.004`.
   - Scan controls (`--theta-mode scan`):
     `--theta-min`, `--theta-max`, `--theta-count`.
   - Optimize controls (`--theta-mode optimize`):
