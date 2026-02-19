@@ -76,6 +76,23 @@ class BenchmarkOptimizeConfig:
             raise ValueError("theta_optimize_inner_steps must be >= 1.")
 
 
+@dataclass(frozen=True)
+class BenchmarkPolishConfig:
+    """Configuration for local theta_B reduced-energy polish."""
+
+    polish_delta: float
+    polish_points: int
+
+    def validate(self) -> None:
+        """Validate polish controls."""
+        if float(self.polish_delta) <= 0.0:
+            raise ValueError("theta_polish_delta must be > 0.")
+        if int(self.polish_points) < 3:
+            raise ValueError("theta_polish_points must be >= 3.")
+        if int(self.polish_points) % 2 == 0:
+            raise ValueError("theta_polish_points must be odd.")
+
+
 def _resolve_optimize_preset(
     *,
     optimize_preset: str,
@@ -302,6 +319,55 @@ def _run_theta_optimize(
     return theta_opt
 
 
+def _run_theta_local_polish(
+    minim: Minimizer,
+    *,
+    theta_center: float,
+    polish_cfg: BenchmarkPolishConfig,
+    reset_outer: bool,
+) -> tuple[float, dict[str, Any]]:
+    """Refine theta_B by local reduced-energy sampling near a center value."""
+    _ensure_repo_root_on_sys_path()
+    from tools.diagnostics.flat_disk_one_leaflet_theory import quadratic_min_from_scan
+
+    n = int(polish_cfg.polish_points)
+    d = float(polish_cfg.polish_delta)
+    offsets = np.linspace(-d, d, n)
+    theta_values = float(theta_center) + offsets
+    energies = np.zeros_like(theta_values)
+    for i, theta_value in enumerate(theta_values):
+        energies[i] = _run_theta_relaxation(
+            minim,
+            theta_value=float(theta_value),
+            reset_outer=reset_outer,
+        )
+    min_idx = int(np.argmin(energies))
+    theta_star = float(theta_values[min_idx])
+    method = "grid_min"
+    qfit_report = None
+    if 0 < min_idx < int(theta_values.size - 1):
+        local_theta = theta_values[min_idx - 1 : min_idx + 2]
+        local_energy = energies[min_idx - 1 : min_idx + 2]
+        try:
+            qfit = quadratic_min_from_scan(local_theta, local_energy)
+            theta_star = float(qfit.theta_star)
+            method = "quadratic_local"
+            qfit_report = qfit.to_dict()
+        except ValueError:
+            method = "grid_min"
+    report = {
+        "polish_delta": float(d),
+        "polish_points": int(n),
+        "theta_values": [float(x) for x in theta_values.tolist()],
+        "energy_values": [float(x) for x in energies.tolist()],
+        "grid_min_theta": float(theta_values[min_idx]),
+        "grid_min_energy": float(energies[min_idx]),
+        "method": method,
+        "local_quadratic_fit": qfit_report,
+    }
+    return float(theta_star), report
+
+
 def _profile_metrics(mesh, *, radius: float) -> dict[str, float]:
     positions = mesh.positions_view()
     r, r_hat = _radial_unit_vectors(positions)
@@ -421,6 +487,8 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_optimize_every: int = 1,
     theta_optimize_delta: float = 2.0e-4,
     theta_optimize_inner_steps: int = 20,
+    theta_polish_delta: float = 1.0e-4,
+    theta_polish_points: int = 3,
     optimize_preset: str = "none",
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
@@ -445,11 +513,12 @@ def run_flat_disk_one_leaflet_benchmark(
     params = theory_params if theory_params is not None else tex_reference_params()
     theory = compute_flat_disk_theory(params)
     theta_mode_str = str(theta_mode).lower()
-    if theta_mode_str not in {"scan", "optimize"}:
-        raise ValueError("theta_mode must be 'scan' or 'optimize'.")
+    if theta_mode_str not in {"scan", "optimize", "optimize_full"}:
+        raise ValueError("theta_mode must be 'scan', 'optimize', or 'optimize_full'.")
 
     scan_cfg = None
     optimize_cfg = None
+    polish_cfg = None
     effective_optimize_preset = "none"
     if theta_mode_str == "scan":
         scan_cfg = BenchmarkScanConfig(
@@ -467,6 +536,12 @@ def run_flat_disk_one_leaflet_benchmark(
             optimize_inner_steps=int(theta_optimize_inner_steps),
         )
         optimize_cfg.validate()
+        if theta_mode_str == "optimize_full":
+            polish_cfg = BenchmarkPolishConfig(
+                polish_delta=float(theta_polish_delta),
+                polish_points=int(theta_polish_points),
+            )
+            polish_cfg.validate()
         optimize_cfg, effective_optimize_preset = _resolve_optimize_preset(
             optimize_preset=str(optimize_preset),
             refine_level=int(refine_level),
@@ -532,11 +607,21 @@ def run_flat_disk_one_leaflet_benchmark(
     else:
         assert optimize_cfg is not None
         t0 = perf_counter()
-        theta_star = _run_theta_optimize(
+        theta_opt_raw = _run_theta_optimize(
             minim,
             optimize_cfg=optimize_cfg,
             reset_outer=True,
         )
+        theta_star = float(theta_opt_raw)
+        polish_report = None
+        if theta_mode_str == "optimize_full":
+            assert polish_cfg is not None
+            theta_star, polish_report = _run_theta_local_polish(
+                minim,
+                theta_center=float(theta_opt_raw),
+                polish_cfg=polish_cfg,
+                reset_outer=True,
+            )
         optimize_seconds = float(perf_counter() - t0)
         optimize_report = {
             "theta_initial": float(optimize_cfg.theta_initial),
@@ -546,6 +631,8 @@ def run_flat_disk_one_leaflet_benchmark(
             "optimize_inner_steps": int(optimize_cfg.optimize_inner_steps),
             "optimize_seconds": optimize_seconds,
             "optimize_preset_effective": str(effective_optimize_preset),
+            "theta_star_raw": float(theta_opt_raw),
+            "polish": polish_report,
             "theta_star": float(theta_star),
         }
 
@@ -674,7 +761,9 @@ def main(argv: Iterable[str] | None = None) -> int:
         choices=("dirichlet", "splay_twist"),
         default="dirichlet",
     )
-    ap.add_argument("--theta-mode", choices=("scan", "optimize"), default="scan")
+    ap.add_argument(
+        "--theta-mode", choices=("scan", "optimize", "optimize_full"), default="scan"
+    )
     ap.add_argument("--theta-min", type=float, default=0.0)
     ap.add_argument("--theta-max", type=float, default=0.0014)
     ap.add_argument("--theta-count", type=int, default=8)
@@ -683,6 +772,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--theta-optimize-every", type=int, default=1)
     ap.add_argument("--theta-optimize-delta", type=float, default=2.0e-4)
     ap.add_argument("--theta-optimize-inner-steps", type=int, default=20)
+    ap.add_argument("--theta-polish-delta", type=float, default=1.0e-4)
+    ap.add_argument("--theta-polish-points", type=int, default=3)
     ap.add_argument(
         "--optimize-preset",
         choices=("none", "fast_r3"),
@@ -705,6 +796,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         theta_optimize_every=args.theta_optimize_every,
         theta_optimize_delta=args.theta_optimize_delta,
         theta_optimize_inner_steps=args.theta_optimize_inner_steps,
+        theta_polish_delta=args.theta_polish_delta,
+        theta_polish_points=args.theta_polish_points,
         optimize_preset=args.optimize_preset,
     )
 
