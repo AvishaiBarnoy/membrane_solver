@@ -47,24 +47,285 @@ def _theory_split_coeffs(theory: Any) -> tuple[float, float, float]:
     return c_in, c_out, b_contact
 
 
-def run_flat_disk_kh_term_audit(
+def _radial_frames(positions: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return radius, radial unit vectors, and azimuthal unit vectors."""
+    r = np.linalg.norm(positions[:, :2], axis=1)
+    r_hat = np.zeros_like(positions)
+    phi_hat = np.zeros_like(positions)
+    good = r > 1e-12
+    r_hat[good, 0] = positions[good, 0] / r[good]
+    r_hat[good, 1] = positions[good, 1] / r[good]
+    phi_hat[good, 0] = -positions[good, 1] / r[good]
+    phi_hat[good, 1] = positions[good, 0] / r[good]
+    return r, r_hat, phi_hat
+
+
+def _triangle_centroid_radius(
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+) -> np.ndarray:
+    tri_cent = (
+        positions[tri_rows[:, 0]]
+        + positions[tri_rows[:, 1]]
+        + positions[tri_rows[:, 2]]
+    ) / 3.0
+    return np.linalg.norm(tri_cent[:, :2], axis=1)
+
+
+def _mesh_internal_region_split(
+    mesh,
     *,
-    fixture: Path | str = DEFAULT_FIXTURE,
-    refine_level: int = 1,
-    outer_mode: str = "disabled",
-    smoothness_model: str = "splay_twist",
-    kappa_physical: float = 10.0,
-    kappa_t_physical: float = 10.0,
-    radius_nm: float = 7.0,
-    length_scale_nm: float = 15.0,
-    drive_physical: float = (2.0 / 0.7),
-    theta_values: Sequence[float] = (0.0, 6.366e-4, 0.004),
+    smoothness_model: str,
+    radius: float,
+) -> dict[str, float]:
+    """Split mesh internal energy into disk (r<R) and outer (r>R) regions."""
+    from modules.energy import tilt_smoothness as tilt_smoothness_base
+
+    gp = mesh.global_parameters
+    positions = mesh.positions_view()
+    tilts_in = mesh.tilts_in_view()
+
+    area, g0, g1, g2, tri_rows = mesh.p1_triangle_shape_gradient_cache(
+        positions=positions
+    )
+    if tri_rows is None or len(tri_rows) == 0:
+        return {
+            "mesh_internal_disk": 0.0,
+            "mesh_internal_outer": 0.0,
+            "mesh_internal_total_from_regions": 0.0,
+            "mesh_tilt_disk": 0.0,
+            "mesh_tilt_outer": 0.0,
+            "mesh_smooth_disk": 0.0,
+            "mesh_smooth_outer": 0.0,
+        }
+
+    tri_r = _triangle_centroid_radius(positions, tri_rows)
+    disk_mask = tri_r <= float(radius)
+    outer_mask = ~disk_mask
+
+    k_tilt = float(gp.get("tilt_modulus_in") or 0.0)
+    tilt_sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
+    tri_tilt_sq_sum = tilt_sq[tri_rows].sum(axis=1)
+    tilt_tri = 0.5 * k_tilt * area * (tri_tilt_sq_sum / 3.0)
+
+    if str(smoothness_model) == "splay_twist":
+        k_splay = gp.get("tilt_splay_modulus_in")
+        if k_splay is None:
+            k_splay = gp.get("bending_modulus_in")
+        if k_splay is None:
+            k_splay = gp.get("bending_modulus")
+        k_splay_f = float(k_splay or 0.0)
+        k_twist_f = float(gp.get("tilt_twist_modulus_in") or 0.0)
+
+        t0 = tilts_in[tri_rows[:, 0]]
+        t1 = tilts_in[tri_rows[:, 1]]
+        t2 = tilts_in[tri_rows[:, 2]]
+        div_tri = (
+            np.einsum("ij,ij->i", t0, g0)
+            + np.einsum("ij,ij->i", t1, g1)
+            + np.einsum("ij,ij->i", t2, g2)
+        )
+
+        n = mesh.triangle_normals(positions=positions)
+        n_norm = np.linalg.norm(n, axis=1)
+        n_hat = np.zeros_like(n)
+        good = n_norm > 1e-20
+        n_hat[good] = n[good] / n_norm[good, None]
+
+        curl_vec = np.cross(g0, t0) + np.cross(g1, t1) + np.cross(g2, t2)
+        curl_n = np.einsum("ij,ij->i", curl_vec, n_hat)
+        smooth_tri = (
+            0.5
+            * area
+            * ((k_splay_f * div_tri * div_tri) + (k_twist_f * curl_n * curl_n))
+        )
+    elif str(smoothness_model) == "dirichlet":
+        k_smooth = gp.get("bending_modulus_in")
+        if k_smooth is None:
+            k_smooth = gp.get("bending_modulus")
+        k_smooth_f = float(k_smooth or 0.0)
+        weights, smooth_tri_rows = tilt_smoothness_base._get_weights_and_tris(
+            mesh,
+            positions=positions,
+            index_map=mesh.vertex_index_to_row,
+        )
+        if smooth_tri_rows is None:
+            smooth_tri = np.zeros_like(tilt_tri)
+            smooth_mask = np.zeros_like(disk_mask)
+        else:
+            c0 = weights[:, 0]
+            c1 = weights[:, 1]
+            c2 = weights[:, 2]
+            t0 = tilts_in[smooth_tri_rows[:, 0]]
+            t1 = tilts_in[smooth_tri_rows[:, 1]]
+            t2 = tilts_in[smooth_tri_rows[:, 2]]
+            d12 = t1 - t2
+            d20 = t2 - t0
+            d01 = t0 - t1
+            smooth_tri = (
+                0.25
+                * k_smooth_f
+                * (
+                    c0 * np.einsum("ij,ij->i", d12, d12)
+                    + c1 * np.einsum("ij,ij->i", d20, d20)
+                    + c2 * np.einsum("ij,ij->i", d01, d01)
+                )
+            )
+            smooth_tri_r = _triangle_centroid_radius(positions, smooth_tri_rows)
+            smooth_mask = smooth_tri_r <= float(radius)
+
+        smooth_disk = float(np.sum(smooth_tri[smooth_mask]))
+        smooth_outer = float(np.sum(smooth_tri[~smooth_mask]))
+        tilt_disk = float(np.sum(tilt_tri[disk_mask]))
+        tilt_outer = float(np.sum(tilt_tri[outer_mask]))
+        return {
+            "mesh_internal_disk": float(tilt_disk + smooth_disk),
+            "mesh_internal_outer": float(tilt_outer + smooth_outer),
+            "mesh_internal_total_from_regions": float(
+                tilt_disk + smooth_disk + tilt_outer + smooth_outer
+            ),
+            "mesh_tilt_disk": tilt_disk,
+            "mesh_tilt_outer": tilt_outer,
+            "mesh_smooth_disk": smooth_disk,
+            "mesh_smooth_outer": smooth_outer,
+        }
+    else:
+        raise ValueError("smoothness_model must be 'dirichlet' or 'splay_twist'.")
+
+    tilt_disk = float(np.sum(tilt_tri[disk_mask]))
+    tilt_outer = float(np.sum(tilt_tri[outer_mask]))
+    smooth_disk = float(np.sum(smooth_tri[disk_mask]))
+    smooth_outer = float(np.sum(smooth_tri[outer_mask]))
+    return {
+        "mesh_internal_disk": float(tilt_disk + smooth_disk),
+        "mesh_internal_outer": float(tilt_outer + smooth_outer),
+        "mesh_internal_total_from_regions": float(
+            tilt_disk + smooth_disk + tilt_outer + smooth_outer
+        ),
+        "mesh_tilt_disk": tilt_disk,
+        "mesh_tilt_outer": tilt_outer,
+        "mesh_smooth_disk": smooth_disk,
+        "mesh_smooth_outer": smooth_outer,
+    }
+
+
+def _boundary_realization_metrics(
+    mesh,
+    *,
+    radius: float,
+    theta_value: float,
+) -> dict[str, float]:
+    """Measure realized radial tilt on the rim shell vs imposed theta_B."""
+    pos = mesh.positions_view()
+    r, r_hat, _ = _radial_frames(pos)
+    shell_tol = max(1e-6, 0.02 * float(radius))
+    rim_mask = np.abs(r - float(radius)) <= shell_tol
+    rows = np.flatnonzero(rim_mask)
+    if rows.size == 0:
+        return {
+            "rim_samples": 0,
+            "rim_theta_error_abs_median": float("nan"),
+            "rim_theta_error_abs_max": float("nan"),
+            "rim_theta_realized_median": float("nan"),
+        }
+    t_in = mesh.tilts_in_view()
+    t_rad = np.einsum("ij,ij->i", t_in[rows], r_hat[rows])
+    err = t_rad - float(theta_value)
+    return {
+        "rim_samples": int(rows.size),
+        "rim_theta_error_abs_median": float(np.median(np.abs(err))),
+        "rim_theta_error_abs_max": float(np.max(np.abs(err))),
+        "rim_theta_realized_median": float(np.median(t_rad)),
+    }
+
+
+def _leakage_metrics(mesh, *, radius: float) -> dict[str, float]:
+    """Report azimuthal (t_phi) leakage relative to radial component."""
+    pos = mesh.positions_view()
+    r, r_hat, phi_hat = _radial_frames(pos)
+    t_in = mesh.tilts_in_view()
+    t_rad = np.einsum("ij,ij->i", t_in, r_hat)
+    t_phi = np.einsum("ij,ij->i", t_in, phi_hat)
+
+    def _ratio(mask: np.ndarray) -> float:
+        if not np.any(mask):
+            return float("nan")
+        num = float(np.median(np.abs(t_phi[mask])))
+        den = float(np.median(np.abs(t_rad[mask])))
+        return float(num / max(den, 1e-18))
+
+    inner_mask = r < float(radius)
+    outer_mask = r > float(radius)
+    return {
+        "inner_tphi_over_trad_median": _ratio(inner_mask),
+        "outer_tphi_over_trad_median": _ratio(outer_mask),
+    }
+
+
+def _resolution_metrics(
+    mesh, *, radius: float, lambda_value: float
+) -> dict[str, float]:
+    """Report rim edge-length scale relative to the decay length lambda."""
+    tri_rows, _ = mesh.triangle_row_cache()
+    if tri_rows is None or len(tri_rows) == 0:
+        return {
+            "rim_edge_count": 0,
+            "rim_edge_length_median": float("nan"),
+            "rim_edge_length_max": float("nan"),
+            "rim_h_over_lambda_median": float("nan"),
+        }
+
+    pos = mesh.positions_view()
+    all_edges = np.vstack(
+        [
+            tri_rows[:, [0, 1]],
+            tri_rows[:, [1, 2]],
+            tri_rows[:, [2, 0]],
+        ]
+    )
+    sorted_edges = np.sort(all_edges, axis=1)
+    edges = np.unique(sorted_edges, axis=0)
+
+    p0 = pos[edges[:, 0]]
+    p1 = pos[edges[:, 1]]
+    mid = 0.5 * (p0 + p1)
+    mid_r = np.linalg.norm(mid[:, :2], axis=1)
+    lengths = np.linalg.norm(p1 - p0, axis=1)
+    rim_mask = (mid_r >= (0.9 * float(radius))) & (mid_r <= (1.1 * float(radius)))
+    rim_lengths = lengths[rim_mask]
+    if rim_lengths.size == 0:
+        return {
+            "rim_edge_count": 0,
+            "rim_edge_length_median": float("nan"),
+            "rim_edge_length_max": float("nan"),
+            "rim_h_over_lambda_median": float("nan"),
+        }
+
+    h_med = float(np.median(rim_lengths))
+    return {
+        "rim_edge_count": int(rim_lengths.size),
+        "rim_edge_length_median": h_med,
+        "rim_edge_length_max": float(np.max(rim_lengths)),
+        "rim_h_over_lambda_median": float(h_med / max(float(lambda_value), 1e-18)),
+    }
+
+
+def _run_single_level(
+    *,
+    fixture: Path,
+    refine_level: int,
+    outer_mode: str,
+    smoothness_model: str,
+    kappa_physical: float,
+    kappa_t_physical: float,
+    radius_nm: float,
+    length_scale_nm: float,
+    drive_physical: float,
+    theta_values: Sequence[float],
 ) -> dict[str, Any]:
-    """Evaluate per-theta mesh/theory split terms in KH physical lane."""
-    _ensure_repo_root_on_sys_path()
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
-        compute_flat_disk_theory,
+        compute_flat_disk_kh_physical_theory,
         physical_to_dimensionless_theory_params,
     )
     from tools.reproduce_flat_disk_one_leaflet import (
@@ -74,12 +335,6 @@ def run_flat_disk_kh_term_audit(
         _run_theta_relaxation,
     )
 
-    fixture_path = Path(fixture)
-    if not fixture_path.is_absolute():
-        fixture_path = (ROOT / fixture_path).resolve()
-    if not fixture_path.exists():
-        raise FileNotFoundError(f"Fixture not found: {fixture_path}")
-
     params = physical_to_dimensionless_theory_params(
         kappa_physical=float(kappa_physical),
         kappa_t_physical=float(kappa_t_physical),
@@ -87,10 +342,10 @@ def run_flat_disk_kh_term_audit(
         drive_physical=float(drive_physical),
         length_scale=float(length_scale_nm),
     )
-    theory = compute_flat_disk_theory(params)
+    theory = compute_flat_disk_kh_physical_theory(params)
     c_in, c_out, b_contact = _theory_split_coeffs(theory)
 
-    mesh = _load_mesh_from_fixture(fixture_path)
+    mesh = _load_mesh_from_fixture(fixture)
     for _ in range(int(refine_level)):
         mesh = refine_triangle_mesh(mesh)
 
@@ -115,6 +370,11 @@ def run_flat_disk_kh_term_audit(
         breakdown = minim.compute_energy_breakdown()
         mesh_contact = float(breakdown.get("tilt_thetaB_contact_in", 0.0))
         mesh_internal = float(mesh_total - mesh_contact)
+        mesh_region = _mesh_internal_region_split(
+            mesh,
+            smoothness_model=smoothness_model,
+            radius=float(theory.radius),
+        )
 
         th_in = float(c_in * theta_f * theta_f)
         th_out = float(c_out * theta_f * theta_f)
@@ -122,33 +382,74 @@ def run_flat_disk_kh_term_audit(
         th_total = float(th_in + th_out + th_contact)
         th_internal = float(th_in + th_out)
 
+        boundary = _boundary_realization_metrics(
+            mesh,
+            radius=float(theory.radius),
+            theta_value=theta_f,
+        )
+        leakage = _leakage_metrics(mesh, radius=float(theory.radius))
+
         rows.append(
             {
                 "theta": theta_f,
                 "mesh_total": mesh_total,
                 "mesh_contact": mesh_contact,
                 "mesh_internal": mesh_internal,
+                "mesh_internal_disk": float(mesh_region["mesh_internal_disk"]),
+                "mesh_internal_outer": float(mesh_region["mesh_internal_outer"]),
+                "mesh_internal_total_from_regions": float(
+                    mesh_region["mesh_internal_total_from_regions"]
+                ),
+                "mesh_tilt_disk": float(mesh_region["mesh_tilt_disk"]),
+                "mesh_tilt_outer": float(mesh_region["mesh_tilt_outer"]),
+                "mesh_smooth_disk": float(mesh_region["mesh_smooth_disk"]),
+                "mesh_smooth_outer": float(mesh_region["mesh_smooth_outer"]),
                 "theory_total": th_total,
                 "theory_contact": th_contact,
                 "theory_internal": th_internal,
+                "theory_internal_disk": th_in,
+                "theory_internal_outer": th_out,
                 "total_error": float(mesh_total - th_total),
                 "contact_error": float(mesh_contact - th_contact),
                 "internal_error": float(mesh_internal - th_internal),
+                "internal_disk_error": float(mesh_region["mesh_internal_disk"] - th_in),
+                "internal_outer_error": float(
+                    mesh_region["mesh_internal_outer"] - th_out
+                ),
                 "contact_ratio_mesh_over_theory": (
                     float(mesh_contact / th_contact)
                     if abs(th_contact) > 1e-18
                     else float("nan")
                 ),
+                "internal_disk_ratio_mesh_over_theory": (
+                    float(mesh_region["mesh_internal_disk"] / th_in)
+                    if abs(th_in) > 1e-18
+                    else float("nan")
+                ),
+                "internal_outer_ratio_mesh_over_theory": (
+                    float(mesh_region["mesh_internal_outer"] / th_out)
+                    if abs(th_out) > 1e-18
+                    else float("nan")
+                ),
+                **boundary,
+                **leakage,
             }
         )
 
+    resolution = _resolution_metrics(
+        mesh,
+        radius=float(theory.radius),
+        lambda_value=float(theory.lambda_value),
+    )
+
     return {
         "meta": {
-            "fixture": str(fixture_path.relative_to(ROOT)),
+            "fixture": str(fixture.relative_to(ROOT)),
             "refine_level": int(refine_level),
             "outer_mode": str(outer_mode),
             "smoothness_model": str(smoothness_model),
             "parameterization": "kh_physical",
+            "theory_model": "kh_physical_strict_kh",
             "kappa_physical": float(kappa_physical),
             "kappa_t_physical": float(kappa_t_physical),
             "radius_nm": float(radius_nm),
@@ -159,12 +460,104 @@ def run_flat_disk_kh_term_audit(
             "kappa": float(theory.kappa),
             "kappa_t": float(theory.kappa_t),
             "radius": float(theory.radius),
+            "lambda_value": float(theory.lambda_value),
             "lambda_inverse": float(theory.lambda_inverse),
             "coeff_B": float(theory.coeff_B),
             "coeff_c_inner": float(c_in),
             "coeff_c_outer": float(c_out),
         },
+        "resolution": resolution,
         "rows": rows,
+    }
+
+
+def run_flat_disk_kh_term_audit(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    refine_level: int = 1,
+    outer_mode: str = "disabled",
+    smoothness_model: str = "splay_twist",
+    kappa_physical: float = 10.0,
+    kappa_t_physical: float = 10.0,
+    radius_nm: float = 7.0,
+    length_scale_nm: float = 15.0,
+    drive_physical: float = (2.0 / 0.7),
+    theta_values: Sequence[float] = (0.0, 6.366e-4, 0.004),
+) -> dict[str, Any]:
+    """Evaluate per-theta mesh/theory split terms in KH physical lane."""
+    _ensure_repo_root_on_sys_path()
+
+    fixture_path = Path(fixture)
+    if not fixture_path.is_absolute():
+        fixture_path = (ROOT / fixture_path).resolve()
+    if not fixture_path.exists():
+        raise FileNotFoundError(f"Fixture not found: {fixture_path}")
+
+    return _run_single_level(
+        fixture=fixture_path,
+        refine_level=int(refine_level),
+        outer_mode=outer_mode,
+        smoothness_model=smoothness_model,
+        kappa_physical=float(kappa_physical),
+        kappa_t_physical=float(kappa_t_physical),
+        radius_nm=float(radius_nm),
+        length_scale_nm=float(length_scale_nm),
+        drive_physical=float(drive_physical),
+        theta_values=theta_values,
+    )
+
+
+def run_flat_disk_kh_term_audit_refine_sweep(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    refine_levels: Sequence[int] = (1, 2, 3),
+    outer_mode: str = "disabled",
+    smoothness_model: str = "splay_twist",
+    kappa_physical: float = 10.0,
+    kappa_t_physical: float = 10.0,
+    radius_nm: float = 7.0,
+    length_scale_nm: float = 15.0,
+    drive_physical: float = (2.0 / 0.7),
+    theta_values: Sequence[float] = (0.0, 6.366e-4, 0.004),
+) -> dict[str, Any]:
+    """Run KH term audit across multiple refinement levels."""
+    _ensure_repo_root_on_sys_path()
+
+    fixture_path = Path(fixture)
+    if not fixture_path.is_absolute():
+        fixture_path = (ROOT / fixture_path).resolve()
+    if not fixture_path.exists():
+        raise FileNotFoundError(f"Fixture not found: {fixture_path}")
+
+    levels = [int(x) for x in refine_levels]
+    if len(levels) == 0:
+        raise ValueError("refine_levels must be non-empty.")
+
+    runs = [
+        _run_single_level(
+            fixture=fixture_path,
+            refine_level=int(level),
+            outer_mode=outer_mode,
+            smoothness_model=smoothness_model,
+            kappa_physical=float(kappa_physical),
+            kappa_t_physical=float(kappa_t_physical),
+            radius_nm=float(radius_nm),
+            length_scale_nm=float(length_scale_nm),
+            drive_physical=float(drive_physical),
+            theta_values=theta_values,
+        )
+        for level in levels
+    ]
+    return {
+        "meta": {
+            "mode": "refine_sweep",
+            "refine_levels": levels,
+            "outer_mode": str(outer_mode),
+            "smoothness_model": str(smoothness_model),
+            "parameterization": "kh_physical",
+            "theory_model": "kh_physical_strict_kh",
+        },
+        "runs": runs,
     }
 
 
@@ -173,6 +566,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fixture", default=str(DEFAULT_FIXTURE))
     ap.add_argument("--refine-level", type=int, default=1)
+    ap.add_argument("--refine-levels", type=int, nargs="+", default=None)
     ap.add_argument("--outer-mode", choices=("disabled", "free"), default="disabled")
     ap.add_argument(
         "--smoothness-model",
@@ -190,18 +584,32 @@ def main() -> int:
     ap.add_argument("--output", default=str(DEFAULT_OUT))
     args = ap.parse_args()
 
-    report = run_flat_disk_kh_term_audit(
-        fixture=args.fixture,
-        refine_level=args.refine_level,
-        outer_mode=args.outer_mode,
-        smoothness_model=args.smoothness_model,
-        kappa_physical=args.kappa_physical,
-        kappa_t_physical=args.kappa_t_physical,
-        radius_nm=args.radius_nm,
-        length_scale_nm=args.length_scale_nm,
-        drive_physical=args.drive_physical,
-        theta_values=args.theta_values,
-    )
+    if args.refine_levels is not None:
+        report = run_flat_disk_kh_term_audit_refine_sweep(
+            fixture=args.fixture,
+            refine_levels=tuple(int(x) for x in args.refine_levels),
+            outer_mode=args.outer_mode,
+            smoothness_model=args.smoothness_model,
+            kappa_physical=args.kappa_physical,
+            kappa_t_physical=args.kappa_t_physical,
+            radius_nm=args.radius_nm,
+            length_scale_nm=args.length_scale_nm,
+            drive_physical=args.drive_physical,
+            theta_values=args.theta_values,
+        )
+    else:
+        report = run_flat_disk_kh_term_audit(
+            fixture=args.fixture,
+            refine_level=args.refine_level,
+            outer_mode=args.outer_mode,
+            smoothness_model=args.smoothness_model,
+            kappa_physical=args.kappa_physical,
+            kappa_t_physical=args.kappa_t_physical,
+            radius_nm=args.radius_nm,
+            length_scale_nm=args.length_scale_nm,
+            drive_physical=args.drive_physical,
+            theta_values=args.theta_values,
+        )
 
     out = Path(args.output)
     if not out.is_absolute():

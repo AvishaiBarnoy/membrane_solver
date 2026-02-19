@@ -526,6 +526,7 @@ def run_flat_disk_one_leaflet_benchmark(
     _ensure_repo_root_on_sys_path()
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
+        compute_flat_disk_kh_physical_theory,
         compute_flat_disk_theory,
         physical_to_dimensionless_theory_params,
         quadratic_min_from_scan,
@@ -559,7 +560,14 @@ def run_flat_disk_one_leaflet_benchmark(
         )
     else:
         params = tex_reference_params()
-    theory = compute_flat_disk_theory(params)
+    if mode == "legacy":
+        theory = compute_flat_disk_theory(params)
+        theory_model = "legacy_scalar_reduced"
+        theory_source = "docs/tex/1_disk_flat.tex"
+    else:
+        theory = compute_flat_disk_kh_physical_theory(params)
+        theory_model = "kh_physical_strict_kh"
+        theory_source = "kh_physical_closed_form"
     theta_mode_str = str(theta_mode).lower()
     if theta_mode_str not in {"scan", "optimize", "optimize_full"}:
         raise ValueError("theta_mode must be 'scan', 'optimize', or 'optimize_full'.")
@@ -823,7 +831,8 @@ def run_flat_disk_one_leaflet_benchmark(
             "optimize_preset": str(optimize_preset).lower(),
             "optimize_preset_effective": str(effective_optimize_preset),
             "splay_modulus_scale_in": float(splay_modulus_scale_in),
-            "theory_source": "docs/tex/1_disk_flat.tex",
+            "theory_model": theory_model,
+            "theory_source": theory_source,
         },
         "theory": theory.to_dict(),
         "scan": scan_report,

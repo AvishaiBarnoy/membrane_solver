@@ -334,11 +334,13 @@ Interactive commands:
     `kappa=10 kBT`, `kappa_t=10 kBT/nm^2`):
     `python tools/reproduce_flat_disk_one_leaflet.py --parameterization kh_physical --kappa-physical 10 --kappa-t-physical 10 --length-scale-nm 15 --radius-nm 7 --drive-physical 2.857142857142857 --outer-mode disabled --smoothness-model splay_twist --theta-mode optimize`.
   - Notes on parity:
-    `kh_physical` currently enforces unit-consistent KH scaling in the harness and
-    report metadata, but legacy flat-theory parity thresholds were tuned against
-    the legacy remap; use `legacy` mode for strict baseline parity gating.
+    `legacy` is compared to the scalar reduced model from `docs/tex/1_disk_flat.tex`.
+    `kh_physical` is compared to strict KH closed-form coefficients
+    (`f=0.5*kappa*(div t)^2 + 0.5*kappa_t*|t|^2`) under the same disk/outer Bessel solution.
   - KH per-theta term audit (mesh vs analytic split):
     `python tools/diagnostics/flat_disk_kh_term_audit.py --refine-level 1 --theta-values 0 6.366e-4 0.004`.
+  - KH audit refine sweep:
+    `python tools/diagnostics/flat_disk_kh_term_audit.py --refine-levels 1 2 --theta-values 0 6.366e-4`.
   - Scan controls (`--theta-mode scan`):
     `--theta-min`, `--theta-max`, `--theta-count`.
   - Optimize controls (`--theta-mode optimize`):

@@ -15,7 +15,7 @@ meta:
   theta_optimize_every: 1
   theta_optimize_delta: 0.0002
   theta_optimize_inner_steps: 20
-  theory_source: docs/tex/1_disk_flat.tex
+  theory_source: kh_physical_closed_form
   expect_meets_factor_2: false
   format: yaml
 metrics:
