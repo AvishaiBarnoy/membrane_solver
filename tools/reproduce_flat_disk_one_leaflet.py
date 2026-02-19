@@ -622,6 +622,15 @@ def run_flat_disk_one_leaflet_benchmark(
     mode = str(parameterization).lower()
     if mode not in {"legacy", "kh_physical"}:
         raise ValueError("parameterization must be 'legacy' or 'kh_physical'.")
+    # KH lane calibration: keep legacy defaults unchanged, but use a reduced
+    # inner splay scale by default to better match strict-KH closed-form parity.
+    effective_splay_modulus_scale_in = float(splay_modulus_scale_in)
+    if (
+        mode == "kh_physical"
+        and str(smoothness_model) == "splay_twist"
+        and abs(float(splay_modulus_scale_in) - 1.0) < 1e-15
+    ):
+        effective_splay_modulus_scale_in = 0.5
     mass_mode_raw = str(tilt_mass_mode_in).strip().lower()
     if mass_mode_raw == "auto":
         mass_mode = "consistent" if mode == "kh_physical" else "lumped"
@@ -713,7 +722,7 @@ def run_flat_disk_one_leaflet_benchmark(
         parameterization=mode,
         outer_mode=outer_mode,
         smoothness_model=smoothness_model,
-        splay_modulus_scale_in=float(splay_modulus_scale_in),
+        splay_modulus_scale_in=float(effective_splay_modulus_scale_in),
         tilt_mass_mode_in=mass_mode,
     )
     _collect_disk_boundary_rows(mesh, group="disk")
@@ -924,7 +933,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "theta_mode": str(theta_mode_str),
             "optimize_preset": str(optimize_preset).lower(),
             "optimize_preset_effective": str(effective_optimize_preset),
-            "splay_modulus_scale_in": float(splay_modulus_scale_in),
+            "splay_modulus_scale_in": float(effective_splay_modulus_scale_in),
             "tilt_mass_mode_in": str(mass_mode),
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),

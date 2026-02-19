@@ -357,9 +357,11 @@ Interactive commands:
     `--optimize-preset fast_r3` for faster refine-3 iteration;
     `--optimize-preset full_accuracy_r3` for heavier refine-3 optimize/full runs;
     `--optimize-preset kh_wide` for wide KH-lane theta-span exploration.
-  - Splay calibration control (benchmark-local, default unchanged):
+  - Splay calibration control (benchmark-local):
     `--splay-modulus-scale-in` scales inner `tilt_splay_modulus_in` when
     `--smoothness-model splay_twist` (for refine-3 parity tuning experiments).
+    In `kh_physical` + `splay_twist`, the benchmark auto-calibrates to `0.5`
+    when this flag is left at `1.0`; pass an explicit value to override.
   - Inner tilt-mass discretization control:
     `--tilt-mass-mode-in auto|lumped|consistent` (default `auto`).
     `auto` maps to `consistent` for `kh_physical` and `lumped` for `legacy`.
