@@ -188,3 +188,54 @@ def test_tilt_leaflet_array_matches_dict_energy_and_gradient(leaflet: str) -> No
     for vid, gvec in tilt_grad.items():
         row = idx_map[vid]
         assert tilt_grad_arr[row] == pytest.approx(gvec, rel=1e-12, abs=1e-12)
+
+
+def test_tilt_in_consistent_mass_single_triangle_closed_form() -> None:
+    module = importlib.import_module("modules.energy.tilt_in")
+    mesh = _build_single_triangle_mesh()
+
+    t0 = np.array([1.0, -2.0, 0.0], dtype=float)
+    t1 = np.array([0.5, 0.25, 0.0], dtype=float)
+    t2 = np.array([-1.5, 0.0, 0.0], dtype=float)
+    mesh.vertices[0].tilt_in = t0
+    mesh.vertices[1].tilt_in = t1
+    mesh.vertices[2].tilt_in = t2
+    mesh.touch_tilts_in()
+
+    k_tilt = 2.0
+    gp = GlobalParameters(
+        {"tilt_modulus_in": k_tilt, "tilt_mass_mode_in": "consistent"}
+    )
+    resolver = ParameterResolver(gp)
+
+    energy, _shape_grad, tilt_grad = module.compute_energy_and_gradient(
+        mesh, gp, resolver
+    )
+
+    area = 0.5
+    s = (
+        float(np.dot(t0, t0))
+        + float(np.dot(t1, t1))
+        + float(np.dot(t2, t2))
+        + float(np.dot(t0, t1))
+        + float(np.dot(t1, t2))
+        + float(np.dot(t2, t0))
+    )
+    expected_energy = float((k_tilt * area / 12.0) * s)
+    assert float(energy) == pytest.approx(expected_energy, rel=1e-12, abs=1e-12)
+
+    scale = float(k_tilt * area / 12.0)
+    assert tilt_grad[0] == pytest.approx(scale * ((2.0 * t0) + t1 + t2), abs=1e-12)
+    assert tilt_grad[1] == pytest.approx(scale * ((2.0 * t1) + t2 + t0), abs=1e-12)
+    assert tilt_grad[2] == pytest.approx(scale * ((2.0 * t2) + t0 + t1), abs=1e-12)
+
+
+def test_tilt_in_mass_mode_guard_rejects_invalid_mode() -> None:
+    module = importlib.import_module("modules.energy.tilt_in")
+    mesh = _build_single_triangle_mesh()
+    mesh.touch_tilts_in()
+    gp = GlobalParameters({"tilt_modulus_in": 1.0, "tilt_mass_mode_in": "invalid"})
+    resolver = ParameterResolver(gp)
+
+    with pytest.raises(ValueError, match="tilt_mass_mode_in must be"):
+        module.compute_energy_and_gradient(mesh, gp, resolver)

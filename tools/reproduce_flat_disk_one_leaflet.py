@@ -255,6 +255,7 @@ def _configure_benchmark_mesh(
     outer_mode: str,
     smoothness_model: str,
     splay_modulus_scale_in: float,
+    tilt_mass_mode_in: str,
 ) -> None:
     _ensure_repo_root_on_sys_path()
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -288,6 +289,7 @@ def _configure_benchmark_mesh(
 
     gp.set("bending_modulus_in", float(mapping["bending_modulus_in"]))
     gp.set("tilt_modulus_in", float(mapping["tilt_modulus_in"]))
+    gp.set("tilt_mass_mode_in", str(tilt_mass_mode_in))
     gp.set("tilt_twist_modulus_in", 0.0)
 
     if smoothness_model == "dirichlet":
@@ -587,6 +589,7 @@ def run_flat_disk_one_leaflet_benchmark(
     kappa_t_physical: float = 10.0,
     drive_physical: float = (2.0 / 0.7),
     splay_modulus_scale_in: float = 1.0,
+    tilt_mass_mode_in: str = "lumped",
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
     theory_params: FlatDiskTheoryParams | None = None,
@@ -616,6 +619,9 @@ def run_flat_disk_one_leaflet_benchmark(
         raise ValueError("rim_local_refine_band_lambda must be >= 0.")
     if float(splay_modulus_scale_in) <= 0.0:
         raise ValueError("splay_modulus_scale_in must be > 0.")
+    mass_mode = str(tilt_mass_mode_in).strip().lower()
+    if mass_mode not in {"lumped", "consistent"}:
+        raise ValueError("tilt_mass_mode_in must be 'lumped' or 'consistent'.")
     mode = str(parameterization).lower()
     if mode not in {"legacy", "kh_physical"}:
         raise ValueError("parameterization must be 'legacy' or 'kh_physical'.")
@@ -704,6 +710,7 @@ def run_flat_disk_one_leaflet_benchmark(
         outer_mode=outer_mode,
         smoothness_model=smoothness_model,
         splay_modulus_scale_in=float(splay_modulus_scale_in),
+        tilt_mass_mode_in=mass_mode,
     )
     _collect_disk_boundary_rows(mesh, group="disk")
 
@@ -914,6 +921,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "optimize_preset": str(optimize_preset).lower(),
             "optimize_preset_effective": str(effective_optimize_preset),
             "splay_modulus_scale_in": float(splay_modulus_scale_in),
+            "tilt_mass_mode_in": str(mass_mode),
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
             "theory_model": theory_model,
@@ -983,6 +991,7 @@ def run_flat_disk_lane_comparison(
     kh_kappa_t_physical: float = 10.0,
     kh_drive_physical: float = (2.0 / 0.7),
     splay_modulus_scale_in: float = 1.0,
+    tilt_mass_mode_in: str = "lumped",
 ) -> dict[str, Any]:
     """Run both legacy and kh_physical benchmark lanes and summarize differences."""
     legacy = run_flat_disk_one_leaflet_benchmark(
@@ -1001,6 +1010,7 @@ def run_flat_disk_lane_comparison(
         theta_optimize_inner_steps=legacy_theta_optimize_inner_steps,
         parameterization="legacy",
         splay_modulus_scale_in=splay_modulus_scale_in,
+        tilt_mass_mode_in=tilt_mass_mode_in,
     )
 
     kh = run_flat_disk_one_leaflet_benchmark(
@@ -1024,6 +1034,7 @@ def run_flat_disk_lane_comparison(
         kappa_t_physical=kh_kappa_t_physical,
         drive_physical=kh_drive_physical,
         splay_modulus_scale_in=splay_modulus_scale_in,
+        tilt_mass_mode_in=tilt_mass_mode_in,
     )
 
     legacy_theta = float(legacy["mesh"]["theta_star"])
@@ -1118,6 +1129,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--kappa-t-physical", type=float, default=10.0)
     ap.add_argument("--drive-physical", type=float, default=(2.0 / 0.7))
     ap.add_argument("--splay-modulus-scale-in", type=float, default=1.0)
+    ap.add_argument(
+        "--tilt-mass-mode-in", choices=("lumped", "consistent"), default="lumped"
+    )
     ap.add_argument("--rim-local-refine-steps", type=int, default=0)
     ap.add_argument("--rim-local-refine-band-lambda", type=float, default=0.0)
     ap.add_argument("--compare-lanes", action="store_true")
@@ -1173,6 +1187,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             kh_kappa_t_physical=args.kappa_t_physical,
             kh_drive_physical=args.drive_physical,
             splay_modulus_scale_in=args.splay_modulus_scale_in,
+            tilt_mass_mode_in=args.tilt_mass_mode_in,
             rim_local_refine_steps=args.rim_local_refine_steps,
             rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
         )
@@ -1201,6 +1216,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             kappa_t_physical=args.kappa_t_physical,
             drive_physical=args.drive_physical,
             splay_modulus_scale_in=args.splay_modulus_scale_in,
+            tilt_mass_mode_in=args.tilt_mass_mode_in,
             rim_local_refine_steps=args.rim_local_refine_steps,
             rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
         )
