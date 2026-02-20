@@ -259,9 +259,17 @@ def test_flat_disk_optimize_preset_kh_strict_fast_is_opt_in_and_mesh_strict() ->
 
     opt = report["optimize"]
     assert opt is not None
-    assert int(opt["optimize_steps"]) == 80
+    assert int(opt["optimize_steps"]) == 30
     assert int(opt["optimize_inner_steps"]) == 14
-    assert float(opt["optimize_theta_span"]) == pytest.approx(0.16, abs=1e-12)
+    assert int(opt["plateau_patience"]) == 12
+    assert float(opt["plateau_abs_tol"]) == pytest.approx(1.0e-12, abs=0.0)
+    assert int(opt["optimize_iterations_completed"]) <= int(opt["optimize_steps"])
+    assert isinstance(opt["stopped_on_plateau"], bool)
+    assert float(opt["optimize_delta"]) == pytest.approx(6.0e-3, abs=0.0)
+    assert float(opt["optimize_theta_span"]) == pytest.approx(0.18, abs=1e-12)
+    assert float(opt["optimize_theta_span_completed"]) <= float(
+        opt["optimize_theta_span"]
+    )
     assert bool(opt["hit_step_limit"]) is False
     assert opt["recommended_fallback_preset"] is None
 

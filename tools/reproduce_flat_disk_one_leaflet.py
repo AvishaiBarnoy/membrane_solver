@@ -63,6 +63,8 @@ class BenchmarkOptimizeConfig:
     optimize_every: int
     optimize_delta: float
     optimize_inner_steps: int
+    plateau_patience: int = 0
+    plateau_abs_tol: float = 0.0
 
     def validate(self) -> None:
         """Validate optimizer controls."""
@@ -74,6 +76,10 @@ class BenchmarkOptimizeConfig:
             raise ValueError("theta_optimize_delta must be > 0.")
         if int(self.optimize_inner_steps) < 1:
             raise ValueError("theta_optimize_inner_steps must be >= 1.")
+        if int(self.plateau_patience) < 0:
+            raise ValueError("theta_optimize_plateau_patience must be >= 0.")
+        if float(self.plateau_abs_tol) < 0.0:
+            raise ValueError("theta_optimize_plateau_abs_tol must be >= 0.")
 
 
 @dataclass(frozen=True)
@@ -155,10 +161,12 @@ def _resolve_optimize_preset(
         return (
             BenchmarkOptimizeConfig(
                 theta_initial=float(optimize_cfg.theta_initial),
-                optimize_steps=80,
+                optimize_steps=30,
                 optimize_every=1,
-                optimize_delta=2.0e-3,
+                optimize_delta=6.0e-3,
                 optimize_inner_steps=14,
+                plateau_patience=12,
+                plateau_abs_tol=1.0e-12,
             ),
             "kh_strict_fast",
         )
@@ -407,7 +415,7 @@ def _run_theta_optimize(
     *,
     optimize_cfg: BenchmarkOptimizeConfig,
     reset_outer: bool,
-) -> float:
+) -> tuple[float, int, bool]:
     mesh = minim.mesh
     gp = mesh.global_parameters
     gp.set("tilt_thetaB_optimize", True)
@@ -424,14 +432,29 @@ def _run_theta_optimize(
 
     positions = mesh.positions_view()
     tilt_mode = str(gp.get("tilt_solve_mode", "coupled") or "coupled")
+    iterations_completed = 0
+    plateau_counter = 0
+    stopped_on_plateau = False
+    prev_theta = float(gp.get("tilt_thetaB_value") or 0.0)
     for i in range(int(optimize_cfg.optimize_steps)):
         minim._relax_leaflet_tilts(positions=positions, mode=tilt_mode)
         minim._optimize_thetaB_scalar(tilt_mode=tilt_mode, iteration=i)
+        iterations_completed += 1
+        theta_now = float(gp.get("tilt_thetaB_value") or 0.0)
+        if int(optimize_cfg.plateau_patience) > 0:
+            if abs(theta_now - prev_theta) <= float(optimize_cfg.plateau_abs_tol):
+                plateau_counter += 1
+            else:
+                plateau_counter = 0
+            if plateau_counter >= int(optimize_cfg.plateau_patience):
+                stopped_on_plateau = True
+                break
+        prev_theta = theta_now
 
     theta_opt = float(gp.get("tilt_thetaB_value") or 0.0)
     if not np.isfinite(theta_opt):
         raise ValueError("Non-finite optimized theta_B value.")
-    return theta_opt
+    return theta_opt, int(iterations_completed), bool(stopped_on_plateau)
 
 
 def _run_theta_local_polish(
@@ -658,6 +681,8 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_optimize_every: int = 1,
     theta_optimize_delta: float = 2.0e-4,
     theta_optimize_inner_steps: int = 20,
+    theta_optimize_plateau_patience: int = 0,
+    theta_optimize_plateau_abs_tol: float = 0.0,
     theta_polish_delta: float = 1.0e-4,
     theta_polish_points: int = 3,
     optimize_preset: str = "none",
@@ -765,6 +790,8 @@ def run_flat_disk_one_leaflet_benchmark(
             optimize_every=int(theta_optimize_every),
             optimize_delta=float(theta_optimize_delta),
             optimize_inner_steps=int(theta_optimize_inner_steps),
+            plateau_patience=int(theta_optimize_plateau_patience),
+            plateau_abs_tol=float(theta_optimize_plateau_abs_tol),
         )
         optimize_cfg.validate()
         optimize_cfg, effective_optimize_preset = _resolve_optimize_preset(
@@ -865,10 +892,12 @@ def run_flat_disk_one_leaflet_benchmark(
     else:
         assert optimize_cfg is not None
         t0 = perf_counter()
-        theta_opt_raw = _run_theta_optimize(
-            minim,
-            optimize_cfg=optimize_cfg,
-            reset_outer=True,
+        theta_opt_raw, optimize_iterations_completed, stopped_on_plateau = (
+            _run_theta_optimize(
+                minim,
+                optimize_cfg=optimize_cfg,
+                reset_outer=True,
+            )
         )
         theta_star = float(theta_opt_raw)
         polish_report = None
@@ -892,13 +921,16 @@ def run_flat_disk_one_leaflet_benchmark(
             )
         optimize_seconds = float(perf_counter() - t0)
         theta_optimize_seconds = optimize_seconds
-        theta_evaluations = int(optimize_cfg.optimize_steps)
-        optimize_theta_span = float(
+        theta_evaluations = int(optimize_iterations_completed)
+        optimize_theta_span_configured = float(
             int(optimize_cfg.optimize_steps) * float(optimize_cfg.optimize_delta)
+        )
+        optimize_theta_span_completed = float(
+            int(optimize_iterations_completed) * float(optimize_cfg.optimize_delta)
         )
         hit_step_limit = bool(
             abs(float(theta_opt_raw) - float(optimize_cfg.theta_initial))
-            >= (optimize_theta_span - 1e-12)
+            >= (optimize_theta_span_configured - 1e-12)
         )
         optimize_report = {
             "theta_initial": float(optimize_cfg.theta_initial),
@@ -906,7 +938,12 @@ def run_flat_disk_one_leaflet_benchmark(
             "optimize_every": int(optimize_cfg.optimize_every),
             "optimize_delta": float(optimize_cfg.optimize_delta),
             "optimize_inner_steps": int(optimize_cfg.optimize_inner_steps),
-            "optimize_theta_span": optimize_theta_span,
+            "optimize_iterations_completed": int(optimize_iterations_completed),
+            "stopped_on_plateau": bool(stopped_on_plateau),
+            "plateau_patience": int(optimize_cfg.plateau_patience),
+            "plateau_abs_tol": float(optimize_cfg.plateau_abs_tol),
+            "optimize_theta_span": optimize_theta_span_configured,
+            "optimize_theta_span_completed": optimize_theta_span_completed,
             "hit_step_limit": hit_step_limit,
             "recommended_fallback_preset": (
                 "kh_strict_refine"
@@ -1240,6 +1277,8 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--theta-optimize-every", type=int, default=1)
     ap.add_argument("--theta-optimize-delta", type=float, default=2.0e-4)
     ap.add_argument("--theta-optimize-inner-steps", type=int, default=20)
+    ap.add_argument("--theta-optimize-plateau-patience", type=int, default=0)
+    ap.add_argument("--theta-optimize-plateau-abs-tol", type=float, default=0.0)
     ap.add_argument("--theta-polish-delta", type=float, default=1.0e-4)
     ap.add_argument("--theta-polish-points", type=int, default=3)
     ap.add_argument(
@@ -1344,6 +1383,8 @@ def main(argv: Iterable[str] | None = None) -> int:
             theta_optimize_every=args.theta_optimize_every,
             theta_optimize_delta=args.theta_optimize_delta,
             theta_optimize_inner_steps=args.theta_optimize_inner_steps,
+            theta_optimize_plateau_patience=args.theta_optimize_plateau_patience,
+            theta_optimize_plateau_abs_tol=args.theta_optimize_plateau_abs_tol,
             theta_polish_delta=args.theta_polish_delta,
             theta_polish_points=args.theta_polish_points,
             optimize_preset=args.optimize_preset,
