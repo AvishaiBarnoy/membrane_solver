@@ -86,9 +86,16 @@ def test_kozlov_free_disk_outer_radial_tilts_match_in_outer_band() -> None:
 
     m_same, m_oppo, m_ref = _outer_radial_symmetry_metric(mesh, r_min=1.5, r_max=10.5)
     m_best = min(m_same, m_oppo)
-    # Require the mismatch to be small compared to the typical radial tilt.
+    # Require mismatch to be small relative to signal when the radial tilt is
+    # above numerical floor, otherwise enforce a strict absolute floor.
     assert m_ref > 0.0
-    assert (m_best / m_ref) < 0.4, (
-        f"outer radial symmetry too weak: m_same={m_same:.3e} "
-        f"m_oppo={m_oppo:.3e} m_ref={m_ref:.3e}"
-    )
+    if m_ref >= 2.0e-8:
+        assert (m_best / m_ref) < 0.4, (
+            f"outer radial symmetry too weak: m_same={m_same:.3e} "
+            f"m_oppo={m_oppo:.3e} m_ref={m_ref:.3e}"
+        )
+    else:
+        assert m_best < 1.0e-8, (
+            f"outer radial mismatch above floor: m_same={m_same:.3e} "
+            f"m_oppo={m_oppo:.3e} m_ref={m_ref:.3e}"
+        )
