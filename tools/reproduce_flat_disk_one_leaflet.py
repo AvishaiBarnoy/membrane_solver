@@ -663,6 +663,7 @@ def run_flat_disk_one_leaflet_benchmark(
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
+    t_run_start = perf_counter()
     _ensure_repo_root_on_sys_path()
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -773,6 +774,7 @@ def run_flat_disk_one_leaflet_benchmark(
             )
             polish_cfg.validate()
 
+    t_mesh_prep_start = perf_counter()
     mesh = _load_mesh_from_fixture(fixture_path)
     for _ in range(int(effective_refine_level)):
         mesh = refine_triangle_mesh(mesh)
@@ -786,7 +788,9 @@ def run_flat_disk_one_leaflet_benchmark(
             rim_radius=float(theory.radius),
             band_half_width=band_half_width,
         )
+    mesh_load_refine_seconds = float(perf_counter() - t_mesh_prep_start)
 
+    t_setup_start = perf_counter()
     _configure_benchmark_mesh(
         mesh,
         theory_params=params,
@@ -801,11 +805,14 @@ def run_flat_disk_one_leaflet_benchmark(
     minim = _build_minimizer(mesh)
     minim.enforce_constraints_after_mesh_ops(mesh)
     mesh.project_tilts_to_tangent()
+    setup_seconds = float(perf_counter() - t_setup_start)
 
     scan_report: dict[str, Any] | None = None
     optimize_report: dict[str, Any] | None = None
     theta_factor_raw: float | None = None
     energy_factor_raw: float | None = None
+    theta_optimize_seconds = 0.0
+    theta_evaluations = 0
     theta_star: float
     if theta_mode_str == "scan":
         assert scan_cfg is not None
@@ -821,6 +828,7 @@ def run_flat_disk_one_leaflet_benchmark(
                 theta_value=float(theta_value),
                 reset_outer=True,
             )
+        theta_evaluations = int(theta_values.size)
 
         min_idx = int(np.argmin(energies))
         if min_idx == 0 or min_idx == int(theta_values.size - 1):
@@ -872,6 +880,8 @@ def run_flat_disk_one_leaflet_benchmark(
                 float(abs(raw_energy)), float(abs(theory.total))
             )
         optimize_seconds = float(perf_counter() - t0)
+        theta_optimize_seconds = optimize_seconds
+        theta_evaluations = int(optimize_cfg.optimize_steps)
         optimize_theta_span = float(
             int(optimize_cfg.optimize_steps) * float(optimize_cfg.optimize_delta)
         )
@@ -900,6 +910,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "theta_star": float(theta_star),
         }
 
+    t_final_start = perf_counter()
     total_energy = _run_theta_relaxation(
         minim,
         theta_value=float(theta_star),
@@ -1018,6 +1029,14 @@ def run_flat_disk_one_leaflet_benchmark(
             ),
             "theory_model": theory_model,
             "theory_source": theory_source,
+            "performance": {
+                "mesh_load_refine_seconds": float(mesh_load_refine_seconds),
+                "setup_seconds": float(setup_seconds),
+                "theta_optimize_seconds": float(theta_optimize_seconds),
+                "theta_evaluations": int(theta_evaluations),
+                "final_relax_report_seconds": float(perf_counter() - t_final_start),
+                "total_runtime_seconds": float(perf_counter() - t_run_start),
+            },
         },
         "theory": theory.to_dict(),
         "scan": scan_report,
