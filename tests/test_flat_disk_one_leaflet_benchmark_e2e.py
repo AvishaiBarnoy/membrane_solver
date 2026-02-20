@@ -280,13 +280,13 @@ def test_flat_disk_kh_optimize_profile_and_continuity_e2e() -> None:
         smoothness_model="splay_twist",
         theta_mode="optimize",
         parameterization="kh_physical",
-        optimize_preset="kh_wide",
+        optimize_preset="kh_strict_refine",
     )
 
     assert report["meta"]["theta_mode"] == "optimize"
-    assert report["meta"]["optimize_preset_effective"] == "kh_wide"
-    assert float(report["parity"]["theta_factor"]) <= 1.9
-    assert float(report["parity"]["energy_factor"]) <= 1.9
+    assert report["meta"]["optimize_preset_effective"] == "kh_strict_refine"
+    assert float(report["parity"]["theta_factor"]) <= 1.6
+    assert float(report["parity"]["energy_factor"]) <= 1.6
 
     profile = report["mesh"]["profile"]
     inner = float(profile["inner_abs_median"])
@@ -412,6 +412,8 @@ def test_flat_disk_kh_strict_refine_preset_improves_score_vs_baseline() -> None:
     assert int(strict["meta"]["rim_local_refine_steps"]) == 1
     assert score_strict <= score_base
     assert strict_runtime < refine2_runtime
+    assert float(strict["parity"]["theta_factor"]) <= 1.6
+    assert float(strict["parity"]["energy_factor"]) <= 1.6
 
     rim = strict["mesh"]["rim_boundary_realization"]
     assert int(rim["rim_samples"]) > 0
