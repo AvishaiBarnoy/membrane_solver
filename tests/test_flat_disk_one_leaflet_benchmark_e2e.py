@@ -52,7 +52,13 @@ def _kh_opt_report(
     # tests reuse the same expensive run.
     effective_refine = (
         1
-        if preset in {"kh_strict_refine", "kh_strict_fast", "kh_strict_continuity"}
+        if preset
+        in {
+            "kh_strict_refine",
+            "kh_strict_fast",
+            "kh_strict_continuity",
+            "kh_strict_robust",
+        }
         else int(refine_level)
     )
     return run_flat_disk_one_leaflet_benchmark(
@@ -319,6 +325,34 @@ def test_flat_disk_optimize_preset_kh_strict_continuity_improves_rim_metrics() -
     leak_cont = float(continuity["mesh"]["leakage"]["outer_tphi_over_trad_median"])
     assert jump_cont < jump_fast
     assert leak_cont < leak_fast
+
+
+@pytest.mark.regression
+def test_flat_disk_optimize_preset_kh_strict_robust_non_worsening_score() -> None:
+    fast = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_fast",
+    )
+    robust = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_robust",
+    )
+
+    score_fast = float(
+        np.hypot(
+            np.log(max(float(fast["parity"]["theta_factor"]), 1e-18)),
+            np.log(max(float(fast["parity"]["energy_factor"]), 1e-18)),
+        )
+    )
+    score_robust = float(
+        np.hypot(
+            np.log(max(float(robust["parity"]["theta_factor"]), 1e-18)),
+            np.log(max(float(robust["parity"]["energy_factor"]), 1e-18)),
+        )
+    )
+    assert robust["meta"]["optimize_preset_effective"] == "kh_strict_robust"
+    assert robust["optimize"]["postcheck"] is not None
+    assert score_robust <= 1.30 * score_fast
 
 
 @pytest.mark.regression

@@ -27,6 +27,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Added canonical lane-separated parity scoreboard diagnostics (`tools/diagnostics/flat_disk_parity_scoreboard.py`) to lock `legacy` and `kh_physical` theory references in one deterministic report.
   - Added strict-KH rim/interface fidelity diagnostics (`tools/diagnostics/flat_disk_kh_rim_fidelity.py`) with continuity, boundary-realization, and leakage metrics.
   - Added opt-in `kh_strict_continuity` optimize preset to improve rim continuity/leakage via stricter rim-local refinement in strict-KH diagnostics workflows.
+  - Added opt-in `kh_strict_robust` optimize preset with local post-optimize energy consistency check/polish (`theta_optimize_postcheck`) for non-worsening strict parity.
   - KH term audit now supports strict optimize-preset characterization (`--strict-preset-characterization`) with deterministic parity/runtime candidate ranking and `selected_best` reporting.
   - KH physical acceptance baseline fixture now tracks `kh_strict_fast` and strict parity regression caps are tightened to `<=1.5` in strict optimize e2e coverage.
   - Regression test runtime was reduced by reclassifying heavy mass-mode benchmark smoke to `benchmark` and using a lightweight mass-mode ordering regression guard.
