@@ -183,9 +183,23 @@ def _resolve_optimize_preset(
             ),
             "kh_strict_continuity",
         )
+    if preset == "kh_strict_robust":
+        return (
+            BenchmarkOptimizeConfig(
+                theta_initial=float(optimize_cfg.theta_initial),
+                optimize_steps=30,
+                optimize_every=1,
+                optimize_delta=6.0e-3,
+                optimize_inner_steps=14,
+                plateau_patience=12,
+                plateau_abs_tol=1.0e-12,
+            ),
+            "kh_strict_robust",
+        )
     raise ValueError(
         "optimize_preset must be 'none', 'fast_r3', 'full_accuracy_r3', 'kh_wide', "
-        "'kh_strict_refine', 'kh_strict_fast', or 'kh_strict_continuity'."
+        "'kh_strict_refine', 'kh_strict_fast', 'kh_strict_continuity', "
+        "or 'kh_strict_robust'."
     )
 
 
@@ -711,6 +725,7 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_optimize_inner_steps: int = 20,
     theta_optimize_plateau_patience: int = 0,
     theta_optimize_plateau_abs_tol: float = 0.0,
+    theta_optimize_postcheck: bool = False,
     theta_polish_delta: float = 1.0e-4,
     theta_polish_points: int = 3,
     optimize_preset: str = "none",
@@ -755,6 +770,7 @@ def run_flat_disk_one_leaflet_benchmark(
         "kh_strict_refine",
         "kh_strict_fast",
         "kh_strict_continuity",
+        "kh_strict_robust",
     }:
         effective_refine_level = 1
         effective_rim_local_refine_steps = (
@@ -810,6 +826,7 @@ def run_flat_disk_one_leaflet_benchmark(
     optimize_cfg = None
     polish_cfg = None
     effective_optimize_preset = "none"
+    postcheck_enabled = bool(theta_optimize_postcheck)
     if theta_mode_str == "scan":
         scan_cfg = BenchmarkScanConfig(
             theta_min=float(theta_min),
@@ -834,6 +851,8 @@ def run_flat_disk_one_leaflet_benchmark(
             optimize_cfg=optimize_cfg,
         )
         optimize_cfg.validate()
+        if effective_optimize_preset == "kh_strict_robust":
+            postcheck_enabled = True
         if theta_mode_str == "optimize_full":
             polish_delta = float(theta_polish_delta)
             polish_points = int(theta_polish_points)
@@ -935,6 +954,32 @@ def run_flat_disk_one_leaflet_benchmark(
         )
         theta_star = float(theta_opt_raw)
         polish_report = None
+        postcheck_report = None
+        postcheck_evaluations = 0
+        if theta_mode_str == "optimize" and bool(postcheck_enabled):
+            delta = float(optimize_cfg.optimize_delta)
+            theta_candidates = np.asarray(
+                [theta_opt_raw - delta, theta_opt_raw, theta_opt_raw + delta],
+                dtype=float,
+            )
+            energy_candidates = np.asarray(
+                [
+                    _run_theta_relaxation(
+                        minim, theta_value=float(th), reset_outer=True
+                    )
+                    for th in theta_candidates.tolist()
+                ],
+                dtype=float,
+            )
+            best_idx = int(np.argmin(energy_candidates))
+            theta_star = float(theta_candidates[best_idx])
+            postcheck_evaluations = int(theta_candidates.size)
+            postcheck_report = {
+                "enabled": True,
+                "theta_candidates": [float(x) for x in theta_candidates.tolist()],
+                "energy_candidates": [float(x) for x in energy_candidates.tolist()],
+                "selected_theta": float(theta_star),
+            }
         if theta_mode_str == "optimize_full":
             assert polish_cfg is not None
             theta_star, polish_report = _run_theta_local_polish(
@@ -955,7 +1000,9 @@ def run_flat_disk_one_leaflet_benchmark(
             )
         optimize_seconds = float(perf_counter() - t0)
         theta_optimize_seconds = optimize_seconds
-        theta_evaluations = int(optimize_iterations_completed)
+        theta_evaluations = int(optimize_iterations_completed) + int(
+            postcheck_evaluations
+        )
         optimize_theta_span_configured = float(
             int(optimize_cfg.optimize_steps) * float(optimize_cfg.optimize_delta)
         )
@@ -993,6 +1040,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "energy_factor_raw": (
                 None if energy_factor_raw is None else float(energy_factor_raw)
             ),
+            "postcheck": postcheck_report,
             "polish": polish_report,
             "theta_star": float(theta_star),
         }
@@ -1313,6 +1361,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--theta-optimize-inner-steps", type=int, default=20)
     ap.add_argument("--theta-optimize-plateau-patience", type=int, default=0)
     ap.add_argument("--theta-optimize-plateau-abs-tol", type=float, default=0.0)
+    ap.add_argument("--theta-optimize-postcheck", action="store_true")
     ap.add_argument("--theta-polish-delta", type=float, default=1.0e-4)
     ap.add_argument("--theta-polish-points", type=int, default=3)
     ap.add_argument(
@@ -1325,6 +1374,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             "kh_strict_refine",
             "kh_strict_fast",
             "kh_strict_continuity",
+            "kh_strict_robust",
         ),
         default="none",
     )
@@ -1420,6 +1470,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             theta_optimize_inner_steps=args.theta_optimize_inner_steps,
             theta_optimize_plateau_patience=args.theta_optimize_plateau_patience,
             theta_optimize_plateau_abs_tol=args.theta_optimize_plateau_abs_tol,
+            theta_optimize_postcheck=args.theta_optimize_postcheck,
             theta_polish_delta=args.theta_polish_delta,
             theta_polish_points=args.theta_polish_points,
             optimize_preset=args.optimize_preset,
