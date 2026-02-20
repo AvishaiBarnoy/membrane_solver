@@ -151,9 +151,20 @@ def _resolve_optimize_preset(
             ),
             "kh_strict_refine",
         )
+    if preset == "kh_strict_fast":
+        return (
+            BenchmarkOptimizeConfig(
+                theta_initial=float(optimize_cfg.theta_initial),
+                optimize_steps=80,
+                optimize_every=1,
+                optimize_delta=2.0e-3,
+                optimize_inner_steps=14,
+            ),
+            "kh_strict_fast",
+        )
     raise ValueError(
         "optimize_preset must be 'none', 'fast_r3', 'full_accuracy_r3', 'kh_wide', "
-        "or 'kh_strict_refine'."
+        "'kh_strict_refine', or 'kh_strict_fast'."
     )
 
 
@@ -687,7 +698,7 @@ def run_flat_disk_one_leaflet_benchmark(
     effective_refine_level = raw_refine_level
     effective_rim_local_refine_steps = raw_rim_local_refine_steps
     effective_rim_local_refine_band_lambda = raw_rim_local_refine_band_lambda
-    if optimize_preset_raw == "kh_strict_refine":
+    if optimize_preset_raw in {"kh_strict_refine", "kh_strict_fast"}:
         effective_refine_level = 1
         effective_rim_local_refine_steps = 1
         effective_rim_local_refine_band_lambda = 4.0
@@ -897,6 +908,11 @@ def run_flat_disk_one_leaflet_benchmark(
             "optimize_inner_steps": int(optimize_cfg.optimize_inner_steps),
             "optimize_theta_span": optimize_theta_span,
             "hit_step_limit": hit_step_limit,
+            "recommended_fallback_preset": (
+                "kh_strict_refine"
+                if hit_step_limit and effective_optimize_preset == "kh_strict_fast"
+                else None
+            ),
             "optimize_seconds": optimize_seconds,
             "optimize_preset_effective": str(effective_optimize_preset),
             "theta_star_raw": float(theta_opt_raw),
@@ -1228,7 +1244,14 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--theta-polish-points", type=int, default=3)
     ap.add_argument(
         "--optimize-preset",
-        choices=("none", "fast_r3", "full_accuracy_r3", "kh_wide", "kh_strict_refine"),
+        choices=(
+            "none",
+            "fast_r3",
+            "full_accuracy_r3",
+            "kh_wide",
+            "kh_strict_refine",
+            "kh_strict_fast",
+        ),
         default="none",
     )
     ap.add_argument(

@@ -238,6 +238,35 @@ def test_flat_disk_optimize_preset_kh_wide_expands_theta_span_for_kh_lane() -> N
 
 
 @pytest.mark.regression
+def test_flat_disk_optimize_preset_kh_strict_fast_is_opt_in_and_mesh_strict() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=3,  # should be overridden by strict-fast preset
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_strict_fast",
+        rim_local_refine_steps=0,
+        rim_local_refine_band_lambda=0.0,
+    )
+
+    assert report["meta"]["optimize_preset"] == "kh_strict_fast"
+    assert report["meta"]["optimize_preset_effective"] == "kh_strict_fast"
+    assert int(report["meta"]["refine_level"]) == 1
+    assert int(report["meta"]["rim_local_refine_steps"]) == 1
+    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(4.0)
+
+    opt = report["optimize"]
+    assert opt is not None
+    assert int(opt["optimize_steps"]) == 80
+    assert int(opt["optimize_inner_steps"]) == 14
+    assert float(opt["optimize_theta_span"]) == pytest.approx(0.16, abs=1e-12)
+    assert bool(opt["hit_step_limit"]) is False
+    assert opt["recommended_fallback_preset"] is None
+
+
+@pytest.mark.regression
 def test_flat_disk_kh_consistent_mass_improves_parity_with_kh_wide() -> None:
     lumped = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
