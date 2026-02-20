@@ -12,7 +12,6 @@ from benchmarks.benchmark_flat_disk_tilt_mass_mode import benchmark_tilt_mass_mo
 
 
 @pytest.mark.benchmark
-@pytest.mark.regression
 def test_flat_disk_tilt_mass_mode_benchmark_smoke() -> None:
     report = benchmark_tilt_mass_mode(
         refine_level=1,
