@@ -3,6 +3,7 @@ import subprocess
 import sys
 from functools import lru_cache
 from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 import pytest
@@ -355,6 +356,76 @@ def test_flat_disk_kh_default_splay_scale_stays_unmodified() -> None:
         optimize_preset="kh_wide",
     )
     assert float(report["meta"]["splay_modulus_scale_in"]) == pytest.approx(1.0)
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_strict_refine_preset_improves_score_vs_baseline() -> None:
+    baseline = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_wide",
+    )
+    t0 = perf_counter()
+    strict = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=2,  # should be overridden by kh_strict_refine preset
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_strict_refine",
+        rim_local_refine_steps=0,
+        rim_local_refine_band_lambda=0.0,
+    )
+    strict_runtime = float(perf_counter() - t0)
+
+    t1 = perf_counter()
+    run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=2,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_wide",
+    )
+    refine2_runtime = float(perf_counter() - t1)
+
+    score_base = float(
+        np.hypot(
+            np.log(max(float(baseline["parity"]["theta_factor"]), 1e-18)),
+            np.log(max(float(baseline["parity"]["energy_factor"]), 1e-18)),
+        )
+    )
+    score_strict = float(
+        np.hypot(
+            np.log(max(float(strict["parity"]["theta_factor"]), 1e-18)),
+            np.log(max(float(strict["parity"]["energy_factor"]), 1e-18)),
+        )
+    )
+
+    assert int(strict["meta"]["refine_level"]) == 1
+    assert int(strict["meta"]["rim_local_refine_steps"]) == 1
+    assert score_strict <= score_base
+    assert strict_runtime < refine2_runtime
+
+    rim = strict["mesh"]["rim_boundary_realization"]
+    assert int(rim["rim_samples"]) > 0
+    assert np.isfinite(float(rim["rim_theta_error_abs_median"]))
+    assert np.isfinite(float(rim["rim_theta_error_abs_max"]))
+    assert float(rim["rim_theta_error_abs_median"]) <= 1e-12
+    assert float(rim["rim_theta_error_abs_max"]) <= 1e-12
+
+    leakage = strict["mesh"]["leakage"]
+    assert np.isfinite(float(leakage["inner_tphi_over_trad_median"]))
+    assert np.isfinite(float(leakage["outer_tphi_over_trad_median"]))
+    # Regression caps from strict baseline (refine1 + rim-local step 1).
+    assert float(leakage["inner_tphi_over_trad_median"]) <= 0.03
+    assert float(leakage["outer_tphi_over_trad_median"]) <= 1.40
 
 
 @pytest.mark.regression

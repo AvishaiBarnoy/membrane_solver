@@ -140,8 +140,20 @@ def _resolve_optimize_preset(
             ),
             "kh_wide",
         )
+    if preset == "kh_strict_refine":
+        return (
+            BenchmarkOptimizeConfig(
+                theta_initial=float(optimize_cfg.theta_initial),
+                optimize_steps=120,
+                optimize_every=1,
+                optimize_delta=2.0e-3,
+                optimize_inner_steps=20,
+            ),
+            "kh_strict_refine",
+        )
     raise ValueError(
-        "optimize_preset must be 'none', 'fast_r3', 'full_accuracy_r3', or 'kh_wide'."
+        "optimize_preset must be 'none', 'fast_r3', 'full_accuracy_r3', 'kh_wide', "
+        "or 'kh_strict_refine'."
     )
 
 
@@ -543,6 +555,62 @@ def _rim_continuity_metrics(
     }
 
 
+def _rim_boundary_realization_metrics(
+    mesh,
+    *,
+    radius: float,
+    theta_value: float,
+) -> dict[str, float]:
+    """Measure realized radial tilt on a rim shell vs imposed theta_B."""
+    positions = mesh.positions_view()
+    r, r_hat = _radial_unit_vectors(positions)
+    shell_tol = max(1e-6, 0.02 * float(radius))
+    rim_mask = np.abs(r - float(radius)) <= shell_tol
+    rows = np.flatnonzero(rim_mask)
+    if rows.size == 0:
+        return {
+            "rim_samples": 0,
+            "rim_theta_error_abs_median": float("nan"),
+            "rim_theta_error_abs_max": float("nan"),
+            "rim_theta_realized_median": float("nan"),
+        }
+    t_rad = np.einsum("ij,ij->i", mesh.tilts_in_view()[rows], r_hat[rows])
+    err = t_rad - float(theta_value)
+    return {
+        "rim_samples": int(rows.size),
+        "rim_theta_error_abs_median": float(np.median(np.abs(err))),
+        "rim_theta_error_abs_max": float(np.max(np.abs(err))),
+        "rim_theta_realized_median": float(np.median(t_rad)),
+    }
+
+
+def _leakage_metrics(mesh, *, radius: float) -> dict[str, float]:
+    """Report azimuthal leakage t_phi relative to radial component t_r."""
+    positions = mesh.positions_view()
+    r, r_hat = _radial_unit_vectors(positions)
+    phi_hat = np.zeros_like(positions)
+    good = r > 1e-12
+    phi_hat[good, 0] = -positions[good, 1] / r[good]
+    phi_hat[good, 1] = positions[good, 0] / r[good]
+    t_in = mesh.tilts_in_view()
+    t_rad = np.einsum("ij,ij->i", t_in, r_hat)
+    t_phi = np.einsum("ij,ij->i", t_in, phi_hat)
+
+    def _ratio(mask: np.ndarray) -> float:
+        if not np.any(mask):
+            return float("nan")
+        num = float(np.median(np.abs(t_phi[mask])))
+        den = float(np.median(np.abs(t_rad[mask])))
+        return float(num / max(den, 1e-18))
+
+    inner_mask = r < float(radius)
+    outer_mask = r > float(radius)
+    return {
+        "inner_tphi_over_trad_median": _ratio(inner_mask),
+        "outer_tphi_over_trad_median": _ratio(outer_mask),
+    }
+
+
 def _contact_diagnostics(
     *,
     breakdown: dict[str, float],
@@ -611,11 +679,23 @@ def run_flat_disk_one_leaflet_benchmark(
     if not fixture_path.exists():
         raise FileNotFoundError(f"Fixture not found: {fixture_path}")
 
-    if int(refine_level) < 0:
+    raw_refine_level = int(refine_level)
+    raw_rim_local_refine_steps = int(rim_local_refine_steps)
+    raw_rim_local_refine_band_lambda = float(rim_local_refine_band_lambda)
+    optimize_preset_raw = str(optimize_preset).lower()
+    effective_refine_level = raw_refine_level
+    effective_rim_local_refine_steps = raw_rim_local_refine_steps
+    effective_rim_local_refine_band_lambda = raw_rim_local_refine_band_lambda
+    if optimize_preset_raw == "kh_strict_refine":
+        effective_refine_level = 1
+        effective_rim_local_refine_steps = 1
+        effective_rim_local_refine_band_lambda = 4.0
+
+    if int(effective_refine_level) < 0:
         raise ValueError("refine_level must be >= 0.")
-    if int(rim_local_refine_steps) < 0:
+    if int(effective_rim_local_refine_steps) < 0:
         raise ValueError("rim_local_refine_steps must be >= 0.")
-    if float(rim_local_refine_band_lambda) < 0.0:
+    if float(effective_rim_local_refine_band_lambda) < 0.0:
         raise ValueError("rim_local_refine_band_lambda must be >= 0.")
     if float(splay_modulus_scale_in) <= 0.0:
         raise ValueError("splay_modulus_scale_in must be > 0.")
@@ -677,7 +757,7 @@ def run_flat_disk_one_leaflet_benchmark(
         optimize_cfg.validate()
         optimize_cfg, effective_optimize_preset = _resolve_optimize_preset(
             optimize_preset=str(optimize_preset),
-            refine_level=int(refine_level),
+            refine_level=int(effective_refine_level),
             optimize_cfg=optimize_cfg,
         )
         optimize_cfg.validate()
@@ -694,15 +774,15 @@ def run_flat_disk_one_leaflet_benchmark(
             polish_cfg.validate()
 
     mesh = _load_mesh_from_fixture(fixture_path)
-    for _ in range(int(refine_level)):
+    for _ in range(int(effective_refine_level)):
         mesh = refine_triangle_mesh(mesh)
-    if int(rim_local_refine_steps) > 0:
-        band_half_width = float(rim_local_refine_band_lambda) * float(
+    if int(effective_rim_local_refine_steps) > 0:
+        band_half_width = float(effective_rim_local_refine_band_lambda) * float(
             theory.lambda_value
         )
         mesh = _refine_mesh_locally_near_rim(
             mesh,
-            local_steps=int(rim_local_refine_steps),
+            local_steps=int(effective_rim_local_refine_steps),
             rim_radius=float(theory.radius),
             band_half_width=band_half_width,
         )
@@ -829,6 +909,12 @@ def run_flat_disk_one_leaflet_benchmark(
 
     profile = _profile_metrics(mesh, radius=float(theory.radius))
     rim_continuity = _rim_continuity_metrics(mesh, radius=float(theory.radius))
+    rim_boundary = _rim_boundary_realization_metrics(
+        mesh,
+        radius=float(theory.radius),
+        theta_value=float(theta_star),
+    )
+    leakage = _leakage_metrics(mesh, radius=float(theory.radius))
     positions = mesh.positions_view()
     z_span = float(np.ptp(positions[:, 2]))
     t_out = mesh.tilts_out_view()
@@ -910,7 +996,7 @@ def run_flat_disk_one_leaflet_benchmark(
     report = {
         "meta": {
             "fixture": str(fixture_path.relative_to(ROOT)),
-            "refine_level": int(refine_level),
+            "refine_level": int(effective_refine_level),
             "outer_mode": str(outer_mode),
             "smoothness_model": str(smoothness_model),
             "parameterization": str(mode),
@@ -926,8 +1012,10 @@ def run_flat_disk_one_leaflet_benchmark(
             "optimize_preset_effective": str(effective_optimize_preset),
             "splay_modulus_scale_in": float(splay_modulus_scale_in),
             "tilt_mass_mode_in": str(mass_mode),
-            "rim_local_refine_steps": int(rim_local_refine_steps),
-            "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
+            "rim_local_refine_steps": int(effective_rim_local_refine_steps),
+            "rim_local_refine_band_lambda": float(
+                effective_rim_local_refine_band_lambda
+            ),
             "theory_model": theory_model,
             "theory_source": theory_source,
         },
@@ -941,6 +1029,8 @@ def run_flat_disk_one_leaflet_benchmark(
             "planarity_z_span": z_span,
             "profile": profile,
             "rim_continuity": rim_continuity,
+            "rim_boundary_realization": rim_boundary,
+            "leakage": leakage,
             "outer_tilt_max_free_rows": outer_max,
             "outer_tilt_mean_free_rows": outer_mean,
             "outer_decay_probe_max_before": outer_decay_probe_before,
@@ -1119,7 +1209,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--theta-polish-points", type=int, default=3)
     ap.add_argument(
         "--optimize-preset",
-        choices=("none", "fast_r3", "full_accuracy_r3", "kh_wide"),
+        choices=("none", "fast_r3", "full_accuracy_r3", "kh_wide", "kh_strict_refine"),
         default="none",
     )
     ap.add_argument(
