@@ -555,6 +555,62 @@ def _rim_continuity_metrics(
     }
 
 
+def _rim_boundary_realization_metrics(
+    mesh,
+    *,
+    radius: float,
+    theta_value: float,
+) -> dict[str, float]:
+    """Measure realized radial tilt on a rim shell vs imposed theta_B."""
+    positions = mesh.positions_view()
+    r, r_hat = _radial_unit_vectors(positions)
+    shell_tol = max(1e-6, 0.02 * float(radius))
+    rim_mask = np.abs(r - float(radius)) <= shell_tol
+    rows = np.flatnonzero(rim_mask)
+    if rows.size == 0:
+        return {
+            "rim_samples": 0,
+            "rim_theta_error_abs_median": float("nan"),
+            "rim_theta_error_abs_max": float("nan"),
+            "rim_theta_realized_median": float("nan"),
+        }
+    t_rad = np.einsum("ij,ij->i", mesh.tilts_in_view()[rows], r_hat[rows])
+    err = t_rad - float(theta_value)
+    return {
+        "rim_samples": int(rows.size),
+        "rim_theta_error_abs_median": float(np.median(np.abs(err))),
+        "rim_theta_error_abs_max": float(np.max(np.abs(err))),
+        "rim_theta_realized_median": float(np.median(t_rad)),
+    }
+
+
+def _leakage_metrics(mesh, *, radius: float) -> dict[str, float]:
+    """Report azimuthal leakage t_phi relative to radial component t_r."""
+    positions = mesh.positions_view()
+    r, r_hat = _radial_unit_vectors(positions)
+    phi_hat = np.zeros_like(positions)
+    good = r > 1e-12
+    phi_hat[good, 0] = -positions[good, 1] / r[good]
+    phi_hat[good, 1] = positions[good, 0] / r[good]
+    t_in = mesh.tilts_in_view()
+    t_rad = np.einsum("ij,ij->i", t_in, r_hat)
+    t_phi = np.einsum("ij,ij->i", t_in, phi_hat)
+
+    def _ratio(mask: np.ndarray) -> float:
+        if not np.any(mask):
+            return float("nan")
+        num = float(np.median(np.abs(t_phi[mask])))
+        den = float(np.median(np.abs(t_rad[mask])))
+        return float(num / max(den, 1e-18))
+
+    inner_mask = r < float(radius)
+    outer_mask = r > float(radius)
+    return {
+        "inner_tphi_over_trad_median": _ratio(inner_mask),
+        "outer_tphi_over_trad_median": _ratio(outer_mask),
+    }
+
+
 def _contact_diagnostics(
     *,
     breakdown: dict[str, float],
@@ -853,6 +909,12 @@ def run_flat_disk_one_leaflet_benchmark(
 
     profile = _profile_metrics(mesh, radius=float(theory.radius))
     rim_continuity = _rim_continuity_metrics(mesh, radius=float(theory.radius))
+    rim_boundary = _rim_boundary_realization_metrics(
+        mesh,
+        radius=float(theory.radius),
+        theta_value=float(theta_star),
+    )
+    leakage = _leakage_metrics(mesh, radius=float(theory.radius))
     positions = mesh.positions_view()
     z_span = float(np.ptp(positions[:, 2]))
     t_out = mesh.tilts_out_view()
@@ -967,6 +1029,8 @@ def run_flat_disk_one_leaflet_benchmark(
             "planarity_z_span": z_span,
             "profile": profile,
             "rim_continuity": rim_continuity,
+            "rim_boundary_realization": rim_boundary,
+            "leakage": leakage,
             "outer_tilt_max_free_rows": outer_max,
             "outer_tilt_mean_free_rows": outer_mean,
             "outer_decay_probe_max_before": outer_decay_probe_before,
