@@ -9,15 +9,15 @@ meta:
   length_scale_nm: 15.0
   radius_nm: 7.0
   drive_physical: 2.857142857142857
-  optimize_preset: kh_strict_refine
+  optimize_preset: kh_strict_fast
   splay_modulus_scale_in: 1.0
   tilt_mass_mode_in: consistent
   theta_mode: optimize
   theta_initial: 0.0
-  theta_optimize_steps: 120
+  theta_optimize_steps: 30
   theta_optimize_every: 1
-  theta_optimize_delta: 0.002
-  theta_optimize_inner_steps: 20
+  theta_optimize_delta: 0.006
+  theta_optimize_inner_steps: 14
   theory_source: kh_physical_closed_form
   expect_meets_factor_2: true
   format: yaml
@@ -29,27 +29,27 @@ metrics:
     theta_star: 0.14323594888052385
     total: -0.8999780094660339
   optimize:
-    theta_star_raw: 0.1300000000000001
-    theta_star: 0.1300000000000001
-    optimize_theta_span: 0.24
+    theta_star_raw: 0.13200000000000003
+    theta_star: 0.13200000000000003
+    optimize_theta_span: 0.18
     hit_step_limit: 0.0
   mesh:
-    theta_star: 0.1300000000000001
-    total_energy: -0.8086204503204082
+    theta_star: 0.13200000000000003
+    total_energy: -0.8081730702306509
     planarity_z_span: 0.0
     outer_tilt_max_free_rows: 0.0
     outer_decay_probe_max_before: 0.0
     outer_decay_probe_max_after: 0.0
     profile:
-      inner_abs_median: 0.00038056795824426443
-      rim_abs_median: 0.1300000000000001
-      outer_abs_median: 3.641310791903462e-05
+      inner_abs_median: 0.00038642284990956084
+      rim_abs_median: 0.13200000000000003
+      outer_abs_median: 3.697330957932745e-05
     rim_continuity:
       matched_bins: 12.0
-      jump_abs_median: 0.034466908188373446
+      jump_abs_median: 0.0349971683143484
   parity:
-    theta_factor: 1.1018149913886441
-    energy_factor: 1.112979530890452
+    theta_factor: 1.085120824852453
+    energy_factor: 1.1135956425882665
 tolerances:
   theory:
     lambda_value: 1.0e-12
