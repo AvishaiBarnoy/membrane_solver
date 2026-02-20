@@ -170,9 +170,22 @@ def _resolve_optimize_preset(
             ),
             "kh_strict_fast",
         )
+    if preset == "kh_strict_continuity":
+        return (
+            BenchmarkOptimizeConfig(
+                theta_initial=float(optimize_cfg.theta_initial),
+                optimize_steps=30,
+                optimize_every=1,
+                optimize_delta=6.0e-3,
+                optimize_inner_steps=14,
+                plateau_patience=12,
+                plateau_abs_tol=1.0e-12,
+            ),
+            "kh_strict_continuity",
+        )
     raise ValueError(
         "optimize_preset must be 'none', 'fast_r3', 'full_accuracy_r3', 'kh_wide', "
-        "'kh_strict_refine', or 'kh_strict_fast'."
+        "'kh_strict_refine', 'kh_strict_fast', or 'kh_strict_continuity'."
     )
 
 
@@ -738,9 +751,15 @@ def run_flat_disk_one_leaflet_benchmark(
     effective_refine_level = raw_refine_level
     effective_rim_local_refine_steps = raw_rim_local_refine_steps
     effective_rim_local_refine_band_lambda = raw_rim_local_refine_band_lambda
-    if optimize_preset_raw in {"kh_strict_refine", "kh_strict_fast"}:
+    if optimize_preset_raw in {
+        "kh_strict_refine",
+        "kh_strict_fast",
+        "kh_strict_continuity",
+    }:
         effective_refine_level = 1
-        effective_rim_local_refine_steps = 1
+        effective_rim_local_refine_steps = (
+            2 if optimize_preset_raw == "kh_strict_continuity" else 1
+        )
         effective_rim_local_refine_band_lambda = 4.0
 
     if int(effective_refine_level) < 0:
@@ -1305,6 +1324,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             "kh_wide",
             "kh_strict_refine",
             "kh_strict_fast",
+            "kh_strict_continuity",
         ),
         default="none",
     )
