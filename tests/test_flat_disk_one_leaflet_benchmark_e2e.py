@@ -40,6 +40,25 @@ def _report_for_mode(mode: str) -> dict:
     )
 
 
+@lru_cache(maxsize=8)
+def _kh_opt_report(
+    *,
+    refine_level: int,
+    optimize_preset: str,
+    tilt_mass_mode_in: str = "consistent",
+) -> dict:
+    return run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=int(refine_level),
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset=str(optimize_preset),
+        tilt_mass_mode_in=str(tilt_mass_mode_in),
+    )
+
+
 @pytest.mark.acceptance
 @pytest.mark.e2e
 def test_flat_disk_one_leaflet_mesh_parity_outer_disabled_e2e() -> None:
@@ -217,13 +236,8 @@ def test_flat_disk_optimize_preset_full_accuracy_r3_is_noop_below_refine3() -> N
 
 @pytest.mark.regression
 def test_flat_disk_optimize_preset_kh_wide_expands_theta_span_for_kh_lane() -> None:
-    report = run_flat_disk_one_leaflet_benchmark(
-        fixture=DEFAULT_FIXTURE,
+    report = _kh_opt_report(
         refine_level=1,
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_mode="optimize",
-        parameterization="kh_physical",
         optimize_preset="kh_wide",
     )
 
@@ -240,16 +254,9 @@ def test_flat_disk_optimize_preset_kh_wide_expands_theta_span_for_kh_lane() -> N
 
 @pytest.mark.regression
 def test_flat_disk_optimize_preset_kh_strict_fast_is_opt_in_and_mesh_strict() -> None:
-    report = run_flat_disk_one_leaflet_benchmark(
-        fixture=DEFAULT_FIXTURE,
+    report = _kh_opt_report(
         refine_level=3,  # should be overridden by strict-fast preset
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_mode="optimize",
-        parameterization="kh_physical",
         optimize_preset="kh_strict_fast",
-        rim_local_refine_steps=0,
-        rim_local_refine_band_lambda=0.0,
     )
 
     assert report["meta"]["optimize_preset"] == "kh_strict_fast"
@@ -277,23 +284,13 @@ def test_flat_disk_optimize_preset_kh_strict_fast_is_opt_in_and_mesh_strict() ->
 
 @pytest.mark.regression
 def test_flat_disk_kh_consistent_mass_improves_parity_with_kh_wide() -> None:
-    lumped = run_flat_disk_one_leaflet_benchmark(
-        fixture=DEFAULT_FIXTURE,
+    lumped = _kh_opt_report(
         refine_level=1,
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_mode="optimize",
-        parameterization="kh_physical",
         optimize_preset="kh_wide",
         tilt_mass_mode_in="lumped",
     )
-    consistent = run_flat_disk_one_leaflet_benchmark(
-        fixture=DEFAULT_FIXTURE,
+    consistent = _kh_opt_report(
         refine_level=1,
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_mode="optimize",
-        parameterization="kh_physical",
         optimize_preset="kh_wide",
         tilt_mass_mode_in="consistent",
     )
@@ -311,13 +308,8 @@ def test_flat_disk_kh_consistent_mass_improves_parity_with_kh_wide() -> None:
 @pytest.mark.acceptance
 @pytest.mark.e2e
 def test_flat_disk_kh_optimize_profile_and_continuity_e2e() -> None:
-    report = run_flat_disk_one_leaflet_benchmark(
-        fixture=DEFAULT_FIXTURE,
+    report = _kh_opt_report(
         refine_level=1,
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_mode="optimize",
-        parameterization="kh_physical",
         optimize_preset="kh_strict_fast",
     )
 
@@ -347,13 +339,8 @@ def test_flat_disk_kh_optimize_profile_and_continuity_e2e() -> None:
 
 @pytest.mark.regression
 def test_flat_disk_kh_optimize_parity_does_not_worsen_with_refinement() -> None:
-    refine1 = run_flat_disk_one_leaflet_benchmark(
-        fixture=DEFAULT_FIXTURE,
+    refine1 = _kh_opt_report(
         refine_level=1,
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_mode="optimize",
-        parameterization="kh_physical",
         optimize_preset="kh_wide",
     )
     refine2 = run_flat_disk_one_leaflet_benchmark(
@@ -389,13 +376,8 @@ def test_flat_disk_reports_splay_modulus_scale_meta() -> None:
 
 @pytest.mark.regression
 def test_flat_disk_kh_default_splay_scale_stays_unmodified() -> None:
-    report = run_flat_disk_one_leaflet_benchmark(
-        fixture=DEFAULT_FIXTURE,
+    report = _kh_opt_report(
         refine_level=1,
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_mode="optimize",
-        parameterization="kh_physical",
         optimize_preset="kh_wide",
     )
     assert float(report["meta"]["splay_modulus_scale_in"]) == pytest.approx(1.0)
@@ -403,25 +385,13 @@ def test_flat_disk_kh_default_splay_scale_stays_unmodified() -> None:
 
 @pytest.mark.regression
 def test_flat_disk_kh_strict_refine_preset_improves_score_vs_baseline() -> None:
-    baseline = run_flat_disk_one_leaflet_benchmark(
-        fixture=DEFAULT_FIXTURE,
+    baseline = _kh_opt_report(
         refine_level=1,
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_mode="optimize",
-        parameterization="kh_physical",
         optimize_preset="kh_wide",
     )
-    strict = run_flat_disk_one_leaflet_benchmark(
-        fixture=DEFAULT_FIXTURE,
+    strict = _kh_opt_report(
         refine_level=2,  # should be overridden by kh_strict_refine preset
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_mode="optimize",
-        parameterization="kh_physical",
         optimize_preset="kh_strict_refine",
-        rim_local_refine_steps=0,
-        rim_local_refine_band_lambda=0.0,
     )
 
     score_base = float(
