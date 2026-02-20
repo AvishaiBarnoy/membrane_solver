@@ -103,7 +103,46 @@ def test_flat_disk_kh_term_audit_local_rim_refine_changes_resolution() -> None:
 
 
 @pytest.mark.regression
-def test_flat_disk_kh_strict_refinement_characterization_emits_best() -> None:
+def test_flat_disk_kh_strict_refinement_characterization_emits_best(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_term_audit as audit_mod
+
+    def _fake_run_flat_disk_one_leaflet_benchmark(**kwargs):
+        refine_level = int(kwargs.get("refine_level", 1))
+        rim_steps = int(kwargs.get("rim_local_refine_steps", 0))
+        if refine_level == 1 and rim_steps == 1:
+            return {
+                "parity": {
+                    "theta_factor": 1.10,
+                    "energy_factor": 1.10,
+                    "meets_factor_2": True,
+                },
+                "optimize": {"optimize_steps": 120, "optimize_inner_steps": 20},
+            }
+        return {
+            "parity": {
+                "theta_factor": 1.30,
+                "energy_factor": 1.20,
+                "meets_factor_2": True,
+            },
+            "optimize": {"optimize_steps": 120, "optimize_inner_steps": 20},
+        }
+
+    def _fake_run_flat_disk_kh_term_audit(**kwargs):
+        rim_steps = int(kwargs.get("rim_local_refine_steps", 0))
+        rim_h = 0.6 if rim_steps > 0 else 1.2
+        return {"resolution": {"rim_h_over_lambda_median": rim_h}}
+
+    monkeypatch.setattr(
+        "tools.reproduce_flat_disk_one_leaflet.run_flat_disk_one_leaflet_benchmark",
+        _fake_run_flat_disk_one_leaflet_benchmark,
+    )
+    monkeypatch.setattr(
+        audit_mod, "run_flat_disk_kh_term_audit", _fake_run_flat_disk_kh_term_audit
+    )
+    monkeypatch.setattr(audit_mod, "perf_counter", lambda: 1.0)
+
     report = run_flat_disk_kh_strict_refinement_characterization(
         optimize_preset="kh_wide",
         global_refine_levels=(1,),
@@ -120,6 +159,7 @@ def test_flat_disk_kh_strict_refinement_characterization_emits_best() -> None:
         assert np.isfinite(float(row["rim_h_over_lambda_median"]))
     best = report["selected_best"]
     assert np.isfinite(float(best["theta_factor"]))
+    assert int(best["rim_local_refine_steps"]) == 1
 
 
 @pytest.mark.regression
