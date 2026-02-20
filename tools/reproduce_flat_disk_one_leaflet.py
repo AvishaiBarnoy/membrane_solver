@@ -410,7 +410,7 @@ def _run_theta_relaxation(
     return energy
 
 
-def _run_theta_optimize(
+def _run_theta_optimize_detailed(
     minim: Minimizer,
     *,
     optimize_cfg: BenchmarkOptimizeConfig,
@@ -455,6 +455,21 @@ def _run_theta_optimize(
     if not np.isfinite(theta_opt):
         raise ValueError("Non-finite optimized theta_B value.")
     return theta_opt, int(iterations_completed), bool(stopped_on_plateau)
+
+
+def _run_theta_optimize(
+    minim: Minimizer,
+    *,
+    optimize_cfg: BenchmarkOptimizeConfig,
+    reset_outer: bool,
+) -> float:
+    """Backward-compatible optimize helper returning theta_B as a scalar."""
+    theta_opt, _, _ = _run_theta_optimize_detailed(
+        minim,
+        optimize_cfg=optimize_cfg,
+        reset_outer=reset_outer,
+    )
+    return float(theta_opt)
 
 
 def _run_theta_local_polish(
@@ -893,7 +908,7 @@ def run_flat_disk_one_leaflet_benchmark(
         assert optimize_cfg is not None
         t0 = perf_counter()
         theta_opt_raw, optimize_iterations_completed, stopped_on_plateau = (
-            _run_theta_optimize(
+            _run_theta_optimize_detailed(
                 minim,
                 optimize_cfg=optimize_cfg,
                 reset_outer=True,

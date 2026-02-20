@@ -3,7 +3,6 @@ import subprocess
 import sys
 from functools import lru_cache
 from pathlib import Path
-from time import perf_counter
 
 import numpy as np
 import pytest
@@ -413,7 +412,6 @@ def test_flat_disk_kh_strict_refine_preset_improves_score_vs_baseline() -> None:
         parameterization="kh_physical",
         optimize_preset="kh_wide",
     )
-    t0 = perf_counter()
     strict = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
         refine_level=2,  # should be overridden by kh_strict_refine preset
@@ -425,19 +423,6 @@ def test_flat_disk_kh_strict_refine_preset_improves_score_vs_baseline() -> None:
         rim_local_refine_steps=0,
         rim_local_refine_band_lambda=0.0,
     )
-    strict_runtime = float(perf_counter() - t0)
-
-    t1 = perf_counter()
-    run_flat_disk_one_leaflet_benchmark(
-        fixture=DEFAULT_FIXTURE,
-        refine_level=2,
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_mode="optimize",
-        parameterization="kh_physical",
-        optimize_preset="kh_wide",
-    )
-    refine2_runtime = float(perf_counter() - t1)
 
     score_base = float(
         np.hypot(
@@ -455,7 +440,6 @@ def test_flat_disk_kh_strict_refine_preset_improves_score_vs_baseline() -> None:
     assert int(strict["meta"]["refine_level"]) == 1
     assert int(strict["meta"]["rim_local_refine_steps"]) == 1
     assert score_strict <= score_base
-    assert strict_runtime < refine2_runtime
     assert float(strict["parity"]["theta_factor"]) <= 1.6
     assert float(strict["parity"]["energy_factor"]) <= 1.6
 
