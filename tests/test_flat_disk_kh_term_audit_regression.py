@@ -7,6 +7,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.flat_disk_kh_term_audit import (
+    run_flat_disk_kh_strict_preset_characterization,
     run_flat_disk_kh_strict_refinement_characterization,
     run_flat_disk_kh_term_audit,
     run_flat_disk_kh_term_audit_refine_sweep,
@@ -119,3 +120,53 @@ def test_flat_disk_kh_strict_refinement_characterization_emits_best() -> None:
         assert np.isfinite(float(row["rim_h_over_lambda_median"]))
     best = report["selected_best"]
     assert np.isfinite(float(best["theta_factor"]))
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_strict_preset_characterization_emits_best(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_term_audit as audit_mod
+
+    def _fake_run_flat_disk_one_leaflet_benchmark(**kwargs):
+        preset = str(kwargs.get("optimize_preset"))
+        if preset == "kh_strict_fast":
+            return {
+                "parity": {
+                    "theta_factor": 1.12,
+                    "energy_factor": 1.10,
+                    "meets_factor_2": True,
+                },
+                "optimize": {"optimize_steps": 30, "optimize_inner_steps": 14},
+            }
+        return {
+            "parity": {
+                "theta_factor": 1.10,
+                "energy_factor": 1.10,
+                "meets_factor_2": True,
+            },
+            "optimize": {"optimize_steps": 120, "optimize_inner_steps": 20},
+        }
+
+    monkeypatch.setattr(
+        "tools.reproduce_flat_disk_one_leaflet.run_flat_disk_one_leaflet_benchmark",
+        _fake_run_flat_disk_one_leaflet_benchmark,
+    )
+    monkeypatch.setattr(audit_mod, "perf_counter", lambda: 1.0)
+
+    report = run_flat_disk_kh_strict_preset_characterization(
+        optimize_presets=("kh_strict_refine", "kh_strict_fast"),
+        refine_level=1,
+        rim_local_refine_steps=1,
+        rim_local_refine_band_lambda=4.0,
+    )
+    assert report["meta"]["mode"] == "strict_preset_characterization"
+    rows = report["rows"]
+    assert len(rows) == 2
+    for row in rows:
+        assert np.isfinite(float(row["theta_factor"]))
+        assert np.isfinite(float(row["energy_factor"]))
+        assert np.isfinite(float(row["balanced_parity_score"]))
+        assert np.isfinite(float(row["runtime_seconds"]))
+    best = report["selected_best"]
+    assert best["optimize_preset"] == "kh_strict_refine"
