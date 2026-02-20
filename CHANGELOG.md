@@ -24,6 +24,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Flat disk reproducer now supports `--parameterization legacy|kh_physical` plus physical scaling CLI controls (`--kappa-physical`, `--kappa-t-physical`, `--length-scale-nm`, `--radius-nm`, `--drive-physical`) and reports these unit metadata fields in YAML output.
   - Flat disk baseline acceptance now includes a dedicated `kh_physical` lane fixture (`tests/fixtures/flat_disk_one_leaflet_kh_physical_disabled_baseline.yaml`) in addition to the legacy disabled/free baselines, with lane-specific expectations for parity pass/fail.
   - Added KH physical-lane per-theta term audit utility (`tools/diagnostics/flat_disk_kh_term_audit.py`) to report mesh/theory split terms (internal/contact/total) at user-selected `theta_B` values.
+  - Added canonical lane-separated parity scoreboard diagnostics (`tools/diagnostics/flat_disk_parity_scoreboard.py`) to lock `legacy` and `kh_physical` theory references in one deterministic report.
   - KH term audit now supports strict optimize-preset characterization (`--strict-preset-characterization`) with deterministic parity/runtime candidate ranking and `selected_best` reporting.
   - KH physical acceptance baseline fixture now tracks `kh_strict_fast` and strict parity regression caps are tightened to `<=1.5` in strict optimize e2e coverage.
   - Flat disk reproduction CLI default refinement is now `--refine-level 2` (was `1`) to keep default parity in the `<2x` acceptance range with full rim continuity enforced.
