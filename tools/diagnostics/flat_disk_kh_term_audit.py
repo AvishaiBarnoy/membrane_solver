@@ -765,6 +765,105 @@ def run_flat_disk_kh_strict_refinement_characterization(
     }
 
 
+def run_flat_disk_kh_strict_preset_characterization(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    outer_mode: str = "disabled",
+    smoothness_model: str = "splay_twist",
+    kappa_physical: float = 10.0,
+    kappa_t_physical: float = 10.0,
+    radius_nm: float = 7.0,
+    length_scale_nm: float = 15.0,
+    drive_physical: float = (2.0 / 0.7),
+    tilt_mass_mode_in: str = "auto",
+    optimize_presets: Sequence[str] = ("kh_strict_refine", "kh_strict_fast"),
+    refine_level: int = 1,
+    rim_local_refine_steps: int = 1,
+    rim_local_refine_band_lambda: float = 4.0,
+) -> dict[str, Any]:
+    """Characterize strict-KH optimize preset candidates on a fixed strict mesh."""
+    from tools.reproduce_flat_disk_one_leaflet import (
+        run_flat_disk_one_leaflet_benchmark,
+    )
+
+    fixture_path = Path(fixture)
+    if not fixture_path.is_absolute():
+        fixture_path = (ROOT / fixture_path).resolve()
+    if not fixture_path.exists():
+        raise FileNotFoundError(f"Fixture not found: {fixture_path}")
+
+    presets = [str(x) for x in optimize_presets]
+    if len(presets) == 0:
+        raise ValueError("optimize_presets must be non-empty.")
+
+    rows: list[dict[str, float | int | bool | str]] = []
+    for complexity_rank, preset in enumerate(presets):
+        t0 = perf_counter()
+        bench = run_flat_disk_one_leaflet_benchmark(
+            fixture=fixture_path,
+            refine_level=int(refine_level),
+            outer_mode=outer_mode,
+            smoothness_model=smoothness_model,
+            theta_mode="optimize",
+            optimize_preset=str(preset),
+            parameterization="kh_physical",
+            kappa_physical=float(kappa_physical),
+            kappa_t_physical=float(kappa_t_physical),
+            radius_nm=float(radius_nm),
+            length_scale_nm=float(length_scale_nm),
+            drive_physical=float(drive_physical),
+            splay_modulus_scale_in=1.0,
+            tilt_mass_mode_in=str(tilt_mass_mode_in),
+            rim_local_refine_steps=int(rim_local_refine_steps),
+            rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
+        )
+        runtime_seconds = float(perf_counter() - t0)
+
+        theta_factor = float(bench["parity"]["theta_factor"])
+        energy_factor = float(bench["parity"]["energy_factor"])
+        score = _balanced_parity_score(theta_factor, energy_factor)
+        opt = bench["optimize"] or {}
+        rows.append(
+            {
+                "optimize_preset": str(preset),
+                "theta_factor": theta_factor,
+                "energy_factor": energy_factor,
+                "balanced_parity_score": score,
+                "runtime_seconds": runtime_seconds,
+                "meets_factor_2": bool(bench["parity"]["meets_factor_2"]),
+                "optimize_steps": int(opt.get("optimize_steps", 0) or 0),
+                "optimize_inner_steps": int(opt.get("optimize_inner_steps", 0) or 0),
+                "complexity_rank": int(complexity_rank),
+            }
+        )
+
+    selected = min(
+        rows,
+        key=lambda row: (
+            float(row["balanced_parity_score"]),
+            float(row["runtime_seconds"]),
+            int(row["complexity_rank"]),
+        ),
+    )
+    return {
+        "meta": {
+            "mode": "strict_preset_characterization",
+            "fixture": str(fixture_path.relative_to(ROOT)),
+            "parameterization": "kh_physical",
+            "splay_modulus_scale_in": 1.0,
+            "tilt_mass_mode_in": str(tilt_mass_mode_in),
+            "theta_mode": "optimize",
+            "outer_mode": str(outer_mode),
+            "smoothness_model": str(smoothness_model),
+            "refine_level": int(refine_level),
+            "rim_local_refine_steps": int(rim_local_refine_steps),
+            "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
+        },
+        "rows": rows,
+        "selected_best": selected,
+    }
+
+
 def main() -> int:
     _ensure_repo_root_on_sys_path()
     ap = argparse.ArgumentParser()
@@ -795,8 +894,18 @@ def main() -> int:
         help="Run strict-KH refinement characterization matrix.",
     )
     ap.add_argument(
+        "--strict-preset-characterization",
+        action="store_true",
+        help="Run strict-KH optimize-preset characterization on fixed strict mesh.",
+    )
+    ap.add_argument(
         "--optimize-preset",
         default="kh_wide",
+    )
+    ap.add_argument(
+        "--optimize-presets",
+        nargs="+",
+        default=None,
     )
     ap.add_argument(
         "--theta-values", type=float, nargs="+", default=[0.0, 6.366e-4, 0.004]
@@ -804,7 +913,28 @@ def main() -> int:
     ap.add_argument("--output", default=str(DEFAULT_OUT))
     args = ap.parse_args()
 
-    if args.strict_refinement_characterization:
+    if args.strict_preset_characterization:
+        presets = (
+            tuple(str(x) for x in args.optimize_presets)
+            if args.optimize_presets is not None
+            else ("kh_strict_refine", "kh_strict_fast")
+        )
+        report = run_flat_disk_kh_strict_preset_characterization(
+            fixture=args.fixture,
+            outer_mode=args.outer_mode,
+            smoothness_model=args.smoothness_model,
+            kappa_physical=args.kappa_physical,
+            kappa_t_physical=args.kappa_t_physical,
+            radius_nm=args.radius_nm,
+            length_scale_nm=args.length_scale_nm,
+            drive_physical=args.drive_physical,
+            tilt_mass_mode_in=args.tilt_mass_mode_in,
+            optimize_presets=presets,
+            refine_level=args.refine_level,
+            rim_local_refine_steps=args.rim_local_refine_steps,
+            rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
+        )
+    elif args.strict_refinement_characterization:
         report = run_flat_disk_kh_strict_refinement_characterization(
             fixture=args.fixture,
             outer_mode=args.outer_mode,
