@@ -173,19 +173,55 @@ def test_flat_disk_kh_strict_preset_characterization_emits_best(
         if preset == "kh_strict_fast":
             return {
                 "parity": {
-                    "theta_factor": 1.12,
+                    "theta_factor": 1.11,
                     "energy_factor": 1.10,
                     "meets_factor_2": True,
                 },
-                "optimize": {"optimize_steps": 30, "optimize_inner_steps": 14},
+                "optimize": {
+                    "optimize_steps": 30,
+                    "optimize_inner_steps": 14,
+                    "optimize_seconds": 10.0,
+                },
+                "mesh": {
+                    "profile": {"rim_abs_median": 1.0},
+                    "rim_continuity": {"jump_abs_median": 0.26},
+                    "leakage": {"outer_tphi_over_trad_median": 0.88},
+                },
+            }
+        if preset == "kh_strict_continuity":
+            return {
+                "parity": {
+                    "theta_factor": 1.04,
+                    "energy_factor": 1.08,
+                    "meets_factor_2": True,
+                },
+                "optimize": {
+                    "optimize_steps": 30,
+                    "optimize_inner_steps": 14,
+                    "optimize_seconds": 45.0,
+                },
+                "mesh": {
+                    "profile": {"rim_abs_median": 1.0},
+                    "rim_continuity": {"jump_abs_median": 0.18},
+                    "leakage": {"outer_tphi_over_trad_median": 0.07},
+                },
             }
         return {
             "parity": {
-                "theta_factor": 1.10,
-                "energy_factor": 1.10,
+                "theta_factor": 1.13,
+                "energy_factor": 1.11,
                 "meets_factor_2": True,
             },
-            "optimize": {"optimize_steps": 120, "optimize_inner_steps": 20},
+            "optimize": {
+                "optimize_steps": 30,
+                "optimize_inner_steps": 14,
+                "optimize_seconds": 46.0,
+            },
+            "mesh": {
+                "profile": {"rim_abs_median": 1.0},
+                "rim_continuity": {"jump_abs_median": 0.26},
+                "leakage": {"outer_tphi_over_trad_median": 0.88},
+            },
         }
 
     monkeypatch.setattr(
@@ -195,18 +231,25 @@ def test_flat_disk_kh_strict_preset_characterization_emits_best(
     monkeypatch.setattr(audit_mod, "perf_counter", lambda: 1.0)
 
     report = run_flat_disk_kh_strict_preset_characterization(
-        optimize_presets=("kh_strict_refine", "kh_strict_fast"),
+        optimize_presets=(
+            "kh_strict_fast",
+            "kh_strict_continuity",
+            "kh_strict_robust",
+        ),
         refine_level=1,
         rim_local_refine_steps=1,
         rim_local_refine_band_lambda=4.0,
     )
     assert report["meta"]["mode"] == "strict_preset_characterization"
     rows = report["rows"]
-    assert len(rows) == 2
+    assert len(rows) == 3
     for row in rows:
         assert np.isfinite(float(row["theta_factor"]))
         assert np.isfinite(float(row["energy_factor"]))
         assert np.isfinite(float(row["balanced_parity_score"]))
         assert np.isfinite(float(row["runtime_seconds"]))
+        assert np.isfinite(float(row["optimize_seconds"]))
+        assert np.isfinite(float(row["rim_jump_ratio"]))
+        assert np.isfinite(float(row["outer_tphi_over_trad_median"]))
     best = report["selected_best"]
-    assert best["optimize_preset"] == "kh_strict_refine"
+    assert best["optimize_preset"] == "kh_strict_continuity"
