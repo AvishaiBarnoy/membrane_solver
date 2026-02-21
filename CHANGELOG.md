@@ -29,6 +29,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Added opt-in `kh_strict_continuity` optimize preset to improve rim continuity/leakage via stricter rim-local refinement in strict-KH diagnostics workflows.
   - Added opt-in `kh_strict_balanced` optimize preset (rim-local refine steps=2, narrower rim band) to target improved strict parity/runtime tradeoff between `kh_strict_fast` and `kh_strict_continuity`.
   - Added opt-in `kh_strict_robust` optimize preset with local post-optimize energy consistency check/polish (`theta_optimize_postcheck`) for non-worsening strict parity.
+  - Added opt-in local parity-focused theta polish for optimize mode (`--theta-optimize-parity-polish`), automatically enabled by `kh_strict_balanced`, with candidate scores reported in `optimize.parity_polish`.
   - Added region-resolved strict-KH parity diagnostics (`tools/diagnostics/flat_disk_kh_region_parity.py`) to compare disk/outer internal energy ratios at optimized `theta_B` across strict presets.
   - KH term audit now supports strict optimize-preset characterization (`--strict-preset-characterization`) with deterministic parity/runtime candidate ranking and `selected_best` reporting.
   - Strict optimize-preset characterization now reports rim-jump/leakage diagnostics and optimize-phase runtime, with default strict candidate sweep over `kh_strict_fast`, `kh_strict_continuity`, and `kh_strict_robust`.

@@ -343,6 +343,7 @@ def test_flat_disk_optimize_preset_kh_strict_balanced_tradeoff_vs_fast() -> None
     assert int(balanced["meta"]["refine_level"]) == 1
     assert int(balanced["meta"]["rim_local_refine_steps"]) == 2
     assert float(balanced["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
+    assert balanced["optimize"]["parity_polish"] is not None
 
     score_fast = float(
         np.hypot(
