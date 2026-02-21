@@ -20,17 +20,33 @@ def test_flat_disk_parity_scoreboard_locks_lane_references(
     def _fake_run_flat_disk_one_leaflet_benchmark(**kwargs):
         lane = str(kwargs.get("parameterization", "legacy"))
         if lane == "kh_physical":
+            preset = str(kwargs.get("optimize_preset"))
+            if preset == "kh_strict_balanced":
+                theta_factor = 1.04
+                energy_factor = 1.09
+                theta_star = 0.1425
+                total_energy = -0.826
+                effective = "kh_strict_balanced"
+                runtime = 55.0
+            else:
+                theta_factor = 1.08
+                energy_factor = 1.11
+                theta_star = 0.132
+                total_energy = -0.808
+                effective = "kh_strict_fast"
+                runtime = 45.0
             return {
                 "meta": {
                     "theta_mode": "optimize",
-                    "optimize_preset_effective": "kh_strict_fast",
+                    "optimize_preset_effective": effective,
                     "theory_model": "kh_physical_strict_kh",
                     "theory_source": "kh_physical_closed_form",
+                    "performance": {"total_seconds": runtime},
                 },
-                "mesh": {"theta_star": 0.132, "total_energy": -0.808},
+                "mesh": {"theta_star": theta_star, "total_energy": total_energy},
                 "parity": {
-                    "theta_factor": 1.08,
-                    "energy_factor": 1.11,
+                    "theta_factor": theta_factor,
+                    "energy_factor": energy_factor,
                     "meets_factor_2": True,
                 },
             }
@@ -54,10 +70,15 @@ def test_flat_disk_parity_scoreboard_locks_lane_references(
         _fake_run_flat_disk_one_leaflet_benchmark,
     )
 
-    report = run_flat_disk_parity_scoreboard()
+    report = run_flat_disk_parity_scoreboard(
+        kh_optimize_presets=("kh_strict_fast", "kh_strict_balanced")
+    )
     assert report["meta"]["mode"] == "flat_disk_parity_scoreboard"
     lanes = report["lanes"]
     assert set(lanes.keys()) == {"legacy", "kh_physical"}
+    assert len(report["kh_candidates"]) == 2
+    assert report["selected_kh_candidate"]["optimize_preset"] == "kh_strict_balanced"
+    assert lanes["kh_physical"]["optimize_preset_effective"] == "kh_strict_balanced"
 
     lock = report["meta"]["reference_lock"]
     assert lock["legacy"]["theory_model"] == "legacy_scalar_reduced"

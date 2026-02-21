@@ -776,7 +776,12 @@ def run_flat_disk_kh_strict_preset_characterization(
     length_scale_nm: float = 15.0,
     drive_physical: float = (2.0 / 0.7),
     tilt_mass_mode_in: str = "auto",
-    optimize_presets: Sequence[str] = ("kh_strict_refine", "kh_strict_fast"),
+    optimize_presets: Sequence[str] = (
+        "kh_strict_fast",
+        "kh_strict_balanced",
+        "kh_strict_continuity",
+        "kh_strict_robust",
+    ),
     refine_level: int = 1,
     rim_local_refine_steps: int = 1,
     rim_local_refine_band_lambda: float = 4.0,
@@ -823,6 +828,17 @@ def run_flat_disk_kh_strict_preset_characterization(
         energy_factor = float(bench["parity"]["energy_factor"])
         score = _balanced_parity_score(theta_factor, energy_factor)
         opt = bench["optimize"] or {}
+        mesh = bench.get("mesh") or {}
+        profile = mesh.get("profile") or {}
+        continuity = mesh.get("rim_continuity") or {}
+        leakage = mesh.get("leakage") or {}
+        rim_abs = float(profile.get("rim_abs_median", 0.0) or 0.0)
+        jump_abs = float(continuity.get("jump_abs_median", float("nan")))
+        jump_ratio = (
+            float(jump_abs / max(rim_abs, 1e-18))
+            if np.isfinite(jump_abs)
+            else float("nan")
+        )
         rows.append(
             {
                 "optimize_preset": str(preset),
@@ -830,9 +846,14 @@ def run_flat_disk_kh_strict_preset_characterization(
                 "energy_factor": energy_factor,
                 "balanced_parity_score": score,
                 "runtime_seconds": runtime_seconds,
+                "optimize_seconds": float(opt.get("optimize_seconds", float("nan"))),
                 "meets_factor_2": bool(bench["parity"]["meets_factor_2"]),
                 "optimize_steps": int(opt.get("optimize_steps", 0) or 0),
                 "optimize_inner_steps": int(opt.get("optimize_inner_steps", 0) or 0),
+                "rim_jump_ratio": jump_ratio,
+                "outer_tphi_over_trad_median": float(
+                    leakage.get("outer_tphi_over_trad_median", float("nan"))
+                ),
                 "complexity_rank": int(complexity_rank),
             }
         )
@@ -917,7 +938,12 @@ def main() -> int:
         presets = (
             tuple(str(x) for x in args.optimize_presets)
             if args.optimize_presets is not None
-            else ("kh_strict_refine", "kh_strict_fast")
+            else (
+                "kh_strict_fast",
+                "kh_strict_balanced",
+                "kh_strict_continuity",
+                "kh_strict_robust",
+            )
         )
         report = run_flat_disk_kh_strict_preset_characterization(
             fixture=args.fixture,
