@@ -778,6 +778,7 @@ def run_flat_disk_kh_strict_preset_characterization(
     tilt_mass_mode_in: str = "auto",
     optimize_presets: Sequence[str] = (
         "kh_strict_fast",
+        "kh_strict_balanced",
         "kh_strict_continuity",
         "kh_strict_robust",
     ),
@@ -937,7 +938,12 @@ def main() -> int:
         presets = (
             tuple(str(x) for x in args.optimize_presets)
             if args.optimize_presets is not None
-            else ("kh_strict_fast", "kh_strict_continuity", "kh_strict_robust")
+            else (
+                "kh_strict_fast",
+                "kh_strict_balanced",
+                "kh_strict_continuity",
+                "kh_strict_robust",
+            )
         )
         report = run_flat_disk_kh_strict_preset_characterization(
             fixture=args.fixture,

@@ -206,6 +206,24 @@ def test_flat_disk_kh_strict_preset_characterization_emits_best(
                     "leakage": {"outer_tphi_over_trad_median": 0.07},
                 },
             }
+        if preset == "kh_strict_balanced":
+            return {
+                "parity": {
+                    "theta_factor": 1.06,
+                    "energy_factor": 1.09,
+                    "meets_factor_2": True,
+                },
+                "optimize": {
+                    "optimize_steps": 34,
+                    "optimize_inner_steps": 16,
+                    "optimize_seconds": 20.0,
+                },
+                "mesh": {
+                    "profile": {"rim_abs_median": 1.0},
+                    "rim_continuity": {"jump_abs_median": 0.22},
+                    "leakage": {"outer_tphi_over_trad_median": 0.33},
+                },
+            }
         return {
             "parity": {
                 "theta_factor": 1.13,
@@ -233,6 +251,7 @@ def test_flat_disk_kh_strict_preset_characterization_emits_best(
     report = run_flat_disk_kh_strict_preset_characterization(
         optimize_presets=(
             "kh_strict_fast",
+            "kh_strict_balanced",
             "kh_strict_continuity",
             "kh_strict_robust",
         ),
@@ -242,7 +261,7 @@ def test_flat_disk_kh_strict_preset_characterization_emits_best(
     )
     assert report["meta"]["mode"] == "strict_preset_characterization"
     rows = report["rows"]
-    assert len(rows) == 3
+    assert len(rows) == 4
     for row in rows:
         assert np.isfinite(float(row["theta_factor"]))
         assert np.isfinite(float(row["energy_factor"]))

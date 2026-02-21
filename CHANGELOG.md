@@ -25,13 +25,17 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Flat disk baseline acceptance now includes a dedicated `kh_physical` lane fixture (`tests/fixtures/flat_disk_one_leaflet_kh_physical_disabled_baseline.yaml`) in addition to the legacy disabled/free baselines, with lane-specific expectations for parity pass/fail.
   - Added KH physical-lane per-theta term audit utility (`tools/diagnostics/flat_disk_kh_term_audit.py`) to report mesh/theory split terms (internal/contact/total) at user-selected `theta_B` values.
   - Added canonical lane-separated parity scoreboard diagnostics (`tools/diagnostics/flat_disk_parity_scoreboard.py`) to lock `legacy` and `kh_physical` theory references in one deterministic report.
+  - Parity scoreboard now supports strict KH candidate sweeps (`--kh-optimize-presets`) with deterministic best-candidate selection (parity score first, runtime second, complexity third).
   - Added strict-KH rim/interface fidelity diagnostics (`tools/diagnostics/flat_disk_kh_rim_fidelity.py`) with continuity, boundary-realization, and leakage metrics.
   - Added opt-in `kh_strict_continuity` optimize preset to improve rim continuity/leakage via stricter rim-local refinement in strict-KH diagnostics workflows.
+  - Added opt-in `kh_strict_balanced` optimize preset (rim-local refine steps=2, narrower rim band) to target improved strict parity/runtime tradeoff between `kh_strict_fast` and `kh_strict_continuity`.
   - Added opt-in `kh_strict_robust` optimize preset with local post-optimize energy consistency check/polish (`theta_optimize_postcheck`) for non-worsening strict parity.
+  - Added opt-in local parity-focused theta polish for optimize mode (`--theta-optimize-parity-polish`), automatically enabled by `kh_strict_balanced`, with candidate scores reported in `optimize.parity_polish`.
   - Added region-resolved strict-KH parity diagnostics (`tools/diagnostics/flat_disk_kh_region_parity.py`) to compare disk/outer internal energy ratios at optimized `theta_B` across strict presets.
   - KH term audit now supports strict optimize-preset characterization (`--strict-preset-characterization`) with deterministic parity/runtime candidate ranking and `selected_best` reporting.
   - Strict optimize-preset characterization now reports rim-jump/leakage diagnostics and optimize-phase runtime, with default strict candidate sweep over `kh_strict_fast`, `kh_strict_continuity`, and `kh_strict_robust`.
   - KH physical acceptance baseline fixture now tracks `kh_strict_fast` and strict parity regression caps are tightened to `<=1.5` in strict optimize e2e coverage.
+  - Added strict KH acceptance baseline fixture for `kh_strict_balanced` and tightened strict optimize parity e2e caps from `<=1.5` to `<=1.2` for strict fast/balanced/continuity paths.
   - Regression test runtime was reduced by reclassifying heavy mass-mode benchmark smoke to `benchmark` and using a lightweight mass-mode ordering regression guard.
   - Flat disk reproduction CLI default refinement is now `--refine-level 2` (was `1`) to keep default parity in the `<2x` acceptance range with full rim continuity enforced.
   - Flat disk optimize-mode defaults are now lighter and parity-stable at the default refinement (`theta_optimize_steps=20`, `theta_optimize_inner_steps=20`, `theta_optimize_delta=2e-4`).

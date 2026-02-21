@@ -131,6 +131,16 @@ intended for development and planning; users should consult `README.md` and
    - Deferred: requires tightly coupled inextensibility constraints (edge
      lengths, facet areas, and corner-angle preservation) to stay stable.
 
+## 4. Flat-Disk KH Parity Tightening
+
+1. Strict-KH reproducibility lane (one leaflet, flat disk benchmark)
+   - [x] Lane/reference lock diagnostics (`legacy` vs `kh_physical` targets).
+   - [x] Rim/interface fidelity diagnostics and regression guards.
+   - [x] Opt-in strict presets (`kh_strict_fast`, `kh_strict_balanced`,
+         `kh_strict_continuity`, `kh_strict_robust`) for parity/runtime tradeoff.
+   - [x] Tightened strict parity e2e acceptance caps to `<=1.2` for fast/balanced/continuity.
+   - [ ] Continue narrowing strict-KH residual mismatch without changing KH/TeX parameter ratios.
+
 ## 5. Mesh tooling for targeted refinement
 
 1. Group-aware refinement workflow
