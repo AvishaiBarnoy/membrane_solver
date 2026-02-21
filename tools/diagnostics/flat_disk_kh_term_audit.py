@@ -779,6 +779,7 @@ def run_flat_disk_kh_strict_preset_characterization(
     optimize_presets: Sequence[str] = (
         "kh_strict_fast",
         "kh_strict_balanced",
+        "kh_strict_energy_tight",
         "kh_strict_continuity",
         "kh_strict_robust",
     ),
@@ -941,6 +942,7 @@ def main() -> int:
             else (
                 "kh_strict_fast",
                 "kh_strict_balanced",
+                "kh_strict_energy_tight",
                 "kh_strict_continuity",
                 "kh_strict_robust",
             )
