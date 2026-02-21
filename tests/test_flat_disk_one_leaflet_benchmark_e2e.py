@@ -56,6 +56,7 @@ def _kh_opt_report(
         in {
             "kh_strict_refine",
             "kh_strict_fast",
+            "kh_strict_balanced",
             "kh_strict_continuity",
             "kh_strict_robust",
         }
@@ -325,6 +326,39 @@ def test_flat_disk_optimize_preset_kh_strict_continuity_improves_rim_metrics() -
     leak_cont = float(continuity["mesh"]["leakage"]["outer_tphi_over_trad_median"])
     assert jump_cont < jump_fast
     assert leak_cont < leak_fast
+
+
+@pytest.mark.regression
+def test_flat_disk_optimize_preset_kh_strict_balanced_tradeoff_vs_fast() -> None:
+    fast = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_fast",
+    )
+    balanced = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_balanced",
+    )
+
+    assert balanced["meta"]["optimize_preset_effective"] == "kh_strict_balanced"
+    assert int(balanced["meta"]["refine_level"]) == 1
+    assert int(balanced["meta"]["rim_local_refine_steps"]) == 2
+    assert float(balanced["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
+
+    score_fast = float(
+        np.hypot(
+            np.log(max(float(fast["parity"]["theta_factor"]), 1e-18)),
+            np.log(max(float(fast["parity"]["energy_factor"]), 1e-18)),
+        )
+    )
+    score_balanced = float(
+        np.hypot(
+            np.log(max(float(balanced["parity"]["theta_factor"]), 1e-18)),
+            np.log(max(float(balanced["parity"]["energy_factor"]), 1e-18)),
+        )
+    )
+    assert score_balanced <= score_fast
+    assert float(balanced["parity"]["theta_factor"]) <= 1.5
+    assert float(balanced["parity"]["energy_factor"]) <= 1.5
 
 
 @pytest.mark.regression

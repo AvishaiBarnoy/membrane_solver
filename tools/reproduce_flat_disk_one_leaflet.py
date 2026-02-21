@@ -170,6 +170,19 @@ def _resolve_optimize_preset(
             ),
             "kh_strict_fast",
         )
+    if preset == "kh_strict_balanced":
+        return (
+            BenchmarkOptimizeConfig(
+                theta_initial=float(optimize_cfg.theta_initial),
+                optimize_steps=34,
+                optimize_every=1,
+                optimize_delta=5.0e-3,
+                optimize_inner_steps=16,
+                plateau_patience=12,
+                plateau_abs_tol=1.0e-12,
+            ),
+            "kh_strict_balanced",
+        )
     if preset == "kh_strict_continuity":
         return (
             BenchmarkOptimizeConfig(
@@ -198,7 +211,8 @@ def _resolve_optimize_preset(
         )
     raise ValueError(
         "optimize_preset must be 'none', 'fast_r3', 'full_accuracy_r3', 'kh_wide', "
-        "'kh_strict_refine', 'kh_strict_fast', 'kh_strict_continuity', "
+        "'kh_strict_refine', 'kh_strict_fast', 'kh_strict_balanced', "
+        "'kh_strict_continuity', "
         "or 'kh_strict_robust'."
     )
 
@@ -769,14 +783,19 @@ def run_flat_disk_one_leaflet_benchmark(
     if optimize_preset_raw in {
         "kh_strict_refine",
         "kh_strict_fast",
+        "kh_strict_balanced",
         "kh_strict_continuity",
         "kh_strict_robust",
     }:
         effective_refine_level = 1
         effective_rim_local_refine_steps = (
-            2 if optimize_preset_raw == "kh_strict_continuity" else 1
+            2
+            if optimize_preset_raw in {"kh_strict_balanced", "kh_strict_continuity"}
+            else 1
         )
-        effective_rim_local_refine_band_lambda = 4.0
+        effective_rim_local_refine_band_lambda = (
+            3.0 if optimize_preset_raw == "kh_strict_balanced" else 4.0
+        )
 
     if int(effective_refine_level) < 0:
         raise ValueError("refine_level must be >= 0.")
@@ -1373,6 +1392,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             "kh_wide",
             "kh_strict_refine",
             "kh_strict_fast",
+            "kh_strict_balanced",
             "kh_strict_continuity",
             "kh_strict_robust",
         ),
