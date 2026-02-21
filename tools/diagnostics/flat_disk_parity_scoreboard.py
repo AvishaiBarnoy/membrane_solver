@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import yaml
@@ -45,6 +45,7 @@ def run_flat_disk_parity_scoreboard(
     kh_smoothness_model: str = "splay_twist",
     kh_theta_mode: str = "optimize",
     kh_optimize_preset: str = "kh_strict_fast",
+    kh_optimize_presets: Sequence[str] | None = None,
     tilt_mass_mode_in: str = "consistent",
 ) -> dict[str, Any]:
     """Run canonical legacy/KH lanes and emit a locked-reference scoreboard."""
@@ -68,21 +69,65 @@ def run_flat_disk_parity_scoreboard(
         parameterization="legacy",
     )
 
-    kh = run_flat_disk_one_leaflet_benchmark(
-        fixture=fixture_path,
-        refine_level=int(refine_level),
-        outer_mode=str(outer_mode),
-        smoothness_model=str(kh_smoothness_model),
-        theta_mode=str(kh_theta_mode),
-        parameterization="kh_physical",
-        optimize_preset=str(kh_optimize_preset),
-        tilt_mass_mode_in=str(tilt_mass_mode_in),
+    kh_presets = (
+        [str(x) for x in kh_optimize_presets]
+        if kh_optimize_presets is not None
+        else [str(kh_optimize_preset)]
     )
+    if len(kh_presets) == 0:
+        raise ValueError("kh_optimize_presets must be non-empty when provided.")
+
+    kh_candidates: list[dict[str, float | bool | str]] = []
+    for rank, preset in enumerate(kh_presets):
+        kh_run = run_flat_disk_one_leaflet_benchmark(
+            fixture=fixture_path,
+            refine_level=int(refine_level),
+            outer_mode=str(outer_mode),
+            smoothness_model=str(kh_smoothness_model),
+            theta_mode=str(kh_theta_mode),
+            parameterization="kh_physical",
+            optimize_preset=str(preset),
+            tilt_mass_mode_in=str(tilt_mass_mode_in),
+        )
+        theta_factor = float(kh_run["parity"]["theta_factor"])
+        energy_factor = float(kh_run["parity"]["energy_factor"])
+        kh_candidates.append(
+            {
+                "optimize_preset": str(preset),
+                "optimize_preset_effective": str(
+                    kh_run["meta"]["optimize_preset_effective"]
+                ),
+                "theta_factor": theta_factor,
+                "energy_factor": energy_factor,
+                "balanced_parity_score": _balanced_score(theta_factor, energy_factor),
+                "theta_star": float(kh_run["mesh"]["theta_star"]),
+                "total_energy": float(kh_run["mesh"]["total_energy"]),
+                "runtime_seconds": float(
+                    kh_run.get("meta", {})
+                    .get("performance", {})
+                    .get("total_seconds", float("nan"))
+                ),
+                "meets_factor_2": bool(kh_run["parity"]["meets_factor_2"]),
+                "theta_mode": str(kh_run["meta"]["theta_mode"]),
+                "complexity_rank": int(rank),
+                "theory_model": str(kh_run["meta"]["theory_model"]),
+                "theory_source": str(kh_run["meta"]["theory_source"]),
+            }
+        )
+
+    kh_selected = min(
+        kh_candidates,
+        key=lambda row: (
+            float(row["balanced_parity_score"]),
+            float(row["runtime_seconds"]),
+            int(row["complexity_rank"]),
+        ),
+    )
+    kh_theta = float(kh_selected["theta_factor"])
+    kh_energy = float(kh_selected["energy_factor"])
 
     legacy_theta = float(legacy["parity"]["theta_factor"])
     legacy_energy = float(legacy["parity"]["energy_factor"])
-    kh_theta = float(kh["parity"]["theta_factor"])
-    kh_energy = float(kh["parity"]["energy_factor"])
 
     return {
         "meta": {
@@ -94,11 +139,13 @@ def run_flat_disk_parity_scoreboard(
                     "theory_source": str(legacy["meta"]["theory_source"]),
                 },
                 "kh_physical": {
-                    "theory_model": str(kh["meta"]["theory_model"]),
-                    "theory_source": str(kh["meta"]["theory_source"]),
+                    "theory_model": str(kh_selected["theory_model"]),
+                    "theory_source": str(kh_selected["theory_source"]),
                 },
             },
         },
+        "kh_candidates": kh_candidates,
+        "selected_kh_candidate": kh_selected,
         "lanes": {
             "legacy": {
                 "theta_factor": legacy_theta,
@@ -116,12 +163,12 @@ def run_flat_disk_parity_scoreboard(
                 "theta_factor": kh_theta,
                 "energy_factor": kh_energy,
                 "balanced_parity_score": _balanced_score(kh_theta, kh_energy),
-                "theta_star": float(kh["mesh"]["theta_star"]),
-                "total_energy": float(kh["mesh"]["total_energy"]),
-                "meets_factor_2": bool(kh["parity"]["meets_factor_2"]),
-                "theta_mode": str(kh["meta"]["theta_mode"]),
+                "theta_star": float(kh_selected["theta_star"]),
+                "total_energy": float(kh_selected["total_energy"]),
+                "meets_factor_2": bool(kh_selected["meets_factor_2"]),
+                "theta_mode": str(kh_selected["theta_mode"]),
                 "optimize_preset_effective": str(
-                    kh["meta"]["optimize_preset_effective"]
+                    kh_selected["optimize_preset_effective"]
                 ),
             },
         },
@@ -154,6 +201,7 @@ def main() -> int:
         default="optimize",
     )
     ap.add_argument("--kh-optimize-preset", default="kh_strict_fast")
+    ap.add_argument("--kh-optimize-presets", nargs="+", default=None)
     ap.add_argument(
         "--tilt-mass-mode-in",
         choices=("auto", "lumped", "consistent"),
@@ -171,6 +219,7 @@ def main() -> int:
         kh_smoothness_model=args.kh_smoothness_model,
         kh_theta_mode=args.kh_theta_mode,
         kh_optimize_preset=args.kh_optimize_preset,
+        kh_optimize_presets=args.kh_optimize_presets,
         tilt_mass_mode_in=args.tilt_mass_mode_in,
     )
 
