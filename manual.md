@@ -356,7 +356,15 @@ Interactive commands:
   - Optimize presets:
     `--optimize-preset fast_r3` for faster refine-3 iteration;
     `--optimize-preset full_accuracy_r3` for heavier refine-3 optimize/full runs;
-    `--optimize-preset kh_wide` for wide KH-lane theta-span exploration.
+    `--optimize-preset kh_wide` for wide KH-lane theta-span exploration;
+    `--optimize-preset kh_strict_fast` for strict-KH fast parity checks;
+    `--optimize-preset kh_strict_balanced` for strict-KH parity tightening with
+    added rim-local refinement and parity polish;
+    `--optimize-preset kh_strict_continuity` for strongest rim continuity checks.
+  - Strict optimize polish controls:
+    `--theta-optimize-postcheck` performs local energy postcheck around theta*;
+    `--theta-optimize-parity-polish` performs local parity-score polish around
+    theta* (auto-enabled by `kh_strict_balanced`).
   - Splay calibration control (benchmark-local):
     `--splay-modulus-scale-in` scales inner `tilt_splay_modulus_in` when
     `--smoothness-model splay_twist` (for refine-3 parity tuning experiments).
