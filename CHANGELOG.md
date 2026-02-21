@@ -25,6 +25,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Flat disk baseline acceptance now includes a dedicated `kh_physical` lane fixture (`tests/fixtures/flat_disk_one_leaflet_kh_physical_disabled_baseline.yaml`) in addition to the legacy disabled/free baselines, with lane-specific expectations for parity pass/fail.
   - Added KH physical-lane per-theta term audit utility (`tools/diagnostics/flat_disk_kh_term_audit.py`) to report mesh/theory split terms (internal/contact/total) at user-selected `theta_B` values.
   - Added canonical lane-separated parity scoreboard diagnostics (`tools/diagnostics/flat_disk_parity_scoreboard.py`) to lock `legacy` and `kh_physical` theory references in one deterministic report.
+  - Parity scoreboard now supports strict KH candidate sweeps (`--kh-optimize-presets`) with deterministic best-candidate selection (parity score first, runtime second, complexity third).
   - Added strict-KH rim/interface fidelity diagnostics (`tools/diagnostics/flat_disk_kh_rim_fidelity.py`) with continuity, boundary-realization, and leakage metrics.
   - Added opt-in `kh_strict_continuity` optimize preset to improve rim continuity/leakage via stricter rim-local refinement in strict-KH diagnostics workflows.
   - Added opt-in `kh_strict_balanced` optimize preset (rim-local refine steps=2, narrower rim band) to target improved strict parity/runtime tradeoff between `kh_strict_fast` and `kh_strict_continuity`.
