@@ -39,10 +39,14 @@ def _score_from_region_ratios(disk_ratio: float, outer_ratio: float) -> float:
 def run_flat_disk_kh_region_parity(
     *,
     fixture: Path | str = DEFAULT_FIXTURE,
-    optimize_presets: Sequence[str] = ("kh_strict_fast", "kh_strict_balanced"),
+    optimize_presets: Sequence[str] = (
+        "kh_strict_energy_tight",
+        "kh_strict_partition_tight",
+    ),
     refine_level: int = 1,
     rim_local_refine_steps: Sequence[int] | None = None,
     rim_local_refine_band_lambdas: Sequence[float] | None = None,
+    baseline_optimize_preset: str = "kh_strict_energy_tight",
 ) -> dict[str, Any]:
     """Compare strict candidates by disk/outer internal energy ratios at theta*."""
     _ensure_repo_root_on_sys_path()
@@ -166,12 +170,36 @@ def run_flat_disk_kh_region_parity(
             int(x["complexity_rank"]),
         ),
     )
+    baseline_rows = [
+        row
+        for row in rows
+        if str(row["optimize_preset"]) == str(baseline_optimize_preset)
+    ]
+    baseline_best = (
+        min(
+            baseline_rows,
+            key=lambda x: (
+                float(x["region_parity_score"]),
+                float(x["runtime_seconds"]),
+                int(x["complexity_rank"]),
+            ),
+        )
+        if baseline_rows
+        else None
+    )
+    selected_vs_baseline_partition_delta = None
+    if baseline_best is not None:
+        selected_vs_baseline_partition_delta = float(
+            float(selected["region_parity_score"])
+            - float(baseline_best["region_parity_score"])
+        )
     return {
         "meta": {
             "mode": "flat_disk_kh_region_parity",
             "fixture": str(fixture_path.relative_to(ROOT)),
             "parameterization": "kh_physical",
             "optimize_presets": presets,
+            "baseline_optimize_preset": str(baseline_optimize_preset),
             "rim_local_refine_steps": (
                 None if steps_override is None else [int(x) for x in steps_override]
             ),
@@ -181,6 +209,12 @@ def run_flat_disk_kh_region_parity(
         },
         "rows": rows,
         "selected_best": selected,
+        "baseline_best": baseline_best,
+        "selected_vs_baseline_partition_score_delta": (
+            None
+            if selected_vs_baseline_partition_delta is None
+            else float(selected_vs_baseline_partition_delta)
+        ),
     }
 
 
@@ -188,6 +222,10 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--fixture", default=str(DEFAULT_FIXTURE))
     ap.add_argument("--optimize-presets", nargs="+", default=None)
+    ap.add_argument(
+        "--baseline-optimize-preset",
+        default="kh_strict_energy_tight",
+    )
     ap.add_argument("--refine-level", type=int, default=1)
     ap.add_argument("--rim-local-refine-steps", type=int, nargs="+", default=None)
     ap.add_argument(
@@ -199,7 +237,7 @@ def main() -> int:
     presets = (
         tuple(str(x) for x in args.optimize_presets)
         if args.optimize_presets is not None
-        else ("kh_strict_fast", "kh_strict_balanced")
+        else ("kh_strict_energy_tight", "kh_strict_partition_tight")
     )
     report = run_flat_disk_kh_region_parity(
         fixture=args.fixture,
@@ -207,6 +245,7 @@ def main() -> int:
         refine_level=args.refine_level,
         rim_local_refine_steps=args.rim_local_refine_steps,
         rim_local_refine_band_lambdas=args.rim_local_refine_band_lambdas,
+        baseline_optimize_preset=args.baseline_optimize_preset,
     )
     out = Path(args.output)
     if not out.is_absolute():

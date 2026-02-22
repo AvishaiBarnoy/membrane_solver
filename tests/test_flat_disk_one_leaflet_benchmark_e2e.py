@@ -59,6 +59,7 @@ def _kh_opt_report(
             "kh_strict_balanced",
             "kh_strict_continuity",
             "kh_strict_energy_tight",
+            "kh_strict_partition_tight",
             "kh_strict_robust",
         }
         else int(refine_level)
@@ -396,6 +397,22 @@ def test_flat_disk_optimize_preset_kh_strict_energy_tight_controls() -> None:
     assert int(report["meta"]["refine_level"]) == 1
     assert int(report["meta"]["rim_local_refine_steps"]) == 2
     assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(8.0)
+    assert report["optimize"]["parity_polish"] is not None
+    assert float(report["parity"]["theta_factor"]) <= 1.2
+    assert float(report["parity"]["energy_factor"]) <= 1.2
+
+
+@pytest.mark.regression
+def test_flat_disk_optimize_preset_kh_strict_partition_tight_controls() -> None:
+    report = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_partition_tight",
+    )
+
+    assert report["meta"]["optimize_preset_effective"] == "kh_strict_partition_tight"
+    assert int(report["meta"]["refine_level"]) == 1
+    assert int(report["meta"]["rim_local_refine_steps"]) == 2
+    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(10.0)
     assert report["optimize"]["parity_polish"] is not None
     assert float(report["parity"]["theta_factor"]) <= 1.2
     assert float(report["parity"]["energy_factor"]) <= 1.2
