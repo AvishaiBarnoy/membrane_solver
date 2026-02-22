@@ -222,6 +222,19 @@ def _resolve_optimize_preset(
             ),
             "kh_strict_section_tight",
         )
+    if preset == "kh_strict_outerband_tight":
+        return (
+            BenchmarkOptimizeConfig(
+                theta_initial=float(optimize_cfg.theta_initial),
+                optimize_steps=30,
+                optimize_every=1,
+                optimize_delta=6.0e-3,
+                optimize_inner_steps=14,
+                plateau_patience=12,
+                plateau_abs_tol=1.0e-12,
+            ),
+            "kh_strict_outerband_tight",
+        )
     if preset == "kh_strict_partition_tight":
         return (
             BenchmarkOptimizeConfig(
@@ -252,7 +265,8 @@ def _resolve_optimize_preset(
         "optimize_preset must be 'none', 'fast_r3', 'full_accuracy_r3', 'kh_wide', "
         "'kh_strict_refine', 'kh_strict_fast', 'kh_strict_balanced', "
         "'kh_strict_continuity', 'kh_strict_energy_tight', "
-        "'kh_strict_section_tight', 'kh_strict_partition_tight', "
+        "'kh_strict_section_tight', 'kh_strict_outerband_tight', "
+        "'kh_strict_partition_tight', "
         "or 'kh_strict_robust'."
     )
 
@@ -829,11 +843,18 @@ def run_flat_disk_one_leaflet_benchmark(
         "kh_strict_continuity",
         "kh_strict_energy_tight",
         "kh_strict_section_tight",
+        "kh_strict_outerband_tight",
         "kh_strict_partition_tight",
         "kh_strict_robust",
     }:
         effective_refine_level = (
-            2 if optimize_preset_raw == "kh_strict_section_tight" else 1
+            2
+            if optimize_preset_raw
+            in {
+                "kh_strict_section_tight",
+                "kh_strict_outerband_tight",
+            }
+            else 1
         )
         if int(raw_rim_local_refine_steps) > 0:
             effective_rim_local_refine_steps = int(raw_rim_local_refine_steps)
@@ -845,6 +866,7 @@ def run_flat_disk_one_leaflet_benchmark(
                     "kh_strict_balanced",
                     "kh_strict_continuity",
                     "kh_strict_energy_tight",
+                    "kh_strict_outerband_tight",
                     "kh_strict_partition_tight",
                 }
                 else 1
@@ -860,6 +882,8 @@ def run_flat_disk_one_leaflet_benchmark(
                 effective_rim_local_refine_band_lambda = 8.0
             elif optimize_preset_raw == "kh_strict_section_tight":
                 effective_rim_local_refine_band_lambda = 4.0
+            elif optimize_preset_raw == "kh_strict_outerband_tight":
+                effective_rim_local_refine_band_lambda = 8.0
             elif optimize_preset_raw == "kh_strict_partition_tight":
                 effective_rim_local_refine_band_lambda = 10.0
             else:
@@ -944,12 +968,14 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_balanced",
             "kh_strict_energy_tight",
             "kh_strict_section_tight",
+            "kh_strict_outerband_tight",
             "kh_strict_partition_tight",
         }:
             parity_polish_enabled = True
         if effective_optimize_preset in {
             "kh_strict_energy_tight",
             "kh_strict_section_tight",
+            "kh_strict_outerband_tight",
         }:
             energy_polish_enabled = True
         if effective_optimize_preset == "kh_strict_robust":
@@ -1553,6 +1579,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             "kh_strict_continuity",
             "kh_strict_energy_tight",
             "kh_strict_section_tight",
+            "kh_strict_outerband_tight",
             "kh_strict_partition_tight",
             "kh_strict_robust",
         ),
