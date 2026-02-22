@@ -32,6 +32,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Added opt-in `kh_strict_energy_tight` preset (rim steps=2, rim band=8.0, parity polish enabled) for best-known strict energy parity without changing KH/TeX ratios.
   - Added opt-in `kh_strict_partition_tight` preset (rim steps=2, rim band=10.0, parity polish) for partition-focused strict-KH diagnostics.
   - Region-parity diagnostics now report baseline-vs-selected partition score deltas (`baseline_optimize_preset`, `baseline_best`, `selected_vs_baseline_partition_score_delta`).
+  - Added strict-KH partition ablation diagnostics (`tools/diagnostics/flat_disk_kh_partition_ablation.py`) with per-band internal energy decomposition and baseline-vs-selected deltas for partition score and energy factor.
   - Strict optimize presets now preserve explicit rim-local override inputs (`--rim-local-refine-steps`, `--rim-local-refine-band-lambda`) while still enforcing strict global refine level.
   - Added opt-in `kh_strict_robust` optimize preset with local post-optimize energy consistency check/polish (`theta_optimize_postcheck`) for non-worsening strict parity.
   - Added opt-in local parity-focused theta polish for optimize mode (`--theta-optimize-parity-polish`), automatically enabled by `kh_strict_balanced`, with candidate scores reported in `optimize.parity_polish`.
