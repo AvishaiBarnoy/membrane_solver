@@ -138,6 +138,12 @@ intended for development and planning; users should consult `README.md` and
    - [x] Rim/interface fidelity diagnostics and regression guards.
    - [x] Opt-in strict presets (`kh_strict_fast`, `kh_strict_balanced`,
          `kh_strict_continuity`, `kh_strict_robust`) for parity/runtime tradeoff.
+   - [x] Added and retuned `kh_strict_outerband_tight` (strict refine=2,
+         rim-local step=1, band=5λ) to improve outer-band section mismatch
+         while keeping inner/global strict parity non-worsening.
+   - [x] Added strict outerband benchmark gates (fixed-theta section gate +
+         composite log-space score gate) to enforce balanced non-worsening
+         parity vs `kh_strict_section_tight`.
    - [x] Tightened strict parity e2e acceptance caps to `<=1.2` for fast/balanced/continuity.
    - [ ] Continue narrowing strict-KH residual mismatch without changing KH/TeX parameter ratios.
 
