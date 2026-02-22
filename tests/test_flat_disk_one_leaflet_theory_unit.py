@@ -144,7 +144,7 @@ def test_solver_mapping_from_theory_supports_legacy_and_kh_physical() -> None:
 
 @pytest.mark.unit
 def test_flat_disk_kh_physical_theory_reference_values() -> None:
-    """Lock kh_physical lane reference to strict KH closed form."""
+    """Lock kh_physical lane reference to strict KH radial-integral theory."""
     params = physical_to_dimensionless_theory_params(
         kappa_physical=10.0,
         kappa_t_physical=10.0,
@@ -157,8 +157,8 @@ def test_flat_disk_kh_physical_theory_reference_values() -> None:
     assert result.lambda_value == pytest.approx(1.0 / 15.0, abs=1e-12)
     assert result.lambda_inverse == pytest.approx(15.0, abs=1e-12)
     assert result.lambda_radius == pytest.approx(7.0, abs=1e-9)
-    assert result.coeff_A == pytest.approx(43.8659803, rel=1e-7, abs=1e-8)
-    assert result.theta_star == pytest.approx(0.143235949, rel=5e-7, abs=1e-10)
-    assert result.elastic_inner == pytest.approx(0.417583673, rel=5e-7, abs=1e-10)
-    assert result.elastic_outer == pytest.approx(0.482394337, rel=5e-7, abs=1e-10)
-    assert result.total == pytest.approx(-0.899978009, rel=5e-7, abs=1e-10)
+    assert result.coeff_A == pytest.approx(44.32880989, rel=1e-7, abs=1e-8)
+    assert result.theta_star == pytest.approx(0.1417404465, rel=5e-7, abs=1e-10)
+    assert result.elastic_inner == pytest.approx(0.4773577391, rel=5e-7, abs=1e-10)
+    assert result.elastic_outer == pytest.approx(0.4132237519, rel=5e-7, abs=1e-10)
+    assert result.total == pytest.approx(-0.8905814910, rel=5e-7, abs=1e-10)
