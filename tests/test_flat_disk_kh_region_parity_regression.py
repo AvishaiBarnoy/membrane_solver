@@ -32,6 +32,30 @@ def test_flat_disk_kh_region_parity_emits_ranked_rows(
                 "mesh": {"theta_star": 0.136 + 0.001 * rim_steps},
                 "parity": {"theta_factor": 1.04, "energy_factor": 1.08},
             }
+        if preset == "kh_strict_partition_tight":
+            return {
+                "meta": {
+                    "refine_level": 1,
+                    "rim_local_refine_steps": rim_steps,
+                    "rim_local_refine_band_lambda": float(
+                        kwargs.get("rim_local_refine_band_lambda", 10.0)
+                    ),
+                },
+                "mesh": {"theta_star": 0.145 + 0.001 * rim_steps},
+                "parity": {"theta_factor": 1.02, "energy_factor": 1.08},
+            }
+        if preset == "kh_strict_energy_tight":
+            return {
+                "meta": {
+                    "refine_level": 1,
+                    "rim_local_refine_steps": rim_steps,
+                    "rim_local_refine_band_lambda": float(
+                        kwargs.get("rim_local_refine_band_lambda", 8.0)
+                    ),
+                },
+                "mesh": {"theta_star": 0.141 + 0.001 * rim_steps},
+                "parity": {"theta_factor": 1.02, "energy_factor": 1.09},
+            }
         return {
             "meta": {
                 "refine_level": 1,
@@ -47,7 +71,17 @@ def test_flat_disk_kh_region_parity_emits_ranked_rows(
     def _fake_run_flat_disk_kh_term_audit(**kwargs):
         rim_steps = int(kwargs.get("rim_local_refine_steps", 0))
         theta = float(kwargs["theta_values"][0])
-        if theta > 0.136 and rim_steps >= 2:
+        if theta >= 0.146:
+            row = {
+                "internal_disk_ratio_mesh_over_theory": 0.93,
+                "internal_outer_ratio_mesh_over_theory": 1.05,
+            }
+        elif theta >= 0.142:
+            row = {
+                "internal_disk_ratio_mesh_over_theory": 0.80,
+                "internal_outer_ratio_mesh_over_theory": 1.40,
+            }
+        elif theta > 0.136 and rim_steps >= 2:
             row = {
                 "internal_disk_ratio_mesh_over_theory": 0.95,
                 "internal_outer_ratio_mesh_over_theory": 0.97,
@@ -69,12 +103,17 @@ def test_flat_disk_kh_region_parity_emits_ranked_rows(
     )
 
     report = run_flat_disk_kh_region_parity(
-        optimize_presets=("kh_strict_fast", "kh_strict_continuity"),
+        optimize_presets=(
+            "kh_strict_energy_tight",
+            "kh_strict_partition_tight",
+            "kh_strict_continuity",
+        ),
         rim_local_refine_steps=(1, 2),
         rim_local_refine_band_lambdas=(3.0,),
+        baseline_optimize_preset="kh_strict_energy_tight",
     )
     assert report["meta"]["mode"] == "flat_disk_kh_region_parity"
-    assert len(report["rows"]) == 4
+    assert len(report["rows"]) == 6
     for row in report["rows"]:
         assert np.isfinite(float(row["theta_star"]))
         assert np.isfinite(float(row["theta_factor"]))
@@ -87,3 +126,6 @@ def test_flat_disk_kh_region_parity_emits_ranked_rows(
         assert np.isfinite(float(row["region_parity_score"]))
         assert int(row["complexity_rank"]) >= 0
     assert report["selected_best"]["optimize_preset"] == "kh_strict_continuity"
+    assert report["baseline_best"]["optimize_preset"] == "kh_strict_energy_tight"
+    assert np.isfinite(float(report["selected_vs_baseline_partition_score_delta"]))
+    assert float(report["selected_vs_baseline_partition_score_delta"]) < 0.0
