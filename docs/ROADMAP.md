@@ -144,6 +144,10 @@ intended for development and planning; users should consult `README.md` and
    - [x] Added strict outerband benchmark gates (fixed-theta section gate +
          composite log-space score gate) to enforce balanced non-worsening
          parity vs `kh_strict_section_tight`.
+   - [x] Added `kh_strict_outerfield_tight` (strict refine=2, rim-local step=1,
+         band=3λ + outer-annulus local refinement) to target outer section mismatch.
+   - [x] Added strict outerfield benchmark gate to enforce improved outer
+         section ratios vs `kh_strict_outerband_tight` with non-worsening inner/global parity.
    - [x] Tightened strict parity e2e acceptance caps to `<=1.2` for fast/balanced/continuity.
    - [ ] Continue narrowing strict-KH residual mismatch without changing KH/TeX parameter ratios.
 
