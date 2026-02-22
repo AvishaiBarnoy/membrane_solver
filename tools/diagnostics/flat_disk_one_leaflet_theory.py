@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 from typing import Sequence
 
 import numpy as np
-from scipy import special
+from scipy import integrate, special
 
 
 @dataclass(frozen=True)
@@ -218,18 +218,55 @@ def compute_flat_disk_kh_physical_theory(
     ratio_i1_i0 = float(i1 / i0)
     ratio_k1_k0 = float(k1 / k0)
 
-    coeff_A = float(np.pi * kappa * radius * lam_inv * (ratio_i1_i0 + ratio_k1_k0))
+    # Exact strict-KH internal coefficient from radial profile integration at theta_B=1.
+    # This avoids relying on reduced-form approximations for the KH lane.
+    if abs(i1) < 1e-18 or abs(k1) < 1e-18:
+        raise ValueError("Invalid KH profile normalization in theory evaluation.")
+    amp_in = float(1.0 / i1)
+    amp_out = float(1.0 / k1)
+
+    def _t_inner(rr: float) -> float:
+        return float(amp_in * special.iv(1, rr / lam))
+
+    def _div_inner(rr: float) -> float:
+        return float((amp_in / lam) * special.iv(0, rr / lam))
+
+    def _t_outer(rr: float) -> float:
+        return float(amp_out * special.kv(1, rr / lam))
+
+    def _div_outer(rr: float) -> float:
+        return float(-(amp_out / lam) * special.kv(0, rr / lam))
+
+    elastic_inner_unit, _ = integrate.quad(
+        lambda rr: (
+            np.pi * kappa_t * rr * (_t_inner(rr) ** 2)
+            + np.pi * kappa * rr * (_div_inner(rr) ** 2)
+        ),
+        0.0,
+        radius,
+        epsabs=1e-12,
+        epsrel=1e-12,
+        limit=500,
+    )
+    elastic_outer_unit, _ = integrate.quad(
+        lambda rr: (
+            np.pi * kappa_t * rr * (_t_outer(rr) ** 2)
+            + np.pi * kappa * rr * (_div_outer(rr) ** 2)
+        ),
+        radius,
+        np.inf,
+        epsabs=1e-12,
+        epsrel=1e-12,
+        limit=500,
+    )
+    coeff_A = float(elastic_inner_unit + elastic_outer_unit)
     coeff_B = float(2.0 * np.pi * radius * drive)
     if coeff_A <= 0.0:
         raise ValueError("Computed quadratic coefficient A must be positive.")
 
     theta_star = float(coeff_B / (2.0 * coeff_A))
-    elastic_inner = float(
-        np.pi * kappa * radius * lam_inv * theta_star**2 * ratio_i1_i0
-    )
-    elastic_outer = float(
-        np.pi * kappa * radius * lam_inv * theta_star**2 * ratio_k1_k0
-    )
+    elastic_inner = float(elastic_inner_unit * theta_star * theta_star)
+    elastic_outer = float(elastic_outer_unit * theta_star * theta_star)
     contact = float(-coeff_B * theta_star)
     total = float(elastic_inner + elastic_outer + contact)
 

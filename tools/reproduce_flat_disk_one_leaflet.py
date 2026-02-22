@@ -886,7 +886,7 @@ def run_flat_disk_one_leaflet_benchmark(
     else:
         theory = compute_flat_disk_kh_physical_theory(params)
         theory_model = "kh_physical_strict_kh"
-        theory_source = "kh_physical_closed_form"
+        theory_source = "kh_physical_radial_integral"
     theta_mode_str = str(theta_mode).lower()
     if theta_mode_str not in {"scan", "optimize", "optimize_full"}:
         raise ValueError("theta_mode must be 'scan', 'optimize', or 'optimize_full'.")
