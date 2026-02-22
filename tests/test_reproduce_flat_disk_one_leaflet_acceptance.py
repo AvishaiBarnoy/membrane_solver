@@ -25,6 +25,10 @@ BASELINES = {
     / "tests"
     / "fixtures"
     / "flat_disk_one_leaflet_kh_physical_balanced_disabled_baseline.yaml",
+    "kh_physical_energy_tight_disabled": ROOT
+    / "tests"
+    / "fixtures"
+    / "flat_disk_one_leaflet_kh_physical_energy_tight_disabled_baseline.yaml",
 }
 
 
@@ -52,6 +56,7 @@ def _get_path(dct: dict[str, Any], path: str) -> float:
         "legacy_free",
         "kh_physical_disabled",
         "kh_physical_balanced_disabled",
+        "kh_physical_energy_tight_disabled",
     ],
 )
 def test_reproduce_flat_disk_one_leaflet_matches_yaml_baseline_with_tolerances(

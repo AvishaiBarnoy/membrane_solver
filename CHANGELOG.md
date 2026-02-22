@@ -30,6 +30,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Added opt-in `kh_strict_continuity` optimize preset to improve rim continuity/leakage via stricter rim-local refinement in strict-KH diagnostics workflows.
   - Added opt-in `kh_strict_balanced` optimize preset (rim-local refine steps=2, narrower rim band) to target improved strict parity/runtime tradeoff between `kh_strict_fast` and `kh_strict_continuity`.
   - Added opt-in `kh_strict_energy_tight` preset (rim steps=2, rim band=8.0, parity polish enabled) for best-known strict energy parity without changing KH/TeX ratios.
+  - `kh_strict_energy_tight` now applies energy-focused local theta polish (objective: minimize `energy_factor`) and reports polish objective/candidate factors in output metadata.
   - Added opt-in `kh_strict_partition_tight` preset (rim steps=2, rim band=10.0, parity polish) for partition-focused strict-KH diagnostics.
   - Region-parity diagnostics now report baseline-vs-selected partition score deltas (`baseline_optimize_preset`, `baseline_best`, `selected_vs_baseline_partition_score_delta`).
   - Added strict-KH partition ablation diagnostics (`tools/diagnostics/flat_disk_kh_partition_ablation.py`) with per-band internal energy decomposition and baseline-vs-selected deltas for partition score and energy factor.
@@ -42,6 +43,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Strict optimize-preset characterization now reports rim-jump/leakage diagnostics and optimize-phase runtime, with default strict candidate sweep over `kh_strict_fast`, `kh_strict_continuity`, and `kh_strict_robust`.
   - KH physical acceptance baseline fixture now tracks `kh_strict_fast` and strict parity regression caps are tightened to `<=1.5` in strict optimize e2e coverage.
   - Added strict KH acceptance baseline fixture for `kh_strict_balanced` and tightened strict optimize parity e2e caps from `<=1.5` to `<=1.2` for strict fast/balanced/continuity paths.
+  - Added strict KH acceptance baseline fixture for `kh_strict_energy_tight` and tightened its e2e parity caps to `theta_factor <= 1.10` and `energy_factor <= 1.10`.
   - Regression test runtime was reduced by reclassifying heavy mass-mode benchmark smoke to `benchmark` and using a lightweight mass-mode ordering regression guard.
   - Flat disk reproduction CLI default refinement is now `--refine-level 2` (was `1`) to keep default parity in the `<2x` acceptance range with full rim continuity enforced.
   - Flat disk optimize-mode defaults are now lighter and parity-stable at the default refinement (`theta_optimize_steps=20`, `theta_optimize_inner_steps=20`, `theta_optimize_delta=2e-4`).

@@ -398,8 +398,9 @@ def test_flat_disk_optimize_preset_kh_strict_energy_tight_controls() -> None:
     assert int(report["meta"]["rim_local_refine_steps"]) == 2
     assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(8.0)
     assert report["optimize"]["parity_polish"] is not None
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
+    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
+    assert float(report["parity"]["theta_factor"]) <= 1.10
+    assert float(report["parity"]["energy_factor"]) <= 1.10
 
 
 @pytest.mark.regression
