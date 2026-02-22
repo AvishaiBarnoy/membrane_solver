@@ -47,8 +47,44 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
         assert np.isfinite(float(row["internal_outer_error"]))
         assert np.isfinite(float(row["inner_tphi_over_trad_median"]))
         assert np.isfinite(float(row["outer_tphi_over_trad_median"]))
+        assert np.isfinite(float(row["mesh_tilt_disk_core"]))
+        assert np.isfinite(float(row["mesh_tilt_rim_band"]))
+        assert np.isfinite(float(row["mesh_tilt_outer_near"]))
+        assert np.isfinite(float(row["mesh_tilt_outer_far"]))
+        assert np.isfinite(float(row["mesh_smooth_disk_core"]))
+        assert np.isfinite(float(row["mesh_smooth_rim_band"]))
+        assert np.isfinite(float(row["mesh_smooth_outer_near"]))
+        assert np.isfinite(float(row["mesh_smooth_outer_far"]))
+        assert np.isfinite(float(row["theory_tilt_disk_core"]))
+        assert np.isfinite(float(row["theory_tilt_rim_band"]))
+        assert np.isfinite(float(row["theory_tilt_outer_near"]))
+        assert np.isfinite(float(row["theory_tilt_outer_far"]))
+        assert np.isfinite(float(row["theory_smooth_disk_core"]))
+        assert np.isfinite(float(row["theory_smooth_rim_band"]))
+        assert np.isfinite(float(row["theory_smooth_outer_near"]))
+        assert np.isfinite(float(row["theory_smooth_outer_far"]))
+        assert np.isfinite(float(row["theory_internal_disk_core"]))
+        assert np.isfinite(float(row["theory_internal_rim_band"]))
+        assert np.isfinite(float(row["theory_internal_outer_near"]))
+        assert np.isfinite(float(row["theory_internal_outer_far"]))
+        assert np.isfinite(float(row["theory_internal_total_from_bands"]))
+        assert np.isfinite(float(row["theory_internal_bands_minus_closed_form"]))
         assert float(row["mesh_internal_total_from_regions"]) == pytest.approx(
             float(row["mesh_internal"]), rel=0.0, abs=1e-12
+        )
+        assert (
+            float(row["mesh_internal_disk_core"])
+            + float(row["mesh_internal_rim_band"])
+            + float(row["mesh_internal_outer_near"])
+            + float(row["mesh_internal_outer_far"])
+        ) == pytest.approx(float(row["mesh_internal"]), rel=0.0, abs=1e-10)
+        assert (
+            float(row["theory_internal_disk_core"])
+            + float(row["theory_internal_rim_band"])
+            + float(row["theory_internal_outer_near"])
+            + float(row["theory_internal_outer_far"])
+        ) == pytest.approx(
+            float(row["theory_internal_total_from_bands"]), rel=0.0, abs=1e-12
         )
 
     theta0 = rows[0]

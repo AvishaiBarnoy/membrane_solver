@@ -11,6 +11,7 @@ from typing import Any, Sequence
 
 import numpy as np
 import yaml
+from scipy import integrate, special
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_FIXTURE = (
@@ -348,8 +349,144 @@ def _mesh_internal_band_split(
         "mesh_internal_rim_band": float(np.sum(internal_tri[rim_band_mask])),
         "mesh_internal_outer_near": float(np.sum(internal_tri[outer_near_mask])),
         "mesh_internal_outer_far": float(np.sum(internal_tri[outer_far_mask])),
+        "mesh_tilt_disk_core": float(np.sum(tilt_tri[disk_core_mask])),
+        "mesh_tilt_rim_band": float(np.sum(tilt_tri[rim_band_mask])),
+        "mesh_tilt_outer_near": float(np.sum(tilt_tri[outer_near_mask])),
+        "mesh_tilt_outer_far": float(np.sum(tilt_tri[outer_far_mask])),
+        "mesh_smooth_disk_core": float(np.sum(smooth_tri[disk_core_mask])),
+        "mesh_smooth_rim_band": float(np.sum(smooth_tri[rim_band_mask])),
+        "mesh_smooth_outer_near": float(np.sum(smooth_tri[outer_near_mask])),
+        "mesh_smooth_outer_far": float(np.sum(smooth_tri[outer_far_mask])),
         "rim_band_tri_count": float(np.sum(rim_band_mask)),
         "rim_band_h_over_lambda_median": rim_h_over_lambda,
+    }
+
+
+def _theory_term_band_split(
+    *,
+    theta: float,
+    kappa: float,
+    kappa_t: float,
+    radius: float,
+    lambda_value: float,
+    rim_half_width_lambda: float,
+    outer_near_width_lambda: float,
+) -> dict[str, float]:
+    """Compute KH theory tilt/splay term split across radial bands at fixed theta."""
+    theta_f = float(theta)
+    kappa_f = float(kappa)
+    kappa_t_f = float(kappa_t)
+    radius_f = float(radius)
+    lam = float(lambda_value)
+
+    x = radius_f / max(lam, 1e-18)
+    i1_x = float(special.iv(1, x))
+    k1_x = float(special.kv(1, x))
+    if abs(i1_x) < 1e-18 or abs(k1_x) < 1e-18:
+        raise ValueError("Invalid KH radial profile normalization in term audit.")
+
+    a_inner = theta_f / i1_x
+    b_outer = theta_f / k1_x
+
+    def _t_inner(r: float) -> float:
+        return float(a_inner * special.iv(1, r / lam))
+
+    def _div_inner(r: float) -> float:
+        return float((a_inner / lam) * special.iv(0, r / lam))
+
+    def _t_outer(r: float) -> float:
+        return float(b_outer * special.kv(1, r / lam))
+
+    def _div_outer(r: float) -> float:
+        return float(-(b_outer / lam) * special.kv(0, r / lam))
+
+    def _integrate_term(
+        fn, lo: float, hi: float, *, use_inf: bool = False, coeff: float
+    ) -> float:
+        lo_f = max(float(lo), 0.0)
+        if use_inf:
+            val, _ = integrate.quad(
+                lambda rr: np.pi * coeff * rr * (fn(rr) ** 2),
+                lo_f,
+                np.inf,
+                epsabs=1e-10,
+                epsrel=1e-9,
+                limit=300,
+            )
+            return float(val)
+        hi_f = max(float(hi), lo_f)
+        if hi_f <= lo_f:
+            return 0.0
+        val, _ = integrate.quad(
+            lambda rr: np.pi * coeff * rr * (fn(rr) ** 2),
+            lo_f,
+            hi_f,
+            epsabs=1e-10,
+            epsrel=1e-9,
+            limit=300,
+        )
+        return float(val)
+
+    rim_w = max(0.0, float(rim_half_width_lambda) * lam)
+    outer_near_w = max(0.0, float(outer_near_width_lambda) * lam)
+    r_in_rim_start = max(0.0, radius_f - rim_w)
+    r_out_rim_end = radius_f + rim_w
+    r_outer_near_end = radius_f + outer_near_w
+
+    tilt_disk_core = _integrate_term(
+        _t_inner, 0.0, min(radius_f, r_in_rim_start), coeff=kappa_t_f
+    )
+    smooth_disk_core = _integrate_term(
+        _div_inner, 0.0, min(radius_f, r_in_rim_start), coeff=kappa_f
+    )
+
+    tilt_rim_in = _integrate_term(_t_inner, r_in_rim_start, radius_f, coeff=kappa_t_f)
+    smooth_rim_in = _integrate_term(_div_inner, r_in_rim_start, radius_f, coeff=kappa_f)
+    tilt_rim_out = _integrate_term(
+        _t_outer, radius_f, max(radius_f, r_out_rim_end), coeff=kappa_t_f
+    )
+    smooth_rim_out = _integrate_term(
+        _div_outer, radius_f, max(radius_f, r_out_rim_end), coeff=kappa_f
+    )
+    tilt_rim_band = float(tilt_rim_in + tilt_rim_out)
+    smooth_rim_band = float(smooth_rim_in + smooth_rim_out)
+
+    tilt_outer_near = _integrate_term(
+        _t_outer,
+        max(radius_f, r_out_rim_end),
+        max(radius_f, r_outer_near_end),
+        coeff=kappa_t_f,
+    )
+    smooth_outer_near = _integrate_term(
+        _div_outer,
+        max(radius_f, r_out_rim_end),
+        max(radius_f, r_outer_near_end),
+        coeff=kappa_f,
+    )
+    tilt_outer_far = _integrate_term(
+        _t_outer, max(radius_f, r_outer_near_end), 0.0, use_inf=True, coeff=kappa_t_f
+    )
+    smooth_outer_far = _integrate_term(
+        _div_outer,
+        max(radius_f, r_outer_near_end),
+        0.0,
+        use_inf=True,
+        coeff=kappa_f,
+    )
+
+    return {
+        "theory_tilt_disk_core": tilt_disk_core,
+        "theory_tilt_rim_band": tilt_rim_band,
+        "theory_tilt_outer_near": tilt_outer_near,
+        "theory_tilt_outer_far": tilt_outer_far,
+        "theory_smooth_disk_core": smooth_disk_core,
+        "theory_smooth_rim_band": smooth_rim_band,
+        "theory_smooth_outer_near": smooth_outer_near,
+        "theory_smooth_outer_far": smooth_outer_far,
+        "theory_internal_disk_core": float(tilt_disk_core + smooth_disk_core),
+        "theory_internal_rim_band": float(tilt_rim_band + smooth_rim_band),
+        "theory_internal_outer_near": float(tilt_outer_near + smooth_outer_near),
+        "theory_internal_outer_far": float(tilt_outer_far + smooth_outer_far),
     }
 
 
@@ -554,6 +691,20 @@ def _run_single_level(
         th_contact = float(-b_contact * theta_f)
         th_total = float(th_in + th_out + th_contact)
         th_internal = float(th_in + th_out)
+        th_bands = _theory_term_band_split(
+            theta=theta_f,
+            kappa=float(theory.kappa),
+            kappa_t=float(theory.kappa_t),
+            radius=float(theory.radius),
+            lambda_value=float(theory.lambda_value),
+            rim_half_width_lambda=1.0,
+            outer_near_width_lambda=4.0,
+        )
+
+        def _ratio(mesh_val: float, theory_val: float) -> float:
+            if abs(float(theory_val)) <= 1e-18:
+                return float("nan")
+            return float(float(mesh_val) / float(theory_val))
 
         boundary = _boundary_realization_metrics(
             mesh,
@@ -589,20 +740,12 @@ def _run_single_level(
                 "internal_outer_error": float(
                     mesh_region["mesh_internal_outer"] - th_out
                 ),
-                "contact_ratio_mesh_over_theory": (
-                    float(mesh_contact / th_contact)
-                    if abs(th_contact) > 1e-18
-                    else float("nan")
+                "contact_ratio_mesh_over_theory": _ratio(mesh_contact, th_contact),
+                "internal_disk_ratio_mesh_over_theory": _ratio(
+                    float(mesh_region["mesh_internal_disk"]), th_in
                 ),
-                "internal_disk_ratio_mesh_over_theory": (
-                    float(mesh_region["mesh_internal_disk"] / th_in)
-                    if abs(th_in) > 1e-18
-                    else float("nan")
-                ),
-                "internal_outer_ratio_mesh_over_theory": (
-                    float(mesh_region["mesh_internal_outer"] / th_out)
-                    if abs(th_out) > 1e-18
-                    else float("nan")
+                "internal_outer_ratio_mesh_over_theory": _ratio(
+                    float(mesh_region["mesh_internal_outer"]), th_out
                 ),
                 "mesh_internal_disk_core": float(mesh_bands["mesh_internal_disk_core"]),
                 "mesh_internal_rim_band": float(mesh_bands["mesh_internal_rim_band"]),
@@ -610,6 +753,78 @@ def _run_single_level(
                     mesh_bands["mesh_internal_outer_near"]
                 ),
                 "mesh_internal_outer_far": float(mesh_bands["mesh_internal_outer_far"]),
+                "mesh_tilt_disk_core": float(mesh_bands["mesh_tilt_disk_core"]),
+                "mesh_tilt_rim_band": float(mesh_bands["mesh_tilt_rim_band"]),
+                "mesh_tilt_outer_near": float(mesh_bands["mesh_tilt_outer_near"]),
+                "mesh_tilt_outer_far": float(mesh_bands["mesh_tilt_outer_far"]),
+                "mesh_smooth_disk_core": float(mesh_bands["mesh_smooth_disk_core"]),
+                "mesh_smooth_rim_band": float(mesh_bands["mesh_smooth_rim_band"]),
+                "mesh_smooth_outer_near": float(mesh_bands["mesh_smooth_outer_near"]),
+                "mesh_smooth_outer_far": float(mesh_bands["mesh_smooth_outer_far"]),
+                **th_bands,
+                "theory_internal_total_from_bands": float(
+                    float(th_bands["theory_internal_disk_core"])
+                    + float(th_bands["theory_internal_rim_band"])
+                    + float(th_bands["theory_internal_outer_near"])
+                    + float(th_bands["theory_internal_outer_far"])
+                ),
+                "theory_internal_bands_minus_closed_form": float(
+                    (
+                        float(th_bands["theory_internal_disk_core"])
+                        + float(th_bands["theory_internal_rim_band"])
+                        + float(th_bands["theory_internal_outer_near"])
+                        + float(th_bands["theory_internal_outer_far"])
+                    )
+                    - th_internal
+                ),
+                "internal_disk_core_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_internal_disk_core"]),
+                    float(th_bands["theory_internal_disk_core"]),
+                ),
+                "internal_rim_band_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_internal_rim_band"]),
+                    float(th_bands["theory_internal_rim_band"]),
+                ),
+                "internal_outer_near_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_internal_outer_near"]),
+                    float(th_bands["theory_internal_outer_near"]),
+                ),
+                "internal_outer_far_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_internal_outer_far"]),
+                    float(th_bands["theory_internal_outer_far"]),
+                ),
+                "tilt_disk_core_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_tilt_disk_core"]),
+                    float(th_bands["theory_tilt_disk_core"]),
+                ),
+                "tilt_rim_band_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_tilt_rim_band"]),
+                    float(th_bands["theory_tilt_rim_band"]),
+                ),
+                "tilt_outer_near_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_tilt_outer_near"]),
+                    float(th_bands["theory_tilt_outer_near"]),
+                ),
+                "tilt_outer_far_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_tilt_outer_far"]),
+                    float(th_bands["theory_tilt_outer_far"]),
+                ),
+                "smooth_disk_core_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_smooth_disk_core"]),
+                    float(th_bands["theory_smooth_disk_core"]),
+                ),
+                "smooth_rim_band_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_smooth_rim_band"]),
+                    float(th_bands["theory_smooth_rim_band"]),
+                ),
+                "smooth_outer_near_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_smooth_outer_near"]),
+                    float(th_bands["theory_smooth_outer_near"]),
+                ),
+                "smooth_outer_far_ratio_mesh_over_theory": _ratio(
+                    float(mesh_bands["mesh_smooth_outer_far"]),
+                    float(th_bands["theory_smooth_outer_far"]),
+                ),
                 "rim_band_tri_count": float(mesh_bands["rim_band_tri_count"]),
                 "rim_band_h_over_lambda_median": float(
                     mesh_bands["rim_band_h_over_lambda_median"]
