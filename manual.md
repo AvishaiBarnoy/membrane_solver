@@ -360,7 +360,11 @@ Interactive commands:
     `--optimize-preset kh_strict_fast` for strict-KH fast parity checks;
     `--optimize-preset kh_strict_balanced` for strict-KH parity tightening with
     added rim-local refinement and parity polish;
-    `--optimize-preset kh_strict_continuity` for strongest rim continuity checks.
+    `--optimize-preset kh_strict_continuity` for strongest rim continuity checks;
+    `--optimize-preset kh_strict_energy_tight` for strict energy-focused parity polish;
+    `--optimize-preset kh_strict_section_tight` for strict section-aware parity tightening;
+    `--optimize-preset kh_strict_outerband_tight` for outer-near mismatch tightening
+    (strict refine=2, rim-local step=1, rim band=3.0 lambda).
   - Strict optimize polish controls:
     `--theta-optimize-postcheck` performs local energy postcheck around theta*;
     `--theta-optimize-parity-polish` performs local parity-score polish around

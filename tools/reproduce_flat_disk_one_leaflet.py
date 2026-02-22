@@ -882,7 +882,7 @@ def run_flat_disk_one_leaflet_benchmark(
             elif optimize_preset_raw == "kh_strict_section_tight":
                 effective_rim_local_refine_band_lambda = 4.0
             elif optimize_preset_raw == "kh_strict_outerband_tight":
-                effective_rim_local_refine_band_lambda = 5.0
+                effective_rim_local_refine_band_lambda = 3.0
             elif optimize_preset_raw == "kh_strict_partition_tight":
                 effective_rim_local_refine_band_lambda = 10.0
             else:

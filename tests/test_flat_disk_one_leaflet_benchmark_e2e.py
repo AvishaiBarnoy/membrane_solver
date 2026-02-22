@@ -460,6 +460,10 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
         == "kh_strict_outerband_tight"
     )
     assert int(outerband_tight["meta"]["refine_level"]) == 2
+    assert int(outerband_tight["meta"]["rim_local_refine_steps"]) == 1
+    assert float(
+        outerband_tight["meta"]["rim_local_refine_band_lambda"]
+    ) == pytest.approx(3.0)
 
     def _audit_row(report: dict, *, theta_value: float) -> dict:
         audit = run_flat_disk_kh_term_audit(
@@ -528,9 +532,10 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
         )
     )
     assert score_outer_outerband <= score_outer_section
-    assert (near_err_outerband < near_err_section) or (
-        far_err_outerband < far_err_section
-    )
+    # Outerband-tight is intended to reduce the near-rim outer mismatch explicitly.
+    assert near_err_outerband <= (near_err_section - 2.0e-4)
+    # Keep far-band behavior non-worsening with a small numerical tolerance.
+    assert far_err_outerband <= (far_err_section + 2.0e-4)
 
     inner_err_section = abs(
         np.log(max(float(section_row["internal_disk_ratio_mesh_over_theory"]), 1e-18))
@@ -538,13 +543,14 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
     inner_err_outerband = abs(
         np.log(max(float(outer_row["internal_disk_ratio_mesh_over_theory"]), 1e-18))
     )
-    assert inner_err_outerband <= inner_err_section
+    # Permit only tiny inner regression while prioritizing near-rim outer fidelity.
+    assert inner_err_outerband <= (inner_err_section + 2.0e-4)
 
     assert float(outerband_tight["parity"]["theta_factor"]) <= (
-        float(section_tight["parity"]["theta_factor"]) * 1.01
+        float(section_tight["parity"]["theta_factor"]) * 1.0005
     )
     assert float(outerband_tight["parity"]["energy_factor"]) <= (
-        float(section_tight["parity"]["energy_factor"]) * 1.01
+        float(section_tight["parity"]["energy_factor"]) * 1.0005
     )
 
 

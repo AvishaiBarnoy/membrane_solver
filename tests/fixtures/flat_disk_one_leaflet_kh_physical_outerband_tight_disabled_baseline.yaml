@@ -35,21 +35,21 @@ metrics:
     hit_step_limit: 0.0
   mesh:
     theta_star: 0.13800000000000004
-    total_energy: -0.8683893127391495
+    total_energy: -0.8682131581419215
     planarity_z_span: 0.0
     outer_tilt_max_free_rows: 0.0
     outer_decay_probe_max_before: 0.0
     outer_decay_probe_max_after: 0.0
     profile:
-      inner_abs_median: 0.00034646233023917354
-      rim_abs_median: 0.11498821366224726
-      outer_abs_median: 6.330905323053314e-07
+      inner_abs_median: 0.0018199048721721759
+      rim_abs_median: 0.11489359549365252
+      outer_abs_median: 7.996250246469274e-07
     rim_continuity:
       matched_bins: 12.0
-      jump_abs_median: 0.030015138657405772
+      jump_abs_median: 0.029791958588962383
   parity:
     theta_factor: 1.0271046847962275
-    energy_factor: 1.0255555634195144
+    energy_factor: 1.0257636417301401
 tolerances:
   theory:
     lambda_value: 1.0e-12
