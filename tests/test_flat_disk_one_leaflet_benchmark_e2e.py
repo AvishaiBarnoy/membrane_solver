@@ -549,6 +549,62 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
 
 
 @pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerband_tight_composite_score_non_worsening() -> (
+    None
+):
+    section_tight = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_section_tight",
+    )
+    outerband_tight = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerband_tight",
+    )
+
+    def _audit_row(report: dict) -> dict:
+        theta = float(report["mesh"]["theta_star"])
+        audit = run_flat_disk_kh_term_audit(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(report["meta"]["refine_level"]),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_nm=7.0,
+            length_scale_nm=15.0,
+            drive_physical=(2.0 / 0.7),
+            theta_values=(theta,),
+            tilt_mass_mode_in="consistent",
+            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
+            rim_local_refine_band_lambda=float(
+                report["meta"]["rim_local_refine_band_lambda"]
+            ),
+        )
+        return audit["rows"][0]
+
+    sec_row = _audit_row(section_tight)
+    out_row = _audit_row(outerband_tight)
+
+    def _composite_score(report: dict, row: dict) -> float:
+        ratios = np.asarray(
+            [
+                float(report["parity"]["theta_factor"]),
+                float(report["parity"]["energy_factor"]),
+                float(row["internal_disk_ratio_mesh_over_theory"]),
+                float(row["internal_outer_near_ratio_mesh_over_theory"]),
+                float(row["internal_outer_far_ratio_mesh_over_theory"]),
+            ],
+            dtype=float,
+        )
+        logs = np.log(np.maximum(ratios, 1e-18))
+        return float(np.sqrt(np.mean(logs * logs)))
+
+    score_sec = _composite_score(section_tight, sec_row)
+    score_out = _composite_score(outerband_tight, out_row)
+    assert score_out <= (score_sec * 1.005)
+
+
+@pytest.mark.benchmark
 def test_flat_disk_kh_strict_section_tight_non_worsening_vs_energy_tight() -> None:
     energy_tight = _kh_opt_report(
         refine_level=1,
