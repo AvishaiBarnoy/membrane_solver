@@ -35,6 +35,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Region-parity diagnostics now report baseline-vs-selected partition score deltas (`baseline_optimize_preset`, `baseline_best`, `selected_vs_baseline_partition_score_delta`).
   - Added strict-KH partition ablation diagnostics (`tools/diagnostics/flat_disk_kh_partition_ablation.py`) with per-band internal energy decomposition and baseline-vs-selected deltas for partition score and energy factor.
   - KH term audit now reports fixed-theta per-term regional decomposition (tilt vs splay across disk-core/rim-band/outer-near/outer-far) with mesh/theory ratio fields for isolating internal-energy mismatch sources.
+  - KH term audit now uses deterministic subtriangle area fractions for rim-crossing triangles (replacing vertex-count fractions) so strict fixed-theta disk/outer internal ratios are not biased by coarse rim partitioning.
   - Strict optimize presets now preserve explicit rim-local override inputs (`--rim-local-refine-steps`, `--rim-local-refine-band-lambda`) while still enforcing strict global refine level.
   - Added opt-in `kh_strict_robust` optimize preset with local post-optimize energy consistency check/polish (`theta_optimize_postcheck`) for non-worsening strict parity.
   - Added opt-in local parity-focused theta polish for optimize mode (`--theta-optimize-parity-polish`), automatically enabled by `kh_strict_balanced`, with candidate scores reported in `optimize.parity_polish`.

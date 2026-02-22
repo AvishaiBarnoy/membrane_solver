@@ -80,12 +80,35 @@ def _triangle_inside_fraction(
     tri_rows: np.ndarray,
     *,
     radius: float,
+    subdivisions: int = 6,
 ) -> np.ndarray:
-    """Return per-triangle inside fraction by vertex count (<R)."""
+    """Return per-triangle inside fraction using deterministic subtriangle sampling."""
     tri_pos = positions[tri_rows]
     tri_r = np.linalg.norm(tri_pos[:, :, :2], axis=2)
-    inside_counts = np.sum(tri_r <= float(radius), axis=1)
-    return np.asarray(inside_counts, dtype=float) / 3.0
+    inside = tri_r <= float(radius)
+    all_in = np.all(inside, axis=1)
+    all_out = np.all(~inside, axis=1)
+
+    frac = np.zeros(tri_rows.shape[0], dtype=float)
+    frac[all_in] = 1.0
+    boundary = ~(all_in | all_out)
+    if not np.any(boundary):
+        return frac
+
+    n = max(int(subdivisions), 1)
+    bary: list[tuple[float, float, float]] = []
+    inv_n = 1.0 / float(n)
+    for i in range(n + 1):
+        for j in range(n + 1 - i):
+            k = n - i - j
+            bary.append((i * inv_n, j * inv_n, k * inv_n))
+    w = np.asarray(bary, dtype=float)  # (P, 3)
+
+    tri2 = tri_pos[boundary, :, :2]  # (M, 3, 2)
+    pts = np.einsum("pj,mjd->mpd", w, tri2)
+    rr = np.linalg.norm(pts, axis=2)
+    frac[boundary] = np.mean(rr <= float(radius), axis=1)
+    return frac
 
 
 def _mesh_internal_region_split(
