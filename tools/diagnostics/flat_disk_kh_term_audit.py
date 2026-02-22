@@ -224,6 +224,135 @@ def _mesh_internal_region_split(
     }
 
 
+def _mesh_internal_band_split(
+    mesh,
+    *,
+    smoothness_model: str,
+    radius: float,
+    lambda_value: float,
+    rim_half_width_lambda: float = 1.0,
+    outer_near_width_lambda: float = 4.0,
+) -> dict[str, float]:
+    """Split mesh internal energy into radial bands and report rim-band resolution."""
+    from modules.energy import tilt_smoothness as tilt_smoothness_base
+
+    gp = mesh.global_parameters
+    positions = mesh.positions_view()
+    tilts_in = mesh.tilts_in_view()
+    area, g0, g1, g2, tri_rows = mesh.p1_triangle_shape_gradient_cache(
+        positions=positions
+    )
+    if tri_rows is None or len(tri_rows) == 0:
+        return {
+            "mesh_internal_disk_core": 0.0,
+            "mesh_internal_rim_band": 0.0,
+            "mesh_internal_outer_near": 0.0,
+            "mesh_internal_outer_far": 0.0,
+            "rim_band_tri_count": 0.0,
+            "rim_band_h_over_lambda_median": float("nan"),
+        }
+
+    k_tilt = float(gp.get("tilt_modulus_in") or 0.0)
+    tilt_sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
+    tri_tilt_sq_sum = tilt_sq[tri_rows].sum(axis=1)
+    tilt_tri = 0.5 * k_tilt * area * (tri_tilt_sq_sum / 3.0)
+
+    if str(smoothness_model) == "splay_twist":
+        k_splay = gp.get("tilt_splay_modulus_in")
+        if k_splay is None:
+            k_splay = gp.get("bending_modulus_in")
+        if k_splay is None:
+            k_splay = gp.get("bending_modulus")
+        k_splay_f = float(k_splay or 0.0)
+        k_twist_f = float(gp.get("tilt_twist_modulus_in") or 0.0)
+        t0 = tilts_in[tri_rows[:, 0]]
+        t1 = tilts_in[tri_rows[:, 1]]
+        t2 = tilts_in[tri_rows[:, 2]]
+        div_tri = (
+            np.einsum("ij,ij->i", t0, g0)
+            + np.einsum("ij,ij->i", t1, g1)
+            + np.einsum("ij,ij->i", t2, g2)
+        )
+        n = mesh.triangle_normals(positions=positions)
+        n_norm = np.linalg.norm(n, axis=1)
+        n_hat = np.zeros_like(n)
+        good = n_norm > 1e-20
+        n_hat[good] = n[good] / n_norm[good, None]
+        curl_vec = np.cross(g0, t0) + np.cross(g1, t1) + np.cross(g2, t2)
+        curl_n = np.einsum("ij,ij->i", curl_vec, n_hat)
+        smooth_tri = (
+            0.5
+            * area
+            * ((k_splay_f * div_tri * div_tri) + (k_twist_f * curl_n * curl_n))
+        )
+    elif str(smoothness_model) == "dirichlet":
+        k_smooth = gp.get("bending_modulus_in")
+        if k_smooth is None:
+            k_smooth = gp.get("bending_modulus")
+        k_smooth_f = float(k_smooth or 0.0)
+        weights, smooth_tri_rows = tilt_smoothness_base._get_weights_and_tris(
+            mesh,
+            positions=positions,
+            index_map=mesh.vertex_index_to_row,
+        )
+        if smooth_tri_rows is None:
+            smooth_tri = np.zeros_like(tilt_tri)
+        else:
+            c0 = weights[:, 0]
+            c1 = weights[:, 1]
+            c2 = weights[:, 2]
+            t0 = tilts_in[smooth_tri_rows[:, 0]]
+            t1 = tilts_in[smooth_tri_rows[:, 1]]
+            t2 = tilts_in[smooth_tri_rows[:, 2]]
+            d12 = t1 - t2
+            d20 = t2 - t0
+            d01 = t0 - t1
+            smooth_tri = (
+                0.25
+                * k_smooth_f
+                * (
+                    c0 * np.einsum("ij,ij->i", d12, d12)
+                    + c1 * np.einsum("ij,ij->i", d20, d20)
+                    + c2 * np.einsum("ij,ij->i", d01, d01)
+                )
+            )
+    else:
+        raise ValueError("smoothness_model must be 'dirichlet' or 'splay_twist'.")
+
+    internal_tri = tilt_tri + smooth_tri
+    tri_r = _triangle_centroid_radius(positions, tri_rows)
+    rim_w = float(rim_half_width_lambda) * float(lambda_value)
+    outer_near_w = float(outer_near_width_lambda) * float(lambda_value)
+
+    disk_core_mask = tri_r < (float(radius) - rim_w)
+    rim_band_mask = np.abs(tri_r - float(radius)) <= rim_w
+    outer_near_mask = (tri_r > (float(radius) + rim_w)) & (
+        tri_r <= (float(radius) + outer_near_w)
+    )
+    outer_far_mask = tri_r > (float(radius) + outer_near_w)
+
+    tri_pos = positions[tri_rows]
+    e01 = np.linalg.norm(tri_pos[:, 0] - tri_pos[:, 1], axis=1)
+    e12 = np.linalg.norm(tri_pos[:, 1] - tri_pos[:, 2], axis=1)
+    e20 = np.linalg.norm(tri_pos[:, 2] - tri_pos[:, 0], axis=1)
+    h_tri = np.maximum.reduce([e01, e12, e20])
+    rim_h = h_tri[rim_band_mask]
+    rim_h_over_lambda = (
+        float(np.median(rim_h) / max(float(lambda_value), 1e-18))
+        if rim_h.size > 0
+        else float("nan")
+    )
+
+    return {
+        "mesh_internal_disk_core": float(np.sum(internal_tri[disk_core_mask])),
+        "mesh_internal_rim_band": float(np.sum(internal_tri[rim_band_mask])),
+        "mesh_internal_outer_near": float(np.sum(internal_tri[outer_near_mask])),
+        "mesh_internal_outer_far": float(np.sum(internal_tri[outer_far_mask])),
+        "rim_band_tri_count": float(np.sum(rim_band_mask)),
+        "rim_band_h_over_lambda_median": rim_h_over_lambda,
+    }
+
+
 def _boundary_realization_metrics(
     mesh,
     *,
@@ -411,6 +540,14 @@ def _run_single_level(
             smoothness_model=smoothness_model,
             radius=float(theory.radius),
         )
+        mesh_bands = _mesh_internal_band_split(
+            mesh,
+            smoothness_model=smoothness_model,
+            radius=float(theory.radius),
+            lambda_value=float(theory.lambda_value),
+            rim_half_width_lambda=1.0,
+            outer_near_width_lambda=4.0,
+        )
 
         th_in = float(c_in * theta_f * theta_f)
         th_out = float(c_out * theta_f * theta_f)
@@ -466,6 +603,16 @@ def _run_single_level(
                     float(mesh_region["mesh_internal_outer"] / th_out)
                     if abs(th_out) > 1e-18
                     else float("nan")
+                ),
+                "mesh_internal_disk_core": float(mesh_bands["mesh_internal_disk_core"]),
+                "mesh_internal_rim_band": float(mesh_bands["mesh_internal_rim_band"]),
+                "mesh_internal_outer_near": float(
+                    mesh_bands["mesh_internal_outer_near"]
+                ),
+                "mesh_internal_outer_far": float(mesh_bands["mesh_internal_outer_far"]),
+                "rim_band_tri_count": float(mesh_bands["rim_band_tri_count"]),
+                "rim_band_h_over_lambda_median": float(
+                    mesh_bands["rim_band_h_over_lambda_median"]
                 ),
                 **boundary,
                 **leakage,
