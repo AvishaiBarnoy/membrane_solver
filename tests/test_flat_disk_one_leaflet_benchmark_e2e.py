@@ -50,20 +50,20 @@ def _kh_opt_report(
     preset = str(optimize_preset)
     # Strict presets force refine=1 in benchmark harness; normalize cache key so
     # tests reuse the same expensive run.
-    effective_refine = (
-        1
-        if preset
-        in {
-            "kh_strict_refine",
-            "kh_strict_fast",
-            "kh_strict_balanced",
-            "kh_strict_continuity",
-            "kh_strict_energy_tight",
-            "kh_strict_partition_tight",
-            "kh_strict_robust",
-        }
-        else int(refine_level)
-    )
+    strict_presets = {
+        "kh_strict_refine",
+        "kh_strict_fast",
+        "kh_strict_balanced",
+        "kh_strict_continuity",
+        "kh_strict_energy_tight",
+        "kh_strict_section_tight",
+        "kh_strict_partition_tight",
+        "kh_strict_robust",
+    }
+    if preset in strict_presets:
+        effective_refine = 2 if preset == "kh_strict_section_tight" else 1
+    else:
+        effective_refine = int(refine_level)
     return run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
         refine_level=effective_refine,
@@ -417,6 +417,23 @@ def test_flat_disk_optimize_preset_kh_strict_partition_tight_controls() -> None:
     assert report["optimize"]["parity_polish"] is not None
     assert float(report["parity"]["theta_factor"]) <= 1.2
     assert float(report["parity"]["energy_factor"]) <= 1.2
+
+
+@pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_section_tight_controls() -> None:
+    report = _kh_opt_report(
+        refine_level=1,  # should be overridden by section-tight preset
+        optimize_preset="kh_strict_section_tight",
+    )
+
+    assert report["meta"]["optimize_preset_effective"] == "kh_strict_section_tight"
+    assert int(report["meta"]["refine_level"]) == 2
+    assert int(report["meta"]["rim_local_refine_steps"]) == 1
+    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(4.0)
+    assert report["optimize"]["parity_polish"] is not None
+    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
+    assert float(report["parity"]["theta_factor"]) <= 1.25
+    assert float(report["parity"]["energy_factor"]) <= 1.25
 
 
 @pytest.mark.benchmark
