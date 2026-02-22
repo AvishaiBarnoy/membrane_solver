@@ -736,6 +736,90 @@ def _run_single_level(
         )
         leakage = _leakage_metrics(mesh, radius=float(theory.radius))
 
+        ratio_internal_disk = _ratio(float(mesh_region["mesh_internal_disk"]), th_in)
+        ratio_internal_outer = _ratio(float(mesh_region["mesh_internal_outer"]), th_out)
+        ratio_internal_disk_core = _ratio(
+            float(mesh_bands["mesh_internal_disk_core"]),
+            float(th_bands["theory_internal_disk_core"]),
+        )
+        ratio_internal_rim_band = _ratio(
+            float(mesh_bands["mesh_internal_rim_band"]),
+            float(th_bands["theory_internal_rim_band"]),
+        )
+        ratio_internal_outer_near = _ratio(
+            float(mesh_bands["mesh_internal_outer_near"]),
+            float(th_bands["theory_internal_outer_near"]),
+        )
+        ratio_internal_outer_far = _ratio(
+            float(mesh_bands["mesh_internal_outer_far"]),
+            float(th_bands["theory_internal_outer_far"]),
+        )
+        ratio_tilt_disk_core = _ratio(
+            float(mesh_bands["mesh_tilt_disk_core"]),
+            float(th_bands["theory_tilt_disk_core"]),
+        )
+        ratio_tilt_rim_band = _ratio(
+            float(mesh_bands["mesh_tilt_rim_band"]),
+            float(th_bands["theory_tilt_rim_band"]),
+        )
+        ratio_tilt_outer_near = _ratio(
+            float(mesh_bands["mesh_tilt_outer_near"]),
+            float(th_bands["theory_tilt_outer_near"]),
+        )
+        ratio_tilt_outer_far = _ratio(
+            float(mesh_bands["mesh_tilt_outer_far"]),
+            float(th_bands["theory_tilt_outer_far"]),
+        )
+        ratio_smooth_disk_core = _ratio(
+            float(mesh_bands["mesh_smooth_disk_core"]),
+            float(th_bands["theory_smooth_disk_core"]),
+        )
+        ratio_smooth_rim_band = _ratio(
+            float(mesh_bands["mesh_smooth_rim_band"]),
+            float(th_bands["theory_smooth_rim_band"]),
+        )
+        ratio_smooth_outer_near = _ratio(
+            float(mesh_bands["mesh_smooth_outer_near"]),
+            float(th_bands["theory_smooth_outer_near"]),
+        )
+        ratio_smooth_outer_far = _ratio(
+            float(mesh_bands["mesh_smooth_outer_far"]),
+            float(th_bands["theory_smooth_outer_far"]),
+        )
+
+        score_internal_split = _ratio_distance_score(
+            ratio_internal_disk,
+            ratio_internal_outer,
+        )
+        score_internal_bands = _ratio_distance_score(
+            ratio_internal_disk_core,
+            ratio_internal_rim_band,
+            ratio_internal_outer_near,
+            ratio_internal_outer_far,
+        )
+        score_tilt_bands = _ratio_distance_score(
+            ratio_tilt_disk_core,
+            ratio_tilt_rim_band,
+            ratio_tilt_outer_near,
+            ratio_tilt_outer_far,
+        )
+        score_smooth_bands = _ratio_distance_score(
+            ratio_smooth_disk_core,
+            ratio_smooth_rim_band,
+            ratio_smooth_outer_near,
+            ratio_smooth_outer_far,
+        )
+        score_all_terms = _ratio_distance_score(
+            ratio_tilt_disk_core,
+            ratio_tilt_rim_band,
+            ratio_tilt_outer_near,
+            ratio_tilt_outer_far,
+            ratio_smooth_disk_core,
+            ratio_smooth_rim_band,
+            ratio_smooth_outer_near,
+            ratio_smooth_outer_far,
+        )
+
         rows.append(
             {
                 "theta": theta_f,
@@ -764,12 +848,8 @@ def _run_single_level(
                     mesh_region["mesh_internal_outer"] - th_out
                 ),
                 "contact_ratio_mesh_over_theory": _ratio(mesh_contact, th_contact),
-                "internal_disk_ratio_mesh_over_theory": _ratio(
-                    float(mesh_region["mesh_internal_disk"]), th_in
-                ),
-                "internal_outer_ratio_mesh_over_theory": _ratio(
-                    float(mesh_region["mesh_internal_outer"]), th_out
-                ),
+                "internal_disk_ratio_mesh_over_theory": ratio_internal_disk,
+                "internal_outer_ratio_mesh_over_theory": ratio_internal_outer,
                 "mesh_internal_disk_core": float(mesh_bands["mesh_internal_disk_core"]),
                 "mesh_internal_rim_band": float(mesh_bands["mesh_internal_rim_band"]),
                 "mesh_internal_outer_near": float(
@@ -800,54 +880,53 @@ def _run_single_level(
                     )
                     - th_internal
                 ),
-                "internal_disk_core_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_internal_disk_core"]),
-                    float(th_bands["theory_internal_disk_core"]),
+                "internal_disk_core_ratio_mesh_over_theory": ratio_internal_disk_core,
+                "internal_rim_band_ratio_mesh_over_theory": ratio_internal_rim_band,
+                "internal_outer_near_ratio_mesh_over_theory": ratio_internal_outer_near,
+                "internal_outer_far_ratio_mesh_over_theory": ratio_internal_outer_far,
+                "tilt_disk_core_ratio_mesh_over_theory": ratio_tilt_disk_core,
+                "tilt_rim_band_ratio_mesh_over_theory": ratio_tilt_rim_band,
+                "tilt_outer_near_ratio_mesh_over_theory": ratio_tilt_outer_near,
+                "tilt_outer_far_ratio_mesh_over_theory": ratio_tilt_outer_far,
+                "smooth_disk_core_ratio_mesh_over_theory": ratio_smooth_disk_core,
+                "smooth_rim_band_ratio_mesh_over_theory": ratio_smooth_rim_band,
+                "smooth_outer_near_ratio_mesh_over_theory": ratio_smooth_outer_near,
+                "smooth_outer_far_ratio_mesh_over_theory": ratio_smooth_outer_far,
+                "section_score_internal_split_l2_log": float(
+                    score_internal_split["l2_log"]
                 ),
-                "internal_rim_band_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_internal_rim_band"]),
-                    float(th_bands["theory_internal_rim_band"]),
+                "section_score_internal_split_max_abs_log": float(
+                    score_internal_split["max_abs_log"]
                 ),
-                "internal_outer_near_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_internal_outer_near"]),
-                    float(th_bands["theory_internal_outer_near"]),
+                "section_score_internal_split_count": float(
+                    score_internal_split["count"]
                 ),
-                "internal_outer_far_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_internal_outer_far"]),
-                    float(th_bands["theory_internal_outer_far"]),
+                "section_score_internal_bands_l2_log": float(
+                    score_internal_bands["l2_log"]
                 ),
-                "tilt_disk_core_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_tilt_disk_core"]),
-                    float(th_bands["theory_tilt_disk_core"]),
+                "section_score_internal_bands_max_abs_log": float(
+                    score_internal_bands["max_abs_log"]
                 ),
-                "tilt_rim_band_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_tilt_rim_band"]),
-                    float(th_bands["theory_tilt_rim_band"]),
+                "section_score_internal_bands_count": float(
+                    score_internal_bands["count"]
                 ),
-                "tilt_outer_near_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_tilt_outer_near"]),
-                    float(th_bands["theory_tilt_outer_near"]),
+                "section_score_tilt_bands_l2_log": float(score_tilt_bands["l2_log"]),
+                "section_score_tilt_bands_max_abs_log": float(
+                    score_tilt_bands["max_abs_log"]
                 ),
-                "tilt_outer_far_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_tilt_outer_far"]),
-                    float(th_bands["theory_tilt_outer_far"]),
+                "section_score_tilt_bands_count": float(score_tilt_bands["count"]),
+                "section_score_smooth_bands_l2_log": float(
+                    score_smooth_bands["l2_log"]
                 ),
-                "smooth_disk_core_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_smooth_disk_core"]),
-                    float(th_bands["theory_smooth_disk_core"]),
+                "section_score_smooth_bands_max_abs_log": float(
+                    score_smooth_bands["max_abs_log"]
                 ),
-                "smooth_rim_band_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_smooth_rim_band"]),
-                    float(th_bands["theory_smooth_rim_band"]),
+                "section_score_smooth_bands_count": float(score_smooth_bands["count"]),
+                "section_score_all_terms_l2_log": float(score_all_terms["l2_log"]),
+                "section_score_all_terms_max_abs_log": float(
+                    score_all_terms["max_abs_log"]
                 ),
-                "smooth_outer_near_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_smooth_outer_near"]),
-                    float(th_bands["theory_smooth_outer_near"]),
-                ),
-                "smooth_outer_far_ratio_mesh_over_theory": _ratio(
-                    float(mesh_bands["mesh_smooth_outer_far"]),
-                    float(th_bands["theory_smooth_outer_far"]),
-                ),
+                "section_score_all_terms_count": float(score_all_terms["count"]),
                 "rim_band_tri_count": float(mesh_bands["rim_band_tri_count"]),
                 "rim_band_h_over_lambda_median": float(
                     mesh_bands["rim_band_h_over_lambda_median"]
@@ -1008,6 +1087,20 @@ def _balanced_parity_score(theta_factor: float, energy_factor: float) -> float:
             np.log(max(float(energy_factor), 1e-18)),
         )
     )
+
+
+def _ratio_distance_score(*ratios: float) -> dict[str, float]:
+    """Return distance-to-1 scores for ratio tuples using log-space metrics."""
+    vals = np.asarray([float(x) for x in ratios], dtype=float)
+    good = np.isfinite(vals) & (vals > 0.0)
+    if not np.any(good):
+        return {"l2_log": float("nan"), "max_abs_log": float("nan"), "count": 0.0}
+    logs = np.log(vals[good])
+    return {
+        "l2_log": float(np.sqrt(np.mean(logs * logs))),
+        "max_abs_log": float(np.max(np.abs(logs))),
+        "count": float(logs.size),
+    }
 
 
 def run_flat_disk_kh_strict_refinement_characterization(
