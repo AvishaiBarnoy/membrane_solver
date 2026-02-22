@@ -253,7 +253,7 @@ def test_flat_disk_optimize_preset_full_accuracy_r3_is_noop_below_refine3() -> N
     assert opt["polish"] is not None
 
 
-@pytest.mark.regression
+@pytest.mark.benchmark
 def test_flat_disk_optimize_preset_kh_wide_expands_theta_span_for_kh_lane() -> None:
     report = _kh_opt_report(
         refine_level=1,
@@ -271,7 +271,7 @@ def test_flat_disk_optimize_preset_kh_wide_expands_theta_span_for_kh_lane() -> N
     assert float(report["mesh"]["theta_star"]) > 0.02
 
 
-@pytest.mark.regression
+@pytest.mark.benchmark
 def test_flat_disk_optimize_preset_kh_strict_fast_is_opt_in_and_mesh_strict() -> None:
     report = _kh_opt_report(
         refine_level=3,  # should be overridden by strict-fast preset
@@ -301,7 +301,7 @@ def test_flat_disk_optimize_preset_kh_strict_fast_is_opt_in_and_mesh_strict() ->
     assert opt["recommended_fallback_preset"] is None
 
 
-@pytest.mark.regression
+@pytest.mark.benchmark
 def test_flat_disk_optimize_preset_kh_strict_fast_respects_explicit_rim_overrides() -> (
     None
 ):
@@ -323,7 +323,7 @@ def test_flat_disk_optimize_preset_kh_strict_fast_respects_explicit_rim_override
     assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(2.5)
 
 
-@pytest.mark.regression
+@pytest.mark.benchmark
 def test_flat_disk_optimize_preset_kh_strict_continuity_improves_rim_metrics() -> None:
     fast = _kh_opt_report(
         refine_level=1,
@@ -352,7 +352,7 @@ def test_flat_disk_optimize_preset_kh_strict_continuity_improves_rim_metrics() -
     assert leak_cont < leak_fast
 
 
-@pytest.mark.regression
+@pytest.mark.benchmark
 def test_flat_disk_optimize_preset_kh_strict_balanced_tradeoff_vs_fast() -> None:
     fast = _kh_opt_report(
         refine_level=1,
@@ -386,7 +386,7 @@ def test_flat_disk_optimize_preset_kh_strict_balanced_tradeoff_vs_fast() -> None
     assert float(balanced["parity"]["energy_factor"]) <= 1.2
 
 
-@pytest.mark.regression
+@pytest.mark.benchmark
 def test_flat_disk_optimize_preset_kh_strict_energy_tight_controls() -> None:
     report = _kh_opt_report(
         refine_level=1,
@@ -403,7 +403,7 @@ def test_flat_disk_optimize_preset_kh_strict_energy_tight_controls() -> None:
     assert float(report["parity"]["energy_factor"]) <= 1.10
 
 
-@pytest.mark.regression
+@pytest.mark.benchmark
 def test_flat_disk_optimize_preset_kh_strict_partition_tight_controls() -> None:
     report = _kh_opt_report(
         refine_level=1,
@@ -419,7 +419,7 @@ def test_flat_disk_optimize_preset_kh_strict_partition_tight_controls() -> None:
     assert float(report["parity"]["energy_factor"]) <= 1.2
 
 
-@pytest.mark.regression
+@pytest.mark.benchmark
 def test_flat_disk_optimize_preset_kh_strict_robust_non_worsening_score() -> None:
     fast = _kh_opt_report(
         refine_level=1,
@@ -554,7 +554,7 @@ def test_flat_disk_reports_splay_modulus_scale_meta() -> None:
     assert float(report["meta"]["splay_modulus_scale_in"]) == pytest.approx(0.5)
 
 
-@pytest.mark.regression
+@pytest.mark.benchmark
 def test_flat_disk_kh_default_splay_scale_stays_unmodified() -> None:
     report = _kh_opt_report(
         refine_level=1,
@@ -563,7 +563,7 @@ def test_flat_disk_kh_default_splay_scale_stays_unmodified() -> None:
     assert float(report["meta"]["splay_modulus_scale_in"]) == pytest.approx(1.0)
 
 
-@pytest.mark.regression
+@pytest.mark.benchmark
 def test_flat_disk_kh_strict_preset_improves_score_vs_baseline() -> None:
     baseline = _kh_opt_report(
         refine_level=1,

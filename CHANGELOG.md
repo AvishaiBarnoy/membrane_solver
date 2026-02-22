@@ -48,6 +48,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Added strict KH acceptance baseline fixture for `kh_strict_balanced` and tightened strict optimize parity e2e caps from `<=1.5` to `<=1.2` for strict fast/balanced/continuity paths.
   - Added strict KH acceptance baseline fixture for `kh_strict_energy_tight` and tightened its e2e parity caps to `theta_factor <= 1.10` and `energy_factor <= 1.10`.
   - Regression test runtime was reduced by reclassifying heavy mass-mode benchmark smoke to `benchmark` and using a lightweight mass-mode ordering regression guard.
+  - Regression CI now excludes `benchmark`-marked tests; strict KH optimize-preset checks were reclassified to `benchmark` so the blocking regression lane remains fast.
   - Flat disk reproduction CLI default refinement is now `--refine-level 2` (was `1`) to keep default parity in the `<2x` acceptance range with full rim continuity enforced.
   - Flat disk optimize-mode defaults are now lighter and parity-stable at the default refinement (`theta_optimize_steps=20`, `theta_optimize_inner_steps=20`, `theta_optimize_delta=2e-4`).
   - Flat disk reproduction CLI now supports `--optimize-preset fast_r3` for faster `refine_level>=3` optimize-mode runs, with report metadata indicating whether the preset was applied.

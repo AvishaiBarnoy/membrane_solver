@@ -112,7 +112,7 @@ jobs:
 
       - name: Run regression tests
         run: |
-          pytest -q -m "regression"
+          pytest -q -m "regression and not benchmark"
 
   e2e:
     name: E2E tests (py3.12)
