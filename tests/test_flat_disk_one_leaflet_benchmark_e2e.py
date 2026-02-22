@@ -581,6 +581,115 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_controls() -> None
 
 
 @pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_improves_outer_sections_vs_outerband() -> (
+    None
+):
+    outerband = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerband_tight",
+    )
+    outerfield = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_tight",
+    )
+
+    def _audit_row(report: dict, *, theta_value: float) -> dict:
+        audit = run_flat_disk_kh_term_audit(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(report["meta"]["refine_level"]),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_nm=7.0,
+            length_scale_nm=15.0,
+            drive_physical=(2.0 / 0.7),
+            theta_values=(float(theta_value),),
+            tilt_mass_mode_in="consistent",
+            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
+            rim_local_refine_band_lambda=float(
+                report["meta"]["rim_local_refine_band_lambda"]
+            ),
+            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
+            outer_local_refine_rmin_lambda=float(
+                report["meta"]["outer_local_refine_rmin_lambda"]
+            ),
+            outer_local_refine_rmax_lambda=float(
+                report["meta"]["outer_local_refine_rmax_lambda"]
+            ),
+        )
+        return audit["rows"][0]
+
+    outerband_row = _audit_row(outerband, theta_value=0.138)
+    outerfield_row = _audit_row(outerfield, theta_value=0.138)
+
+    near_err_outerband = abs(
+        float(outerband_row["internal_outer_near_ratio_mesh_over_theory"]) - 1.0
+    )
+    near_err_outerfield = abs(
+        float(outerfield_row["internal_outer_near_ratio_mesh_over_theory"]) - 1.0
+    )
+    far_err_outerband = abs(
+        float(outerband_row["internal_outer_far_ratio_mesh_over_theory"]) - 1.0
+    )
+    far_err_outerfield = abs(
+        float(outerfield_row["internal_outer_far_ratio_mesh_over_theory"]) - 1.0
+    )
+    score_outerband = float(
+        np.hypot(
+            np.log(
+                max(
+                    float(outerband_row["internal_outer_near_ratio_mesh_over_theory"]),
+                    1e-18,
+                )
+            ),
+            np.log(
+                max(
+                    float(outerband_row["internal_outer_far_ratio_mesh_over_theory"]),
+                    1e-18,
+                )
+            ),
+        )
+    )
+    score_outerfield = float(
+        np.hypot(
+            np.log(
+                max(
+                    float(outerfield_row["internal_outer_near_ratio_mesh_over_theory"]),
+                    1e-18,
+                )
+            ),
+            np.log(
+                max(
+                    float(outerfield_row["internal_outer_far_ratio_mesh_over_theory"]),
+                    1e-18,
+                )
+            ),
+        )
+    )
+    assert score_outerfield < score_outerband
+    assert near_err_outerfield < near_err_outerband
+    assert far_err_outerfield < far_err_outerband
+
+    inner_err_outerband = abs(
+        np.log(max(float(outerband_row["internal_disk_ratio_mesh_over_theory"]), 1e-18))
+    )
+    inner_err_outerfield = abs(
+        np.log(
+            max(float(outerfield_row["internal_disk_ratio_mesh_over_theory"]), 1e-18)
+        )
+    )
+    assert inner_err_outerfield <= (inner_err_outerband + 2.0e-4)
+
+    assert float(outerfield["parity"]["theta_factor"]) <= (
+        float(outerband["parity"]["theta_factor"]) * 1.0005
+    )
+    assert float(outerfield["parity"]["energy_factor"]) <= (
+        float(outerband["parity"]["energy_factor"]) * 1.001
+    )
+
+
+@pytest.mark.benchmark
 def test_flat_disk_optimize_preset_kh_strict_outerband_tight_composite_score_non_worsening() -> (
     None
 ):
