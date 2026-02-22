@@ -768,6 +768,7 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_optimize_plateau_abs_tol: float = 0.0,
     theta_optimize_postcheck: bool = False,
     theta_optimize_parity_polish: bool = False,
+    theta_optimize_energy_polish: bool = False,
     theta_polish_delta: float = 1.0e-4,
     theta_polish_points: int = 3,
     optimize_preset: str = "none",
@@ -896,6 +897,7 @@ def run_flat_disk_one_leaflet_benchmark(
     effective_optimize_preset = "none"
     postcheck_enabled = bool(theta_optimize_postcheck)
     parity_polish_enabled = bool(theta_optimize_parity_polish)
+    energy_polish_enabled = bool(theta_optimize_energy_polish)
     if theta_mode_str == "scan":
         scan_cfg = BenchmarkScanConfig(
             theta_min=float(theta_min),
@@ -926,6 +928,8 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_partition_tight",
         }:
             parity_polish_enabled = True
+        if effective_optimize_preset == "kh_strict_energy_tight":
+            energy_polish_enabled = True
         if effective_optimize_preset == "kh_strict_robust":
             postcheck_enabled = True
         if theta_mode_str == "optimize_full":
@@ -1096,14 +1100,33 @@ def run_flat_disk_one_leaflet_benchmark(
                 ],
                 dtype=float,
             )
-            best_idx = int(np.argmin(score_candidates))
+            if bool(energy_polish_enabled):
+                energy_factor_candidates = np.asarray(
+                    [
+                        _factor_difference(float(abs(en)), float(abs(theory.total)))
+                        for en in energy_candidates.tolist()
+                    ],
+                    dtype=float,
+                )
+                best_idx = int(np.argmin(energy_factor_candidates))
+            else:
+                energy_factor_candidates = None
+                best_idx = int(np.argmin(score_candidates))
             theta_star = float(theta_candidates[best_idx])
             parity_polish_evaluations = int(theta_candidates.size)
             parity_polish_report = {
                 "enabled": True,
+                "objective": "energy_factor"
+                if bool(energy_polish_enabled)
+                else "balanced",
                 "theta_candidates": [float(x) for x in theta_candidates.tolist()],
                 "energy_candidates": [float(x) for x in energy_candidates.tolist()],
                 "score_candidates": [float(x) for x in score_candidates.tolist()],
+                "energy_factor_candidates": (
+                    None
+                    if energy_factor_candidates is None
+                    else [float(x) for x in energy_factor_candidates.tolist()]
+                ),
                 "selected_theta": float(theta_star),
             }
         if theta_mode_str == "optimize_full":
@@ -1492,6 +1515,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--theta-optimize-plateau-abs-tol", type=float, default=0.0)
     ap.add_argument("--theta-optimize-postcheck", action="store_true")
     ap.add_argument("--theta-optimize-parity-polish", action="store_true")
+    ap.add_argument("--theta-optimize-energy-polish", action="store_true")
     ap.add_argument("--theta-polish-delta", type=float, default=1.0e-4)
     ap.add_argument("--theta-polish-points", type=int, default=3)
     ap.add_argument(
@@ -1605,6 +1629,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             theta_optimize_plateau_abs_tol=args.theta_optimize_plateau_abs_tol,
             theta_optimize_postcheck=args.theta_optimize_postcheck,
             theta_optimize_parity_polish=args.theta_optimize_parity_polish,
+            theta_optimize_energy_polish=args.theta_optimize_energy_polish,
             theta_polish_delta=args.theta_polish_delta,
             theta_polish_points=args.theta_polish_points,
             optimize_preset=args.optimize_preset,
