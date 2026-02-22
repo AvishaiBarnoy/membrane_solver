@@ -639,6 +639,9 @@ def _run_single_level(
     tilt_mass_mode_in: str,
     rim_local_refine_steps: int,
     rim_local_refine_band_lambda: float,
+    outer_local_refine_steps: int,
+    outer_local_refine_rmin_lambda: float,
+    outer_local_refine_rmax_lambda: float,
 ) -> dict[str, Any]:
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -649,6 +652,7 @@ def _run_single_level(
         _build_minimizer,
         _configure_benchmark_mesh,
         _load_mesh_from_fixture,
+        _refine_mesh_locally_in_outer_annulus,
         _refine_mesh_locally_near_rim,
         _run_theta_relaxation,
     )
@@ -673,6 +677,15 @@ def _run_single_level(
             rim_radius=float(theory.radius),
             band_half_width=float(rim_local_refine_band_lambda)
             * float(theory.lambda_value),
+        )
+    if int(outer_local_refine_steps) > 0:
+        mesh = _refine_mesh_locally_in_outer_annulus(
+            mesh,
+            local_steps=int(outer_local_refine_steps),
+            r_min=float(theory.radius)
+            + float(outer_local_refine_rmin_lambda) * float(theory.lambda_value),
+            r_max=float(theory.radius)
+            + float(outer_local_refine_rmax_lambda) * float(theory.lambda_value),
         )
     positions = mesh.positions_view()
     mesh_r_max = float(np.max(np.linalg.norm(positions[:, :2], axis=1)))
@@ -1028,6 +1041,9 @@ def _run_single_level(
             "tilt_mass_mode_in": str(mass_mode),
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
+            "outer_local_refine_steps": int(outer_local_refine_steps),
+            "outer_local_refine_rmin_lambda": float(outer_local_refine_rmin_lambda),
+            "outer_local_refine_rmax_lambda": float(outer_local_refine_rmax_lambda),
         },
         "theory": {
             "kappa": float(theory.kappa),
@@ -1059,6 +1075,9 @@ def run_flat_disk_kh_term_audit(
     tilt_mass_mode_in: str = "auto",
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
+    outer_local_refine_steps: int = 0,
+    outer_local_refine_rmin_lambda: float = 0.0,
+    outer_local_refine_rmax_lambda: float = 0.0,
 ) -> dict[str, Any]:
     """Evaluate per-theta mesh/theory split terms in KH physical lane."""
     _ensure_repo_root_on_sys_path()
@@ -1083,6 +1102,9 @@ def run_flat_disk_kh_term_audit(
         tilt_mass_mode_in=str(tilt_mass_mode_in),
         rim_local_refine_steps=int(rim_local_refine_steps),
         rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
+        outer_local_refine_steps=int(outer_local_refine_steps),
+        outer_local_refine_rmin_lambda=float(outer_local_refine_rmin_lambda),
+        outer_local_refine_rmax_lambda=float(outer_local_refine_rmax_lambda),
     )
 
 
@@ -1101,6 +1123,9 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     tilt_mass_mode_in: str = "auto",
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
+    outer_local_refine_steps: int = 0,
+    outer_local_refine_rmin_lambda: float = 0.0,
+    outer_local_refine_rmax_lambda: float = 0.0,
 ) -> dict[str, Any]:
     """Run KH term audit across multiple refinement levels."""
     _ensure_repo_root_on_sys_path()
@@ -1130,6 +1155,9 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             tilt_mass_mode_in=str(tilt_mass_mode_in),
             rim_local_refine_steps=int(rim_local_refine_steps),
             rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
+            outer_local_refine_steps=int(outer_local_refine_steps),
+            outer_local_refine_rmin_lambda=float(outer_local_refine_rmin_lambda),
+            outer_local_refine_rmax_lambda=float(outer_local_refine_rmax_lambda),
         )
         for level in levels
     ]
@@ -1144,6 +1172,9 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             "tilt_mass_mode_in": str(tilt_mass_mode_in).strip().lower(),
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
+            "outer_local_refine_steps": int(outer_local_refine_steps),
+            "outer_local_refine_rmin_lambda": float(outer_local_refine_rmin_lambda),
+            "outer_local_refine_rmax_lambda": float(outer_local_refine_rmax_lambda),
         },
         "runs": runs,
     }
@@ -1329,12 +1360,16 @@ def run_flat_disk_kh_strict_preset_characterization(
         "kh_strict_balanced",
         "kh_strict_energy_tight",
         "kh_strict_section_tight",
+        "kh_strict_outerfield_tight",
         "kh_strict_continuity",
         "kh_strict_robust",
     ),
     refine_level: int = 1,
     rim_local_refine_steps: int = 1,
     rim_local_refine_band_lambda: float = 4.0,
+    outer_local_refine_steps: int = 0,
+    outer_local_refine_rmin_lambda: float = 0.0,
+    outer_local_refine_rmax_lambda: float = 0.0,
 ) -> dict[str, Any]:
     """Characterize strict-KH optimize preset candidates on a fixed strict mesh."""
     from tools.reproduce_flat_disk_one_leaflet import (
@@ -1371,6 +1406,9 @@ def run_flat_disk_kh_strict_preset_characterization(
             tilt_mass_mode_in=str(tilt_mass_mode_in),
             rim_local_refine_steps=int(rim_local_refine_steps),
             rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
+            outer_local_refine_steps=int(outer_local_refine_steps),
+            outer_local_refine_rmin_lambda=float(outer_local_refine_rmin_lambda),
+            outer_local_refine_rmax_lambda=float(outer_local_refine_rmax_lambda),
         )
         runtime_seconds = float(perf_counter() - t0)
 
@@ -1429,6 +1467,9 @@ def run_flat_disk_kh_strict_preset_characterization(
             "refine_level": int(refine_level),
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
+            "outer_local_refine_steps": int(outer_local_refine_steps),
+            "outer_local_refine_rmin_lambda": float(outer_local_refine_rmin_lambda),
+            "outer_local_refine_rmax_lambda": float(outer_local_refine_rmax_lambda),
         },
         "rows": rows,
         "selected_best": selected,
@@ -1459,6 +1500,9 @@ def main() -> int:
     )
     ap.add_argument("--rim-local-refine-steps", type=int, default=0)
     ap.add_argument("--rim-local-refine-band-lambda", type=float, default=0.0)
+    ap.add_argument("--outer-local-refine-steps", type=int, default=0)
+    ap.add_argument("--outer-local-refine-rmin-lambda", type=float, default=0.0)
+    ap.add_argument("--outer-local-refine-rmax-lambda", type=float, default=0.0)
     ap.add_argument(
         "--strict-refinement-characterization",
         action="store_true",
@@ -1493,6 +1537,7 @@ def main() -> int:
                 "kh_strict_balanced",
                 "kh_strict_energy_tight",
                 "kh_strict_section_tight",
+                "kh_strict_outerfield_tight",
                 "kh_strict_continuity",
                 "kh_strict_robust",
             )
@@ -1511,6 +1556,9 @@ def main() -> int:
             refine_level=args.refine_level,
             rim_local_refine_steps=args.rim_local_refine_steps,
             rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
+            outer_local_refine_steps=args.outer_local_refine_steps,
+            outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
+            outer_local_refine_rmax_lambda=args.outer_local_refine_rmax_lambda,
         )
     elif args.strict_refinement_characterization:
         report = run_flat_disk_kh_strict_refinement_characterization(
@@ -1541,6 +1589,9 @@ def main() -> int:
             tilt_mass_mode_in=args.tilt_mass_mode_in,
             rim_local_refine_steps=args.rim_local_refine_steps,
             rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
+            outer_local_refine_steps=args.outer_local_refine_steps,
+            outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
+            outer_local_refine_rmax_lambda=args.outer_local_refine_rmax_lambda,
         )
     else:
         report = run_flat_disk_kh_term_audit(
@@ -1557,6 +1608,9 @@ def main() -> int:
             tilt_mass_mode_in=args.tilt_mass_mode_in,
             rim_local_refine_steps=args.rim_local_refine_steps,
             rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
+            outer_local_refine_steps=args.outer_local_refine_steps,
+            outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
+            outer_local_refine_rmax_lambda=args.outer_local_refine_rmax_lambda,
         )
 
     out = Path(args.output)

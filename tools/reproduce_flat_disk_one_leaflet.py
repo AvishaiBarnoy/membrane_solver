@@ -235,6 +235,19 @@ def _resolve_optimize_preset(
             ),
             "kh_strict_outerband_tight",
         )
+    if preset == "kh_strict_outerfield_tight":
+        return (
+            BenchmarkOptimizeConfig(
+                theta_initial=float(optimize_cfg.theta_initial),
+                optimize_steps=30,
+                optimize_every=1,
+                optimize_delta=6.0e-3,
+                optimize_inner_steps=14,
+                plateau_patience=12,
+                plateau_abs_tol=1.0e-12,
+            ),
+            "kh_strict_outerfield_tight",
+        )
     if preset == "kh_strict_partition_tight":
         return (
             BenchmarkOptimizeConfig(
@@ -266,6 +279,7 @@ def _resolve_optimize_preset(
         "'kh_strict_refine', 'kh_strict_fast', 'kh_strict_balanced', "
         "'kh_strict_continuity', 'kh_strict_energy_tight', "
         "'kh_strict_section_tight', 'kh_strict_outerband_tight', "
+        "'kh_strict_outerfield_tight', "
         "'kh_strict_partition_tight', "
         "or 'kh_strict_robust'."
     )
@@ -327,6 +341,57 @@ def _refine_mesh_locally_near_rim(
             raise AssertionError(
                 "Rim local refinement selected no facets. Increase "
                 "rim_local_refine_band_lambda."
+            )
+        out = refine_triangle_mesh(out)
+
+    for facet in out.facets.values():
+        facet.options.pop("no_refine", None)
+    return out
+
+
+def _refine_mesh_locally_in_outer_annulus(
+    mesh,
+    *,
+    local_steps: int,
+    r_min: float,
+    r_max: float,
+):
+    """Refine only facets in an outer annulus, selected by centroid radius."""
+    _ensure_repo_root_on_sys_path()
+    from runtime.refinement import refine_triangle_mesh
+
+    steps = int(local_steps)
+    if steps <= 0:
+        return mesh
+    if float(r_min) < 0.0:
+        raise ValueError("outer_local_refine_rmin must be >= 0.")
+    if float(r_max) <= float(r_min):
+        raise ValueError("outer_local_refine_rmax must be > outer_local_refine_rmin.")
+
+    out = mesh
+    for _ in range(steps):
+        out.build_connectivity_maps()
+        out.build_facet_vertex_loops()
+        positions = out.positions_view()
+        selected = 0
+        for facet in out.facets.values():
+            loop = out.facet_vertex_loops.get(int(facet.index))
+            if loop is None or len(loop) == 0:
+                continue
+            rows = np.asarray(
+                [out.vertex_index_to_row[int(vid)] for vid in loop], dtype=int
+            )
+            centroid = np.mean(positions[rows], axis=0)
+            r_cent = float(np.linalg.norm(centroid[:2]))
+            if float(r_min) <= r_cent <= float(r_max):
+                facet.options.pop("no_refine", None)
+                selected += 1
+            else:
+                facet.options["no_refine"] = True
+        if selected == 0:
+            raise AssertionError(
+                "Outer annulus local refinement selected no facets. Adjust "
+                "outer_local_refine_rmin_lambda/outer_local_refine_rmax_lambda."
             )
         out = refine_triangle_mesh(out)
 
@@ -809,6 +874,9 @@ def run_flat_disk_one_leaflet_benchmark(
     tilt_mass_mode_in: str = "auto",
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
+    outer_local_refine_steps: int = 0,
+    outer_local_refine_rmin_lambda: float = 0.0,
+    outer_local_refine_rmax_lambda: float = 0.0,
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
@@ -832,10 +900,16 @@ def run_flat_disk_one_leaflet_benchmark(
     raw_refine_level = int(refine_level)
     raw_rim_local_refine_steps = int(rim_local_refine_steps)
     raw_rim_local_refine_band_lambda = float(rim_local_refine_band_lambda)
+    raw_outer_local_refine_steps = int(outer_local_refine_steps)
+    raw_outer_local_refine_rmin_lambda = float(outer_local_refine_rmin_lambda)
+    raw_outer_local_refine_rmax_lambda = float(outer_local_refine_rmax_lambda)
     optimize_preset_raw = str(optimize_preset).lower()
     effective_refine_level = raw_refine_level
     effective_rim_local_refine_steps = raw_rim_local_refine_steps
     effective_rim_local_refine_band_lambda = raw_rim_local_refine_band_lambda
+    effective_outer_local_refine_steps = raw_outer_local_refine_steps
+    effective_outer_local_refine_rmin_lambda = raw_outer_local_refine_rmin_lambda
+    effective_outer_local_refine_rmax_lambda = raw_outer_local_refine_rmax_lambda
     if optimize_preset_raw in {
         "kh_strict_refine",
         "kh_strict_fast",
@@ -844,6 +918,7 @@ def run_flat_disk_one_leaflet_benchmark(
         "kh_strict_energy_tight",
         "kh_strict_section_tight",
         "kh_strict_outerband_tight",
+        "kh_strict_outerfield_tight",
         "kh_strict_partition_tight",
         "kh_strict_robust",
     }:
@@ -853,6 +928,7 @@ def run_flat_disk_one_leaflet_benchmark(
             in {
                 "kh_strict_section_tight",
                 "kh_strict_outerband_tight",
+                "kh_strict_outerfield_tight",
             }
             else 1
         )
@@ -883,10 +959,34 @@ def run_flat_disk_one_leaflet_benchmark(
                 effective_rim_local_refine_band_lambda = 4.0
             elif optimize_preset_raw == "kh_strict_outerband_tight":
                 effective_rim_local_refine_band_lambda = 3.0
+            elif optimize_preset_raw == "kh_strict_outerfield_tight":
+                effective_rim_local_refine_band_lambda = 3.0
             elif optimize_preset_raw == "kh_strict_partition_tight":
                 effective_rim_local_refine_band_lambda = 10.0
             else:
                 effective_rim_local_refine_band_lambda = 4.0
+        if int(raw_outer_local_refine_steps) > 0:
+            effective_outer_local_refine_steps = int(raw_outer_local_refine_steps)
+        elif optimize_preset_raw == "kh_strict_outerfield_tight":
+            effective_outer_local_refine_steps = 1
+        else:
+            effective_outer_local_refine_steps = 0
+        if float(raw_outer_local_refine_rmin_lambda) > 0.0:
+            effective_outer_local_refine_rmin_lambda = float(
+                raw_outer_local_refine_rmin_lambda
+            )
+        elif optimize_preset_raw == "kh_strict_outerfield_tight":
+            effective_outer_local_refine_rmin_lambda = 1.0
+        else:
+            effective_outer_local_refine_rmin_lambda = 0.0
+        if float(raw_outer_local_refine_rmax_lambda) > 0.0:
+            effective_outer_local_refine_rmax_lambda = float(
+                raw_outer_local_refine_rmax_lambda
+            )
+        elif optimize_preset_raw == "kh_strict_outerfield_tight":
+            effective_outer_local_refine_rmax_lambda = 8.0
+        else:
+            effective_outer_local_refine_rmax_lambda = 0.0
 
     if int(effective_refine_level) < 0:
         raise ValueError("refine_level must be >= 0.")
@@ -894,6 +994,20 @@ def run_flat_disk_one_leaflet_benchmark(
         raise ValueError("rim_local_refine_steps must be >= 0.")
     if float(effective_rim_local_refine_band_lambda) < 0.0:
         raise ValueError("rim_local_refine_band_lambda must be >= 0.")
+    if int(effective_outer_local_refine_steps) < 0:
+        raise ValueError("outer_local_refine_steps must be >= 0.")
+    if float(effective_outer_local_refine_rmin_lambda) < 0.0:
+        raise ValueError("outer_local_refine_rmin_lambda must be >= 0.")
+    if float(effective_outer_local_refine_rmax_lambda) < 0.0:
+        raise ValueError("outer_local_refine_rmax_lambda must be >= 0.")
+    if int(effective_outer_local_refine_steps) > 0 and (
+        float(effective_outer_local_refine_rmax_lambda)
+        <= float(effective_outer_local_refine_rmin_lambda)
+    ):
+        raise ValueError(
+            "outer_local_refine_rmax_lambda must be > "
+            "outer_local_refine_rmin_lambda when outer_local_refine_steps > 0."
+        )
     if float(splay_modulus_scale_in) <= 0.0:
         raise ValueError("splay_modulus_scale_in must be > 0.")
     mode = str(parameterization).lower()
@@ -968,6 +1082,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_energy_tight",
             "kh_strict_section_tight",
             "kh_strict_outerband_tight",
+            "kh_strict_outerfield_tight",
             "kh_strict_partition_tight",
         }:
             parity_polish_enabled = True
@@ -975,6 +1090,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_energy_tight",
             "kh_strict_section_tight",
             "kh_strict_outerband_tight",
+            "kh_strict_outerfield_tight",
         }:
             energy_polish_enabled = True
         if effective_optimize_preset == "kh_strict_robust":
@@ -1004,6 +1120,17 @@ def run_flat_disk_one_leaflet_benchmark(
             local_steps=int(effective_rim_local_refine_steps),
             rim_radius=float(theory.radius),
             band_half_width=band_half_width,
+        )
+    if int(effective_outer_local_refine_steps) > 0:
+        mesh = _refine_mesh_locally_in_outer_annulus(
+            mesh,
+            local_steps=int(effective_outer_local_refine_steps),
+            r_min=float(theory.radius)
+            + float(effective_outer_local_refine_rmin_lambda)
+            * float(theory.lambda_value),
+            r_max=float(theory.radius)
+            + float(effective_outer_local_refine_rmax_lambda)
+            * float(theory.lambda_value),
         )
     mesh_load_refine_seconds = float(perf_counter() - t_mesh_prep_start)
 
@@ -1361,6 +1488,13 @@ def run_flat_disk_one_leaflet_benchmark(
             "rim_local_refine_band_lambda": float(
                 effective_rim_local_refine_band_lambda
             ),
+            "outer_local_refine_steps": int(effective_outer_local_refine_steps),
+            "outer_local_refine_rmin_lambda": float(
+                effective_outer_local_refine_rmin_lambda
+            ),
+            "outer_local_refine_rmax_lambda": float(
+                effective_outer_local_refine_rmax_lambda
+            ),
             "theory_model": theory_model,
             "theory_source": theory_source,
             "performance": {
@@ -1439,6 +1573,11 @@ def run_flat_disk_lane_comparison(
     kh_drive_physical: float = (2.0 / 0.7),
     splay_modulus_scale_in: float = 1.0,
     tilt_mass_mode_in: str = "auto",
+    rim_local_refine_steps: int = 0,
+    rim_local_refine_band_lambda: float = 0.0,
+    outer_local_refine_steps: int = 0,
+    outer_local_refine_rmin_lambda: float = 0.0,
+    outer_local_refine_rmax_lambda: float = 0.0,
 ) -> dict[str, Any]:
     """Run both legacy and kh_physical benchmark lanes and summarize differences."""
     legacy = run_flat_disk_one_leaflet_benchmark(
@@ -1458,6 +1597,11 @@ def run_flat_disk_lane_comparison(
         parameterization="legacy",
         splay_modulus_scale_in=splay_modulus_scale_in,
         tilt_mass_mode_in=tilt_mass_mode_in,
+        rim_local_refine_steps=int(rim_local_refine_steps),
+        rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
+        outer_local_refine_steps=int(outer_local_refine_steps),
+        outer_local_refine_rmin_lambda=float(outer_local_refine_rmin_lambda),
+        outer_local_refine_rmax_lambda=float(outer_local_refine_rmax_lambda),
     )
 
     kh = run_flat_disk_one_leaflet_benchmark(
@@ -1482,6 +1626,11 @@ def run_flat_disk_lane_comparison(
         drive_physical=kh_drive_physical,
         splay_modulus_scale_in=splay_modulus_scale_in,
         tilt_mass_mode_in=tilt_mass_mode_in,
+        rim_local_refine_steps=int(rim_local_refine_steps),
+        rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
+        outer_local_refine_steps=int(outer_local_refine_steps),
+        outer_local_refine_rmin_lambda=float(outer_local_refine_rmin_lambda),
+        outer_local_refine_rmax_lambda=float(outer_local_refine_rmax_lambda),
     )
 
     legacy_theta = float(legacy["mesh"]["theta_star"])
@@ -1579,6 +1728,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             "kh_strict_energy_tight",
             "kh_strict_section_tight",
             "kh_strict_outerband_tight",
+            "kh_strict_outerfield_tight",
             "kh_strict_partition_tight",
             "kh_strict_robust",
         ),
@@ -1602,6 +1752,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     )
     ap.add_argument("--rim-local-refine-steps", type=int, default=0)
     ap.add_argument("--rim-local-refine-band-lambda", type=float, default=0.0)
+    ap.add_argument("--outer-local-refine-steps", type=int, default=0)
+    ap.add_argument("--outer-local-refine-rmin-lambda", type=float, default=0.0)
+    ap.add_argument("--outer-local-refine-rmax-lambda", type=float, default=0.0)
     ap.add_argument("--compare-lanes", action="store_true")
     ap.add_argument(
         "--compare-kh-smoothness-model",
@@ -1658,6 +1811,9 @@ def main(argv: Iterable[str] | None = None) -> int:
             tilt_mass_mode_in=args.tilt_mass_mode_in,
             rim_local_refine_steps=args.rim_local_refine_steps,
             rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
+            outer_local_refine_steps=args.outer_local_refine_steps,
+            outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
+            outer_local_refine_rmax_lambda=args.outer_local_refine_rmax_lambda,
         )
     else:
         report = run_flat_disk_one_leaflet_benchmark(

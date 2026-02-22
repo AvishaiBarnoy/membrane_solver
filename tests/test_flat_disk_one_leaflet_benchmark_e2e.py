@@ -59,13 +59,19 @@ def _kh_opt_report(
         "kh_strict_energy_tight",
         "kh_strict_section_tight",
         "kh_strict_outerband_tight",
+        "kh_strict_outerfield_tight",
         "kh_strict_partition_tight",
         "kh_strict_robust",
     }
     if preset in strict_presets:
         effective_refine = (
             2
-            if preset in {"kh_strict_section_tight", "kh_strict_outerband_tight"}
+            if preset
+            in {
+                "kh_strict_section_tight",
+                "kh_strict_outerband_tight",
+                "kh_strict_outerfield_tight",
+            }
             else 1
         )
     else:
@@ -555,6 +561,26 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
 
 
 @pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_controls() -> None:
+    report = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_tight",
+    )
+
+    assert report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_tight"
+    assert int(report["meta"]["refine_level"]) == 2
+    assert int(report["meta"]["rim_local_refine_steps"]) == 1
+    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
+    assert int(report["meta"]["outer_local_refine_steps"]) == 1
+    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
+    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
+    assert report["optimize"]["parity_polish"] is not None
+    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
+    assert float(report["parity"]["theta_factor"]) <= 1.2
+    assert float(report["parity"]["energy_factor"]) <= 1.2
+
+
+@pytest.mark.benchmark
 def test_flat_disk_optimize_preset_kh_strict_outerband_tight_composite_score_non_worsening() -> (
     None
 ):
@@ -866,6 +892,26 @@ def test_flat_disk_invalid_parameterization_raises() -> None:
             refine_level=1,
             outer_mode="disabled",
             parameterization="invalid_mode",
+        )
+
+
+@pytest.mark.regression
+def test_flat_disk_invalid_outer_local_refine_bounds_raises() -> None:
+    with pytest.raises(
+        ValueError,
+        match=(
+            "outer_local_refine_rmax_lambda must be > outer_local_refine_rmin_lambda"
+        ),
+    ):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            theta_mode="optimize",
+            outer_local_refine_steps=1,
+            outer_local_refine_rmin_lambda=2.0,
+            outer_local_refine_rmax_lambda=2.0,
         )
 
 

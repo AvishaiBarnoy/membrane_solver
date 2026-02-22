@@ -25,6 +25,9 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
     )
 
     assert report["meta"]["parameterization"] == "kh_physical"
+    assert int(report["meta"]["outer_local_refine_steps"]) >= 0
+    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) >= 0.0
+    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) >= 0.0
     rows = report["rows"]
     assert len(rows) == 3
 
@@ -139,6 +142,7 @@ def test_flat_disk_kh_term_audit_refine_sweep_shape() -> None:
     for idx, run in enumerate(runs):
         assert int(run["meta"]["refine_level"]) == (idx + 1)
         assert run["meta"]["theory_model"] == "kh_physical_strict_kh"
+        assert int(run["meta"]["outer_local_refine_steps"]) >= 0
         assert len(run["rows"]) == 2
 
 
