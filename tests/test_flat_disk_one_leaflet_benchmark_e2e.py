@@ -58,11 +58,16 @@ def _kh_opt_report(
         "kh_strict_continuity",
         "kh_strict_energy_tight",
         "kh_strict_section_tight",
+        "kh_strict_outerband_tight",
         "kh_strict_partition_tight",
         "kh_strict_robust",
     }
     if preset in strict_presets:
-        effective_refine = 2 if preset == "kh_strict_section_tight" else 1
+        effective_refine = (
+            2
+            if preset in {"kh_strict_section_tight", "kh_strict_outerband_tight"}
+            else 1
+        )
     else:
         effective_refine = int(refine_level)
     return run_flat_disk_one_leaflet_benchmark(
@@ -435,6 +440,94 @@ def test_flat_disk_optimize_preset_kh_strict_section_tight_controls() -> None:
     assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
     assert float(report["parity"]["theta_factor"]) <= 1.25
     assert float(report["parity"]["energy_factor"]) <= 1.25
+
+
+@pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerband_tight_improves_outer_sections() -> (
+    None
+):
+    outerband_tight = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,  # should be overridden by strict preset
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="scan",
+        theta_min=0.13,
+        theta_max=0.14,
+        theta_count=3,
+        parameterization="kh_physical",
+        optimize_preset="kh_strict_outerband_tight",
+        tilt_mass_mode_in="consistent",
+    )
+
+    assert outerband_tight["meta"]["optimize_preset"] == "kh_strict_outerband_tight"
+    assert outerband_tight["meta"]["optimize_preset_effective"] == "none"
+    assert int(outerband_tight["meta"]["refine_level"]) == 2
+    assert int(outerband_tight["meta"]["rim_local_refine_steps"]) == 2
+    assert float(
+        outerband_tight["meta"]["rim_local_refine_band_lambda"]
+    ) == pytest.approx(8.0)
+
+    def _audit_row(*, refine_level: int, rim_steps: int, rim_band: float) -> dict:
+        audit = run_flat_disk_kh_term_audit(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(refine_level),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_nm=7.0,
+            length_scale_nm=15.0,
+            drive_physical=(2.0 / 0.7),
+            theta_values=(0.138,),
+            tilt_mass_mode_in="consistent",
+            rim_local_refine_steps=int(rim_steps),
+            rim_local_refine_band_lambda=float(rim_band),
+        )
+        return audit["rows"][0]
+
+    section_row = _audit_row(refine_level=2, rim_steps=1, rim_band=4.0)
+    outer_row = _audit_row(refine_level=2, rim_steps=2, rim_band=8.0)
+    assert abs(
+        float(outer_row["internal_outer_near_ratio_mesh_over_theory"]) - 1.0
+    ) <= abs(float(section_row["internal_outer_near_ratio_mesh_over_theory"]) - 1.0)
+    assert abs(
+        float(outer_row["internal_outer_far_ratio_mesh_over_theory"]) - 1.0
+    ) <= abs(float(section_row["internal_outer_far_ratio_mesh_over_theory"]) - 1.0)
+    score_outer_section = float(
+        np.hypot(
+            np.log(
+                max(
+                    float(section_row["internal_outer_near_ratio_mesh_over_theory"]),
+                    1e-18,
+                )
+            ),
+            np.log(
+                max(
+                    float(section_row["internal_outer_far_ratio_mesh_over_theory"]),
+                    1e-18,
+                )
+            ),
+        )
+    )
+    score_outer_outerband = float(
+        np.hypot(
+            np.log(
+                max(
+                    float(outer_row["internal_outer_near_ratio_mesh_over_theory"]),
+                    1e-18,
+                )
+            ),
+            np.log(
+                max(
+                    float(outer_row["internal_outer_far_ratio_mesh_over_theory"]), 1e-18
+                )
+            ),
+        )
+    )
+    assert score_outer_outerband <= score_outer_section
+    assert float(outerband_tight["parity"]["theta_factor"]) <= 2.0
+    assert float(outerband_tight["parity"]["energy_factor"]) <= 2.0
 
 
 @pytest.mark.benchmark

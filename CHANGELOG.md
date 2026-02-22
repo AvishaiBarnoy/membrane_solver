@@ -32,6 +32,7 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - Added opt-in `kh_strict_energy_tight` preset (rim steps=2, rim band=8.0, parity polish enabled) for best-known strict energy parity without changing KH/TeX ratios.
   - `kh_strict_energy_tight` now applies energy-focused local theta polish (objective: minimize `energy_factor`) and reports polish objective/candidate factors in output metadata.
 - Added opt-in `kh_strict_section_tight` preset (strict refine=2, rim-local step=1, band=4λ, energy-focused polish) for section-aware strict KH parity tightening workflows.
+- Added opt-in `kh_strict_outerband_tight` preset (strict refine=2, rim-local step=2, band=8λ, energy-focused polish) and benchmark coverage that enforces non-worsening outer-band section ratios vs `kh_strict_section_tight`.
 - Added strict KH acceptance baseline fixture for `kh_strict_section_tight` (`tests/fixtures/flat_disk_one_leaflet_kh_physical_section_tight_disabled_baseline.yaml`) and benchmark coverage to enforce non-worsening section parity vs `kh_strict_energy_tight`.
   - Added opt-in `kh_strict_partition_tight` preset (rim steps=2, rim band=10.0, parity polish) for partition-focused strict-KH diagnostics.
   - Region-parity diagnostics now report baseline-vs-selected partition score deltas (`baseline_optimize_preset`, `baseline_best`, `selected_vs_baseline_partition_score_delta`).
