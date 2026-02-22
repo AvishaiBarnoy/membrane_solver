@@ -58,6 +58,7 @@ def _kh_opt_report(
             "kh_strict_fast",
             "kh_strict_balanced",
             "kh_strict_continuity",
+            "kh_strict_energy_tight",
             "kh_strict_robust",
         }
         else int(refine_level)
@@ -300,6 +301,28 @@ def test_flat_disk_optimize_preset_kh_strict_fast_is_opt_in_and_mesh_strict() ->
 
 
 @pytest.mark.regression
+def test_flat_disk_optimize_preset_kh_strict_fast_respects_explicit_rim_overrides() -> (
+    None
+):
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=2,  # still forced to strict level
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_strict_fast",
+        rim_local_refine_steps=3,
+        rim_local_refine_band_lambda=2.5,
+    )
+
+    assert report["meta"]["optimize_preset_effective"] == "kh_strict_fast"
+    assert int(report["meta"]["refine_level"]) == 1
+    assert int(report["meta"]["rim_local_refine_steps"]) == 3
+    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(2.5)
+
+
+@pytest.mark.regression
 def test_flat_disk_optimize_preset_kh_strict_continuity_improves_rim_metrics() -> None:
     fast = _kh_opt_report(
         refine_level=1,
@@ -360,6 +383,22 @@ def test_flat_disk_optimize_preset_kh_strict_balanced_tradeoff_vs_fast() -> None
     assert score_balanced <= score_fast
     assert float(balanced["parity"]["theta_factor"]) <= 1.2
     assert float(balanced["parity"]["energy_factor"]) <= 1.2
+
+
+@pytest.mark.regression
+def test_flat_disk_optimize_preset_kh_strict_energy_tight_controls() -> None:
+    report = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_energy_tight",
+    )
+
+    assert report["meta"]["optimize_preset_effective"] == "kh_strict_energy_tight"
+    assert int(report["meta"]["refine_level"]) == 1
+    assert int(report["meta"]["rim_local_refine_steps"]) == 2
+    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(8.0)
+    assert report["optimize"]["parity_polish"] is not None
+    assert float(report["parity"]["theta_factor"]) <= 1.2
+    assert float(report["parity"]["energy_factor"]) <= 1.2
 
 
 @pytest.mark.regression
