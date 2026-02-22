@@ -139,6 +139,28 @@ def test_flat_disk_kh_term_audit_local_rim_refine_changes_resolution() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_kh_term_audit_internal_region_ratios_near_unity_under_strict_mesh() -> (
+    None
+):
+    report = run_flat_disk_kh_term_audit(
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.135,),
+        tilt_mass_mode_in="consistent",
+        rim_local_refine_steps=2,
+        rim_local_refine_band_lambda=8.0,
+    )
+    row = report["rows"][0]
+    disk_ratio = float(row["internal_disk_ratio_mesh_over_theory"])
+    outer_ratio = float(row["internal_outer_ratio_mesh_over_theory"])
+    assert disk_ratio <= 1.30
+    assert disk_ratio >= 0.80
+    assert outer_ratio <= 1.30
+    assert outer_ratio >= 0.80
+
+
+@pytest.mark.regression
 def test_flat_disk_kh_strict_refinement_characterization_emits_best(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
