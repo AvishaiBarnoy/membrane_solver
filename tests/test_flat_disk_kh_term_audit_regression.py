@@ -63,10 +63,17 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
         assert np.isfinite(float(row["theory_smooth_rim_band"]))
         assert np.isfinite(float(row["theory_smooth_outer_near"]))
         assert np.isfinite(float(row["theory_smooth_outer_far"]))
+        assert np.isfinite(float(row["theory_tilt_outer_near_finite"]))
+        assert np.isfinite(float(row["theory_tilt_outer_far_finite"]))
+        assert np.isfinite(float(row["theory_smooth_outer_near_finite"]))
+        assert np.isfinite(float(row["theory_smooth_outer_far_finite"]))
         assert np.isfinite(float(row["theory_internal_disk_core"]))
         assert np.isfinite(float(row["theory_internal_rim_band"]))
         assert np.isfinite(float(row["theory_internal_outer_near"]))
         assert np.isfinite(float(row["theory_internal_outer_far"]))
+        assert np.isfinite(float(row["theory_internal_outer_near_finite"]))
+        assert np.isfinite(float(row["theory_internal_outer_far_finite"]))
+        assert np.isfinite(float(row["theory_outer_r_max"]))
         assert np.isfinite(float(row["theory_internal_total_from_bands"]))
         assert np.isfinite(float(row["theory_internal_bands_minus_closed_form"]))
         if float(row["section_score_internal_split_count"]) > 0.0:
@@ -75,6 +82,13 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
         if float(row["section_score_internal_bands_count"]) > 0.0:
             assert np.isfinite(float(row["section_score_internal_bands_l2_log"]))
             assert np.isfinite(float(row["section_score_internal_bands_max_abs_log"]))
+        if float(row["section_score_internal_bands_finite_outer_count"]) > 0.0:
+            assert np.isfinite(
+                float(row["section_score_internal_bands_finite_outer_l2_log"])
+            )
+            assert np.isfinite(
+                float(row["section_score_internal_bands_finite_outer_max_abs_log"])
+            )
         if float(row["section_score_tilt_bands_count"]) > 0.0:
             assert np.isfinite(float(row["section_score_tilt_bands_l2_log"]))
             assert np.isfinite(float(row["section_score_tilt_bands_max_abs_log"]))
@@ -203,6 +217,39 @@ def test_flat_disk_kh_term_audit_section_scores_deterministic_under_strict_mesh(
     )
     assert float(row["section_score_all_terms_l2_log"]) == pytest.approx(
         0.6269074314, rel=1e-6, abs=1e-10
+    )
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_finite_outer_reference_matches_infinite_at_rmax12() -> (
+    None
+):
+    report = run_flat_disk_kh_term_audit(
+        refine_level=2,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.138,),
+        tilt_mass_mode_in="consistent",
+        rim_local_refine_steps=1,
+        rim_local_refine_band_lambda=4.0,
+    )
+    row = report["rows"][0]
+    assert float(row["theory_outer_r_max"]) == pytest.approx(12.0, rel=0.0, abs=1e-10)
+    assert float(row["theory_internal_outer_near_finite"]) == pytest.approx(
+        float(row["theory_internal_outer_near"]), rel=0.0, abs=1e-15
+    )
+    assert float(row["theory_internal_outer_far_finite"]) == pytest.approx(
+        float(row["theory_internal_outer_far"]), rel=0.0, abs=1e-15
+    )
+    assert float(
+        row["internal_outer_near_ratio_mesh_over_theory_finite"]
+    ) == pytest.approx(
+        float(row["internal_outer_near_ratio_mesh_over_theory"]), rel=0.0, abs=1e-12
+    )
+    assert float(
+        row["internal_outer_far_ratio_mesh_over_theory_finite"]
+    ) == pytest.approx(
+        float(row["internal_outer_far_ratio_mesh_over_theory"]), rel=0.0, abs=1e-11
     )
 
 
