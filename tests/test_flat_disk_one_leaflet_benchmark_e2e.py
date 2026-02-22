@@ -11,6 +11,7 @@ import yaml
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data
+from tools.diagnostics.flat_disk_kh_term_audit import run_flat_disk_kh_term_audit
 from tools.reproduce_flat_disk_one_leaflet import (
     DEFAULT_FIXTURE,
     BenchmarkOptimizeConfig,
@@ -434,6 +435,52 @@ def test_flat_disk_optimize_preset_kh_strict_section_tight_controls() -> None:
     assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
     assert float(report["parity"]["theta_factor"]) <= 1.25
     assert float(report["parity"]["energy_factor"]) <= 1.25
+
+
+@pytest.mark.benchmark
+def test_flat_disk_kh_strict_section_tight_non_worsening_vs_energy_tight() -> None:
+    energy_tight = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_energy_tight",
+    )
+    section_tight = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_section_tight",
+    )
+
+    assert float(section_tight["parity"]["energy_factor"]) <= float(
+        energy_tight["parity"]["energy_factor"]
+    )
+
+    def _section_scores(report: dict) -> tuple[float, float]:
+        theta = float(report["mesh"]["theta_star"])
+        audit = run_flat_disk_kh_term_audit(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(report["meta"]["refine_level"]),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_nm=7.0,
+            length_scale_nm=15.0,
+            drive_physical=(2.0 / 0.7),
+            theta_values=(theta,),
+            tilt_mass_mode_in="consistent",
+            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
+            rim_local_refine_band_lambda=float(
+                report["meta"]["rim_local_refine_band_lambda"]
+            ),
+        )
+        row = audit["rows"][0]
+        return (
+            float(row["section_score_internal_split_l2_log"]),
+            float(row["section_score_all_terms_l2_log"]),
+        )
+
+    energy_split, energy_all = _section_scores(energy_tight)
+    section_split, section_all = _section_scores(section_tight)
+    assert section_split <= energy_split
+    assert section_all <= energy_all
 
 
 @pytest.mark.benchmark
