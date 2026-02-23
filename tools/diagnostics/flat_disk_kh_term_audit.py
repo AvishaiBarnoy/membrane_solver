@@ -873,6 +873,9 @@ def _run_single_level(
     outer_local_refine_steps: int,
     outer_local_refine_rmin_lambda: float,
     outer_local_refine_rmax_lambda: float,
+    local_edge_flip_steps: int,
+    local_edge_flip_rmin_lambda: float,
+    local_edge_flip_rmax_lambda: float,
     radial_projection_diagnostic: bool,
 ) -> dict[str, Any]:
     from runtime.refinement import refine_triangle_mesh
@@ -883,6 +886,7 @@ def _run_single_level(
     from tools.reproduce_flat_disk_one_leaflet import (
         _build_minimizer,
         _configure_benchmark_mesh,
+        _flip_edges_locally_in_annulus,
         _load_mesh_from_fixture,
         _refine_mesh_locally_in_outer_annulus,
         _refine_mesh_locally_near_rim,
@@ -918,6 +922,21 @@ def _run_single_level(
             + float(outer_local_refine_rmin_lambda) * float(theory.lambda_value),
             r_max=float(theory.radius)
             + float(outer_local_refine_rmax_lambda) * float(theory.lambda_value),
+        )
+    if int(local_edge_flip_steps) > 0:
+        mesh = _flip_edges_locally_in_annulus(
+            mesh,
+            local_steps=int(local_edge_flip_steps),
+            r_min=max(
+                0.0,
+                float(theory.radius)
+                + float(local_edge_flip_rmin_lambda) * float(theory.lambda_value),
+            ),
+            r_max=max(
+                0.0,
+                float(theory.radius)
+                + float(local_edge_flip_rmax_lambda) * float(theory.lambda_value),
+            ),
         )
     positions = mesh.positions_view()
     mesh_r_max = float(np.max(np.linalg.norm(positions[:, :2], axis=1)))
@@ -1380,6 +1399,9 @@ def run_flat_disk_kh_term_audit(
     outer_local_refine_steps: int = 0,
     outer_local_refine_rmin_lambda: float = 0.0,
     outer_local_refine_rmax_lambda: float = 0.0,
+    local_edge_flip_steps: int = 0,
+    local_edge_flip_rmin_lambda: float = -1.0,
+    local_edge_flip_rmax_lambda: float = 4.0,
     radial_projection_diagnostic: bool = False,
 ) -> dict[str, Any]:
     """Evaluate per-theta mesh/theory split terms in KH physical lane."""
@@ -1408,6 +1430,9 @@ def run_flat_disk_kh_term_audit(
         outer_local_refine_steps=int(outer_local_refine_steps),
         outer_local_refine_rmin_lambda=float(outer_local_refine_rmin_lambda),
         outer_local_refine_rmax_lambda=float(outer_local_refine_rmax_lambda),
+        local_edge_flip_steps=int(local_edge_flip_steps),
+        local_edge_flip_rmin_lambda=float(local_edge_flip_rmin_lambda),
+        local_edge_flip_rmax_lambda=float(local_edge_flip_rmax_lambda),
         radial_projection_diagnostic=bool(radial_projection_diagnostic),
     )
 
@@ -1430,6 +1455,9 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     outer_local_refine_steps: int = 0,
     outer_local_refine_rmin_lambda: float = 0.0,
     outer_local_refine_rmax_lambda: float = 0.0,
+    local_edge_flip_steps: int = 0,
+    local_edge_flip_rmin_lambda: float = -1.0,
+    local_edge_flip_rmax_lambda: float = 4.0,
     radial_projection_diagnostic: bool = False,
 ) -> dict[str, Any]:
     """Run KH term audit across multiple refinement levels."""
@@ -1463,6 +1491,9 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             outer_local_refine_steps=int(outer_local_refine_steps),
             outer_local_refine_rmin_lambda=float(outer_local_refine_rmin_lambda),
             outer_local_refine_rmax_lambda=float(outer_local_refine_rmax_lambda),
+            local_edge_flip_steps=int(local_edge_flip_steps),
+            local_edge_flip_rmin_lambda=float(local_edge_flip_rmin_lambda),
+            local_edge_flip_rmax_lambda=float(local_edge_flip_rmax_lambda),
             radial_projection_diagnostic=bool(radial_projection_diagnostic),
         )
         for level in levels

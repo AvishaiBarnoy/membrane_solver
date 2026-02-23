@@ -60,6 +60,8 @@ def _kh_opt_report(
         "kh_strict_section_tight",
         "kh_strict_outerband_tight",
         "kh_strict_outerfield_tight",
+        "kh_strict_outerfield_quality",
+        "kh_strict_outerfield_tailmatch",
         "kh_strict_outertail_balanced",
         "kh_strict_partition_tight",
         "kh_strict_robust",
@@ -72,6 +74,8 @@ def _kh_opt_report(
                 "kh_strict_section_tight",
                 "kh_strict_outerband_tight",
                 "kh_strict_outerfield_tight",
+                "kh_strict_outerfield_quality",
+                "kh_strict_outerfield_tailmatch",
                 "kh_strict_outertail_balanced",
             }
             else 1
@@ -583,6 +587,54 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_controls() -> None
 
 
 @pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerfield_quality_controls() -> None:
+    report = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_quality",
+    )
+
+    assert report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_quality"
+    assert int(report["meta"]["refine_level"]) == 2
+    assert int(report["meta"]["rim_local_refine_steps"]) == 1
+    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
+    assert int(report["meta"]["outer_local_refine_steps"]) == 1
+    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
+    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
+    assert int(report["meta"]["local_edge_flip_steps"]) == 1
+    assert float(report["meta"]["local_edge_flip_rmin_lambda"]) == pytest.approx(2.0)
+    assert float(report["meta"]["local_edge_flip_rmax_lambda"]) == pytest.approx(6.0)
+    assert report["optimize"]["parity_polish"] is not None
+    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
+    assert float(report["parity"]["theta_factor"]) <= 1.2
+    assert float(report["parity"]["energy_factor"]) <= 1.2
+
+
+@pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerfield_tailmatch_controls() -> None:
+    report = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_tailmatch",
+    )
+
+    assert (
+        report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_tailmatch"
+    )
+    assert int(report["meta"]["refine_level"]) == 2
+    assert int(report["meta"]["rim_local_refine_steps"]) == 1
+    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
+    assert int(report["meta"]["outer_local_refine_steps"]) == 1
+    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
+    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
+    assert int(report["meta"]["local_edge_flip_steps"]) == 1
+    assert float(report["meta"]["local_edge_flip_rmin_lambda"]) == pytest.approx(2.0)
+    assert float(report["meta"]["local_edge_flip_rmax_lambda"]) == pytest.approx(8.0)
+    assert report["optimize"]["parity_polish"] is not None
+    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
+    assert float(report["parity"]["theta_factor"]) <= 1.2
+    assert float(report["parity"]["energy_factor"]) <= 1.2
+
+
+@pytest.mark.benchmark
 def test_flat_disk_optimize_preset_kh_strict_outertail_balanced_controls() -> None:
     report = _kh_opt_report(
         refine_level=1,
@@ -650,6 +702,125 @@ def test_flat_disk_optimize_preset_kh_strict_outertail_balanced_non_worsening_ou
     score_outerfield = _audit_outer_tail_score(outerfield, theta_value=0.138)
     score_outertail = _audit_outer_tail_score(outertail, theta_value=0.138)
     assert score_outertail <= (score_outerfield + 2.0e-4)
+
+
+@pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerfield_quality_non_worsening_outer_tail_score() -> (
+    None
+):
+    outerfield = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_tight",
+    )
+    quality = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_quality",
+    )
+
+    def _audit_outer_tail_score(report: dict, *, theta_value: float) -> float:
+        audit = run_flat_disk_kh_term_audit(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(report["meta"]["refine_level"]),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_nm=7.0,
+            length_scale_nm=15.0,
+            drive_physical=(2.0 / 0.7),
+            theta_values=(float(theta_value),),
+            tilt_mass_mode_in="consistent",
+            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
+            rim_local_refine_band_lambda=float(
+                report["meta"]["rim_local_refine_band_lambda"]
+            ),
+            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
+            outer_local_refine_rmin_lambda=float(
+                report["meta"]["outer_local_refine_rmin_lambda"]
+            ),
+            outer_local_refine_rmax_lambda=float(
+                report["meta"]["outer_local_refine_rmax_lambda"]
+            ),
+            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
+            local_edge_flip_rmin_lambda=float(
+                report["meta"]["local_edge_flip_rmin_lambda"]
+            ),
+            local_edge_flip_rmax_lambda=float(
+                report["meta"]["local_edge_flip_rmax_lambda"]
+            ),
+        )
+        row = audit["rows"][0]
+        near = float(row["internal_outer_near_ratio_mesh_over_theory"])
+        far = float(row["internal_outer_far_ratio_mesh_over_theory"])
+        return float(np.hypot(np.log(max(near, 1e-18)), np.log(max(far, 1e-18))))
+
+    score_outerfield = _audit_outer_tail_score(outerfield, theta_value=0.138)
+    score_quality = _audit_outer_tail_score(quality, theta_value=0.138)
+    assert score_quality <= (score_outerfield + 2.0e-4)
+
+
+@pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerfield_tailmatch_non_worsening_outer_tail_score() -> (
+    None
+):
+    quality = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_quality",
+    )
+    tailmatch = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_tailmatch",
+    )
+
+    def _audit_row(report: dict, *, theta_value: float) -> dict:
+        audit = run_flat_disk_kh_term_audit(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(report["meta"]["refine_level"]),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_nm=7.0,
+            length_scale_nm=15.0,
+            drive_physical=(2.0 / 0.7),
+            theta_values=(float(theta_value),),
+            tilt_mass_mode_in="consistent",
+            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
+            rim_local_refine_band_lambda=float(
+                report["meta"]["rim_local_refine_band_lambda"]
+            ),
+            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
+            outer_local_refine_rmin_lambda=float(
+                report["meta"]["outer_local_refine_rmin_lambda"]
+            ),
+            outer_local_refine_rmax_lambda=float(
+                report["meta"]["outer_local_refine_rmax_lambda"]
+            ),
+            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
+            local_edge_flip_rmin_lambda=float(
+                report["meta"]["local_edge_flip_rmin_lambda"]
+            ),
+            local_edge_flip_rmax_lambda=float(
+                report["meta"]["local_edge_flip_rmax_lambda"]
+            ),
+        )
+        return audit["rows"][0]
+
+    quality_row = _audit_row(quality, theta_value=0.138)
+    tailmatch_row = _audit_row(tailmatch, theta_value=0.138)
+    q_near = float(quality_row["internal_outer_near_ratio_mesh_over_theory"])
+    q_far = float(quality_row["internal_outer_far_ratio_mesh_over_theory"])
+    t_near = float(tailmatch_row["internal_outer_near_ratio_mesh_over_theory"])
+    t_far = float(tailmatch_row["internal_outer_far_ratio_mesh_over_theory"])
+    score_quality = float(
+        np.hypot(np.log(max(q_near, 1e-18)), np.log(max(q_far, 1e-18)))
+    )
+    score_tailmatch = float(
+        np.hypot(np.log(max(t_near, 1e-18)), np.log(max(t_far, 1e-18)))
+    )
+    assert score_tailmatch <= (score_quality + 2.0e-4)
+    assert abs(t_far - 1.0) <= abs(q_far - 1.0)
+    assert abs(t_near - 1.0) <= (abs(q_near - 1.0) + 2.0e-4)
 
 
 @pytest.mark.benchmark

@@ -195,6 +195,52 @@ def test_minimize_resets_stepper_on_failed_step():
     assert stepper.reset_calls == 1
 
 
+def test_minimize_auto_mesh_quality_repair_runs_when_enabled(monkeypatch):
+    mesh = build_min_mesh()
+    gp = GlobalParameters(
+        {
+            "mesh_quality_auto_repair_enabled": True,
+            "mesh_quality_auto_repair_every": 1,
+            "mesh_quality_aspect_threshold": 1.0,
+            "mesh_quality_max_repair_passes": 1,
+        }
+    )
+    energy = DummyEnergyModule(energy=2.0, grad_value=1.0)
+    cm = DummyConstraintManager()
+    stepper = DummyStepper(results=[(True, 1e-3, 2.0)])
+    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
+    monkeypatch.setattr(
+        minim, "_triangle_aspect_percentile", lambda percentile=90.0: 2.0
+    )
+
+    calls = {"n": 0}
+
+    def _fake_equiangulate_iteration(m):
+        calls["n"] += 1
+        return m, True
+
+    monkeypatch.setattr(
+        "runtime.minimizer.equiangulate_iteration", _fake_equiangulate_iteration
+    )
+    minim.minimize(n_steps=1)
+    assert calls["n"] == 1
+
+
+def test_minimize_auto_mesh_quality_repair_default_off(monkeypatch):
+    mesh = build_min_mesh()
+    gp = GlobalParameters()
+    energy = DummyEnergyModule(energy=2.0, grad_value=1.0)
+    cm = DummyConstraintManager()
+    stepper = DummyStepper(results=[(True, 1e-3, 2.0)])
+    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
+
+    def _unexpected(_):
+        raise AssertionError("auto mesh quality repair should be disabled by default")
+
+    monkeypatch.setattr("runtime.minimizer.equiangulate_iteration", _unexpected)
+    minim.minimize(n_steps=1)
+
+
 def test_minimize_volume_drift_triggers_enforcement():
     mesh = build_min_mesh(with_body=True)
     gp = GlobalParameters(
