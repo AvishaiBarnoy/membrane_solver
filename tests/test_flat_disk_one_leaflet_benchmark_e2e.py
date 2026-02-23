@@ -59,13 +59,19 @@ def _kh_opt_report(
         "kh_strict_energy_tight",
         "kh_strict_section_tight",
         "kh_strict_outerband_tight",
+        "kh_strict_outerfield_tight",
         "kh_strict_partition_tight",
         "kh_strict_robust",
     }
     if preset in strict_presets:
         effective_refine = (
             2
-            if preset in {"kh_strict_section_tight", "kh_strict_outerband_tight"}
+            if preset
+            in {
+                "kh_strict_section_tight",
+                "kh_strict_outerband_tight",
+                "kh_strict_outerfield_tight",
+            }
             else 1
         )
     else:
@@ -460,6 +466,10 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
         == "kh_strict_outerband_tight"
     )
     assert int(outerband_tight["meta"]["refine_level"]) == 2
+    assert int(outerband_tight["meta"]["rim_local_refine_steps"]) == 1
+    assert float(
+        outerband_tight["meta"]["rim_local_refine_band_lambda"]
+    ) == pytest.approx(3.0)
 
     def _audit_row(report: dict, *, theta_value: float) -> dict:
         audit = run_flat_disk_kh_term_audit(
@@ -528,9 +538,10 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
         )
     )
     assert score_outer_outerband <= score_outer_section
-    assert (near_err_outerband < near_err_section) or (
-        far_err_outerband < far_err_section
-    )
+    # Outerband-tight is intended to reduce the near-rim outer mismatch explicitly.
+    assert near_err_outerband <= (near_err_section - 2.0e-4)
+    # Keep far-band behavior non-worsening with a small numerical tolerance.
+    assert far_err_outerband <= (far_err_section + 2.0e-4)
 
     inner_err_section = abs(
         np.log(max(float(section_row["internal_disk_ratio_mesh_over_theory"]), 1e-18))
@@ -538,13 +549,143 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
     inner_err_outerband = abs(
         np.log(max(float(outer_row["internal_disk_ratio_mesh_over_theory"]), 1e-18))
     )
-    assert inner_err_outerband <= inner_err_section
+    # Permit only tiny inner regression while prioritizing near-rim outer fidelity.
+    assert inner_err_outerband <= (inner_err_section + 2.0e-4)
 
     assert float(outerband_tight["parity"]["theta_factor"]) <= (
-        float(section_tight["parity"]["theta_factor"]) * 1.01
+        float(section_tight["parity"]["theta_factor"]) * 1.0005
     )
     assert float(outerband_tight["parity"]["energy_factor"]) <= (
-        float(section_tight["parity"]["energy_factor"]) * 1.01
+        float(section_tight["parity"]["energy_factor"]) * 1.0005
+    )
+
+
+@pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_controls() -> None:
+    report = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_tight",
+    )
+
+    assert report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_tight"
+    assert int(report["meta"]["refine_level"]) == 2
+    assert int(report["meta"]["rim_local_refine_steps"]) == 1
+    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
+    assert int(report["meta"]["outer_local_refine_steps"]) == 1
+    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
+    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
+    assert report["optimize"]["parity_polish"] is not None
+    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
+    assert float(report["parity"]["theta_factor"]) <= 1.2
+    assert float(report["parity"]["energy_factor"]) <= 1.2
+
+
+@pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_improves_outer_sections_vs_outerband() -> (
+    None
+):
+    outerband = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerband_tight",
+    )
+    outerfield = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_tight",
+    )
+
+    def _audit_row(report: dict, *, theta_value: float) -> dict:
+        audit = run_flat_disk_kh_term_audit(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(report["meta"]["refine_level"]),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_nm=7.0,
+            length_scale_nm=15.0,
+            drive_physical=(2.0 / 0.7),
+            theta_values=(float(theta_value),),
+            tilt_mass_mode_in="consistent",
+            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
+            rim_local_refine_band_lambda=float(
+                report["meta"]["rim_local_refine_band_lambda"]
+            ),
+            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
+            outer_local_refine_rmin_lambda=float(
+                report["meta"]["outer_local_refine_rmin_lambda"]
+            ),
+            outer_local_refine_rmax_lambda=float(
+                report["meta"]["outer_local_refine_rmax_lambda"]
+            ),
+        )
+        return audit["rows"][0]
+
+    outerband_row = _audit_row(outerband, theta_value=0.138)
+    outerfield_row = _audit_row(outerfield, theta_value=0.138)
+
+    near_err_outerband = abs(
+        float(outerband_row["internal_outer_near_ratio_mesh_over_theory"]) - 1.0
+    )
+    near_err_outerfield = abs(
+        float(outerfield_row["internal_outer_near_ratio_mesh_over_theory"]) - 1.0
+    )
+    far_err_outerband = abs(
+        float(outerband_row["internal_outer_far_ratio_mesh_over_theory"]) - 1.0
+    )
+    far_err_outerfield = abs(
+        float(outerfield_row["internal_outer_far_ratio_mesh_over_theory"]) - 1.0
+    )
+    score_outerband = float(
+        np.hypot(
+            np.log(
+                max(
+                    float(outerband_row["internal_outer_near_ratio_mesh_over_theory"]),
+                    1e-18,
+                )
+            ),
+            np.log(
+                max(
+                    float(outerband_row["internal_outer_far_ratio_mesh_over_theory"]),
+                    1e-18,
+                )
+            ),
+        )
+    )
+    score_outerfield = float(
+        np.hypot(
+            np.log(
+                max(
+                    float(outerfield_row["internal_outer_near_ratio_mesh_over_theory"]),
+                    1e-18,
+                )
+            ),
+            np.log(
+                max(
+                    float(outerfield_row["internal_outer_far_ratio_mesh_over_theory"]),
+                    1e-18,
+                )
+            ),
+        )
+    )
+    assert score_outerfield < score_outerband
+    assert near_err_outerfield < near_err_outerband
+    assert far_err_outerfield < far_err_outerband
+
+    inner_err_outerband = abs(
+        np.log(max(float(outerband_row["internal_disk_ratio_mesh_over_theory"]), 1e-18))
+    )
+    inner_err_outerfield = abs(
+        np.log(
+            max(float(outerfield_row["internal_disk_ratio_mesh_over_theory"]), 1e-18)
+        )
+    )
+    assert inner_err_outerfield <= (inner_err_outerband + 2.0e-4)
+
+    assert float(outerfield["parity"]["theta_factor"]) <= (
+        float(outerband["parity"]["theta_factor"]) * 1.0005
+    )
+    assert float(outerfield["parity"]["energy_factor"]) <= (
+        float(outerband["parity"]["energy_factor"]) * 1.001
     )
 
 
@@ -860,6 +1001,26 @@ def test_flat_disk_invalid_parameterization_raises() -> None:
             refine_level=1,
             outer_mode="disabled",
             parameterization="invalid_mode",
+        )
+
+
+@pytest.mark.regression
+def test_flat_disk_invalid_outer_local_refine_bounds_raises() -> None:
+    with pytest.raises(
+        ValueError,
+        match=(
+            "outer_local_refine_rmax_lambda must be > outer_local_refine_rmin_lambda"
+        ),
+    ):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            theta_mode="optimize",
+            outer_local_refine_steps=1,
+            outer_local_refine_rmin_lambda=2.0,
+            outer_local_refine_rmax_lambda=2.0,
         )
 
 

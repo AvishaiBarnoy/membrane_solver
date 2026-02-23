@@ -347,6 +347,9 @@ Interactive commands:
     `python tools/diagnostics/flat_disk_kh_term_audit.py --refine-levels 1 2 --theta-values 0 6.366e-4`.
   - KH audit local rim-band refinement:
     add `--rim-local-refine-steps` and `--rim-local-refine-band-lambda`.
+  - KH audit local outer-annulus refinement:
+    add `--outer-local-refine-steps`, `--outer-local-refine-rmin-lambda`,
+    and `--outer-local-refine-rmax-lambda` (all lambda-scaled from the disk rim).
   - Scan controls (`--theta-mode scan`):
     `--theta-min`, `--theta-max`, `--theta-count`.
   - Optimize controls (`--theta-mode optimize`):
@@ -360,7 +363,14 @@ Interactive commands:
     `--optimize-preset kh_strict_fast` for strict-KH fast parity checks;
     `--optimize-preset kh_strict_balanced` for strict-KH parity tightening with
     added rim-local refinement and parity polish;
-    `--optimize-preset kh_strict_continuity` for strongest rim continuity checks.
+    `--optimize-preset kh_strict_continuity` for strongest rim continuity checks;
+    `--optimize-preset kh_strict_energy_tight` for strict energy-focused parity polish;
+    `--optimize-preset kh_strict_section_tight` for strict section-aware parity tightening;
+    `--optimize-preset kh_strict_outerband_tight` for outer-near mismatch tightening
+    (strict refine=2, rim-local step=1, rim band=3.0 lambda);
+    `--optimize-preset kh_strict_outerfield_tight` for outer-field section
+    tightening (strict refine=2, rim-local step=1, rim band=3.0 lambda, plus
+    outer-annulus local refinement over `[R+1.0 lambda, R+8.0 lambda]`).
   - Strict optimize polish controls:
     `--theta-optimize-postcheck` performs local energy postcheck around theta*;
     `--theta-optimize-parity-polish` performs local parity-score polish around
