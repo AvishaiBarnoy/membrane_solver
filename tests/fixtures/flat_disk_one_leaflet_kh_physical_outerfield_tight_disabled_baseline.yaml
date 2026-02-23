@@ -1,0 +1,84 @@
+meta:
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml
+  refine_level: 2
+  outer_mode: disabled
+  smoothness_model: splay_twist
+  parameterization: kh_physical
+  kappa_physical: 10.0
+  kappa_t_physical: 10.0
+  length_scale_nm: 15.0
+  radius_nm: 7.0
+  drive_physical: 2.857142857142857
+  optimize_preset: kh_strict_outerfield_tight
+  splay_modulus_scale_in: 1.0
+  tilt_mass_mode_in: consistent
+  outer_local_refine_steps: 1
+  outer_local_refine_rmin_lambda: 1.0
+  outer_local_refine_rmax_lambda: 8.0
+  theta_mode: optimize
+  theta_initial: 0.0
+  theta_optimize_steps: 30
+  theta_optimize_every: 1
+  theta_optimize_delta: 0.006
+  theta_optimize_inner_steps: 14
+  theory_source: kh_physical_radial_integral
+  expect_meets_factor_2: true
+  format: yaml
+metrics:
+  theory:
+    lambda_value: 0.06666666666666667
+    lambda_inverse: 15.0
+    lambda_radius: 7.0
+    theta_star: 0.14174044650187945
+    total: -0.8905814908936833
+  optimize:
+    theta_star_raw: 0.13800000000000004
+    theta_star: 0.13800000000000004
+    optimize_theta_span: 0.18
+    hit_step_limit: 0.0
+  mesh:
+    theta_star: 0.13800000000000004
+    total_energy: -0.8731070365933262
+    planarity_z_span: 0.0
+    outer_tilt_max_free_rows: 0.0
+    outer_decay_probe_max_before: 0.0
+    outer_decay_probe_max_after: 0.0
+    profile:
+      inner_abs_median: 0.002225130002329104
+      rim_abs_median: 0.11461678067780587
+      outer_abs_median: 6.5141169689812595e-06
+    rim_continuity:
+      matched_bins: 12.0
+      jump_abs_median: 0.02828264432700972
+  parity:
+    theta_factor: 1.0271046847962275
+    energy_factor: 1.0200141031602936
+tolerances:
+  theory:
+    lambda_value: 1.0e-12
+    lambda_inverse: 1.0e-10
+    lambda_radius: 1.0e-10
+    theta_star: 1.0e-10
+    total: 1.0e-08
+  optimize:
+    theta_star_raw: 1.0e-10
+    theta_star: 1.0e-10
+    optimize_theta_span: 1.0e-12
+    hit_step_limit: 1.0e-12
+  mesh:
+    theta_star: 1.0e-10
+    total_energy: 1.0e-07
+    planarity_z_span: 1.0e-12
+    outer_tilt_max_free_rows: 1.0e-12
+    outer_decay_probe_max_before: 1.0e-12
+    outer_decay_probe_max_after: 1.0e-12
+    profile:
+      inner_abs_median: 1.0e-08
+      rim_abs_median: 1.0e-10
+      outer_abs_median: 1.0e-08
+    rim_continuity:
+      matched_bins: 1.0e-12
+      jump_abs_median: 1.0e-08
+  parity:
+    theta_factor: 1.0e-08
+    energy_factor: 1.0e-08
