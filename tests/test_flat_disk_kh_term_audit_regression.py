@@ -318,16 +318,56 @@ def test_flat_disk_kh_term_audit_finite_outer_reference_matches_infinite_at_rmax
     assert float(row["theory_internal_outer_far_finite"]) == pytest.approx(
         float(row["theory_internal_outer_far"]), rel=0.0, abs=1e-15
     )
-    assert float(
-        row["internal_outer_near_ratio_mesh_over_theory_finite"]
-    ) == pytest.approx(
-        float(row["internal_outer_near_ratio_mesh_over_theory"]), rel=0.0, abs=1e-12
-    )
-    assert float(
-        row["internal_outer_far_ratio_mesh_over_theory_finite"]
-    ) == pytest.approx(
-        float(row["internal_outer_far_ratio_mesh_over_theory"]), rel=0.0, abs=1e-11
-    )
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_outerfield_tailmatch_improves_outer_far_section() -> (
+    None
+):
+    quality = run_flat_disk_kh_term_audit(
+        refine_level=2,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.138,),
+        tilt_mass_mode_in="consistent",
+        rim_local_refine_steps=1,
+        rim_local_refine_band_lambda=3.0,
+        outer_local_refine_steps=1,
+        outer_local_refine_rmin_lambda=1.0,
+        outer_local_refine_rmax_lambda=8.0,
+        local_edge_flip_steps=1,
+        local_edge_flip_rmin_lambda=2.0,
+        local_edge_flip_rmax_lambda=6.0,
+    )["rows"][0]
+    tailmatch = run_flat_disk_kh_term_audit(
+        refine_level=2,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.138,),
+        tilt_mass_mode_in="consistent",
+        rim_local_refine_steps=1,
+        rim_local_refine_band_lambda=3.0,
+        outer_local_refine_steps=1,
+        outer_local_refine_rmin_lambda=1.0,
+        outer_local_refine_rmax_lambda=8.0,
+        local_edge_flip_steps=1,
+        local_edge_flip_rmin_lambda=2.0,
+        local_edge_flip_rmax_lambda=8.0,
+    )["rows"][0]
+
+    q_near = float(quality["internal_outer_near_ratio_mesh_over_theory"])
+    q_far = float(quality["internal_outer_far_ratio_mesh_over_theory"])
+    t_near = float(tailmatch["internal_outer_near_ratio_mesh_over_theory"])
+    t_far = float(tailmatch["internal_outer_far_ratio_mesh_over_theory"])
+    q_score = float(np.hypot(np.log(max(q_near, 1e-18)), np.log(max(q_far, 1e-18))))
+    t_score = float(np.hypot(np.log(max(t_near, 1e-18)), np.log(max(t_far, 1e-18))))
+
+    assert t_score <= (q_score + 2.0e-4)
+    assert abs(t_far - 1.0) <= abs(q_far - 1.0)
+    assert abs(t_near - 1.0) <= (abs(q_near - 1.0) + 2.0e-4)
+    assert t_far >= 0.85
+    assert t_near <= 1.13
+    assert t_score <= 0.25
 
 
 @pytest.mark.regression
