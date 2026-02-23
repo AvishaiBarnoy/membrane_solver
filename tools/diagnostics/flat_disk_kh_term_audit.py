@@ -576,6 +576,77 @@ def _leakage_metrics(mesh, *, radius: float) -> dict[str, float]:
     }
 
 
+def _radial_projected_band_diagnostics(
+    mesh,
+    *,
+    smoothness_model: str,
+    radius: float,
+    lambda_value: float,
+    theory_bands: dict[str, float],
+) -> dict[str, float]:
+    """Compare current field to radial-only projection t <- (t·r_hat) r_hat."""
+    pos = mesh.positions_view()
+    _, r_hat, _ = _radial_frames(pos)
+    tilts_orig = mesh.tilts_in_view().copy(order="F")
+    t_rad = np.einsum("ij,ij->i", tilts_orig, r_hat)
+    tilts_proj = r_hat * t_rad[:, None]
+
+    mesh.set_tilts_in_from_array(tilts_proj)
+    mesh.project_tilts_to_tangent()
+    try:
+        proj_region = _mesh_internal_region_split(
+            mesh,
+            smoothness_model=smoothness_model,
+            radius=float(radius),
+        )
+        proj_bands = _mesh_internal_band_split(
+            mesh,
+            smoothness_model=smoothness_model,
+            radius=float(radius),
+            lambda_value=float(lambda_value),
+            rim_half_width_lambda=1.0,
+            outer_near_width_lambda=4.0,
+        )
+    finally:
+        mesh.set_tilts_in_from_array(tilts_orig)
+        mesh.project_tilts_to_tangent()
+
+    def _abs_err(mesh_key: str, th_key: str) -> float:
+        return float(abs(float(proj_bands[mesh_key]) - float(theory_bands[th_key])))
+
+    return {
+        "proj_radial_mesh_internal": float(
+            proj_region["mesh_internal_total_from_regions"]
+        ),
+        "proj_radial_mesh_internal_disk": float(proj_region["mesh_internal_disk"]),
+        "proj_radial_mesh_internal_outer": float(proj_region["mesh_internal_outer"]),
+        "proj_radial_mesh_internal_disk_core": float(
+            proj_bands["mesh_internal_disk_core"]
+        ),
+        "proj_radial_mesh_internal_rim_band": float(
+            proj_bands["mesh_internal_rim_band"]
+        ),
+        "proj_radial_mesh_internal_outer_near": float(
+            proj_bands["mesh_internal_outer_near"]
+        ),
+        "proj_radial_mesh_internal_outer_far": float(
+            proj_bands["mesh_internal_outer_far"]
+        ),
+        "proj_radial_internal_disk_core_abs_error": _abs_err(
+            "mesh_internal_disk_core", "theory_internal_disk_core"
+        ),
+        "proj_radial_internal_rim_band_abs_error": _abs_err(
+            "mesh_internal_rim_band", "theory_internal_rim_band"
+        ),
+        "proj_radial_internal_outer_near_abs_error": _abs_err(
+            "mesh_internal_outer_near", "theory_internal_outer_near"
+        ),
+        "proj_radial_internal_outer_far_abs_error": _abs_err(
+            "mesh_internal_outer_far", "theory_internal_outer_far"
+        ),
+    }
+
+
 def _resolution_metrics(
     mesh, *, radius: float, lambda_value: float
 ) -> dict[str, float]:
@@ -642,6 +713,7 @@ def _run_single_level(
     outer_local_refine_steps: int,
     outer_local_refine_rmin_lambda: float,
     outer_local_refine_rmax_lambda: float,
+    radial_projection_diagnostic: bool,
 ) -> dict[str, Any]:
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -770,6 +842,28 @@ def _run_single_level(
             theta_value=theta_f,
         )
         leakage = _leakage_metrics(mesh, radius=float(theory.radius))
+        if bool(radial_projection_diagnostic):
+            proj_radial = _radial_projected_band_diagnostics(
+                mesh,
+                smoothness_model=smoothness_model,
+                radius=float(theory.radius),
+                lambda_value=float(theory.lambda_value),
+                theory_bands=th_bands,
+            )
+        else:
+            proj_radial = {
+                "proj_radial_mesh_internal": float("nan"),
+                "proj_radial_mesh_internal_disk": float("nan"),
+                "proj_radial_mesh_internal_outer": float("nan"),
+                "proj_radial_mesh_internal_disk_core": float("nan"),
+                "proj_radial_mesh_internal_rim_band": float("nan"),
+                "proj_radial_mesh_internal_outer_near": float("nan"),
+                "proj_radial_mesh_internal_outer_far": float("nan"),
+                "proj_radial_internal_disk_core_abs_error": float("nan"),
+                "proj_radial_internal_rim_band_abs_error": float("nan"),
+                "proj_radial_internal_outer_near_abs_error": float("nan"),
+                "proj_radial_internal_outer_far_abs_error": float("nan"),
+            }
 
         ratio_internal_disk = _ratio(float(mesh_region["mesh_internal_disk"]), th_in)
         ratio_internal_outer = _ratio(float(mesh_region["mesh_internal_outer"]), th_out)
@@ -868,10 +962,27 @@ def _run_single_level(
             ratio_smooth_outer_near,
             ratio_smooth_outer_far,
         )
+        err_internal_disk_core = float(
+            float(mesh_bands["mesh_internal_disk_core"])
+            - float(th_bands["theory_internal_disk_core"])
+        )
+        err_internal_rim_band = float(
+            float(mesh_bands["mesh_internal_rim_band"])
+            - float(th_bands["theory_internal_rim_band"])
+        )
+        err_internal_outer_near = float(
+            float(mesh_bands["mesh_internal_outer_near"])
+            - float(th_bands["theory_internal_outer_near"])
+        )
+        err_internal_outer_far = float(
+            float(mesh_bands["mesh_internal_outer_far"])
+            - float(th_bands["theory_internal_outer_far"])
+        )
 
         rows.append(
             {
                 "theta": theta_f,
+                "radial_projection_diagnostic": bool(radial_projection_diagnostic),
                 "mesh_total": mesh_total,
                 "mesh_contact": mesh_contact,
                 "mesh_internal": mesh_internal,
@@ -1014,8 +1125,25 @@ def _run_single_level(
                 "rim_band_h_over_lambda_median": float(
                     mesh_bands["rim_band_h_over_lambda_median"]
                 ),
+                "proj_radial_internal_disk_core_abs_error_delta_vs_unprojected": float(
+                    float(proj_radial["proj_radial_internal_disk_core_abs_error"])
+                    - abs(err_internal_disk_core)
+                ),
+                "proj_radial_internal_rim_band_abs_error_delta_vs_unprojected": float(
+                    float(proj_radial["proj_radial_internal_rim_band_abs_error"])
+                    - abs(err_internal_rim_band)
+                ),
+                "proj_radial_internal_outer_near_abs_error_delta_vs_unprojected": float(
+                    float(proj_radial["proj_radial_internal_outer_near_abs_error"])
+                    - abs(err_internal_outer_near)
+                ),
+                "proj_radial_internal_outer_far_abs_error_delta_vs_unprojected": float(
+                    float(proj_radial["proj_radial_internal_outer_far_abs_error"])
+                    - abs(err_internal_outer_far)
+                ),
                 **boundary,
                 **leakage,
+                **proj_radial,
             }
         )
 
@@ -1044,6 +1172,7 @@ def _run_single_level(
             "outer_local_refine_steps": int(outer_local_refine_steps),
             "outer_local_refine_rmin_lambda": float(outer_local_refine_rmin_lambda),
             "outer_local_refine_rmax_lambda": float(outer_local_refine_rmax_lambda),
+            "radial_projection_diagnostic": bool(radial_projection_diagnostic),
         },
         "theory": {
             "kappa": float(theory.kappa),
@@ -1078,6 +1207,7 @@ def run_flat_disk_kh_term_audit(
     outer_local_refine_steps: int = 0,
     outer_local_refine_rmin_lambda: float = 0.0,
     outer_local_refine_rmax_lambda: float = 0.0,
+    radial_projection_diagnostic: bool = False,
 ) -> dict[str, Any]:
     """Evaluate per-theta mesh/theory split terms in KH physical lane."""
     _ensure_repo_root_on_sys_path()
@@ -1105,6 +1235,7 @@ def run_flat_disk_kh_term_audit(
         outer_local_refine_steps=int(outer_local_refine_steps),
         outer_local_refine_rmin_lambda=float(outer_local_refine_rmin_lambda),
         outer_local_refine_rmax_lambda=float(outer_local_refine_rmax_lambda),
+        radial_projection_diagnostic=bool(radial_projection_diagnostic),
     )
 
 
@@ -1126,6 +1257,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     outer_local_refine_steps: int = 0,
     outer_local_refine_rmin_lambda: float = 0.0,
     outer_local_refine_rmax_lambda: float = 0.0,
+    radial_projection_diagnostic: bool = False,
 ) -> dict[str, Any]:
     """Run KH term audit across multiple refinement levels."""
     _ensure_repo_root_on_sys_path()
@@ -1158,6 +1290,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             outer_local_refine_steps=int(outer_local_refine_steps),
             outer_local_refine_rmin_lambda=float(outer_local_refine_rmin_lambda),
             outer_local_refine_rmax_lambda=float(outer_local_refine_rmax_lambda),
+            radial_projection_diagnostic=bool(radial_projection_diagnostic),
         )
         for level in levels
     ]
@@ -1175,6 +1308,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             "outer_local_refine_steps": int(outer_local_refine_steps),
             "outer_local_refine_rmin_lambda": float(outer_local_refine_rmin_lambda),
             "outer_local_refine_rmax_lambda": float(outer_local_refine_rmax_lambda),
+            "radial_projection_diagnostic": bool(radial_projection_diagnostic),
         },
         "runs": runs,
     }
@@ -1503,6 +1637,7 @@ def main() -> int:
     ap.add_argument("--outer-local-refine-steps", type=int, default=0)
     ap.add_argument("--outer-local-refine-rmin-lambda", type=float, default=0.0)
     ap.add_argument("--outer-local-refine-rmax-lambda", type=float, default=0.0)
+    ap.add_argument("--radial-projection-diagnostic", action="store_true")
     ap.add_argument(
         "--strict-refinement-characterization",
         action="store_true",
@@ -1592,6 +1727,7 @@ def main() -> int:
             outer_local_refine_steps=args.outer_local_refine_steps,
             outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
             outer_local_refine_rmax_lambda=args.outer_local_refine_rmax_lambda,
+            radial_projection_diagnostic=args.radial_projection_diagnostic,
         )
     else:
         report = run_flat_disk_kh_term_audit(
@@ -1611,6 +1747,7 @@ def main() -> int:
             outer_local_refine_steps=args.outer_local_refine_steps,
             outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
             outer_local_refine_rmax_lambda=args.outer_local_refine_rmax_lambda,
+            radial_projection_diagnostic=args.radial_projection_diagnostic,
         )
 
     out = Path(args.output)
