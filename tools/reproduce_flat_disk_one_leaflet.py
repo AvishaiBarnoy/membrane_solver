@@ -400,6 +400,73 @@ def _refine_mesh_locally_in_outer_annulus(
     return out
 
 
+def _flip_edges_locally_in_annulus(
+    mesh,
+    *,
+    local_steps: int,
+    r_min: float,
+    r_max: float,
+):
+    """Perform optional Delaunay-like local edge flips in a radial annulus."""
+    _ensure_repo_root_on_sys_path()
+    from runtime.equiangulation import flip_edge_safe, should_flip_edge
+
+    steps = int(local_steps)
+    if steps <= 0:
+        return mesh
+    if float(r_max) <= float(r_min):
+        raise ValueError("local_edge_flip_rmax must be > local_edge_flip_rmin.")
+
+    out = mesh
+    for _ in range(steps):
+        out.build_connectivity_maps()
+        out.build_facet_vertex_loops()
+        positions = out.positions_view()
+        next_edge_idx = max(out.edges.keys()) + 1 if out.edges else 1
+        candidate_edges = 0
+        flips = 0
+        for edge_idx in list(out.edges.keys()):
+            edge = out.edges.get(int(edge_idx))
+            if edge is None or bool(getattr(edge, "fixed", False)):
+                continue
+            row0 = out.vertex_index_to_row.get(int(edge.tail_index))
+            row1 = out.vertex_index_to_row.get(int(edge.head_index))
+            if row0 is None or row1 is None:
+                continue
+            p0 = positions[int(row0)]
+            p1 = positions[int(row1)]
+            r_mid = float(np.linalg.norm((0.5 * (p0 + p1))[:2]))
+            if r_mid < float(r_min) or r_mid > float(r_max):
+                continue
+            adjacent = out.get_facets_of_edge(int(edge_idx))
+            if len(adjacent) != 2:
+                continue
+            facet1, facet2 = adjacent
+            if len(facet1.edge_indices) != 3 or len(facet2.edge_indices) != 3:
+                continue
+            candidate_edges += 1
+            if should_flip_edge(out, edge, facet1, facet2) and flip_edge_safe(
+                out,
+                int(edge_idx),
+                facet1,
+                facet2,
+                int(next_edge_idx),
+            ):
+                next_edge_idx += 1
+                flips += 1
+                out.increment_topology_version()
+                out.build_connectivity_maps()
+                out.build_facet_vertex_loops()
+        if candidate_edges == 0:
+            raise AssertionError(
+                "Local edge flip selected no candidate edges. Adjust "
+                "local_edge_flip_rmin_lambda/local_edge_flip_rmax_lambda."
+            )
+        if flips == 0:
+            break
+    return out
+
+
 def _collect_disk_boundary_rows(mesh, *, group: str = "disk") -> np.ndarray:
     rows: list[int] = []
     for vid in mesh.vertex_ids:
@@ -877,6 +944,9 @@ def run_flat_disk_one_leaflet_benchmark(
     outer_local_refine_steps: int = 0,
     outer_local_refine_rmin_lambda: float = 0.0,
     outer_local_refine_rmax_lambda: float = 0.0,
+    local_edge_flip_steps: int = 0,
+    local_edge_flip_rmin_lambda: float = -1.0,
+    local_edge_flip_rmax_lambda: float = 4.0,
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
@@ -903,6 +973,9 @@ def run_flat_disk_one_leaflet_benchmark(
     raw_outer_local_refine_steps = int(outer_local_refine_steps)
     raw_outer_local_refine_rmin_lambda = float(outer_local_refine_rmin_lambda)
     raw_outer_local_refine_rmax_lambda = float(outer_local_refine_rmax_lambda)
+    raw_local_edge_flip_steps = int(local_edge_flip_steps)
+    raw_local_edge_flip_rmin_lambda = float(local_edge_flip_rmin_lambda)
+    raw_local_edge_flip_rmax_lambda = float(local_edge_flip_rmax_lambda)
     optimize_preset_raw = str(optimize_preset).lower()
     effective_refine_level = raw_refine_level
     effective_rim_local_refine_steps = raw_rim_local_refine_steps
@@ -910,6 +983,9 @@ def run_flat_disk_one_leaflet_benchmark(
     effective_outer_local_refine_steps = raw_outer_local_refine_steps
     effective_outer_local_refine_rmin_lambda = raw_outer_local_refine_rmin_lambda
     effective_outer_local_refine_rmax_lambda = raw_outer_local_refine_rmax_lambda
+    effective_local_edge_flip_steps = raw_local_edge_flip_steps
+    effective_local_edge_flip_rmin_lambda = raw_local_edge_flip_rmin_lambda
+    effective_local_edge_flip_rmax_lambda = raw_local_edge_flip_rmax_lambda
     if optimize_preset_raw in {
         "kh_strict_refine",
         "kh_strict_fast",
@@ -1007,6 +1083,16 @@ def run_flat_disk_one_leaflet_benchmark(
         raise ValueError(
             "outer_local_refine_rmax_lambda must be > "
             "outer_local_refine_rmin_lambda when outer_local_refine_steps > 0."
+        )
+    if int(effective_local_edge_flip_steps) < 0:
+        raise ValueError("local_edge_flip_steps must be >= 0.")
+    if int(effective_local_edge_flip_steps) > 0 and (
+        float(effective_local_edge_flip_rmax_lambda)
+        <= float(effective_local_edge_flip_rmin_lambda)
+    ):
+        raise ValueError(
+            "local_edge_flip_rmax_lambda must be > "
+            "local_edge_flip_rmin_lambda when local_edge_flip_steps > 0."
         )
     if float(splay_modulus_scale_in) <= 0.0:
         raise ValueError("splay_modulus_scale_in must be > 0.")
@@ -1131,6 +1217,23 @@ def run_flat_disk_one_leaflet_benchmark(
             r_max=float(theory.radius)
             + float(effective_outer_local_refine_rmax_lambda)
             * float(theory.lambda_value),
+        )
+    if int(effective_local_edge_flip_steps) > 0:
+        mesh = _flip_edges_locally_in_annulus(
+            mesh,
+            local_steps=int(effective_local_edge_flip_steps),
+            r_min=max(
+                0.0,
+                float(theory.radius)
+                + float(effective_local_edge_flip_rmin_lambda)
+                * float(theory.lambda_value),
+            ),
+            r_max=max(
+                0.0,
+                float(theory.radius)
+                + float(effective_local_edge_flip_rmax_lambda)
+                * float(theory.lambda_value),
+            ),
         )
     mesh_load_refine_seconds = float(perf_counter() - t_mesh_prep_start)
 
@@ -1495,6 +1598,9 @@ def run_flat_disk_one_leaflet_benchmark(
             "outer_local_refine_rmax_lambda": float(
                 effective_outer_local_refine_rmax_lambda
             ),
+            "local_edge_flip_steps": int(effective_local_edge_flip_steps),
+            "local_edge_flip_rmin_lambda": float(effective_local_edge_flip_rmin_lambda),
+            "local_edge_flip_rmax_lambda": float(effective_local_edge_flip_rmax_lambda),
             "theory_model": theory_model,
             "theory_source": theory_source,
             "performance": {
@@ -1578,6 +1684,9 @@ def run_flat_disk_lane_comparison(
     outer_local_refine_steps: int = 0,
     outer_local_refine_rmin_lambda: float = 0.0,
     outer_local_refine_rmax_lambda: float = 0.0,
+    local_edge_flip_steps: int = 0,
+    local_edge_flip_rmin_lambda: float = -1.0,
+    local_edge_flip_rmax_lambda: float = 4.0,
 ) -> dict[str, Any]:
     """Run both legacy and kh_physical benchmark lanes and summarize differences."""
     legacy = run_flat_disk_one_leaflet_benchmark(
@@ -1602,6 +1711,9 @@ def run_flat_disk_lane_comparison(
         outer_local_refine_steps=int(outer_local_refine_steps),
         outer_local_refine_rmin_lambda=float(outer_local_refine_rmin_lambda),
         outer_local_refine_rmax_lambda=float(outer_local_refine_rmax_lambda),
+        local_edge_flip_steps=int(local_edge_flip_steps),
+        local_edge_flip_rmin_lambda=float(local_edge_flip_rmin_lambda),
+        local_edge_flip_rmax_lambda=float(local_edge_flip_rmax_lambda),
     )
 
     kh = run_flat_disk_one_leaflet_benchmark(
@@ -1631,6 +1743,9 @@ def run_flat_disk_lane_comparison(
         outer_local_refine_steps=int(outer_local_refine_steps),
         outer_local_refine_rmin_lambda=float(outer_local_refine_rmin_lambda),
         outer_local_refine_rmax_lambda=float(outer_local_refine_rmax_lambda),
+        local_edge_flip_steps=int(local_edge_flip_steps),
+        local_edge_flip_rmin_lambda=float(local_edge_flip_rmin_lambda),
+        local_edge_flip_rmax_lambda=float(local_edge_flip_rmax_lambda),
     )
 
     legacy_theta = float(legacy["mesh"]["theta_star"])
@@ -1755,6 +1870,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--outer-local-refine-steps", type=int, default=0)
     ap.add_argument("--outer-local-refine-rmin-lambda", type=float, default=0.0)
     ap.add_argument("--outer-local-refine-rmax-lambda", type=float, default=0.0)
+    ap.add_argument("--local-edge-flip-steps", type=int, default=0)
+    ap.add_argument("--local-edge-flip-rmin-lambda", type=float, default=-1.0)
+    ap.add_argument("--local-edge-flip-rmax-lambda", type=float, default=4.0)
     ap.add_argument("--compare-lanes", action="store_true")
     ap.add_argument(
         "--compare-kh-smoothness-model",
@@ -1814,6 +1932,9 @@ def main(argv: Iterable[str] | None = None) -> int:
             outer_local_refine_steps=args.outer_local_refine_steps,
             outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
             outer_local_refine_rmax_lambda=args.outer_local_refine_rmax_lambda,
+            local_edge_flip_steps=args.local_edge_flip_steps,
+            local_edge_flip_rmin_lambda=args.local_edge_flip_rmin_lambda,
+            local_edge_flip_rmax_lambda=args.local_edge_flip_rmax_lambda,
         )
     else:
         report = run_flat_disk_one_leaflet_benchmark(
@@ -1848,6 +1969,12 @@ def main(argv: Iterable[str] | None = None) -> int:
             tilt_mass_mode_in=args.tilt_mass_mode_in,
             rim_local_refine_steps=args.rim_local_refine_steps,
             rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
+            outer_local_refine_steps=args.outer_local_refine_steps,
+            outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
+            outer_local_refine_rmax_lambda=args.outer_local_refine_rmax_lambda,
+            local_edge_flip_steps=args.local_edge_flip_steps,
+            local_edge_flip_rmin_lambda=args.local_edge_flip_rmin_lambda,
+            local_edge_flip_rmax_lambda=args.local_edge_flip_rmax_lambda,
         )
 
     out_path = Path(args.output)
