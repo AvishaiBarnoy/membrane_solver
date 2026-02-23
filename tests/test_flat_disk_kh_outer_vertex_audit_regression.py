@@ -19,6 +19,8 @@ def test_flat_disk_kh_outer_vertex_audit_reports_finite_bands() -> None:
         include_frozen_analytic=True,
     )
     assert bool(report["meta"]["include_frozen_analytic"]) is True
+    assert report["meta"]["outer_reference_primary"] == "infinite"
+    assert report["meta"]["outer_reference_secondary"] == "finite_outer_rmax"
     controls = report["meta"]["controls_effective"]
     assert int(controls["refine_level"]) == 2
     assert int(controls["outer_local_refine_steps"]) == 1
@@ -42,6 +44,14 @@ def test_flat_disk_kh_outer_vertex_audit_reports_finite_bands() -> None:
         sections = report["section_energy_by_field"][field]
         for name in ("disk_total", "outer_near", "outer_far"):
             sec = sections[name]
+            assert np.isfinite(float(sec["mesh"]))
+            assert np.isfinite(float(sec["theory"]))
+            assert np.isfinite(float(sec["ratio_mesh_over_theory"]))
+        sections_finite = report["section_energy_by_field_finite_outer_reference"][
+            field
+        ]
+        for name in ("disk_total", "outer_near", "outer_far"):
+            sec = sections_finite[name]
             assert np.isfinite(float(sec["mesh"]))
             assert np.isfinite(float(sec["theory"]))
             assert np.isfinite(float(sec["ratio_mesh_over_theory"]))
