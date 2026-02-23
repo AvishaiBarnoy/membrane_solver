@@ -277,9 +277,14 @@ def run_flat_disk_kh_outer_vertex_audit(
         splay_modulus_scale_in=1.0,
         tilt_mass_mode_in="consistent",
     )
+    minim = _build_minimizer(mesh)
+    minim.enforce_constraints_after_mesh_ops(mesh)
+    mesh.project_tilts_to_tangent()
     total_energy = float(
         _run_theta_relaxation(
-            _build_minimizer(mesh), theta_value=float(theta), reset_outer=True
+            minim,
+            theta_value=float(theta),
+            reset_outer=True,
         )
     )
 
@@ -317,6 +322,15 @@ def run_flat_disk_kh_outer_vertex_audit(
         lambda_value=lam,
         rim_half_width_lambda=1.0,
         outer_near_width_lambda=4.0,
+    )
+    theory_bands_finite_outer = _theory_term_band_split(
+        theta=float(theta),
+        kappa=float(theory.kappa),
+        kappa_t=float(theory.kappa_t),
+        radius=radius,
+        lambda_value=lam,
+        rim_half_width_lambda=1.0,
+        outer_near_width_lambda=4.0,
         outer_r_max=float(np.max(np.linalg.norm(positions[:, :2], axis=1))),
     )
     near = _safe_ratio(
@@ -331,6 +345,13 @@ def run_flat_disk_kh_outer_vertex_audit(
     section_energy_by_field: dict[str, dict[str, dict[str, float]]] = {
         "solved": _section_energy_summary(
             mesh_bands=mesh_bands, theory_bands=theory_bands
+        )
+    }
+    section_energy_by_field_finite_outer_reference: dict[
+        str, dict[str, dict[str, float]]
+    ] = {
+        "solved": _section_energy_summary(
+            mesh_bands=mesh_bands, theory_bands=theory_bands_finite_outer
         )
     }
     bands_by_field: dict[str, list[dict[str, float | int | str]]] = {
@@ -352,6 +373,12 @@ def run_flat_disk_kh_outer_vertex_audit(
     section_energy_by_field["radial_only"] = _section_energy_summary(
         mesh_bands=radial_mesh_bands,
         theory_bands=theory_bands,
+    )
+    section_energy_by_field_finite_outer_reference["radial_only"] = (
+        _section_energy_summary(
+            mesh_bands=radial_mesh_bands,
+            theory_bands=theory_bands_finite_outer,
+        )
     )
     bands_by_field["radial_only"] = _vertex_bands(
         positions=positions,
@@ -384,6 +411,12 @@ def run_flat_disk_kh_outer_vertex_audit(
             mesh_bands=frozen_mesh_bands,
             theory_bands=theory_bands,
         )
+        section_energy_by_field_finite_outer_reference["frozen_analytic"] = (
+            _section_energy_summary(
+                mesh_bands=frozen_mesh_bands,
+                theory_bands=theory_bands_finite_outer,
+            )
+        )
         bands_by_field["frozen_analytic"] = _vertex_bands(
             positions=positions,
             tri_rows=tri_rows_i,
@@ -403,6 +436,8 @@ def run_flat_disk_kh_outer_vertex_audit(
             "optimize_preset": str(optimize_preset),
             "theta": float(theta),
             "include_frozen_analytic": bool(include_frozen_analytic),
+            "outer_reference_primary": "infinite",
+            "outer_reference_secondary": "finite_outer_rmax",
             "controls_effective": controls,
         },
         "parity": {
@@ -416,6 +451,9 @@ def run_flat_disk_kh_outer_vertex_audit(
         "bands": solved_bands,
         "bands_by_field": bands_by_field,
         "section_energy_by_field": section_energy_by_field,
+        "section_energy_by_field_finite_outer_reference": (
+            section_energy_by_field_finite_outer_reference
+        ),
     }
 
 
