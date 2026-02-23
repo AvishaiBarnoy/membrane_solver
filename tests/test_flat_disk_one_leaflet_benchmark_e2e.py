@@ -1025,6 +1025,24 @@ def test_flat_disk_invalid_outer_local_refine_bounds_raises() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_invalid_local_edge_flip_bounds_raises() -> None:
+    with pytest.raises(
+        ValueError,
+        match=("local_edge_flip_rmax_lambda must be > local_edge_flip_rmin_lambda"),
+    ):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            theta_mode="optimize",
+            local_edge_flip_steps=1,
+            local_edge_flip_rmin_lambda=2.0,
+            local_edge_flip_rmax_lambda=2.0,
+        )
+
+
+@pytest.mark.regression
 def test_flat_disk_lane_comparison_reports_both_lanes() -> None:
     report = run_flat_disk_lane_comparison(
         fixture=DEFAULT_FIXTURE,

@@ -25,6 +25,7 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
     )
 
     assert report["meta"]["parameterization"] == "kh_physical"
+    assert bool(report["meta"]["radial_projection_diagnostic"]) is False
     assert int(report["meta"]["outer_local_refine_steps"]) >= 0
     assert float(report["meta"]["outer_local_refine_rmin_lambda"]) >= 0.0
     assert float(report["meta"]["outer_local_refine_rmax_lambda"]) >= 0.0
@@ -50,6 +51,30 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
         assert np.isfinite(float(row["internal_outer_error"]))
         assert np.isfinite(float(row["inner_tphi_over_trad_median"]))
         assert np.isfinite(float(row["outer_tphi_over_trad_median"]))
+        assert np.isfinite(float(row["disk_core_tphi_abs_median"]))
+        assert np.isfinite(float(row["disk_core_trad_abs_median"]))
+        assert np.isfinite(float(row["disk_core_tphi_over_trad_median"]))
+        assert np.isfinite(float(row["rim_band_tphi_abs_median"]))
+        assert np.isfinite(float(row["rim_band_trad_abs_median"]))
+        assert np.isfinite(float(row["rim_band_tphi_over_trad_median"]))
+        assert np.isfinite(float(row["outer_near_tphi_abs_median"]))
+        assert np.isfinite(float(row["outer_near_trad_abs_median"]))
+        assert np.isfinite(float(row["outer_near_tphi_over_trad_median"]))
+        assert np.isfinite(float(row["outer_far_tphi_abs_median"]))
+        assert np.isfinite(float(row["outer_far_trad_abs_median"]))
+        assert np.isfinite(float(row["outer_far_tphi_over_trad_median"]))
+        assert np.isfinite(float(row["disk_core_hmax_over_hmin_mean"]))
+        assert np.isfinite(float(row["rim_band_hmax_over_hmin_mean"]))
+        assert np.isfinite(float(row["outer_near_hmax_over_hmin_mean"]))
+        assert np.isfinite(float(row["outer_far_hmax_over_hmin_mean"]))
+        assert np.isfinite(float(row["disk_core_edge_orientation_spread"]))
+        assert np.isfinite(float(row["rim_band_edge_orientation_spread"]))
+        assert np.isfinite(float(row["outer_near_edge_orientation_spread"]))
+        assert np.isfinite(float(row["outer_far_edge_orientation_spread"]))
+        corr_aspect = float(row["corr_hmax_over_hmin_vs_tphi_over_trad"])
+        corr_orient = float(row["corr_orientation_spread_vs_tphi_over_trad"])
+        assert np.isfinite(corr_aspect) or np.isnan(corr_aspect)
+        assert np.isfinite(corr_orient) or np.isnan(corr_orient)
         assert np.isfinite(float(row["mesh_tilt_disk_core"]))
         assert np.isfinite(float(row["mesh_tilt_rim_band"]))
         assert np.isfinite(float(row["mesh_tilt_outer_near"]))
@@ -79,6 +104,13 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
         assert np.isfinite(float(row["theory_outer_r_max"]))
         assert np.isfinite(float(row["theory_internal_total_from_bands"]))
         assert np.isfinite(float(row["theory_internal_bands_minus_closed_form"]))
+        assert bool(row["radial_projection_diagnostic"]) is False
+        assert np.isnan(float(row["proj_radial_mesh_internal"]))
+        assert np.isnan(float(row["proj_radial_mesh_internal_outer_near"]))
+        assert np.isnan(float(row["proj_radial_internal_outer_near_abs_error"]))
+        assert np.isnan(
+            float(row["proj_radial_internal_outer_near_abs_error_delta_vs_unprojected"])
+        )
         if float(row["section_score_internal_split_count"]) > 0.0:
             assert np.isfinite(float(row["section_score_internal_split_l2_log"]))
             assert np.isfinite(float(row["section_score_internal_split_max_abs_log"]))
@@ -128,6 +160,46 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
     resolution = report["resolution"]
     assert int(resolution["rim_edge_count"]) > 0
     assert np.isfinite(float(resolution["rim_h_over_lambda_median"]))
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_radial_projection_diagnostic_emits_finite_rows() -> (
+    None
+):
+    report = run_flat_disk_kh_term_audit(
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.138,),
+        tilt_mass_mode_in="consistent",
+        radial_projection_diagnostic=True,
+    )
+    assert bool(report["meta"]["radial_projection_diagnostic"]) is True
+    row = report["rows"][0]
+    assert bool(row["radial_projection_diagnostic"]) is True
+    assert np.isfinite(float(row["proj_radial_mesh_internal"]))
+    assert np.isfinite(float(row["proj_radial_mesh_internal_disk"]))
+    assert np.isfinite(float(row["proj_radial_mesh_internal_outer"]))
+    assert np.isfinite(float(row["proj_radial_mesh_internal_disk_core"]))
+    assert np.isfinite(float(row["proj_radial_mesh_internal_rim_band"]))
+    assert np.isfinite(float(row["proj_radial_mesh_internal_outer_near"]))
+    assert np.isfinite(float(row["proj_radial_mesh_internal_outer_far"]))
+    assert np.isfinite(float(row["proj_radial_internal_disk_core_abs_error"]))
+    assert np.isfinite(float(row["proj_radial_internal_rim_band_abs_error"]))
+    assert np.isfinite(float(row["proj_radial_internal_outer_near_abs_error"]))
+    assert np.isfinite(float(row["proj_radial_internal_outer_far_abs_error"]))
+    assert np.isfinite(
+        float(row["proj_radial_internal_disk_core_abs_error_delta_vs_unprojected"])
+    )
+    assert np.isfinite(
+        float(row["proj_radial_internal_rim_band_abs_error_delta_vs_unprojected"])
+    )
+    assert np.isfinite(
+        float(row["proj_radial_internal_outer_near_abs_error_delta_vs_unprojected"])
+    )
+    assert np.isfinite(
+        float(row["proj_radial_internal_outer_far_abs_error_delta_vs_unprojected"])
+    )
 
 
 @pytest.mark.regression
