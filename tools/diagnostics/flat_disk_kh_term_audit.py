@@ -553,7 +553,14 @@ def _boundary_realization_metrics(
     }
 
 
-def _leakage_metrics(mesh, *, radius: float) -> dict[str, float]:
+def _leakage_metrics(
+    mesh,
+    *,
+    radius: float,
+    lambda_value: float,
+    rim_half_width_lambda: float,
+    outer_near_width_lambda: float,
+) -> dict[str, float]:
     """Report azimuthal (t_phi) leakage relative to radial component."""
     pos = mesh.positions_view()
     r, r_hat, phi_hat = _radial_frames(pos)
@@ -568,12 +575,165 @@ def _leakage_metrics(mesh, *, radius: float) -> dict[str, float]:
         den = float(np.median(np.abs(t_rad[mask])))
         return float(num / max(den, 1e-18))
 
+    def _median_abs(values: np.ndarray, mask: np.ndarray) -> float:
+        if not np.any(mask):
+            return float("nan")
+        return float(np.median(np.abs(values[mask])))
+
     inner_mask = r < float(radius)
     outer_mask = r > float(radius)
+    rim_w = max(0.0, float(rim_half_width_lambda) * float(lambda_value))
+    outer_near_w = max(0.0, float(outer_near_width_lambda) * float(lambda_value))
+    r_disk_core_end = max(0.0, float(radius) - rim_w)
+    r_rim_end = max(r_disk_core_end, float(radius) + rim_w)
+    r_outer_near_end = max(r_rim_end, float(radius) + outer_near_w)
+
+    disk_core_mask = r < r_disk_core_end
+    rim_band_mask = (r >= r_disk_core_end) & (r <= r_rim_end)
+    outer_near_mask = (r > r_rim_end) & (r <= r_outer_near_end)
+    outer_far_mask = r > r_outer_near_end
     return {
         "inner_tphi_over_trad_median": _ratio(inner_mask),
         "outer_tphi_over_trad_median": _ratio(outer_mask),
+        "disk_core_tphi_abs_median": _median_abs(t_phi, disk_core_mask),
+        "disk_core_trad_abs_median": _median_abs(t_rad, disk_core_mask),
+        "disk_core_tphi_over_trad_median": _ratio(disk_core_mask),
+        "rim_band_tphi_abs_median": _median_abs(t_phi, rim_band_mask),
+        "rim_band_trad_abs_median": _median_abs(t_rad, rim_band_mask),
+        "rim_band_tphi_over_trad_median": _ratio(rim_band_mask),
+        "outer_near_tphi_abs_median": _median_abs(t_phi, outer_near_mask),
+        "outer_near_trad_abs_median": _median_abs(t_rad, outer_near_mask),
+        "outer_near_tphi_over_trad_median": _ratio(outer_near_mask),
+        "outer_far_tphi_abs_median": _median_abs(t_phi, outer_far_mask),
+        "outer_far_trad_abs_median": _median_abs(t_rad, outer_far_mask),
+        "outer_far_tphi_over_trad_median": _ratio(outer_far_mask),
     }
+
+
+def _pearson_correlation(x_vals: Sequence[float], y_vals: Sequence[float]) -> float:
+    x = np.asarray([float(v) for v in x_vals], dtype=float)
+    y = np.asarray([float(v) for v in y_vals], dtype=float)
+    mask = np.isfinite(x) & np.isfinite(y)
+    if np.sum(mask) < 2:
+        return float("nan")
+    xg = x[mask]
+    yg = y[mask]
+    x0 = xg - float(np.mean(xg))
+    y0 = yg - float(np.mean(yg))
+    den = float(np.linalg.norm(x0) * np.linalg.norm(y0))
+    if den <= 1e-18:
+        return float("nan")
+    return float(np.dot(x0, y0) / den)
+
+
+def _band_anisotropy_metrics(
+    mesh,
+    *,
+    radius: float,
+    lambda_value: float,
+    leakage: dict[str, float],
+) -> dict[str, float]:
+    """Report per-band anisotropy metrics and leakage correlations."""
+    tri_rows, _ = mesh.triangle_row_cache()
+    if tri_rows is None or len(tri_rows) == 0:
+        return {
+            "disk_core_hmax_over_hmin_mean": float("nan"),
+            "rim_band_hmax_over_hmin_mean": float("nan"),
+            "outer_near_hmax_over_hmin_mean": float("nan"),
+            "outer_far_hmax_over_hmin_mean": float("nan"),
+            "disk_core_edge_orientation_spread": float("nan"),
+            "rim_band_edge_orientation_spread": float("nan"),
+            "outer_near_edge_orientation_spread": float("nan"),
+            "outer_far_edge_orientation_spread": float("nan"),
+            "corr_hmax_over_hmin_vs_tphi_over_trad": float("nan"),
+            "corr_orientation_spread_vs_tphi_over_trad": float("nan"),
+        }
+
+    pos = mesh.positions_view()
+    tri_pos = pos[tri_rows]
+    e01 = tri_pos[:, 1] - tri_pos[:, 0]
+    e12 = tri_pos[:, 2] - tri_pos[:, 1]
+    e20 = tri_pos[:, 0] - tri_pos[:, 2]
+    l01 = np.linalg.norm(e01, axis=1)
+    l12 = np.linalg.norm(e12, axis=1)
+    l20 = np.linalg.norm(e20, axis=1)
+    lmax = np.maximum.reduce([l01, l12, l20])
+    lmin = np.minimum.reduce([l01, l12, l20])
+    tri_aspect = lmax / np.maximum(lmin, 1e-18)
+    tri_cent = np.mean(tri_pos, axis=1)
+    tri_r = np.linalg.norm(tri_cent[:, :2], axis=1)
+
+    rim_w = max(0.0, float(lambda_value))
+    outer_near_w = max(0.0, 4.0 * float(lambda_value))
+    r_disk_core_end = max(0.0, float(radius) - rim_w)
+    r_rim_end = max(r_disk_core_end, float(radius) + rim_w)
+    r_outer_near_end = max(r_rim_end, float(radius) + outer_near_w)
+
+    tri_masks = {
+        "disk_core": tri_r < r_disk_core_end,
+        "rim_band": (tri_r >= r_disk_core_end) & (tri_r <= r_rim_end),
+        "outer_near": (tri_r > r_rim_end) & (tri_r <= r_outer_near_end),
+        "outer_far": tri_r > r_outer_near_end,
+    }
+
+    def _mean_aspect(mask: np.ndarray) -> float:
+        if not np.any(mask):
+            return float("nan")
+        return float(np.mean(tri_aspect[mask]))
+
+    all_edges = np.vstack(
+        [tri_rows[:, [0, 1]], tri_rows[:, [1, 2]], tri_rows[:, [2, 0]]]
+    )
+    sorted_edges = np.sort(all_edges, axis=1)
+    edges = np.unique(sorted_edges, axis=0)
+    p0 = pos[edges[:, 0]]
+    p1 = pos[edges[:, 1]]
+    dxy = p1[:, :2] - p0[:, :2]
+    edge_len = np.linalg.norm(dxy, axis=1)
+    valid = edge_len > 1e-12
+    angles = np.zeros(edges.shape[0], dtype=float)
+    angles[valid] = np.arctan2(dxy[valid, 1], dxy[valid, 0])
+    mid = 0.5 * (p0 + p1)
+    r_mid = np.linalg.norm(mid[:, :2], axis=1)
+    edge_masks = {
+        "disk_core": valid & (r_mid < r_disk_core_end),
+        "rim_band": valid & (r_mid >= r_disk_core_end) & (r_mid <= r_rim_end),
+        "outer_near": valid & (r_mid > r_rim_end) & (r_mid <= r_outer_near_end),
+        "outer_far": valid & (r_mid > r_outer_near_end),
+    }
+
+    def _orientation_spread(mask: np.ndarray) -> float:
+        if not np.any(mask):
+            return float("nan")
+        th2 = 2.0 * angles[mask]
+        c = float(np.mean(np.cos(th2)))
+        s = float(np.mean(np.sin(th2)))
+        resultant = float(np.clip(np.hypot(c, s), 1e-12, 1.0))
+        return float(np.sqrt(max(0.0, -2.0 * np.log(resultant))) / 2.0)
+
+    aspect_vec = []
+    orient_vec = []
+    leak_vec = []
+    by_band: dict[str, float] = {}
+    for band in ("disk_core", "rim_band", "outer_near", "outer_far"):
+        asp = _mean_aspect(tri_masks[band])
+        ori = _orientation_spread(edge_masks[band])
+        leak = float(leakage.get(f"{band}_tphi_over_trad_median", float("nan")))
+        by_band[f"{band}_hmax_over_hmin_mean"] = asp
+        by_band[f"{band}_edge_orientation_spread"] = ori
+        aspect_vec.append(asp)
+        orient_vec.append(ori)
+        leak_vec.append(
+            float(np.log(max(leak, 1e-18))) if np.isfinite(leak) else float("nan")
+        )
+
+    by_band["corr_hmax_over_hmin_vs_tphi_over_trad"] = _pearson_correlation(
+        aspect_vec, leak_vec
+    )
+    by_band["corr_orientation_spread_vs_tphi_over_trad"] = _pearson_correlation(
+        orient_vec, leak_vec
+    )
+    return by_band
 
 
 def _radial_projected_band_diagnostics(
@@ -841,7 +1001,19 @@ def _run_single_level(
             radius=float(theory.radius),
             theta_value=theta_f,
         )
-        leakage = _leakage_metrics(mesh, radius=float(theory.radius))
+        leakage = _leakage_metrics(
+            mesh,
+            radius=float(theory.radius),
+            lambda_value=float(theory.lambda_value),
+            rim_half_width_lambda=1.0,
+            outer_near_width_lambda=4.0,
+        )
+        anisotropy = _band_anisotropy_metrics(
+            mesh,
+            radius=float(theory.radius),
+            lambda_value=float(theory.lambda_value),
+            leakage=leakage,
+        )
         if bool(radial_projection_diagnostic):
             proj_radial = _radial_projected_band_diagnostics(
                 mesh,
@@ -1143,6 +1315,7 @@ def _run_single_level(
                 ),
                 **boundary,
                 **leakage,
+                **anisotropy,
                 **proj_radial,
             }
         )

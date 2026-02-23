@@ -255,6 +255,9 @@ intended for development and planning; users should consult `README.md` and
           `legacy` parity remap and `kh_physical` unit-consistent scaling
           (energy scaled by `kappa`, length scaled by user-selected `L0`,
           including physical CLI inputs for `kappa`, `kappa_t`, `R`, and drive).
+    - [x] Added strict-KH diagnostics for radial-only projected fields and
+          bandwise anisotropy/leakage attribution, plus optional local
+          edge-flip annulus quality controls in the flat benchmark harness.
     - [ ] E2E regression: for γ=0, recover the 1_disk_3d predictions
           (`θ^p(r)=θ^d(r)` in the outer region and `φ*≈θ_B/2`).
      - [ ] Future: enforce/validate that interacting tilt sources on a given
