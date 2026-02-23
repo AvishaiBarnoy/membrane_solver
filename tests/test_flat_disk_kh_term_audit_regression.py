@@ -7,6 +7,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.flat_disk_kh_term_audit import (
+    run_flat_disk_kh_outertail_characterization,
     run_flat_disk_kh_strict_preset_characterization,
     run_flat_disk_kh_strict_refinement_characterization,
     run_flat_disk_kh_term_audit,
@@ -518,3 +519,57 @@ def test_flat_disk_kh_strict_preset_characterization_emits_best(
         assert np.isfinite(float(row["outer_tphi_over_trad_median"]))
     best = report["selected_best"]
     assert best["optimize_preset"] == "kh_strict_energy_tight"
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_outertail_characterization_emits_ranked_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_term_audit as audit_mod
+
+    def _fake_run_flat_disk_one_leaflet_benchmark(**kwargs):
+        rmax = float(kwargs.get("outer_local_refine_rmax_lambda", 8.0))
+        theta_factor = 1.02 if rmax >= 10.0 else 1.03
+        energy_factor = 1.04 if rmax >= 10.0 else 1.05
+        return {
+            "parity": {
+                "theta_factor": theta_factor,
+                "energy_factor": energy_factor,
+                "meets_factor_2": True,
+            },
+            "mesh": {"theta_star": 0.138},
+        }
+
+    def _fake_run_flat_disk_kh_term_audit(**kwargs):
+        rmax = float(kwargs.get("outer_local_refine_rmax_lambda", 8.0))
+        near_ratio = 1.03 if rmax >= 10.0 else 1.15
+        far_ratio = 0.96 if rmax >= 10.0 else 0.70
+        return {
+            "rows": [
+                {
+                    "internal_outer_near_ratio_mesh_over_theory_finite": near_ratio,
+                    "internal_outer_far_ratio_mesh_over_theory_finite": far_ratio,
+                    "mesh_internal_outer_near": 0.05,
+                    "mesh_internal_outer_far": 0.001,
+                    "theory_internal_outer_near_finite": 0.05,
+                    "theory_internal_outer_far_finite": 0.001,
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        "tools.reproduce_flat_disk_one_leaflet.run_flat_disk_one_leaflet_benchmark",
+        _fake_run_flat_disk_one_leaflet_benchmark,
+    )
+    monkeypatch.setattr(
+        audit_mod, "run_flat_disk_kh_term_audit", _fake_run_flat_disk_kh_term_audit
+    )
+
+    report = run_flat_disk_kh_outertail_characterization(
+        optimize_presets=("kh_strict_outerfield_tight",),
+        outer_local_refine_steps_values=(1,),
+        outer_local_refine_rmax_lambda_values=(8.0, 10.0),
+    )
+    assert len(report["rows"]) == 2
+    best = report["selected_best"]
+    assert float(best["outer_local_refine_rmax_lambda"]) == pytest.approx(10.0)

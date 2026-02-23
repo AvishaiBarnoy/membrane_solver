@@ -1783,6 +1783,198 @@ def run_flat_disk_kh_strict_preset_characterization(
     }
 
 
+def run_flat_disk_kh_outertail_characterization(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    outer_mode: str = "disabled",
+    smoothness_model: str = "splay_twist",
+    kappa_physical: float = 10.0,
+    kappa_t_physical: float = 10.0,
+    radius_nm: float = 7.0,
+    length_scale_nm: float = 15.0,
+    drive_physical: float = (2.0 / 0.7),
+    tilt_mass_mode_in: str = "consistent",
+    optimize_presets: Sequence[str] = (
+        "kh_strict_outerfield_tight",
+        "kh_strict_outerband_tight",
+    ),
+    refine_level: int = 2,
+    rim_local_refine_steps: int = 1,
+    rim_local_refine_band_lambda: float = 3.0,
+    outer_local_refine_steps_values: Sequence[int] = (1, 2),
+    outer_local_refine_rmin_lambda: float = 1.0,
+    outer_local_refine_rmax_lambda_values: Sequence[float] = (8.0, 10.0),
+) -> dict[str, Any]:
+    """Characterize strict KH outer-tail parity over a compact mesh-control matrix."""
+    from tools.reproduce_flat_disk_one_leaflet import (
+        run_flat_disk_one_leaflet_benchmark,
+    )
+
+    fixture_path = Path(fixture)
+    if not fixture_path.is_absolute():
+        fixture_path = (ROOT / fixture_path).resolve()
+    if not fixture_path.exists():
+        raise FileNotFoundError(f"Fixture not found: {fixture_path}")
+
+    presets = [str(x) for x in optimize_presets]
+    outer_steps_values = [int(x) for x in outer_local_refine_steps_values]
+    outer_rmax_values = [float(x) for x in outer_local_refine_rmax_lambda_values]
+    if len(presets) == 0:
+        raise ValueError("optimize_presets must be non-empty.")
+    if len(outer_steps_values) == 0:
+        raise ValueError("outer_local_refine_steps_values must be non-empty.")
+    if len(outer_rmax_values) == 0:
+        raise ValueError("outer_local_refine_rmax_lambda_values must be non-empty.")
+
+    rows: list[dict[str, float | int | bool | str]] = []
+    complexity_rank = 0
+
+    def _pick(row: dict[str, Any], primary: str, fallback: str) -> float:
+        if primary in row:
+            return float(row[primary])
+        return float(row[fallback])
+
+    for preset in presets:
+        for outer_steps in outer_steps_values:
+            for outer_rmax in outer_rmax_values:
+                if float(outer_rmax) <= float(outer_local_refine_rmin_lambda):
+                    raise ValueError(
+                        "outer_local_refine_rmax_lambda must be > "
+                        "outer_local_refine_rmin_lambda in characterization."
+                    )
+                t0 = perf_counter()
+                bench = run_flat_disk_one_leaflet_benchmark(
+                    fixture=fixture_path,
+                    refine_level=int(refine_level),
+                    outer_mode=outer_mode,
+                    smoothness_model=smoothness_model,
+                    theta_mode="optimize",
+                    optimize_preset=str(preset),
+                    parameterization="kh_physical",
+                    kappa_physical=float(kappa_physical),
+                    kappa_t_physical=float(kappa_t_physical),
+                    radius_nm=float(radius_nm),
+                    length_scale_nm=float(length_scale_nm),
+                    drive_physical=float(drive_physical),
+                    splay_modulus_scale_in=1.0,
+                    tilt_mass_mode_in=str(tilt_mass_mode_in),
+                    rim_local_refine_steps=int(rim_local_refine_steps),
+                    rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
+                    outer_local_refine_steps=int(outer_steps),
+                    outer_local_refine_rmin_lambda=float(
+                        outer_local_refine_rmin_lambda
+                    ),
+                    outer_local_refine_rmax_lambda=float(outer_rmax),
+                )
+                runtime_seconds = float(perf_counter() - t0)
+                theta_star = float(bench["mesh"]["theta_star"])
+                theta_factor = float(bench["parity"]["theta_factor"])
+                energy_factor = float(bench["parity"]["energy_factor"])
+                balanced_parity_score = _balanced_parity_score(
+                    theta_factor, energy_factor
+                )
+
+                audit = run_flat_disk_kh_term_audit(
+                    fixture=fixture_path,
+                    refine_level=int(refine_level),
+                    outer_mode=outer_mode,
+                    smoothness_model=smoothness_model,
+                    kappa_physical=float(kappa_physical),
+                    kappa_t_physical=float(kappa_t_physical),
+                    radius_nm=float(radius_nm),
+                    length_scale_nm=float(length_scale_nm),
+                    drive_physical=float(drive_physical),
+                    theta_values=(theta_star,),
+                    tilt_mass_mode_in=str(tilt_mass_mode_in),
+                    rim_local_refine_steps=int(rim_local_refine_steps),
+                    rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
+                    outer_local_refine_steps=int(outer_steps),
+                    outer_local_refine_rmin_lambda=float(
+                        outer_local_refine_rmin_lambda
+                    ),
+                    outer_local_refine_rmax_lambda=float(outer_rmax),
+                )
+                if len(audit.get("rows", [])) == 0:
+                    raise ValueError(
+                        "run_flat_disk_kh_term_audit returned empty rows for "
+                        f"candidate preset={preset} outer_steps={outer_steps} "
+                        f"outer_rmax={outer_rmax}"
+                    )
+                arow = audit["rows"][0]
+                outer_near_ratio = _pick(
+                    arow,
+                    "internal_outer_near_ratio_mesh_over_theory_finite",
+                    "internal_outer_near_ratio_mesh_over_theory",
+                )
+                outer_far_ratio = _pick(
+                    arow,
+                    "internal_outer_far_ratio_mesh_over_theory_finite",
+                    "internal_outer_far_ratio_mesh_over_theory",
+                )
+                outer_tail_score = _ratio_distance_score(
+                    outer_near_ratio, outer_far_ratio
+                )
+                if not np.isfinite(outer_tail_score["l2_log"]) or not np.isfinite(
+                    outer_tail_score["max_abs_log"]
+                ):
+                    raise ValueError(
+                        "Non-finite outer-tail score for "
+                        f"preset={preset} outer_steps={outer_steps} "
+                        f"outer_rmax={outer_rmax}"
+                    )
+
+                rows.append(
+                    {
+                        "optimize_preset": str(preset),
+                        "outer_local_refine_steps": int(outer_steps),
+                        "outer_local_refine_rmax_lambda": float(outer_rmax),
+                        "theta_factor": theta_factor,
+                        "energy_factor": energy_factor,
+                        "balanced_parity_score": float(balanced_parity_score),
+                        "runtime_seconds": runtime_seconds,
+                        "outer_near_ratio_mesh_over_theory": float(outer_near_ratio),
+                        "outer_far_ratio_mesh_over_theory": float(outer_far_ratio),
+                        "outer_tail_balance_score": float(outer_tail_score["l2_log"]),
+                        "outer_tail_max_abs_log": float(
+                            outer_tail_score["max_abs_log"]
+                        ),
+                        "complexity_rank": int(complexity_rank),
+                    }
+                )
+                complexity_rank += 1
+
+    if len(rows) == 0:
+        raise ValueError("Strict outer-tail characterization produced no candidates.")
+
+    selected = min(
+        rows,
+        key=lambda row: (
+            float(row["outer_tail_balance_score"]),
+            float(row["balanced_parity_score"]),
+            float(row["runtime_seconds"]),
+            int(row["complexity_rank"]),
+        ),
+    )
+    return {
+        "meta": {
+            "mode": "strict_outertail_characterization",
+            "fixture": str(fixture_path.relative_to(ROOT)),
+            "parameterization": "kh_physical",
+            "splay_modulus_scale_in": 1.0,
+            "tilt_mass_mode_in": str(tilt_mass_mode_in),
+            "theta_mode": "optimize",
+            "outer_mode": str(outer_mode),
+            "smoothness_model": str(smoothness_model),
+            "refine_level": int(refine_level),
+            "rim_local_refine_steps": int(rim_local_refine_steps),
+            "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
+            "outer_local_refine_rmin_lambda": float(outer_local_refine_rmin_lambda),
+        },
+        "rows": rows,
+        "selected_best": selected,
+    }
+
+
 def main() -> int:
     _ensure_repo_root_on_sys_path()
     ap = argparse.ArgumentParser()
@@ -1822,6 +2014,11 @@ def main() -> int:
         help="Run strict-KH optimize-preset characterization on fixed strict mesh.",
     )
     ap.add_argument(
+        "--strict-outertail-characterization",
+        action="store_true",
+        help="Run strict-KH outer-tail characterization matrix.",
+    )
+    ap.add_argument(
         "--optimize-preset",
         default="kh_wide",
     )
@@ -1830,13 +2027,49 @@ def main() -> int:
         nargs="+",
         default=None,
     )
+    ap.add_argument("--outer-local-refine-steps-values", type=int, nargs="+")
+    ap.add_argument("--outer-local-refine-rmax-lambda-values", type=float, nargs="+")
     ap.add_argument(
         "--theta-values", type=float, nargs="+", default=[0.0, 6.366e-4, 0.004]
     )
     ap.add_argument("--output", default=str(DEFAULT_OUT))
     args = ap.parse_args()
 
-    if args.strict_preset_characterization:
+    if args.strict_outertail_characterization:
+        presets = (
+            tuple(str(x) for x in args.optimize_presets)
+            if args.optimize_presets is not None
+            else ("kh_strict_outerfield_tight", "kh_strict_outerband_tight")
+        )
+        outer_steps_values = (
+            tuple(int(x) for x in args.outer_local_refine_steps_values)
+            if args.outer_local_refine_steps_values is not None
+            else (1, 2)
+        )
+        outer_rmax_values = (
+            tuple(float(x) for x in args.outer_local_refine_rmax_lambda_values)
+            if args.outer_local_refine_rmax_lambda_values is not None
+            else (8.0, 10.0)
+        )
+        report = run_flat_disk_kh_outertail_characterization(
+            fixture=args.fixture,
+            outer_mode=args.outer_mode,
+            smoothness_model=args.smoothness_model,
+            kappa_physical=args.kappa_physical,
+            kappa_t_physical=args.kappa_t_physical,
+            radius_nm=args.radius_nm,
+            length_scale_nm=args.length_scale_nm,
+            drive_physical=args.drive_physical,
+            tilt_mass_mode_in=args.tilt_mass_mode_in,
+            optimize_presets=presets,
+            refine_level=args.refine_level,
+            rim_local_refine_steps=args.rim_local_refine_steps,
+            rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
+            outer_local_refine_steps_values=outer_steps_values,
+            outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
+            outer_local_refine_rmax_lambda_values=outer_rmax_values,
+        )
+    elif args.strict_preset_characterization:
         presets = (
             tuple(str(x) for x in args.optimize_presets)
             if args.optimize_presets is not None
