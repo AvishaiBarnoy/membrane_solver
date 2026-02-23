@@ -47,6 +47,9 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   - KH term audit now uses deterministic subtriangle area fractions for rim-crossing triangles (replacing vertex-count fractions) so strict fixed-theta disk/outer internal ratios are not biased by coarse rim partitioning.
 - KH term audit now emits log-space section parity scores (internal split, internal bands, tilt bands, smooth bands, and combined terms) to track per-section distance-to-theory during strict parity tightening.
 - KH term audit now also reports finite-domain outer-band KH reference terms at mesh `r_max` (`theory_*_finite`) alongside the infinite-domain reference, so truncation-vs-discretization effects can be diagnosed explicitly.
+- Flat one-leaflet reproducer now supports optional local edge-flip annulus controls (`--local-edge-flip-steps`, `--local-edge-flip-rmin-lambda`, `--local-edge-flip-rmax-lambda`) for mesh-quality tightening without coefficient changes.
+- KH term audit now supports optional radial-projection diagnostics (`--radial-projection-diagnostic`) and reports projected per-band error deltas vs unprojected fields.
+- KH term audit now reports per-band leakage (`t_phi/t_r`) and anisotropy metrics (`h_max/h_min`, edge-orientation spread) plus cross-band correlations.
   - Strict `kh_physical` theory coefficients now use exact radial KH integral evaluation (instead of reduced closed-form coefficient approximation), and KH baseline fixtures were refreshed to this reference (`theory_source=kh_physical_radial_integral`).
   - Strict optimize presets now preserve explicit rim-local override inputs (`--rim-local-refine-steps`, `--rim-local-refine-band-lambda`) while still enforcing strict global refine level.
   - Added opt-in `kh_strict_robust` optimize preset with local post-optimize energy consistency check/polish (`theta_optimize_postcheck`) for non-worsening strict parity.

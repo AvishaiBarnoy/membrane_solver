@@ -343,6 +343,8 @@ Interactive commands:
     (`f=0.5*kappa*(div t)^2 + 0.5*kappa_t*|t|^2`) under the same disk/outer Bessel solution.
   - KH per-theta term audit (mesh vs analytic split):
     `python tools/diagnostics/flat_disk_kh_term_audit.py --refine-level 1 --theta-values 0 6.366e-4 0.004`.
+    Add `--radial-projection-diagnostic` to compare against radial-only projected
+    fields (`t <- (t·r_hat) r_hat`) with per-band projected error deltas.
   - KH audit refine sweep:
     `python tools/diagnostics/flat_disk_kh_term_audit.py --refine-levels 1 2 --theta-values 0 6.366e-4`.
   - KH audit local rim-band refinement:
@@ -350,6 +352,11 @@ Interactive commands:
   - KH audit local outer-annulus refinement:
     add `--outer-local-refine-steps`, `--outer-local-refine-rmin-lambda`,
     and `--outer-local-refine-rmax-lambda` (all lambda-scaled from the disk rim).
+  - Optional local edge-flip quality pass (benchmark harness and KH term audit):
+    `--local-edge-flip-steps`, `--local-edge-flip-rmin-lambda`,
+    `--local-edge-flip-rmax-lambda`.
+  - KH term audit now reports per-band anisotropy (`h_max/h_min`,
+    edge-orientation spread) and bandwise leakage metrics (`t_phi/t_r`).
   - Scan controls (`--theta-mode scan`):
     `--theta-min`, `--theta-max`, `--theta-count`.
   - Optimize controls (`--theta-mode optimize`):
