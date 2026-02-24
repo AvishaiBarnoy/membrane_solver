@@ -2078,8 +2078,10 @@ def run_flat_disk_kh_outerfield_averaged_sweep(
     rim_local_refine_steps: int = 1,
     rim_local_refine_band_lambda: float = 3.0,
     outer_local_refine_rmin_lambda: float = 1.0,
+    outer_local_refine_rmin_lambda_values: Sequence[float] | None = None,
     outer_local_refine_rmax_lambda_values: Sequence[float] = (8.0, 9.0, 10.0),
     outer_local_vertex_average_steps: int = 2,
+    outer_local_vertex_average_steps_values: Sequence[int] | None = None,
     outer_local_vertex_average_rmin_lambda_values: Sequence[float] = (3.5, 4.0, 4.5),
     outer_local_vertex_average_rmax_lambda_values: Sequence[float] = (10.0, 11.0, 12.0),
 ) -> dict[str, Any]:
@@ -2090,11 +2092,25 @@ def run_flat_disk_kh_outerfield_averaged_sweep(
     if not fixture_path.exists():
         raise FileNotFoundError(f"Fixture not found: {fixture_path}")
 
+    refine_rmin_values = (
+        [float(x) for x in outer_local_refine_rmin_lambda_values]
+        if outer_local_refine_rmin_lambda_values is not None
+        else [float(outer_local_refine_rmin_lambda)]
+    )
     refine_rmax_values = [float(x) for x in outer_local_refine_rmax_lambda_values]
+    avg_steps_values = (
+        [int(x) for x in outer_local_vertex_average_steps_values]
+        if outer_local_vertex_average_steps_values is not None
+        else [int(outer_local_vertex_average_steps)]
+    )
     avg_rmin_values = [float(x) for x in outer_local_vertex_average_rmin_lambda_values]
     avg_rmax_values = [float(x) for x in outer_local_vertex_average_rmax_lambda_values]
+    if len(refine_rmin_values) == 0:
+        raise ValueError("outer_local_refine_rmin_lambda_values must be non-empty.")
     if len(refine_rmax_values) == 0:
         raise ValueError("outer_local_refine_rmax_lambda_values must be non-empty.")
+    if len(avg_steps_values) == 0:
+        raise ValueError("outer_local_vertex_average_steps_values must be non-empty.")
     if len(avg_rmin_values) == 0:
         raise ValueError(
             "outer_local_vertex_average_rmin_lambda_values must be non-empty."
@@ -2106,107 +2122,125 @@ def run_flat_disk_kh_outerfield_averaged_sweep(
 
     rows: list[dict[str, float | int | str]] = []
     complexity_rank = 0
-    for refine_rmax in refine_rmax_values:
-        if float(refine_rmax) <= float(outer_local_refine_rmin_lambda):
-            raise ValueError(
-                "outer_local_refine_rmax_lambda must be > "
-                "outer_local_refine_rmin_lambda in strict averaged sweep."
-            )
-        for avg_rmin in avg_rmin_values:
-            for avg_rmax in avg_rmax_values:
-                if float(avg_rmax) <= float(avg_rmin):
+    for refine_rmin in refine_rmin_values:
+        for refine_rmax in refine_rmax_values:
+            if float(refine_rmax) <= float(refine_rmin):
+                raise ValueError(
+                    "outer_local_refine_rmax_lambda must be > "
+                    "outer_local_refine_rmin_lambda in strict averaged sweep."
+                )
+            for avg_steps in avg_steps_values:
+                if int(avg_steps) < 0:
                     raise ValueError(
-                        "outer_local_vertex_average_rmax_lambda must be > "
-                        "outer_local_vertex_average_rmin_lambda in strict averaged "
-                        "sweep."
+                        "outer_local_vertex_average_steps_values must be >= 0."
                     )
-                t0 = perf_counter()
-                audit = run_flat_disk_kh_term_audit(
-                    fixture=fixture_path,
-                    refine_level=int(refine_level),
-                    outer_mode=outer_mode,
-                    smoothness_model=smoothness_model,
-                    kappa_physical=float(kappa_physical),
-                    kappa_t_physical=float(kappa_t_physical),
-                    radius_nm=float(radius_nm),
-                    length_scale_nm=float(length_scale_nm),
-                    drive_physical=float(drive_physical),
-                    theta_values=(float(theta_value),),
-                    tilt_mass_mode_in=str(tilt_mass_mode_in),
-                    rim_local_refine_steps=int(rim_local_refine_steps),
-                    rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
-                    outer_local_refine_steps=1,
-                    outer_local_refine_rmin_lambda=float(
-                        outer_local_refine_rmin_lambda
-                    ),
-                    outer_local_refine_rmax_lambda=float(refine_rmax),
-                    local_edge_flip_steps=0,
-                    local_edge_flip_rmin_lambda=-1.0,
-                    local_edge_flip_rmax_lambda=4.0,
-                    outer_local_vertex_average_steps=int(
-                        outer_local_vertex_average_steps
-                    ),
-                    outer_local_vertex_average_rmin_lambda=float(avg_rmin),
-                    outer_local_vertex_average_rmax_lambda=float(avg_rmax),
-                )
-                runtime_seconds = float(perf_counter() - t0)
-                if len(audit.get("rows", [])) == 0:
-                    raise AssertionError(
-                        "run_flat_disk_kh_term_audit returned empty rows in strict "
-                        "outerfield averaged sweep."
-                    )
-                row0 = audit["rows"][0]
-                disk_ratio = float(row0["internal_disk_ratio_mesh_over_theory"])
-                near_ratio = float(
-                    row0["internal_outer_near_ratio_mesh_over_theory_finite"]
-                )
-                far_ratio = float(
-                    row0["internal_outer_far_ratio_mesh_over_theory_finite"]
-                )
-                section_score = float(
-                    row0["section_score_internal_bands_finite_outer_l2_log"]
-                )
-                if not np.isfinite(disk_ratio):
-                    raise ValueError(
-                        "Non-finite disk ratio in strict averaged sweep for "
-                        f"outer_local_refine_rmax_lambda={refine_rmax}, "
-                        f"outer_local_vertex_average_rmin_lambda={avg_rmin}, "
-                        f"outer_local_vertex_average_rmax_lambda={avg_rmax}."
-                    )
-                if not np.isfinite(near_ratio) or not np.isfinite(far_ratio):
-                    raise ValueError(
-                        "Non-finite outer ratios in strict averaged sweep for "
-                        f"outer_local_refine_rmax_lambda={refine_rmax}, "
-                        f"outer_local_vertex_average_rmin_lambda={avg_rmin}, "
-                        f"outer_local_vertex_average_rmax_lambda={avg_rmax}."
-                    )
-                if not np.isfinite(section_score):
-                    raise ValueError(
-                        "Non-finite section score in strict averaged sweep for "
-                        f"outer_local_refine_rmax_lambda={refine_rmax}, "
-                        f"outer_local_vertex_average_rmin_lambda={avg_rmin}, "
-                        f"outer_local_vertex_average_rmax_lambda={avg_rmax}."
-                    )
-                rows.append(
-                    {
-                        "outer_local_refine_rmax_lambda": float(refine_rmax),
-                        "outer_local_vertex_average_rmin_lambda": float(avg_rmin),
-                        "outer_local_vertex_average_rmax_lambda": float(avg_rmax),
-                        "internal_disk_ratio_mesh_over_theory": float(disk_ratio),
-                        "internal_outer_near_ratio_mesh_over_theory_finite": float(
-                            near_ratio
-                        ),
-                        "internal_outer_far_ratio_mesh_over_theory_finite": float(
-                            far_ratio
-                        ),
-                        "section_score_internal_bands_finite_outer_l2_log": float(
-                            section_score
-                        ),
-                        "runtime_seconds": float(runtime_seconds),
-                        "complexity_rank": int(complexity_rank),
-                    }
-                )
-                complexity_rank += 1
+                for avg_rmin in avg_rmin_values:
+                    for avg_rmax in avg_rmax_values:
+                        if float(avg_rmax) <= float(avg_rmin):
+                            raise ValueError(
+                                "outer_local_vertex_average_rmax_lambda must be > "
+                                "outer_local_vertex_average_rmin_lambda in strict averaged "
+                                "sweep."
+                            )
+                        t0 = perf_counter()
+                        audit = run_flat_disk_kh_term_audit(
+                            fixture=fixture_path,
+                            refine_level=int(refine_level),
+                            outer_mode=outer_mode,
+                            smoothness_model=smoothness_model,
+                            kappa_physical=float(kappa_physical),
+                            kappa_t_physical=float(kappa_t_physical),
+                            radius_nm=float(radius_nm),
+                            length_scale_nm=float(length_scale_nm),
+                            drive_physical=float(drive_physical),
+                            theta_values=(float(theta_value),),
+                            tilt_mass_mode_in=str(tilt_mass_mode_in),
+                            rim_local_refine_steps=int(rim_local_refine_steps),
+                            rim_local_refine_band_lambda=float(
+                                rim_local_refine_band_lambda
+                            ),
+                            outer_local_refine_steps=1,
+                            outer_local_refine_rmin_lambda=float(refine_rmin),
+                            outer_local_refine_rmax_lambda=float(refine_rmax),
+                            local_edge_flip_steps=0,
+                            local_edge_flip_rmin_lambda=-1.0,
+                            local_edge_flip_rmax_lambda=4.0,
+                            outer_local_vertex_average_steps=int(avg_steps),
+                            outer_local_vertex_average_rmin_lambda=float(avg_rmin),
+                            outer_local_vertex_average_rmax_lambda=float(avg_rmax),
+                        )
+                        runtime_seconds = float(perf_counter() - t0)
+                        if len(audit.get("rows", [])) == 0:
+                            raise AssertionError(
+                                "run_flat_disk_kh_term_audit returned empty rows in strict "
+                                "outerfield averaged sweep."
+                            )
+                        row0 = audit["rows"][0]
+                        disk_ratio = float(row0["internal_disk_ratio_mesh_over_theory"])
+                        near_ratio = float(
+                            row0["internal_outer_near_ratio_mesh_over_theory_finite"]
+                        )
+                        far_ratio = float(
+                            row0["internal_outer_far_ratio_mesh_over_theory_finite"]
+                        )
+                        section_score = float(
+                            row0["section_score_internal_bands_finite_outer_l2_log"]
+                        )
+                        if not np.isfinite(disk_ratio):
+                            raise ValueError(
+                                "Non-finite disk ratio in strict averaged sweep for "
+                                f"outer_local_refine_rmin_lambda={refine_rmin}, "
+                                f"outer_local_refine_rmax_lambda={refine_rmax}, "
+                                f"outer_local_vertex_average_steps={avg_steps}, "
+                                f"outer_local_vertex_average_rmin_lambda={avg_rmin}, "
+                                f"outer_local_vertex_average_rmax_lambda={avg_rmax}."
+                            )
+                        if not np.isfinite(near_ratio) or not np.isfinite(far_ratio):
+                            raise ValueError(
+                                "Non-finite outer ratios in strict averaged sweep for "
+                                f"outer_local_refine_rmin_lambda={refine_rmin}, "
+                                f"outer_local_refine_rmax_lambda={refine_rmax}, "
+                                f"outer_local_vertex_average_steps={avg_steps}, "
+                                f"outer_local_vertex_average_rmin_lambda={avg_rmin}, "
+                                f"outer_local_vertex_average_rmax_lambda={avg_rmax}."
+                            )
+                        if not np.isfinite(section_score):
+                            raise ValueError(
+                                "Non-finite section score in strict averaged sweep for "
+                                f"outer_local_refine_rmin_lambda={refine_rmin}, "
+                                f"outer_local_refine_rmax_lambda={refine_rmax}, "
+                                f"outer_local_vertex_average_steps={avg_steps}, "
+                                f"outer_local_vertex_average_rmin_lambda={avg_rmin}, "
+                                f"outer_local_vertex_average_rmax_lambda={avg_rmax}."
+                            )
+                        rows.append(
+                            {
+                                "outer_local_refine_rmin_lambda": float(refine_rmin),
+                                "outer_local_refine_rmax_lambda": float(refine_rmax),
+                                "outer_local_vertex_average_steps": int(avg_steps),
+                                "outer_local_vertex_average_rmin_lambda": float(
+                                    avg_rmin
+                                ),
+                                "outer_local_vertex_average_rmax_lambda": float(
+                                    avg_rmax
+                                ),
+                                "internal_disk_ratio_mesh_over_theory": float(
+                                    disk_ratio
+                                ),
+                                "internal_outer_near_ratio_mesh_over_theory_finite": float(
+                                    near_ratio
+                                ),
+                                "internal_outer_far_ratio_mesh_over_theory_finite": float(
+                                    far_ratio
+                                ),
+                                "section_score_internal_bands_finite_outer_l2_log": float(
+                                    section_score
+                                ),
+                                "runtime_seconds": float(runtime_seconds),
+                                "complexity_rank": int(complexity_rank),
+                            }
+                        )
+                        complexity_rank += 1
 
     if len(rows) == 0:
         raise AssertionError("Strict outerfield averaged sweep produced no candidates.")
@@ -2236,11 +2270,17 @@ def run_flat_disk_kh_outerfield_averaged_sweep(
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
             "outer_local_refine_steps": 1,
-            "outer_local_refine_rmin_lambda": float(outer_local_refine_rmin_lambda),
-            "outer_local_vertex_average_steps": int(outer_local_vertex_average_steps),
+            "outer_local_refine_rmin_lambda_values": [
+                float(x) for x in refine_rmin_values
+            ],
+            "outer_local_vertex_average_steps_values": [
+                int(x) for x in avg_steps_values
+            ],
             "local_edge_flip_steps": 0,
             "baseline_controls": {
+                "outer_local_refine_rmin_lambda": 1.0,
                 "outer_local_refine_rmax_lambda": 8.0,
+                "outer_local_vertex_average_steps": 2,
                 "outer_local_vertex_average_rmin_lambda": 4.0,
                 "outer_local_vertex_average_rmax_lambda": 12.0,
             },
@@ -2311,7 +2351,9 @@ def main() -> int:
         default=None,
     )
     ap.add_argument("--outer-local-refine-steps-values", type=int, nargs="+")
+    ap.add_argument("--outer-local-refine-rmin-lambda-values", type=float, nargs="+")
     ap.add_argument("--outer-local-refine-rmax-lambda-values", type=float, nargs="+")
+    ap.add_argument("--outer-local-vertex-average-steps-values", type=int, nargs="+")
     ap.add_argument(
         "--outer-local-vertex-average-rmin-lambda-values", type=float, nargs="+"
     )
@@ -2356,8 +2398,18 @@ def main() -> int:
             rim_local_refine_steps=args.rim_local_refine_steps,
             rim_local_refine_band_lambda=args.rim_local_refine_band_lambda,
             outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
+            outer_local_refine_rmin_lambda_values=(
+                tuple(float(x) for x in args.outer_local_refine_rmin_lambda_values)
+                if args.outer_local_refine_rmin_lambda_values is not None
+                else None
+            ),
             outer_local_refine_rmax_lambda_values=outer_rmax_values,
             outer_local_vertex_average_steps=args.outer_local_vertex_average_steps,
+            outer_local_vertex_average_steps_values=(
+                tuple(int(x) for x in args.outer_local_vertex_average_steps_values)
+                if args.outer_local_vertex_average_steps_values is not None
+                else None
+            ),
             outer_local_vertex_average_rmin_lambda_values=avg_rmin_values,
             outer_local_vertex_average_rmax_lambda_values=avg_rmax_values,
         )

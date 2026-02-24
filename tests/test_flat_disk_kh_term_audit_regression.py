@@ -651,14 +651,18 @@ def test_flat_disk_kh_outerfield_averaged_sweep_emits_matrix_and_best(
     )
 
     report = run_flat_disk_kh_outerfield_averaged_sweep(
+        outer_local_refine_rmin_lambda_values=(1.0, 1.5),
         outer_local_refine_rmax_lambda_values=(8.0, 9.0),
+        outer_local_vertex_average_steps_values=(1, 2),
         outer_local_vertex_average_rmin_lambda_values=(3.5, 4.0),
         outer_local_vertex_average_rmax_lambda_values=(11.0, 12.0),
     )
     assert report["meta"]["mode"] == "strict_outerfield_averaged_sweep"
     rows = report["rows"]
-    assert len(rows) == 8
+    assert len(rows) == 32
     for row in rows:
+        assert np.isfinite(float(row["outer_local_refine_rmin_lambda"]))
+        assert int(row["outer_local_vertex_average_steps"]) in (1, 2)
         assert np.isfinite(float(row["internal_disk_ratio_mesh_over_theory"]))
         assert np.isfinite(
             float(row["internal_outer_near_ratio_mesh_over_theory_finite"])
@@ -677,6 +681,14 @@ def test_flat_disk_kh_outerfield_averaged_sweep_emits_matrix_and_best(
 
 @pytest.mark.regression
 def test_flat_disk_kh_outerfield_averaged_sweep_empty_values_raise() -> None:
+    with pytest.raises(ValueError, match="outer_local_refine_rmin_lambda_values"):
+        run_flat_disk_kh_outerfield_averaged_sweep(
+            outer_local_refine_rmin_lambda_values=(),
+        )
+    with pytest.raises(ValueError, match="outer_local_vertex_average_steps_values"):
+        run_flat_disk_kh_outerfield_averaged_sweep(
+            outer_local_vertex_average_steps_values=(),
+        )
     with pytest.raises(ValueError, match="outer_local_refine_rmax_lambda_values"):
         run_flat_disk_kh_outerfield_averaged_sweep(
             outer_local_refine_rmax_lambda_values=(),

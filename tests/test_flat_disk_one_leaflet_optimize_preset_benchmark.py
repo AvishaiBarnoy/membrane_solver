@@ -170,3 +170,50 @@ def test_flat_disk_kh_outerfield_averaged_bounded_optimize_has_finite_metrics() 
     # keeping runtime practical for CI.
     assert theta_factor <= 3.1
     assert energy_factor <= 1.9
+
+
+@pytest.mark.benchmark
+def test_flat_disk_kh_outerfield_bounded_optimize_rmax9_non_worsening_vs_rmax8() -> (
+    None
+):
+    def _run_with_outer_rmax(rmax_lambda: float) -> dict:
+        return run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=2,
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            theta_mode="optimize",
+            optimize_preset="none",
+            parameterization="kh_physical",
+            tilt_mass_mode_in="consistent",
+            theta_optimize_steps=8,
+            theta_optimize_inner_steps=8,
+            theta_optimize_delta=6.0e-3,
+            rim_local_refine_steps=1,
+            rim_local_refine_band_lambda=3.0,
+            outer_local_refine_steps=1,
+            outer_local_refine_rmin_lambda=1.0,
+            outer_local_refine_rmax_lambda=float(rmax_lambda),
+            outer_local_vertex_average_steps=2,
+            outer_local_vertex_average_rmin_lambda=4.0,
+            outer_local_vertex_average_rmax_lambda=12.0,
+        )
+
+    baseline = _run_with_outer_rmax(8.0)
+    candidate = _run_with_outer_rmax(9.0)
+
+    base_theta = float(baseline["parity"]["theta_factor"])
+    base_energy = float(baseline["parity"]["energy_factor"])
+    cand_theta = float(candidate["parity"]["theta_factor"])
+    cand_energy = float(candidate["parity"]["energy_factor"])
+
+    assert isfinite(base_theta)
+    assert isfinite(base_energy)
+    assert isfinite(cand_theta)
+    assert isfinite(cand_energy)
+    assert bool(baseline["optimize"]["hit_step_limit"]) is True
+    assert bool(candidate["optimize"]["hit_step_limit"]) is True
+
+    # Winner from fixed-theta sweep must be non-worsening under bounded optimize.
+    assert cand_theta <= (base_theta * 1.001)
+    assert cand_energy <= (base_energy * 1.001)
