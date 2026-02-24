@@ -782,19 +782,19 @@ def test_flat_disk_kh_strict_outerfield_averaged_sweep_baseline_non_worsening() 
         rim_local_refine_steps=1,
         rim_local_refine_band_lambda=3.0,
         outer_local_refine_rmin_lambda_values=(1.0,),
-        outer_local_refine_rmax_lambda_values=(8.0, 9.0),
-        outer_local_vertex_average_steps_values=(2,),
-        outer_local_vertex_average_rmin_lambda_values=(4.0, 4.5),
-        outer_local_vertex_average_rmax_lambda_values=(11.0, 12.0),
+        outer_local_refine_rmax_lambda_values=(8.0, 9.0, 10.0),
+        outer_local_vertex_average_steps_values=(0, 1, 2),
+        outer_local_vertex_average_rmin_lambda_values=(4.0,),
+        outer_local_vertex_average_rmax_lambda_values=(12.0,),
     )
     assert report["meta"]["mode"] == "strict_outerfield_averaged_sweep"
     rows = report["rows"]
-    assert len(rows) == 8
+    assert len(rows) == 9
     baseline = next(
         row
         for row in rows
         if float(row["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-        and float(row["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
+        and float(row["outer_local_refine_rmax_lambda"]) == pytest.approx(9.0)
         and int(row["outer_local_vertex_average_steps"]) == 2
         and float(row["outer_local_vertex_average_rmin_lambda"]) == pytest.approx(4.0)
         and float(row["outer_local_vertex_average_rmax_lambda"]) == pytest.approx(12.0)
@@ -803,15 +803,18 @@ def test_flat_disk_kh_strict_outerfield_averaged_sweep_baseline_non_worsening() 
         row
         for row in rows
         if float(row["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-        and int(row["outer_local_vertex_average_steps"]) == 2
-        and float(row["outer_local_vertex_average_rmin_lambda"]) == pytest.approx(4.5)
+        and float(row["outer_local_refine_rmax_lambda"]) == pytest.approx(10.0)
+        and int(row["outer_local_vertex_average_steps"]) == 0
+        and float(row["outer_local_vertex_average_rmin_lambda"]) == pytest.approx(4.0)
         and float(row["outer_local_vertex_average_rmax_lambda"]) == pytest.approx(12.0)
     )
     best = report["selected_best"]
 
     assert float(best["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
+    assert float(best["outer_local_refine_rmax_lambda"]) == pytest.approx(9.0)
     assert int(best["outer_local_vertex_average_steps"]) == 2
     assert float(best["outer_local_vertex_average_rmin_lambda"]) == pytest.approx(4.0)
+    assert float(best["outer_local_vertex_average_rmax_lambda"]) == pytest.approx(12.0)
     assert float(best["section_score_internal_bands_finite_outer_l2_log"]) <= float(
         candidate_bad["section_score_internal_bands_finite_outer_l2_log"]
     )
