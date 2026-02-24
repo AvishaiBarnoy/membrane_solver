@@ -111,6 +111,53 @@ def _triangle_inside_fraction(
     return frac
 
 
+def _triangle_radial_interval_fraction(
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+    *,
+    r_min: float,
+    r_max: float | None,
+    subdivisions: int = 6,
+) -> np.ndarray:
+    """Return per-triangle fraction inside radial interval [r_min, r_max)."""
+    if tri_rows is None or len(tri_rows) == 0:
+        return np.zeros(0, dtype=float)
+    tri_pos = positions[tri_rows]
+    tri_r = np.linalg.norm(tri_pos[:, :, :2], axis=2)
+    lo = float(max(r_min, 0.0))
+    hi = None if r_max is None else float(max(r_max, lo))
+    if hi is None:
+        inside_v = tri_r >= lo
+    else:
+        inside_v = (tri_r >= lo) & (tri_r < hi)
+    all_in = np.all(inside_v, axis=1)
+    all_out = np.all(~inside_v, axis=1)
+
+    frac = np.zeros(tri_rows.shape[0], dtype=float)
+    frac[all_in] = 1.0
+    boundary = ~(all_in | all_out)
+    if not np.any(boundary):
+        return frac
+
+    n = max(int(subdivisions), 1)
+    bary: list[tuple[float, float, float]] = []
+    inv_n = 1.0 / float(n)
+    for i in range(n + 1):
+        for j in range(n + 1 - i):
+            k = n - i - j
+            bary.append((i * inv_n, j * inv_n, k * inv_n))
+    w = np.asarray(bary, dtype=float)
+    tri2 = tri_pos[boundary, :, :2]
+    pts = np.einsum("pj,mjd->mpd", w, tri2)
+    rr = np.linalg.norm(pts, axis=2)
+    if hi is None:
+        inside_pts = rr >= lo
+    else:
+        inside_pts = (rr >= lo) & (rr < hi)
+    frac[boundary] = np.mean(inside_pts, axis=1)
+    return frac
+
+
 def _mesh_internal_region_split(
     mesh,
     *,
@@ -256,6 +303,7 @@ def _mesh_internal_band_split(
     lambda_value: float,
     rim_half_width_lambda: float = 1.0,
     outer_near_width_lambda: float = 4.0,
+    partition_mode: str = "centroid",
 ) -> dict[str, float]:
     """Split mesh internal energy into radial bands and report rim-band resolution."""
     from modules.energy import tilt_smoothness as tilt_smoothness_base
@@ -344,23 +392,49 @@ def _mesh_internal_band_split(
         raise ValueError("smoothness_model must be 'dirichlet' or 'splay_twist'.")
 
     internal_tri = tilt_tri + smooth_tri
-    tri_r = _triangle_centroid_radius(positions, tri_rows)
     rim_w = float(rim_half_width_lambda) * float(lambda_value)
     outer_near_w = float(outer_near_width_lambda) * float(lambda_value)
-
-    disk_core_mask = tri_r < (float(radius) - rim_w)
-    rim_band_mask = np.abs(tri_r - float(radius)) <= rim_w
-    outer_near_mask = (tri_r > (float(radius) + rim_w)) & (
-        tri_r <= (float(radius) + outer_near_w)
-    )
-    outer_far_mask = tri_r > (float(radius) + outer_near_w)
+    partition = str(partition_mode).strip().lower()
+    if partition == "centroid":
+        tri_r = _triangle_centroid_radius(positions, tri_rows)
+        disk_core_w = (tri_r < (float(radius) - rim_w)).astype(float)
+        rim_band_w = (np.abs(tri_r - float(radius)) <= rim_w).astype(float)
+        outer_near_wg = (
+            (tri_r > (float(radius) + rim_w))
+            & (tri_r <= (float(radius) + outer_near_w))
+        ).astype(float)
+        outer_far_w = (tri_r > (float(radius) + outer_near_w)).astype(float)
+    elif partition == "fractional":
+        disk_core_w = _triangle_radial_interval_fraction(
+            positions, tri_rows, r_min=0.0, r_max=(float(radius) - rim_w)
+        )
+        rim_band_w = _triangle_radial_interval_fraction(
+            positions,
+            tri_rows,
+            r_min=(float(radius) - rim_w),
+            r_max=(float(radius) + rim_w),
+        )
+        outer_near_wg = _triangle_radial_interval_fraction(
+            positions,
+            tri_rows,
+            r_min=(float(radius) + rim_w),
+            r_max=(float(radius) + outer_near_w),
+        )
+        outer_far_w = _triangle_radial_interval_fraction(
+            positions,
+            tri_rows,
+            r_min=(float(radius) + outer_near_w),
+            r_max=None,
+        )
+    else:
+        raise ValueError("partition_mode must be 'centroid' or 'fractional'.")
 
     tri_pos = positions[tri_rows]
     e01 = np.linalg.norm(tri_pos[:, 0] - tri_pos[:, 1], axis=1)
     e12 = np.linalg.norm(tri_pos[:, 1] - tri_pos[:, 2], axis=1)
     e20 = np.linalg.norm(tri_pos[:, 2] - tri_pos[:, 0], axis=1)
     h_tri = np.maximum.reduce([e01, e12, e20])
-    rim_h = h_tri[rim_band_mask]
+    rim_h = h_tri[rim_band_w > 1e-12]
     rim_h_over_lambda = (
         float(np.median(rim_h) / max(float(lambda_value), 1e-18))
         if rim_h.size > 0
@@ -368,19 +442,19 @@ def _mesh_internal_band_split(
     )
 
     return {
-        "mesh_internal_disk_core": float(np.sum(internal_tri[disk_core_mask])),
-        "mesh_internal_rim_band": float(np.sum(internal_tri[rim_band_mask])),
-        "mesh_internal_outer_near": float(np.sum(internal_tri[outer_near_mask])),
-        "mesh_internal_outer_far": float(np.sum(internal_tri[outer_far_mask])),
-        "mesh_tilt_disk_core": float(np.sum(tilt_tri[disk_core_mask])),
-        "mesh_tilt_rim_band": float(np.sum(tilt_tri[rim_band_mask])),
-        "mesh_tilt_outer_near": float(np.sum(tilt_tri[outer_near_mask])),
-        "mesh_tilt_outer_far": float(np.sum(tilt_tri[outer_far_mask])),
-        "mesh_smooth_disk_core": float(np.sum(smooth_tri[disk_core_mask])),
-        "mesh_smooth_rim_band": float(np.sum(smooth_tri[rim_band_mask])),
-        "mesh_smooth_outer_near": float(np.sum(smooth_tri[outer_near_mask])),
-        "mesh_smooth_outer_far": float(np.sum(smooth_tri[outer_far_mask])),
-        "rim_band_tri_count": float(np.sum(rim_band_mask)),
+        "mesh_internal_disk_core": float(np.sum(internal_tri * disk_core_w)),
+        "mesh_internal_rim_band": float(np.sum(internal_tri * rim_band_w)),
+        "mesh_internal_outer_near": float(np.sum(internal_tri * outer_near_wg)),
+        "mesh_internal_outer_far": float(np.sum(internal_tri * outer_far_w)),
+        "mesh_tilt_disk_core": float(np.sum(tilt_tri * disk_core_w)),
+        "mesh_tilt_rim_band": float(np.sum(tilt_tri * rim_band_w)),
+        "mesh_tilt_outer_near": float(np.sum(tilt_tri * outer_near_wg)),
+        "mesh_tilt_outer_far": float(np.sum(tilt_tri * outer_far_w)),
+        "mesh_smooth_disk_core": float(np.sum(smooth_tri * disk_core_w)),
+        "mesh_smooth_rim_band": float(np.sum(smooth_tri * rim_band_w)),
+        "mesh_smooth_outer_near": float(np.sum(smooth_tri * outer_near_wg)),
+        "mesh_smooth_outer_far": float(np.sum(smooth_tri * outer_far_w)),
+        "rim_band_tri_count": float(np.sum(rim_band_w)),
         "rim_band_h_over_lambda_median": rim_h_over_lambda,
     }
 
@@ -880,6 +954,7 @@ def _run_single_level(
     outer_local_vertex_average_rmin_lambda: float,
     outer_local_vertex_average_rmax_lambda: float,
     radial_projection_diagnostic: bool,
+    partition_mode: str,
 ) -> dict[str, Any]:
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -1004,6 +1079,7 @@ def _run_single_level(
             lambda_value=float(theory.lambda_value),
             rim_half_width_lambda=1.0,
             outer_near_width_lambda=4.0,
+            partition_mode=str(partition_mode),
         )
 
         th_in = float(c_in * theta_f * theta_f)
@@ -1393,6 +1469,7 @@ def _run_single_level(
                 outer_local_vertex_average_rmax_lambda
             ),
             "radial_projection_diagnostic": bool(radial_projection_diagnostic),
+            "partition_mode": str(partition_mode),
         },
         "theory": {
             "kappa": float(theory.kappa),
@@ -1434,6 +1511,7 @@ def run_flat_disk_kh_term_audit(
     outer_local_vertex_average_rmin_lambda: float = 0.0,
     outer_local_vertex_average_rmax_lambda: float = 0.0,
     radial_projection_diagnostic: bool = False,
+    partition_mode: str = "centroid",
 ) -> dict[str, Any]:
     """Evaluate per-theta mesh/theory split terms in KH physical lane."""
     _ensure_repo_root_on_sys_path()
@@ -1472,6 +1550,7 @@ def run_flat_disk_kh_term_audit(
             outer_local_vertex_average_rmax_lambda
         ),
         radial_projection_diagnostic=bool(radial_projection_diagnostic),
+        partition_mode=str(partition_mode),
     )
 
 
@@ -1500,6 +1579,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     outer_local_vertex_average_rmin_lambda: float = 0.0,
     outer_local_vertex_average_rmax_lambda: float = 0.0,
     radial_projection_diagnostic: bool = False,
+    partition_mode: str = "centroid",
 ) -> dict[str, Any]:
     """Run KH term audit across multiple refinement levels."""
     _ensure_repo_root_on_sys_path()
@@ -1543,6 +1623,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
                 outer_local_vertex_average_rmax_lambda
             ),
             radial_projection_diagnostic=bool(radial_projection_diagnostic),
+            partition_mode=str(partition_mode),
         )
         for level in levels
     ]
@@ -1568,6 +1649,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
                 outer_local_vertex_average_rmax_lambda
             ),
             "radial_projection_diagnostic": bool(radial_projection_diagnostic),
+            "partition_mode": str(partition_mode),
         },
         "runs": runs,
     }
@@ -2348,6 +2430,11 @@ def main() -> int:
     ap.add_argument("--outer-local-vertex-average-rmax-lambda", type=float, default=0.0)
     ap.add_argument("--radial-projection-diagnostic", action="store_true")
     ap.add_argument(
+        "--partition-mode",
+        choices=("centroid", "fractional"),
+        default="centroid",
+    )
+    ap.add_argument(
         "--strict-refinement-characterization",
         action="store_true",
         help="Run strict-KH refinement characterization matrix.",
@@ -2551,6 +2638,7 @@ def main() -> int:
                 args.outer_local_vertex_average_rmax_lambda
             ),
             radial_projection_diagnostic=args.radial_projection_diagnostic,
+            partition_mode=args.partition_mode,
         )
     else:
         report = run_flat_disk_kh_term_audit(
@@ -2578,6 +2666,7 @@ def main() -> int:
                 args.outer_local_vertex_average_rmax_lambda
             ),
             radial_projection_diagnostic=args.radial_projection_diagnostic,
+            partition_mode=args.partition_mode,
         )
 
     out = Path(args.output)
