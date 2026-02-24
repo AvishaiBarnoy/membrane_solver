@@ -1148,7 +1148,7 @@ def run_flat_disk_one_leaflet_benchmark(
             effective_local_edge_flip_rmax_lambda = 6.0
         elif optimize_preset_raw == "kh_strict_outerfield_tailmatch":
             effective_local_edge_flip_steps = 1
-            effective_local_edge_flip_rmin_lambda = 2.0
+            effective_local_edge_flip_rmin_lambda = 0.5
             effective_local_edge_flip_rmax_lambda = 8.0
         else:
             effective_local_edge_flip_steps = 0

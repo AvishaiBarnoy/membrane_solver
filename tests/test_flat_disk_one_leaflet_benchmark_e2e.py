@@ -626,7 +626,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_tailmatch_controls() -> 
     assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
     assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
     assert int(report["meta"]["local_edge_flip_steps"]) == 1
-    assert float(report["meta"]["local_edge_flip_rmin_lambda"]) == pytest.approx(2.0)
+    assert float(report["meta"]["local_edge_flip_rmin_lambda"]) == pytest.approx(0.5)
     assert float(report["meta"]["local_edge_flip_rmax_lambda"]) == pytest.approx(8.0)
     assert report["optimize"]["parity_polish"] is not None
     assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
