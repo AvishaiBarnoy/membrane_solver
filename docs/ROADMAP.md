@@ -148,6 +148,9 @@ intended for development and planning; users should consult `README.md` and
          band=3λ + outer-annulus local refinement) to target outer section mismatch.
    - [x] Added strict outerfield benchmark gate to enforce improved outer
          section ratios vs `kh_strict_outerband_tight` with non-worsening inner/global parity.
+   - [x] Added opt-in outer-annulus local vertex-averaging controls and
+         `kh_strict_outerfield_averaged` preset (`[R+4λ, R+12λ]`, two passes)
+         for finite-domain outer-band section-score tightening without changing KH coefficients.
    - [x] Tightened strict parity e2e acceptance caps to `<=1.2` for fast/balanced/continuity.
    - [ ] Continue narrowing strict-KH residual mismatch without changing KH/TeX parameter ratios.
 

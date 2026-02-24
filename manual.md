@@ -355,6 +355,10 @@ Interactive commands:
   - Optional local edge-flip quality pass (benchmark harness and KH term audit):
     `--local-edge-flip-steps`, `--local-edge-flip-rmin-lambda`,
     `--local-edge-flip-rmax-lambda`.
+  - Optional local outer-annulus vertex-averaging pass (benchmark harness and KH term audit):
+    `--outer-local-vertex-average-steps`,
+    `--outer-local-vertex-average-rmin-lambda`,
+    `--outer-local-vertex-average-rmax-lambda`.
   - KH term audit now reports per-band anisotropy (`h_max/h_min`,
     edge-orientation spread) and bandwise leakage metrics (`t_phi/t_r`).
   - Scan controls (`--theta-mode scan`):
@@ -378,6 +382,9 @@ Interactive commands:
     `--optimize-preset kh_strict_outerfield_tight` for outer-field section
     tightening (strict refine=2, rim-local step=1, rim band=3.0 lambda, plus
     outer-annulus local refinement over `[R+1.0 lambda, R+8.0 lambda]`).
+    `--optimize-preset kh_strict_outerfield_averaged` for finite outer-band split
+    tightening (same strict outer-field mesh controls as `kh_strict_outerfield_tight`
+    plus two local vertex-averaging passes over `[R+4.0 lambda, R+12.0 lambda]`).
   - Strict optimize polish controls:
     `--theta-optimize-postcheck` performs local energy postcheck around theta*;
     `--theta-optimize-parity-polish` performs local parity-score polish around
