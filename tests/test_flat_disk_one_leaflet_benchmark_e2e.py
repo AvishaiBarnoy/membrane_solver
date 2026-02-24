@@ -11,7 +11,10 @@ import yaml
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data
-from tools.diagnostics.flat_disk_kh_term_audit import run_flat_disk_kh_term_audit
+from tools.diagnostics.flat_disk_kh_term_audit import (
+    run_flat_disk_kh_outerfield_averaged_sweep,
+    run_flat_disk_kh_term_audit,
+)
 from tools.reproduce_flat_disk_one_leaflet import (
     DEFAULT_FIXTURE,
     BenchmarkOptimizeConfig,
@@ -760,6 +763,57 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_averaged_improves_finite
     assert float(averaged["parity"]["energy_factor"]) <= (
         float(outerfield["parity"]["energy_factor"]) * 1.01
     )
+
+
+@pytest.mark.benchmark
+def test_flat_disk_kh_strict_outerfield_averaged_sweep_baseline_non_worsening() -> None:
+    report = run_flat_disk_kh_outerfield_averaged_sweep(
+        fixture=DEFAULT_FIXTURE,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        kappa_physical=10.0,
+        kappa_t_physical=10.0,
+        radius_nm=7.0,
+        length_scale_nm=15.0,
+        drive_physical=(2.0 / 0.7),
+        tilt_mass_mode_in="consistent",
+        theta_value=0.138,
+        refine_level=2,
+        rim_local_refine_steps=1,
+        rim_local_refine_band_lambda=3.0,
+        outer_local_refine_rmin_lambda=1.0,
+        outer_local_refine_rmax_lambda_values=(8.0,),
+        outer_local_vertex_average_steps=2,
+        outer_local_vertex_average_rmin_lambda_values=(4.0, 4.5),
+        outer_local_vertex_average_rmax_lambda_values=(12.0,),
+    )
+    assert report["meta"]["mode"] == "strict_outerfield_averaged_sweep"
+    rows = report["rows"]
+    assert len(rows) == 2
+    baseline = next(
+        row
+        for row in rows
+        if float(row["outer_local_vertex_average_rmin_lambda"]) == pytest.approx(4.0)
+    )
+    candidate = next(
+        row
+        for row in rows
+        if float(row["outer_local_vertex_average_rmin_lambda"]) == pytest.approx(4.5)
+    )
+    best = report["selected_best"]
+
+    assert float(best["outer_local_vertex_average_rmin_lambda"]) == pytest.approx(4.0)
+    assert float(best["section_score_internal_bands_finite_outer_l2_log"]) <= float(
+        candidate["section_score_internal_bands_finite_outer_l2_log"]
+    )
+    assert abs(
+        float(baseline["internal_outer_near_ratio_mesh_over_theory_finite"]) - 1.0
+    ) <= abs(
+        float(candidate["internal_outer_near_ratio_mesh_over_theory_finite"]) - 1.0
+    )
+    assert abs(
+        float(baseline["internal_outer_far_ratio_mesh_over_theory_finite"]) - 1.0
+    ) <= abs(float(candidate["internal_outer_far_ratio_mesh_over_theory_finite"]) - 1.0)
 
 
 @pytest.mark.benchmark
