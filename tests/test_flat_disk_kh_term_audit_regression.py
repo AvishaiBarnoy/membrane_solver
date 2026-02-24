@@ -30,6 +30,9 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
     assert int(report["meta"]["outer_local_refine_steps"]) >= 0
     assert float(report["meta"]["outer_local_refine_rmin_lambda"]) >= 0.0
     assert float(report["meta"]["outer_local_refine_rmax_lambda"]) >= 0.0
+    assert int(report["meta"]["outer_local_vertex_average_steps"]) >= 0
+    assert float(report["meta"]["outer_local_vertex_average_rmin_lambda"]) >= 0.0
+    assert float(report["meta"]["outer_local_vertex_average_rmax_lambda"]) >= 0.0
     rows = report["rows"]
     assert len(rows) == 3
 

@@ -508,6 +508,64 @@ def _flip_edges_locally_in_annulus(
     return out
 
 
+def _vertex_average_locally_in_annulus(
+    mesh,
+    *,
+    local_steps: int,
+    r_min: float,
+    r_max: float,
+):
+    """Perform optional vertex averaging in a radial annulus."""
+    _ensure_repo_root_on_sys_path()
+    from runtime.vertex_average import vertex_average
+
+    steps = int(local_steps)
+    if steps <= 0:
+        return mesh
+    if float(r_max) <= float(r_min):
+        raise ValueError(
+            "outer_local_vertex_average_rmax must be > outer_local_vertex_average_rmin."
+        )
+
+    out = mesh
+    for _ in range(steps):
+        positions = out.positions_view()
+        radii = np.linalg.norm(positions[:, :2], axis=1)
+        selected_rows = np.flatnonzero(
+            (radii >= float(r_min)) & (radii <= float(r_max))
+        )
+        if selected_rows.size == 0:
+            raise AssertionError(
+                "Outer annulus local vertex averaging selected no rows. Adjust "
+                "outer_local_vertex_average_rmin_lambda/"
+                "outer_local_vertex_average_rmax_lambda."
+            )
+        row_to_vid = {
+            int(row): int(vid) for vid, row in out.vertex_index_to_row.items()
+        }
+        selected_vids = {
+            row_to_vid[int(row)] for row in selected_rows if int(row) in row_to_vid
+        }
+        if len(selected_vids) == 0:
+            raise AssertionError(
+                "Outer annulus local vertex averaging selected no vertices."
+            )
+
+        fixed_backup = {
+            int(vid): bool(getattr(v, "fixed", False))
+            for vid, v in out.vertices.items()
+        }
+        try:
+            for vid, v in out.vertices.items():
+                if int(vid) not in selected_vids:
+                    v.fixed = True
+            vertex_average(out)
+        finally:
+            for vid, was_fixed in fixed_backup.items():
+                out.vertices[int(vid)].fixed = bool(was_fixed)
+    return out
+
+
 def _collect_disk_boundary_rows(mesh, *, group: str = "disk") -> np.ndarray:
     rows: list[int] = []
     for vid in mesh.vertex_ids:
@@ -988,6 +1046,9 @@ def run_flat_disk_one_leaflet_benchmark(
     local_edge_flip_steps: int = 0,
     local_edge_flip_rmin_lambda: float = -1.0,
     local_edge_flip_rmax_lambda: float = 4.0,
+    outer_local_vertex_average_steps: int = 0,
+    outer_local_vertex_average_rmin_lambda: float = 0.0,
+    outer_local_vertex_average_rmax_lambda: float = 0.0,
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
@@ -1017,6 +1078,13 @@ def run_flat_disk_one_leaflet_benchmark(
     raw_local_edge_flip_steps = int(local_edge_flip_steps)
     raw_local_edge_flip_rmin_lambda = float(local_edge_flip_rmin_lambda)
     raw_local_edge_flip_rmax_lambda = float(local_edge_flip_rmax_lambda)
+    raw_outer_local_vertex_average_steps = int(outer_local_vertex_average_steps)
+    raw_outer_local_vertex_average_rmin_lambda = float(
+        outer_local_vertex_average_rmin_lambda
+    )
+    raw_outer_local_vertex_average_rmax_lambda = float(
+        outer_local_vertex_average_rmax_lambda
+    )
     optimize_preset_raw = str(optimize_preset).lower()
     effective_refine_level = raw_refine_level
     effective_rim_local_refine_steps = raw_rim_local_refine_steps
@@ -1027,6 +1095,13 @@ def run_flat_disk_one_leaflet_benchmark(
     effective_local_edge_flip_steps = raw_local_edge_flip_steps
     effective_local_edge_flip_rmin_lambda = raw_local_edge_flip_rmin_lambda
     effective_local_edge_flip_rmax_lambda = raw_local_edge_flip_rmax_lambda
+    effective_outer_local_vertex_average_steps = raw_outer_local_vertex_average_steps
+    effective_outer_local_vertex_average_rmin_lambda = (
+        raw_outer_local_vertex_average_rmin_lambda
+    )
+    effective_outer_local_vertex_average_rmax_lambda = (
+        raw_outer_local_vertex_average_rmax_lambda
+    )
     if optimize_preset_raw in {
         "kh_strict_refine",
         "kh_strict_fast",
@@ -1183,6 +1258,21 @@ def run_flat_disk_one_leaflet_benchmark(
             "local_edge_flip_rmax_lambda must be > "
             "local_edge_flip_rmin_lambda when local_edge_flip_steps > 0."
         )
+    if int(effective_outer_local_vertex_average_steps) < 0:
+        raise ValueError("outer_local_vertex_average_steps must be >= 0.")
+    if float(effective_outer_local_vertex_average_rmin_lambda) < 0.0:
+        raise ValueError("outer_local_vertex_average_rmin_lambda must be >= 0.")
+    if float(effective_outer_local_vertex_average_rmax_lambda) < 0.0:
+        raise ValueError("outer_local_vertex_average_rmax_lambda must be >= 0.")
+    if int(effective_outer_local_vertex_average_steps) > 0 and (
+        float(effective_outer_local_vertex_average_rmax_lambda)
+        <= float(effective_outer_local_vertex_average_rmin_lambda)
+    ):
+        raise ValueError(
+            "outer_local_vertex_average_rmax_lambda must be > "
+            "outer_local_vertex_average_rmin_lambda when "
+            "outer_local_vertex_average_steps > 0."
+        )
     if float(splay_modulus_scale_in) <= 0.0:
         raise ValueError("splay_modulus_scale_in must be > 0.")
     mode = str(parameterization).lower()
@@ -1327,6 +1417,23 @@ def run_flat_disk_one_leaflet_benchmark(
                 0.0,
                 float(theory.radius)
                 + float(effective_local_edge_flip_rmax_lambda)
+                * float(theory.lambda_value),
+            ),
+        )
+    if int(effective_outer_local_vertex_average_steps) > 0:
+        mesh = _vertex_average_locally_in_annulus(
+            mesh,
+            local_steps=int(effective_outer_local_vertex_average_steps),
+            r_min=max(
+                0.0,
+                float(theory.radius)
+                + float(effective_outer_local_vertex_average_rmin_lambda)
+                * float(theory.lambda_value),
+            ),
+            r_max=max(
+                0.0,
+                float(theory.radius)
+                + float(effective_outer_local_vertex_average_rmax_lambda)
                 * float(theory.lambda_value),
             ),
         )
@@ -1696,6 +1803,15 @@ def run_flat_disk_one_leaflet_benchmark(
             "local_edge_flip_steps": int(effective_local_edge_flip_steps),
             "local_edge_flip_rmin_lambda": float(effective_local_edge_flip_rmin_lambda),
             "local_edge_flip_rmax_lambda": float(effective_local_edge_flip_rmax_lambda),
+            "outer_local_vertex_average_steps": int(
+                effective_outer_local_vertex_average_steps
+            ),
+            "outer_local_vertex_average_rmin_lambda": float(
+                effective_outer_local_vertex_average_rmin_lambda
+            ),
+            "outer_local_vertex_average_rmax_lambda": float(
+                effective_outer_local_vertex_average_rmax_lambda
+            ),
             "theory_model": theory_model,
             "theory_source": theory_source,
             "performance": {
@@ -1782,6 +1898,9 @@ def run_flat_disk_lane_comparison(
     local_edge_flip_steps: int = 0,
     local_edge_flip_rmin_lambda: float = -1.0,
     local_edge_flip_rmax_lambda: float = 4.0,
+    outer_local_vertex_average_steps: int = 0,
+    outer_local_vertex_average_rmin_lambda: float = 0.0,
+    outer_local_vertex_average_rmax_lambda: float = 0.0,
 ) -> dict[str, Any]:
     """Run both legacy and kh_physical benchmark lanes and summarize differences."""
     legacy = run_flat_disk_one_leaflet_benchmark(
@@ -1809,6 +1928,13 @@ def run_flat_disk_lane_comparison(
         local_edge_flip_steps=int(local_edge_flip_steps),
         local_edge_flip_rmin_lambda=float(local_edge_flip_rmin_lambda),
         local_edge_flip_rmax_lambda=float(local_edge_flip_rmax_lambda),
+        outer_local_vertex_average_steps=int(outer_local_vertex_average_steps),
+        outer_local_vertex_average_rmin_lambda=float(
+            outer_local_vertex_average_rmin_lambda
+        ),
+        outer_local_vertex_average_rmax_lambda=float(
+            outer_local_vertex_average_rmax_lambda
+        ),
     )
 
     kh = run_flat_disk_one_leaflet_benchmark(
@@ -1841,6 +1967,13 @@ def run_flat_disk_lane_comparison(
         local_edge_flip_steps=int(local_edge_flip_steps),
         local_edge_flip_rmin_lambda=float(local_edge_flip_rmin_lambda),
         local_edge_flip_rmax_lambda=float(local_edge_flip_rmax_lambda),
+        outer_local_vertex_average_steps=int(outer_local_vertex_average_steps),
+        outer_local_vertex_average_rmin_lambda=float(
+            outer_local_vertex_average_rmin_lambda
+        ),
+        outer_local_vertex_average_rmax_lambda=float(
+            outer_local_vertex_average_rmax_lambda
+        ),
     )
 
     legacy_theta = float(legacy["mesh"]["theta_star"])
@@ -1969,6 +2102,9 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--local-edge-flip-steps", type=int, default=0)
     ap.add_argument("--local-edge-flip-rmin-lambda", type=float, default=-1.0)
     ap.add_argument("--local-edge-flip-rmax-lambda", type=float, default=4.0)
+    ap.add_argument("--outer-local-vertex-average-steps", type=int, default=0)
+    ap.add_argument("--outer-local-vertex-average-rmin-lambda", type=float, default=0.0)
+    ap.add_argument("--outer-local-vertex-average-rmax-lambda", type=float, default=0.0)
     ap.add_argument("--compare-lanes", action="store_true")
     ap.add_argument(
         "--compare-kh-smoothness-model",
@@ -2031,6 +2167,13 @@ def main(argv: Iterable[str] | None = None) -> int:
             local_edge_flip_steps=args.local_edge_flip_steps,
             local_edge_flip_rmin_lambda=args.local_edge_flip_rmin_lambda,
             local_edge_flip_rmax_lambda=args.local_edge_flip_rmax_lambda,
+            outer_local_vertex_average_steps=args.outer_local_vertex_average_steps,
+            outer_local_vertex_average_rmin_lambda=(
+                args.outer_local_vertex_average_rmin_lambda
+            ),
+            outer_local_vertex_average_rmax_lambda=(
+                args.outer_local_vertex_average_rmax_lambda
+            ),
         )
     else:
         report = run_flat_disk_one_leaflet_benchmark(
@@ -2071,6 +2214,13 @@ def main(argv: Iterable[str] | None = None) -> int:
             local_edge_flip_steps=args.local_edge_flip_steps,
             local_edge_flip_rmin_lambda=args.local_edge_flip_rmin_lambda,
             local_edge_flip_rmax_lambda=args.local_edge_flip_rmax_lambda,
+            outer_local_vertex_average_steps=args.outer_local_vertex_average_steps,
+            outer_local_vertex_average_rmin_lambda=(
+                args.outer_local_vertex_average_rmin_lambda
+            ),
+            outer_local_vertex_average_rmax_lambda=(
+                args.outer_local_vertex_average_rmax_lambda
+            ),
         )
 
     out_path = Path(args.output)

@@ -1286,6 +1286,50 @@ def test_flat_disk_invalid_local_edge_flip_bounds_raises() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_outer_local_vertex_average_controls_reported() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        optimize_preset="kh_wide",
+        outer_local_vertex_average_steps=1,
+        outer_local_vertex_average_rmin_lambda=1.0,
+        outer_local_vertex_average_rmax_lambda=6.0,
+    )
+
+    assert int(report["meta"]["outer_local_vertex_average_steps"]) == 1
+    assert float(
+        report["meta"]["outer_local_vertex_average_rmin_lambda"]
+    ) == pytest.approx(1.0)
+    assert float(
+        report["meta"]["outer_local_vertex_average_rmax_lambda"]
+    ) == pytest.approx(6.0)
+
+
+@pytest.mark.regression
+def test_flat_disk_invalid_outer_local_vertex_average_bounds_raises() -> None:
+    with pytest.raises(
+        ValueError,
+        match=(
+            "outer_local_vertex_average_rmax_lambda must be > "
+            "outer_local_vertex_average_rmin_lambda"
+        ),
+    ):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            theta_mode="optimize",
+            outer_local_vertex_average_steps=1,
+            outer_local_vertex_average_rmin_lambda=4.0,
+            outer_local_vertex_average_rmax_lambda=4.0,
+        )
+
+
+@pytest.mark.regression
 def test_flat_disk_lane_comparison_reports_both_lanes() -> None:
     report = run_flat_disk_lane_comparison(
         fixture=DEFAULT_FIXTURE,
