@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Sequence
 
 import numpy as np
@@ -211,6 +212,126 @@ def run_flat_disk_kh_error_source_audit(
     }
 
 
+def run_flat_disk_kh_error_source_candidate_bakeoff(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    optimize_presets: Sequence[str] = (
+        "kh_strict_outerfield_tight",
+        "kh_strict_outerband_tight",
+        "kh_strict_outerfield_averaged",
+    ),
+    refine_level: int = 2,
+    mass_modes: Sequence[str] = ("consistent",),
+    partition_modes: Sequence[str] = ("centroid", "fractional"),
+) -> dict[str, Any]:
+    """Run bounded strict-KH candidate bakeoff and pick deterministic best row."""
+    fixture_path = Path(fixture)
+    if not fixture_path.is_absolute():
+        fixture_path = (ROOT / fixture_path).resolve()
+    if not fixture_path.exists():
+        raise FileNotFoundError(f"Fixture not found: {fixture_path}")
+    presets = [str(x) for x in optimize_presets]
+    if len(presets) == 0:
+        raise ValueError("optimize_presets must be non-empty.")
+
+    rows: list[dict[str, Any]] = []
+    for preset in presets:
+        t0 = perf_counter()
+        bench = run_flat_disk_one_leaflet_benchmark(
+            fixture=fixture_path,
+            refine_level=int(refine_level),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            theta_mode="optimize",
+            optimize_preset=str(preset),
+            parameterization="kh_physical",
+            tilt_mass_mode_in="consistent",
+            splay_modulus_scale_in=1.0,
+        )
+        runtime_seconds = max(float(perf_counter() - t0), 0.0)
+        theta_factor = float(bench["parity"]["theta_factor"])
+        energy_factor = float(bench["parity"]["energy_factor"])
+        parity_score = float(
+            np.hypot(
+                np.log(max(theta_factor, 1e-18)),
+                np.log(max(energy_factor, 1e-18)),
+            )
+        )
+        audit = run_flat_disk_kh_error_source_audit(
+            fixture=fixture_path,
+            primary_preset=str(preset),
+            reference_preset="kh_strict_outerband_tight",
+            refine_levels=(int(refine_level),),
+            mass_modes=tuple(mass_modes),
+            partition_modes=tuple(partition_modes),
+        )
+        run_rows = list(audit.get("runs", []))
+        if len(run_rows) == 0:
+            raise ValueError(f"candidate {preset} produced empty runs.")
+        near_logs = [
+            abs(np.log(max(float(r["outer_near_ratio"]), 1e-18))) for r in run_rows
+        ]
+        far_logs = [
+            abs(np.log(max(float(r["outer_far_ratio"]), 1e-18))) for r in run_rows
+        ]
+        outer_section_score = float(
+            np.hypot(float(np.mean(near_logs)), float(np.mean(far_logs)))
+        )
+        row = {
+            "optimize_preset": str(preset),
+            "refine_level": int(refine_level),
+            "theta_factor": theta_factor,
+            "energy_factor": energy_factor,
+            "balanced_parity_score": parity_score,
+            "outer_section_score": outer_section_score,
+            "runtime_seconds": float(runtime_seconds),
+            "dominant_source": str(audit["attribution"]["dominant_source"]),
+            "partition_effect": float(
+                audit["attribution"]["effect_sizes"].get("partition_effect", 0.0)
+            ),
+            "mass_effect": float(
+                audit["attribution"]["effect_sizes"].get("mass_effect", 0.0)
+            ),
+            "resolution_effect": float(
+                audit["attribution"]["effect_sizes"].get("resolution_effect", 0.0)
+            ),
+            "operator_effect": float(
+                audit["attribution"]["effect_sizes"].get("operator_effect", 0.0)
+            ),
+        }
+        for key in (
+            "theta_factor",
+            "energy_factor",
+            "balanced_parity_score",
+            "outer_section_score",
+            "runtime_seconds",
+        ):
+            if not np.isfinite(float(row[key])):
+                raise ValueError(f"candidate {preset} produced non-finite {key}.")
+        rows.append(row)
+
+    selected = min(
+        rows,
+        key=lambda row: (
+            float(row["outer_section_score"]),
+            float(row["balanced_parity_score"]),
+            float(row["runtime_seconds"]),
+            str(row["optimize_preset"]),
+        ),
+    )
+    return {
+        "meta": {
+            "mode": "kh_error_source_candidate_bakeoff",
+            "fixture": str(fixture_path.relative_to(ROOT)),
+            "refine_level": int(refine_level),
+            "mass_modes": [str(x) for x in mass_modes],
+            "partition_modes": [str(x) for x in partition_modes],
+        },
+        "candidates": rows,
+        "selected_best": selected,
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="KH strict error-source attribution audit."
@@ -228,16 +349,37 @@ def main() -> int:
         nargs="+",
         default=["centroid", "fractional"],
     )
+    ap.add_argument("--candidate-bakeoff", action="store_true")
+    ap.add_argument(
+        "--optimize-presets",
+        type=str,
+        nargs="+",
+        default=[
+            "kh_strict_outerfield_tight",
+            "kh_strict_outerband_tight",
+            "kh_strict_outerfield_averaged",
+        ],
+    )
+    ap.add_argument("--refine-level", type=int, default=2)
     ap.add_argument("--output", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args()
-    report = run_flat_disk_kh_error_source_audit(
-        fixture=args.fixture,
-        primary_preset=args.primary_preset,
-        reference_preset=args.reference_preset,
-        refine_levels=tuple(args.refine_levels),
-        mass_modes=tuple(args.mass_modes),
-        partition_modes=tuple(args.partition_modes),
-    )
+    if bool(args.candidate_bakeoff):
+        report = run_flat_disk_kh_error_source_candidate_bakeoff(
+            fixture=args.fixture,
+            optimize_presets=tuple(args.optimize_presets),
+            refine_level=int(args.refine_level),
+            mass_modes=tuple(args.mass_modes),
+            partition_modes=tuple(args.partition_modes),
+        )
+    else:
+        report = run_flat_disk_kh_error_source_audit(
+            fixture=args.fixture,
+            primary_preset=args.primary_preset,
+            reference_preset=args.reference_preset,
+            refine_levels=tuple(args.refine_levels),
+            mass_modes=tuple(args.mass_modes),
+            partition_modes=tuple(args.partition_modes),
+        )
     out = Path(args.output)
     if not out.is_absolute():
         out = (ROOT / out).resolve()
