@@ -1754,6 +1754,7 @@ def run_flat_disk_kh_strict_preset_characterization(
         "kh_strict_energy_tight",
         "kh_strict_section_tight",
         "kh_strict_outerfield_tight",
+        "kh_strict_outerfield_averaged",
         "kh_strict_continuity",
         "kh_strict_robust",
     ),
@@ -2168,6 +2169,7 @@ def main() -> int:
                 "kh_strict_energy_tight",
                 "kh_strict_section_tight",
                 "kh_strict_outerfield_tight",
+                "kh_strict_outerfield_averaged",
                 "kh_strict_continuity",
                 "kh_strict_robust",
             )

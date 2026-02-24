@@ -274,6 +274,19 @@ def _resolve_optimize_preset(
             ),
             "kh_strict_outerfield_tailmatch",
         )
+    if preset == "kh_strict_outerfield_averaged":
+        return (
+            BenchmarkOptimizeConfig(
+                theta_initial=float(optimize_cfg.theta_initial),
+                optimize_steps=30,
+                optimize_every=1,
+                optimize_delta=6.0e-3,
+                optimize_inner_steps=14,
+                plateau_patience=12,
+                plateau_abs_tol=1.0e-12,
+            ),
+            "kh_strict_outerfield_averaged",
+        )
     if preset == "kh_strict_outertail_balanced":
         return (
             BenchmarkOptimizeConfig(
@@ -319,7 +332,7 @@ def _resolve_optimize_preset(
         "'kh_strict_continuity', 'kh_strict_energy_tight', "
         "'kh_strict_section_tight', 'kh_strict_outerband_tight', "
         "'kh_strict_outerfield_tight', 'kh_strict_outerfield_quality', "
-        "'kh_strict_outerfield_tailmatch', "
+        "'kh_strict_outerfield_tailmatch', 'kh_strict_outerfield_averaged', "
         "'kh_strict_outertail_balanced', "
         "'kh_strict_partition_tight', "
         "or 'kh_strict_robust'."
@@ -1113,6 +1126,7 @@ def run_flat_disk_one_leaflet_benchmark(
         "kh_strict_outerfield_tight",
         "kh_strict_outerfield_quality",
         "kh_strict_outerfield_tailmatch",
+        "kh_strict_outerfield_averaged",
         "kh_strict_outertail_balanced",
         "kh_strict_partition_tight",
         "kh_strict_robust",
@@ -1126,6 +1140,7 @@ def run_flat_disk_one_leaflet_benchmark(
                 "kh_strict_outerfield_tight",
                 "kh_strict_outerfield_quality",
                 "kh_strict_outerfield_tailmatch",
+                "kh_strict_outerfield_averaged",
                 "kh_strict_outertail_balanced",
             }
             else 1
@@ -1163,6 +1178,8 @@ def run_flat_disk_one_leaflet_benchmark(
                 effective_rim_local_refine_band_lambda = 3.0
             elif optimize_preset_raw == "kh_strict_outerfield_tailmatch":
                 effective_rim_local_refine_band_lambda = 3.0
+            elif optimize_preset_raw == "kh_strict_outerfield_averaged":
+                effective_rim_local_refine_band_lambda = 3.0
             elif optimize_preset_raw == "kh_strict_outertail_balanced":
                 effective_rim_local_refine_band_lambda = 3.0
             elif optimize_preset_raw == "kh_strict_partition_tight":
@@ -1175,6 +1192,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_outerfield_tight",
             "kh_strict_outerfield_quality",
             "kh_strict_outerfield_tailmatch",
+            "kh_strict_outerfield_averaged",
             "kh_strict_outertail_balanced",
         }:
             effective_outer_local_refine_steps = 1
@@ -1188,6 +1206,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_outerfield_tight",
             "kh_strict_outerfield_quality",
             "kh_strict_outerfield_tailmatch",
+            "kh_strict_outerfield_averaged",
             "kh_strict_outertail_balanced",
         }:
             effective_outer_local_refine_rmin_lambda = 1.0
@@ -1202,6 +1221,8 @@ def run_flat_disk_one_leaflet_benchmark(
         elif optimize_preset_raw == "kh_strict_outerfield_quality":
             effective_outer_local_refine_rmax_lambda = 8.0
         elif optimize_preset_raw == "kh_strict_outerfield_tailmatch":
+            effective_outer_local_refine_rmax_lambda = 8.0
+        elif optimize_preset_raw == "kh_strict_outerfield_averaged":
             effective_outer_local_refine_rmax_lambda = 8.0
         elif optimize_preset_raw == "kh_strict_outertail_balanced":
             effective_outer_local_refine_rmax_lambda = 10.0
@@ -1225,8 +1246,28 @@ def run_flat_disk_one_leaflet_benchmark(
             effective_local_edge_flip_steps = 1
             effective_local_edge_flip_rmin_lambda = 0.5
             effective_local_edge_flip_rmax_lambda = 8.0
+        elif optimize_preset_raw == "kh_strict_outerfield_averaged":
+            effective_local_edge_flip_steps = 0
         else:
             effective_local_edge_flip_steps = 0
+        if int(raw_outer_local_vertex_average_steps) > 0:
+            effective_outer_local_vertex_average_steps = int(
+                raw_outer_local_vertex_average_steps
+            )
+            if float(raw_outer_local_vertex_average_rmin_lambda) > 0.0:
+                effective_outer_local_vertex_average_rmin_lambda = float(
+                    raw_outer_local_vertex_average_rmin_lambda
+                )
+            if float(raw_outer_local_vertex_average_rmax_lambda) > 0.0:
+                effective_outer_local_vertex_average_rmax_lambda = float(
+                    raw_outer_local_vertex_average_rmax_lambda
+                )
+        elif optimize_preset_raw == "kh_strict_outerfield_averaged":
+            effective_outer_local_vertex_average_steps = 2
+            effective_outer_local_vertex_average_rmin_lambda = 4.0
+            effective_outer_local_vertex_average_rmax_lambda = 12.0
+        else:
+            effective_outer_local_vertex_average_steps = 0
 
     if int(effective_refine_level) < 0:
         raise ValueError("refine_level must be >= 0.")
@@ -1350,6 +1391,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_outerfield_tight",
             "kh_strict_outerfield_quality",
             "kh_strict_outerfield_tailmatch",
+            "kh_strict_outerfield_averaged",
             "kh_strict_outertail_balanced",
             "kh_strict_partition_tight",
         }:
@@ -1361,6 +1403,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_outerfield_tight",
             "kh_strict_outerfield_quality",
             "kh_strict_outerfield_tailmatch",
+            "kh_strict_outerfield_averaged",
             "kh_strict_outertail_balanced",
         }:
             energy_polish_enabled = True
@@ -2072,6 +2115,9 @@ def main(argv: Iterable[str] | None = None) -> int:
             "kh_strict_section_tight",
             "kh_strict_outerband_tight",
             "kh_strict_outerfield_tight",
+            "kh_strict_outerfield_quality",
+            "kh_strict_outerfield_tailmatch",
+            "kh_strict_outerfield_averaged",
             "kh_strict_outertail_balanced",
             "kh_strict_partition_tight",
             "kh_strict_robust",
