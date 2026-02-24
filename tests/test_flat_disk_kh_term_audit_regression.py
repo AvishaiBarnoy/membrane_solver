@@ -27,6 +27,7 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
     )
 
     assert report["meta"]["parameterization"] == "kh_physical"
+    assert report["meta"]["partition_mode"] == "centroid"
     assert bool(report["meta"]["radial_projection_diagnostic"]) is False
     assert int(report["meta"]["outer_local_refine_steps"]) >= 0
     assert float(report["meta"]["outer_local_refine_rmin_lambda"]) >= 0.0
@@ -205,6 +206,39 @@ def test_flat_disk_kh_term_audit_radial_projection_diagnostic_emits_finite_rows(
     assert np.isfinite(
         float(row["proj_radial_internal_outer_far_abs_error_delta_vs_unprojected"])
     )
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_fractional_partition_mode_runs() -> None:
+    report = run_flat_disk_kh_term_audit(
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.0,),
+        tilt_mass_mode_in="consistent",
+        partition_mode="fractional",
+    )
+    assert report["meta"]["partition_mode"] == "fractional"
+    row = report["rows"][0]
+    assert np.isfinite(float(row["mesh_internal_disk_core"]))
+    assert np.isfinite(float(row["mesh_internal_outer_near"]))
+    assert np.isfinite(float(row["mesh_internal_outer_far"]))
+    assert (
+        float(row["mesh_internal_disk_core"])
+        + float(row["mesh_internal_rim_band"])
+        + float(row["mesh_internal_outer_near"])
+        + float(row["mesh_internal_outer_far"])
+    ) == pytest.approx(float(row["mesh_internal"]), rel=0.0, abs=1e-8)
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_invalid_partition_mode_raises() -> None:
+    with pytest.raises(ValueError, match="partition_mode"):
+        run_flat_disk_kh_term_audit(
+            refine_level=1,
+            theta_values=(0.0,),
+            partition_mode="bad_mode",
+        )
 
 
 @pytest.mark.regression
