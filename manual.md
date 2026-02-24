@@ -385,10 +385,16 @@ Interactive commands:
     `--optimize-preset kh_strict_outerfield_averaged` for finite outer-band split
     tightening (same strict outer-field mesh controls as `kh_strict_outerfield_tight`
     plus two local vertex-averaging passes over `[R+4.0 lambda, R+12.0 lambda]`).
+    `--optimize-preset kh_strict_outerfield_best` for the diagnostics-selected
+    strict outer-field preset (currently aligned with the best-known averaged
+    outer-field controls).
   - Strict optimize polish controls:
     `--theta-optimize-postcheck` performs local energy postcheck around theta*;
     `--theta-optimize-parity-polish` performs local parity-score polish around
     theta* (auto-enabled by `kh_strict_balanced`).
+  - Candidate bakeoff diagnostics:
+    `python tools/diagnostics/flat_disk_kh_error_source_audit.py --candidate-bakeoff`
+    emits bounded strict-candidate rows and `selected_best` in YAML.
   - Splay calibration control (benchmark-local):
     `--splay-modulus-scale-in` scales inner `tilt_splay_modulus_in` when
     `--smoothness-model splay_twist` (for refine-3 parity tuning experiments).
