@@ -62,6 +62,7 @@ def _kh_opt_report(
         "kh_strict_outerfield_tight",
         "kh_strict_outerfield_quality",
         "kh_strict_outerfield_tailmatch",
+        "kh_strict_outerfield_averaged",
         "kh_strict_outertail_balanced",
         "kh_strict_partition_tight",
         "kh_strict_robust",
@@ -76,6 +77,7 @@ def _kh_opt_report(
                 "kh_strict_outerfield_tight",
                 "kh_strict_outerfield_quality",
                 "kh_strict_outerfield_tailmatch",
+                "kh_strict_outerfield_averaged",
                 "kh_strict_outertail_balanced",
             }
             else 1
@@ -654,6 +656,110 @@ def test_flat_disk_optimize_preset_kh_strict_outertail_balanced_controls() -> No
     assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
     assert float(report["parity"]["theta_factor"]) <= 1.2
     assert float(report["parity"]["energy_factor"]) <= 1.2
+
+
+@pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerfield_averaged_controls() -> None:
+    report = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_averaged",
+    )
+
+    assert (
+        report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_averaged"
+    )
+    assert int(report["meta"]["refine_level"]) == 2
+    assert int(report["meta"]["rim_local_refine_steps"]) == 1
+    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
+    assert int(report["meta"]["outer_local_refine_steps"]) == 1
+    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
+    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
+    assert int(report["meta"]["local_edge_flip_steps"]) == 0
+    assert int(report["meta"]["outer_local_vertex_average_steps"]) == 2
+    assert float(
+        report["meta"]["outer_local_vertex_average_rmin_lambda"]
+    ) == pytest.approx(4.0)
+    assert float(
+        report["meta"]["outer_local_vertex_average_rmax_lambda"]
+    ) == pytest.approx(12.0)
+    assert report["optimize"]["parity_polish"] is not None
+    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
+    assert float(report["parity"]["theta_factor"]) <= 1.2
+    assert float(report["parity"]["energy_factor"]) <= 1.2
+
+
+@pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerfield_averaged_improves_finite_outer_split_score() -> (
+    None
+):
+    outerfield = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_tight",
+    )
+    averaged = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_averaged",
+    )
+
+    def _audit_row(report: dict, *, theta_value: float) -> dict:
+        audit = run_flat_disk_kh_term_audit(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(report["meta"]["refine_level"]),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_nm=7.0,
+            length_scale_nm=15.0,
+            drive_physical=(2.0 / 0.7),
+            theta_values=(float(theta_value),),
+            tilt_mass_mode_in="consistent",
+            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
+            rim_local_refine_band_lambda=float(
+                report["meta"]["rim_local_refine_band_lambda"]
+            ),
+            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
+            outer_local_refine_rmin_lambda=float(
+                report["meta"]["outer_local_refine_rmin_lambda"]
+            ),
+            outer_local_refine_rmax_lambda=float(
+                report["meta"]["outer_local_refine_rmax_lambda"]
+            ),
+            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
+            local_edge_flip_rmin_lambda=float(
+                report["meta"]["local_edge_flip_rmin_lambda"]
+            ),
+            local_edge_flip_rmax_lambda=float(
+                report["meta"]["local_edge_flip_rmax_lambda"]
+            ),
+            outer_local_vertex_average_steps=int(
+                report["meta"]["outer_local_vertex_average_steps"]
+            ),
+            outer_local_vertex_average_rmin_lambda=float(
+                report["meta"]["outer_local_vertex_average_rmin_lambda"]
+            ),
+            outer_local_vertex_average_rmax_lambda=float(
+                report["meta"]["outer_local_vertex_average_rmax_lambda"]
+            ),
+        )
+        return audit["rows"][0]
+
+    outerfield_row = _audit_row(outerfield, theta_value=0.138)
+    averaged_row = _audit_row(averaged, theta_value=0.138)
+    score_outerfield = float(
+        outerfield_row["section_score_internal_bands_finite_outer_l2_log"]
+    )
+    score_averaged = float(
+        averaged_row["section_score_internal_bands_finite_outer_l2_log"]
+    )
+    assert score_averaged <= (score_outerfield - 1.0e-3)
+
+    assert float(averaged["parity"]["theta_factor"]) <= (
+        float(outerfield["parity"]["theta_factor"]) * 1.01
+    )
+    assert float(averaged["parity"]["energy_factor"]) <= (
+        float(outerfield["parity"]["energy_factor"]) * 1.01
+    )
 
 
 @pytest.mark.benchmark
@@ -1282,6 +1388,50 @@ def test_flat_disk_invalid_local_edge_flip_bounds_raises() -> None:
             local_edge_flip_steps=1,
             local_edge_flip_rmin_lambda=2.0,
             local_edge_flip_rmax_lambda=2.0,
+        )
+
+
+@pytest.mark.regression
+def test_flat_disk_outer_local_vertex_average_controls_reported() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        optimize_preset="kh_wide",
+        outer_local_vertex_average_steps=1,
+        outer_local_vertex_average_rmin_lambda=1.0,
+        outer_local_vertex_average_rmax_lambda=6.0,
+    )
+
+    assert int(report["meta"]["outer_local_vertex_average_steps"]) == 1
+    assert float(
+        report["meta"]["outer_local_vertex_average_rmin_lambda"]
+    ) == pytest.approx(1.0)
+    assert float(
+        report["meta"]["outer_local_vertex_average_rmax_lambda"]
+    ) == pytest.approx(6.0)
+
+
+@pytest.mark.regression
+def test_flat_disk_invalid_outer_local_vertex_average_bounds_raises() -> None:
+    with pytest.raises(
+        ValueError,
+        match=(
+            "outer_local_vertex_average_rmax_lambda must be > "
+            "outer_local_vertex_average_rmin_lambda"
+        ),
+    ):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            theta_mode="optimize",
+            outer_local_vertex_average_steps=1,
+            outer_local_vertex_average_rmin_lambda=4.0,
+            outer_local_vertex_average_rmax_lambda=4.0,
         )
 
 

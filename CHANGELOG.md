@@ -40,6 +40,16 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Added opt-in `kh_strict_outerfield_tight` preset (strict refine=2, rim-local step=1, rim band=3λ, plus outer-annulus local refine over `[R+1λ, R+8λ]`) for outer-section mismatch tightening without coefficient retuning.
 - Added strict benchmark gate enforcing `kh_strict_outerfield_tight` outer-section improvement (`outer_near`, `outer_far`, and combined log-space outer score) vs `kh_strict_outerband_tight` while keeping inner/global parity non-worsening.
 - Added strict KH acceptance baseline fixture for `kh_strict_outerfield_tight` (`tests/fixtures/flat_disk_one_leaflet_kh_physical_outerfield_tight_disabled_baseline.yaml`) and acceptance wiring for deterministic reproduction.
+- Added opt-in outer-annulus local vertex-averaging controls to flat-disk KH tooling:
+  `--outer-local-vertex-average-steps`,
+  `--outer-local-vertex-average-rmin-lambda`,
+  `--outer-local-vertex-average-rmax-lambda`
+  (in both `tools/reproduce_flat_disk_one_leaflet.py` and
+  `tools/diagnostics/flat_disk_kh_term_audit.py`).
+- Added opt-in `kh_strict_outerfield_averaged` preset
+  (strict refine=2, rim-local step=1, rim band=3λ, outer local refine `[R+1λ, R+8λ]`,
+  plus outer-annulus local vertex averaging over `[R+4λ, R+12λ]` with two passes)
+  to tighten finite-domain outer-band section parity without coefficient retuning.
   - Added opt-in `kh_strict_partition_tight` preset (rim steps=2, rim band=10.0, parity polish) for partition-focused strict-KH diagnostics.
   - Region-parity diagnostics now report baseline-vs-selected partition score deltas (`baseline_optimize_preset`, `baseline_best`, `selected_vs_baseline_partition_score_delta`).
   - Added strict-KH partition ablation diagnostics (`tools/diagnostics/flat_disk_kh_partition_ablation.py`) with per-band internal energy decomposition and baseline-vs-selected deltas for partition score and energy factor.

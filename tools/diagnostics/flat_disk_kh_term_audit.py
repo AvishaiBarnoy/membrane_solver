@@ -876,6 +876,9 @@ def _run_single_level(
     local_edge_flip_steps: int,
     local_edge_flip_rmin_lambda: float,
     local_edge_flip_rmax_lambda: float,
+    outer_local_vertex_average_steps: int,
+    outer_local_vertex_average_rmin_lambda: float,
+    outer_local_vertex_average_rmax_lambda: float,
     radial_projection_diagnostic: bool,
 ) -> dict[str, Any]:
     from runtime.refinement import refine_triangle_mesh
@@ -891,6 +894,7 @@ def _run_single_level(
         _refine_mesh_locally_in_outer_annulus,
         _refine_mesh_locally_near_rim,
         _run_theta_relaxation,
+        _vertex_average_locally_in_annulus,
     )
 
     params = physical_to_dimensionless_theory_params(
@@ -936,6 +940,23 @@ def _run_single_level(
                 0.0,
                 float(theory.radius)
                 + float(local_edge_flip_rmax_lambda) * float(theory.lambda_value),
+            ),
+        )
+    if int(outer_local_vertex_average_steps) > 0:
+        mesh = _vertex_average_locally_in_annulus(
+            mesh,
+            local_steps=int(outer_local_vertex_average_steps),
+            r_min=max(
+                0.0,
+                float(theory.radius)
+                + float(outer_local_vertex_average_rmin_lambda)
+                * float(theory.lambda_value),
+            ),
+            r_max=max(
+                0.0,
+                float(theory.radius)
+                + float(outer_local_vertex_average_rmax_lambda)
+                * float(theory.lambda_value),
             ),
         )
     positions = mesh.positions_view()
@@ -1364,6 +1385,13 @@ def _run_single_level(
             "outer_local_refine_steps": int(outer_local_refine_steps),
             "outer_local_refine_rmin_lambda": float(outer_local_refine_rmin_lambda),
             "outer_local_refine_rmax_lambda": float(outer_local_refine_rmax_lambda),
+            "outer_local_vertex_average_steps": int(outer_local_vertex_average_steps),
+            "outer_local_vertex_average_rmin_lambda": float(
+                outer_local_vertex_average_rmin_lambda
+            ),
+            "outer_local_vertex_average_rmax_lambda": float(
+                outer_local_vertex_average_rmax_lambda
+            ),
             "radial_projection_diagnostic": bool(radial_projection_diagnostic),
         },
         "theory": {
@@ -1402,6 +1430,9 @@ def run_flat_disk_kh_term_audit(
     local_edge_flip_steps: int = 0,
     local_edge_flip_rmin_lambda: float = -1.0,
     local_edge_flip_rmax_lambda: float = 4.0,
+    outer_local_vertex_average_steps: int = 0,
+    outer_local_vertex_average_rmin_lambda: float = 0.0,
+    outer_local_vertex_average_rmax_lambda: float = 0.0,
     radial_projection_diagnostic: bool = False,
 ) -> dict[str, Any]:
     """Evaluate per-theta mesh/theory split terms in KH physical lane."""
@@ -1433,6 +1464,13 @@ def run_flat_disk_kh_term_audit(
         local_edge_flip_steps=int(local_edge_flip_steps),
         local_edge_flip_rmin_lambda=float(local_edge_flip_rmin_lambda),
         local_edge_flip_rmax_lambda=float(local_edge_flip_rmax_lambda),
+        outer_local_vertex_average_steps=int(outer_local_vertex_average_steps),
+        outer_local_vertex_average_rmin_lambda=float(
+            outer_local_vertex_average_rmin_lambda
+        ),
+        outer_local_vertex_average_rmax_lambda=float(
+            outer_local_vertex_average_rmax_lambda
+        ),
         radial_projection_diagnostic=bool(radial_projection_diagnostic),
     )
 
@@ -1458,6 +1496,9 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     local_edge_flip_steps: int = 0,
     local_edge_flip_rmin_lambda: float = -1.0,
     local_edge_flip_rmax_lambda: float = 4.0,
+    outer_local_vertex_average_steps: int = 0,
+    outer_local_vertex_average_rmin_lambda: float = 0.0,
+    outer_local_vertex_average_rmax_lambda: float = 0.0,
     radial_projection_diagnostic: bool = False,
 ) -> dict[str, Any]:
     """Run KH term audit across multiple refinement levels."""
@@ -1494,6 +1535,13 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             local_edge_flip_steps=int(local_edge_flip_steps),
             local_edge_flip_rmin_lambda=float(local_edge_flip_rmin_lambda),
             local_edge_flip_rmax_lambda=float(local_edge_flip_rmax_lambda),
+            outer_local_vertex_average_steps=int(outer_local_vertex_average_steps),
+            outer_local_vertex_average_rmin_lambda=float(
+                outer_local_vertex_average_rmin_lambda
+            ),
+            outer_local_vertex_average_rmax_lambda=float(
+                outer_local_vertex_average_rmax_lambda
+            ),
             radial_projection_diagnostic=bool(radial_projection_diagnostic),
         )
         for level in levels
@@ -1512,6 +1560,13 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             "outer_local_refine_steps": int(outer_local_refine_steps),
             "outer_local_refine_rmin_lambda": float(outer_local_refine_rmin_lambda),
             "outer_local_refine_rmax_lambda": float(outer_local_refine_rmax_lambda),
+            "outer_local_vertex_average_steps": int(outer_local_vertex_average_steps),
+            "outer_local_vertex_average_rmin_lambda": float(
+                outer_local_vertex_average_rmin_lambda
+            ),
+            "outer_local_vertex_average_rmax_lambda": float(
+                outer_local_vertex_average_rmax_lambda
+            ),
             "radial_projection_diagnostic": bool(radial_projection_diagnostic),
         },
         "runs": runs,
@@ -1699,6 +1754,7 @@ def run_flat_disk_kh_strict_preset_characterization(
         "kh_strict_energy_tight",
         "kh_strict_section_tight",
         "kh_strict_outerfield_tight",
+        "kh_strict_outerfield_averaged",
         "kh_strict_continuity",
         "kh_strict_robust",
     ),
@@ -2033,6 +2089,9 @@ def main() -> int:
     ap.add_argument("--outer-local-refine-steps", type=int, default=0)
     ap.add_argument("--outer-local-refine-rmin-lambda", type=float, default=0.0)
     ap.add_argument("--outer-local-refine-rmax-lambda", type=float, default=0.0)
+    ap.add_argument("--outer-local-vertex-average-steps", type=int, default=0)
+    ap.add_argument("--outer-local-vertex-average-rmin-lambda", type=float, default=0.0)
+    ap.add_argument("--outer-local-vertex-average-rmax-lambda", type=float, default=0.0)
     ap.add_argument("--radial-projection-diagnostic", action="store_true")
     ap.add_argument(
         "--strict-refinement-characterization",
@@ -2110,6 +2169,7 @@ def main() -> int:
                 "kh_strict_energy_tight",
                 "kh_strict_section_tight",
                 "kh_strict_outerfield_tight",
+                "kh_strict_outerfield_averaged",
                 "kh_strict_continuity",
                 "kh_strict_robust",
             )
@@ -2164,6 +2224,13 @@ def main() -> int:
             outer_local_refine_steps=args.outer_local_refine_steps,
             outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
             outer_local_refine_rmax_lambda=args.outer_local_refine_rmax_lambda,
+            outer_local_vertex_average_steps=args.outer_local_vertex_average_steps,
+            outer_local_vertex_average_rmin_lambda=(
+                args.outer_local_vertex_average_rmin_lambda
+            ),
+            outer_local_vertex_average_rmax_lambda=(
+                args.outer_local_vertex_average_rmax_lambda
+            ),
             radial_projection_diagnostic=args.radial_projection_diagnostic,
         )
     else:
@@ -2184,6 +2251,13 @@ def main() -> int:
             outer_local_refine_steps=args.outer_local_refine_steps,
             outer_local_refine_rmin_lambda=args.outer_local_refine_rmin_lambda,
             outer_local_refine_rmax_lambda=args.outer_local_refine_rmax_lambda,
+            outer_local_vertex_average_steps=args.outer_local_vertex_average_steps,
+            outer_local_vertex_average_rmin_lambda=(
+                args.outer_local_vertex_average_rmin_lambda
+            ),
+            outer_local_vertex_average_rmax_lambda=(
+                args.outer_local_vertex_average_rmax_lambda
+            ),
             radial_projection_diagnostic=args.radial_projection_diagnostic,
         )
 
