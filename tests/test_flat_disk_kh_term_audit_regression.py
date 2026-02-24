@@ -351,7 +351,7 @@ def test_flat_disk_kh_term_audit_outerfield_tailmatch_improves_outer_far_section
         outer_local_refine_rmin_lambda=1.0,
         outer_local_refine_rmax_lambda=8.0,
         local_edge_flip_steps=1,
-        local_edge_flip_rmin_lambda=2.0,
+        local_edge_flip_rmin_lambda=0.5,
         local_edge_flip_rmax_lambda=8.0,
     )["rows"][0]
 
