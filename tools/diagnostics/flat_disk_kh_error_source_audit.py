@@ -205,10 +205,94 @@ def run_flat_disk_kh_error_source_audit(
             "refine_levels": levels,
             "mass_modes": masses,
             "partition_modes": partitions,
+            "primary_partition_mode": (
+                "fractional" if "fractional" in partitions else partitions[0]
+            ),
             "unmeasured_effects": ["solver_effect", "nearcut_effect"],
         },
         "runs": runs,
         "attribution": _rank_effects(effect_sizes),
+    }
+
+
+def run_flat_disk_kh_fractional_refinement_trend(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    optimize_preset: str = "kh_strict_outerfield_best",
+    refine_levels: Sequence[int] = (1, 2, 3),
+    mass_mode: str = "consistent",
+) -> dict[str, Any]:
+    """Report strict KH section-score trend across refinement levels."""
+    fixture_path = Path(fixture)
+    if not fixture_path.is_absolute():
+        fixture_path = (ROOT / fixture_path).resolve()
+    if not fixture_path.exists():
+        raise FileNotFoundError(f"Fixture not found: {fixture_path}")
+
+    levels = [int(x) for x in refine_levels]
+    if len(levels) == 0:
+        raise ValueError("refine_levels must be non-empty.")
+    mass_mode_norm = str(mass_mode).strip().lower()
+    if mass_mode_norm not in {"consistent", "lumped"}:
+        raise ValueError("mass_mode must be consistent|lumped.")
+
+    rows: list[dict[str, Any]] = []
+    for level in levels:
+        report = run_flat_disk_kh_error_source_audit(
+            fixture=fixture_path,
+            primary_preset=str(optimize_preset),
+            reference_preset="kh_strict_outerband_tight",
+            refine_levels=(int(level),),
+            mass_modes=(mass_mode_norm,),
+            partition_modes=("centroid", "fractional"),
+        )
+        run_rows = [
+            row
+            for row in report["runs"]
+            if str(row["preset"]) == str(optimize_preset)
+            and int(row["refine_level"]) == int(level)
+            and str(row["tilt_mass_mode_in"]) == mass_mode_norm
+            and str(row["partition_mode"]) == "fractional"
+        ]
+        if len(run_rows) == 0:
+            raise ValueError(
+                f"No fractional run row found for preset={optimize_preset} refine={level}"
+            )
+        row = run_rows[0]
+        score = float(row["section_score_internal_bands_finite_outer_l2_log"])
+        if not np.isfinite(score):
+            raise ValueError(
+                f"Non-finite section score for preset={optimize_preset} refine={level}"
+            )
+        rows.append(
+            {
+                "refine_level": int(level),
+                "section_score_internal_bands_finite_outer_l2_log": float(score),
+                "outer_near_ratio": float(row["outer_near_ratio"]),
+                "outer_far_ratio": float(row["outer_far_ratio"]),
+                "disk_ratio": float(row["disk_ratio"]),
+            }
+        )
+
+    scores = [
+        float(r["section_score_internal_bands_finite_outer_l2_log"]) for r in rows
+    ]
+    monotone_non_worsening = all(
+        (scores[i + 1] <= (scores[i] + 1e-12)) for i in range(len(scores) - 1)
+    )
+    return {
+        "meta": {
+            "mode": "kh_fractional_refinement_trend",
+            "fixture": str(fixture_path.relative_to(ROOT)),
+            "optimize_preset": str(optimize_preset),
+            "mass_mode": mass_mode_norm,
+            "primary_partition_mode": "fractional",
+            "refine_levels": levels,
+        },
+        "trend": {
+            "rows": rows,
+            "monotone_non_worsening": bool(monotone_non_worsening),
+        },
     }
 
 
@@ -350,6 +434,7 @@ def main() -> int:
         default=["centroid", "fractional"],
     )
     ap.add_argument("--candidate-bakeoff", action="store_true")
+    ap.add_argument("--fractional-refinement-trend", action="store_true")
     ap.add_argument(
         "--optimize-presets",
         type=str,
@@ -370,6 +455,13 @@ def main() -> int:
             refine_level=int(args.refine_level),
             mass_modes=tuple(args.mass_modes),
             partition_modes=tuple(args.partition_modes),
+        )
+    elif bool(args.fractional_refinement_trend):
+        report = run_flat_disk_kh_fractional_refinement_trend(
+            fixture=args.fixture,
+            optimize_preset=str(args.primary_preset),
+            refine_levels=tuple(args.refine_levels),
+            mass_mode=str(args.mass_modes[0]),
         )
     else:
         report = run_flat_disk_kh_error_source_audit(
