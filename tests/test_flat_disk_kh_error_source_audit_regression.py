@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from tools.diagnostics.flat_disk_kh_error_source_audit import (
     _rank_effects,
+    run_flat_disk_kh_discrete_quality_sweep,
     run_flat_disk_kh_error_source_audit,
     run_flat_disk_kh_error_source_candidate_bakeoff,
     run_flat_disk_kh_fractional_refinement_trend,
@@ -197,3 +198,101 @@ def test_flat_disk_kh_fractional_refinement_trend_emits_rows_and_monotonic_flag(
         assert np.isfinite(
             float(row["section_score_internal_bands_finite_outer_l2_log"])
         )
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_discrete_quality_sweep_emits_rows_and_deltas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_error_source_audit as mod
+
+    def _fake_benchmark(**kwargs):
+        rmax = float(kwargs["outer_local_refine_rmax_lambda"])
+        flips = int(kwargs["local_edge_flip_steps"])
+        avg = int(kwargs["outer_local_vertex_average_steps"])
+        theta_star = 0.132 + 0.002 * (rmax - 8.0) - 0.0005 * flips - 0.0003 * (avg - 2)
+        theta_factor = 1.06 - 0.01 * flips - 0.004 * (avg - 2)
+        energy_factor = 1.15 - 0.02 * flips - 0.01 * (avg - 2) - 0.002 * (rmax - 8.0)
+        return {
+            "mesh": {"theta_star": float(theta_star)},
+            "parity": {
+                "theta_factor": float(theta_factor),
+                "energy_factor": float(energy_factor),
+            },
+            "meta": {
+                "refine_level": int(kwargs["refine_level"]),
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 4.0,
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 1.0,
+                "outer_local_refine_rmax_lambda": float(rmax),
+                "local_edge_flip_steps": int(flips),
+                "local_edge_flip_rmin_lambda": 2.0,
+                "local_edge_flip_rmax_lambda": 6.0,
+                "outer_local_vertex_average_steps": int(avg),
+                "outer_local_vertex_average_rmin_lambda": 4.0,
+                "outer_local_vertex_average_rmax_lambda": 12.0,
+            },
+        }
+
+    def _fake_term_audit(**kwargs):
+        rmax = float(kwargs["outer_local_refine_rmax_lambda"])
+        flips = int(kwargs["local_edge_flip_steps"])
+        avg = int(kwargs["outer_local_vertex_average_steps"])
+        disk = 1.16 - 0.01 * flips - 0.005 * (avg - 2)
+        outer_near = 1.13 - 0.02 * flips - 0.01 * (avg - 2)
+        outer_far = 0.90 + 0.02 * flips + 0.005 * (avg - 2) + 0.003 * (rmax - 8.0)
+        score = float(
+            np.hypot(np.log(max(outer_near, 1e-18)), np.log(max(outer_far, 1e-18)))
+        )
+        return {
+            "rows": [
+                {
+                    "internal_disk_ratio_mesh_over_theory": float(disk),
+                    "internal_outer_near_ratio_mesh_over_theory_finite": float(
+                        outer_near
+                    ),
+                    "internal_outer_far_ratio_mesh_over_theory_finite": float(
+                        outer_far
+                    ),
+                    "section_score_internal_bands_finite_outer_l2_log": float(score),
+                }
+            ]
+        }
+
+    monkeypatch.setattr(mod, "run_flat_disk_one_leaflet_benchmark", _fake_benchmark)
+    monkeypatch.setattr(mod, "run_flat_disk_kh_term_audit", _fake_term_audit)
+
+    report = run_flat_disk_kh_discrete_quality_sweep(
+        optimize_preset="kh_strict_outerfield_best",
+        refine_level=2,
+        outer_local_refine_rmax_lambda_values=(8.0, 10.0),
+        local_edge_flip_steps_values=(0, 1),
+        outer_local_vertex_average_steps_values=(2, 3),
+    )
+    assert report["meta"]["mode"] == "kh_discrete_quality_sweep"
+    rows = report["rows"]
+    assert len(rows) == 8
+    baseline = next(
+        row
+        for row in rows
+        if float(row["outer_local_refine_rmax_lambda"]) == 8.0
+        and int(row["local_edge_flip_steps"]) == 0
+        and int(row["outer_local_vertex_average_steps"]) == 2
+    )
+    assert abs(float(baseline["delta_theta_factor_vs_baseline"])) < 1e-12
+    assert abs(float(baseline["delta_energy_factor_vs_baseline"])) < 1e-12
+    assert abs(float(baseline["delta_section_score_vs_baseline"])) < 1e-12
+    for row in rows:
+        assert np.isfinite(float(row["theta_factor"]))
+        assert np.isfinite(float(row["energy_factor"]))
+        assert np.isfinite(
+            float(row["section_score_internal_bands_finite_outer_l2_log"])
+        )
+        assert np.isfinite(float(row["disk_ratio"]))
+        assert np.isfinite(float(row["outer_near_ratio"]))
+        assert np.isfinite(float(row["outer_far_ratio"]))
+        assert np.isfinite(float(row["delta_theta_factor_vs_baseline"]))
+        assert np.isfinite(float(row["delta_energy_factor_vs_baseline"]))
+        assert np.isfinite(float(row["delta_section_score_vs_baseline"]))
+    assert int(report["selected_best"]["local_edge_flip_steps"]) == 1
