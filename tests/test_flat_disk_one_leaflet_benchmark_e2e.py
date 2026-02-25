@@ -11,6 +11,9 @@ import yaml
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data
+from tools.diagnostics.flat_disk_kh_error_source_audit import (
+    run_flat_disk_kh_fractional_refinement_trend,
+)
 from tools.diagnostics.flat_disk_kh_term_audit import (
     run_flat_disk_kh_outerfield_averaged_sweep,
     run_flat_disk_kh_term_audit,
@@ -998,6 +1001,29 @@ def test_flat_disk_kh_strict_outerfield_averaged_sweep_baseline_non_worsening() 
     ) <= abs(
         float(candidate_bad["internal_outer_far_ratio_mesh_over_theory_finite"]) - 1.0
     )
+
+
+@pytest.mark.benchmark
+def test_flat_disk_kh_fractional_refinement_trend_non_worsening_outerfield_best() -> (
+    None
+):
+    report = run_flat_disk_kh_fractional_refinement_trend(
+        fixture=DEFAULT_FIXTURE,
+        optimize_preset="kh_strict_outerfield_best",
+        refine_levels=(1, 2, 3),
+        mass_mode="consistent",
+    )
+    assert report["meta"]["mode"] == "kh_fractional_refinement_trend"
+    assert report["meta"]["primary_partition_mode"] == "fractional"
+    rows = report["trend"]["rows"]
+    assert [int(row["refine_level"]) for row in rows] == [1, 2, 3]
+    scores = [
+        float(row["section_score_internal_bands_finite_outer_l2_log"]) for row in rows
+    ]
+    for score in scores:
+        assert np.isfinite(score)
+    assert scores[1] <= (scores[0] + 1e-12)
+    assert scores[2] <= (scores[1] + 1e-12)
 
 
 @pytest.mark.benchmark
