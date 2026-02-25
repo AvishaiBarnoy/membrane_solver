@@ -600,6 +600,72 @@ def run_flat_disk_kh_discrete_quality_sweep(
     }
 
 
+def run_flat_disk_kh_discrete_quality_safe_sweep(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    optimize_preset: str = "kh_strict_outerfield_best",
+    refine_level: int = 2,
+    outer_local_refine_rmax_lambda_values: Sequence[float] = (8.0, 9.0, 10.0),
+    outer_local_vertex_average_steps_values: Sequence[int] = (2, 3),
+    outer_far_floor: float = 0.85,
+) -> dict[str, Any]:
+    """Run bounded quality sweep with outer-far eligibility filtering."""
+    floor = float(outer_far_floor)
+    if not np.isfinite(floor) or floor <= 0.0:
+        raise ValueError("outer_far_floor must be finite and > 0.")
+    report = run_flat_disk_kh_discrete_quality_sweep(
+        fixture=fixture,
+        optimize_preset=optimize_preset,
+        refine_level=refine_level,
+        outer_local_refine_rmax_lambda_values=outer_local_refine_rmax_lambda_values,
+        local_edge_flip_steps_values=(0,),
+        outer_local_vertex_average_steps_values=outer_local_vertex_average_steps_values,
+    )
+    rows = list(report["rows"])
+    for row in rows:
+        theta_factor = float(row["theta_factor"])
+        energy_factor = float(row["energy_factor"])
+        outer_far = float(row["outer_far_ratio"])
+        row["balanced_parity_score"] = float(
+            np.hypot(
+                np.log(max(theta_factor, 1e-18)),
+                np.log(max(energy_factor, 1e-18)),
+            )
+        )
+        row["eligible"] = bool(np.isfinite(outer_far) and outer_far >= floor)
+    eligible_rows = [row for row in rows if bool(row["eligible"])]
+    if len(eligible_rows) == 0:
+        raise ValueError(
+            f"No eligible safe-sweep rows for outer_far_floor={floor:.6g}; "
+            f"rows_tested={len(rows)}."
+        )
+    selected = min(
+        eligible_rows,
+        key=lambda row: (
+            float(row["section_score_internal_bands_finite_outer_l2_log"]),
+            float(row["balanced_parity_score"]),
+            abs(float(row["energy_factor"]) - 1.0),
+            abs(float(row["theta_factor"]) - 1.0),
+            float(row["outer_local_refine_rmax_lambda"]),
+            int(row["outer_local_vertex_average_steps"]),
+        ),
+    )
+    return {
+        "meta": {
+            "mode": "kh_discrete_quality_safe_sweep",
+            "fixture": str(report["meta"]["fixture"]),
+            "optimize_preset": str(optimize_preset),
+            "refine_level": int(refine_level),
+            "constraints": {
+                "flip_steps": 0,
+                "outer_far_floor": floor,
+            },
+        },
+        "rows": rows,
+        "selected_best": selected,
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="KH strict error-source attribution audit."
@@ -620,6 +686,7 @@ def main() -> int:
     ap.add_argument("--candidate-bakeoff", action="store_true")
     ap.add_argument("--fractional-refinement-trend", action="store_true")
     ap.add_argument("--quality-candidate-sweep", action="store_true")
+    ap.add_argument("--quality-safe-sweep", action="store_true")
     ap.add_argument(
         "--optimize-presets",
         type=str,
@@ -638,6 +705,13 @@ def main() -> int:
     ap.add_argument(
         "--quality-average-steps-values", type=int, nargs="+", default=[2, 3]
     )
+    ap.add_argument(
+        "--quality-safe-rmax-values", type=float, nargs="+", default=[8.0, 9.0, 10.0]
+    )
+    ap.add_argument(
+        "--quality-safe-average-steps-values", type=int, nargs="+", default=[2, 3]
+    )
+    ap.add_argument("--outer-far-floor", type=float, default=0.85)
     ap.add_argument("--output", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args()
     if bool(args.candidate_bakeoff):
@@ -665,6 +739,17 @@ def main() -> int:
             outer_local_vertex_average_steps_values=tuple(
                 args.quality_average_steps_values
             ),
+        )
+    elif bool(args.quality_safe_sweep):
+        report = run_flat_disk_kh_discrete_quality_safe_sweep(
+            fixture=args.fixture,
+            optimize_preset=str(args.primary_preset),
+            refine_level=int(args.refine_level),
+            outer_local_refine_rmax_lambda_values=tuple(args.quality_safe_rmax_values),
+            outer_local_vertex_average_steps_values=tuple(
+                args.quality_safe_average_steps_values
+            ),
+            outer_far_floor=float(args.outer_far_floor),
         )
     else:
         report = run_flat_disk_kh_error_source_audit(
