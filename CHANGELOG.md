@@ -50,6 +50,11 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
   (strict refine=2, rim-local step=1, rim band=3λ, outer local refine `[R+1λ, R+8λ]`,
   plus outer-annulus local vertex averaging over `[R+4λ, R+12λ]` with two passes)
   to tighten finite-domain outer-band section parity without coefficient retuning.
+  - Added strict KH candidate bakeoff diagnostics mode in
+    `tools/diagnostics/flat_disk_kh_error_source_audit.py`
+    (`--candidate-bakeoff`) with deterministic `selected_best` reporting.
+  - Added opt-in `kh_strict_outerfield_best` optimize preset to reproduce the
+    diagnostics-selected strict outer-field controls from one command.
   - Added opt-in `kh_strict_partition_tight` preset (rim steps=2, rim band=10.0, parity polish) for partition-focused strict-KH diagnostics.
   - Region-parity diagnostics now report baseline-vs-selected partition score deltas (`baseline_optimize_preset`, `baseline_best`, `selected_vs_baseline_partition_score_delta`).
   - Added strict-KH partition ablation diagnostics (`tools/diagnostics/flat_disk_kh_partition_ablation.py`) with per-band internal energy decomposition and baseline-vs-selected deltas for partition score and energy factor.
