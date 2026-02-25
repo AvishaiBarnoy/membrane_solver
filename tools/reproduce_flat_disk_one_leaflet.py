@@ -1054,6 +1054,7 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_optimize_postcheck: bool = False,
     theta_optimize_parity_polish: bool = False,
     theta_optimize_energy_polish: bool = False,
+    theta_optimize_section_polish: bool = False,
     theta_polish_delta: float = 1.0e-4,
     theta_polish_points: int = 3,
     optimize_preset: str = "none",
@@ -1387,6 +1388,9 @@ def run_flat_disk_one_leaflet_benchmark(
     postcheck_enabled = bool(theta_optimize_postcheck)
     parity_polish_enabled = bool(theta_optimize_parity_polish)
     energy_polish_enabled = bool(theta_optimize_energy_polish)
+    section_polish_enabled = bool(theta_optimize_section_polish)
+    if bool(section_polish_enabled):
+        parity_polish_enabled = True
     if theta_mode_str == "scan":
         scan_cfg = BenchmarkScanConfig(
             theta_min=float(theta_min),
@@ -1652,7 +1656,59 @@ def run_flat_disk_one_leaflet_benchmark(
                 ],
                 dtype=float,
             )
-            if bool(energy_polish_enabled):
+            section_score_candidates = None
+            if bool(section_polish_enabled):
+                from tools.diagnostics import flat_disk_kh_term_audit as kh_term_audit
+
+                mesh_r_max = float(
+                    np.max(np.linalg.norm(mesh.positions_view()[:, :2], axis=1))
+                )
+
+                def _section_score() -> float:
+                    mesh_bands = kh_term_audit._mesh_internal_band_split(
+                        mesh,
+                        smoothness_model=str(smoothness_model),
+                        radius=float(theory.radius),
+                        lambda_value=float(theory.lambda_value),
+                        rim_half_width_lambda=1.0,
+                        outer_near_width_lambda=4.0,
+                        partition_mode="fractional",
+                    )
+                    th = kh_term_audit._theory_term_band_split(
+                        theta=float(
+                            mesh.global_parameters.get("tilt_thetaB_value") or 0.0
+                        ),
+                        kappa=float(theory.kappa),
+                        kappa_t=float(theory.kappa_t),
+                        radius=float(theory.radius),
+                        lambda_value=float(theory.lambda_value),
+                        rim_half_width_lambda=1.0,
+                        outer_near_width_lambda=4.0,
+                        outer_r_max=mesh_r_max,
+                    )
+                    score = kh_term_audit._ratio_distance_score(
+                        float(mesh_bands["mesh_internal_disk_core"])
+                        / max(float(th["theory_internal_disk_core"]), 1e-18),
+                        float(mesh_bands["mesh_internal_rim_band"])
+                        / max(float(th["theory_internal_rim_band"]), 1e-18),
+                        float(mesh_bands["mesh_internal_outer_near"])
+                        / max(float(th["theory_internal_outer_near"]), 1e-18),
+                        float(mesh_bands["mesh_internal_outer_far"])
+                        / max(float(th["theory_internal_outer_far"]), 1e-18),
+                    )
+                    return float(score["l2_log"])
+
+                section_vals: list[float] = []
+                for th in theta_candidates.tolist():
+                    _run_theta_relaxation(
+                        minim, theta_value=float(th), reset_outer=True
+                    )
+                    section_vals.append(float(_section_score()))
+                section_score_candidates = np.asarray(section_vals, dtype=float)
+            if bool(section_polish_enabled) and section_score_candidates is not None:
+                energy_factor_candidates = None
+                best_idx = int(np.argmin(section_score_candidates))
+            elif bool(energy_polish_enabled):
                 energy_factor_candidates = np.asarray(
                     [
                         _factor_difference(float(abs(en)), float(abs(theory.total)))
@@ -1668,12 +1724,21 @@ def run_flat_disk_one_leaflet_benchmark(
             parity_polish_evaluations = int(theta_candidates.size)
             parity_polish_report = {
                 "enabled": True,
-                "objective": "energy_factor"
-                if bool(energy_polish_enabled)
-                else "balanced",
+                "objective": (
+                    "section_internal_bands_finite_outer"
+                    if bool(section_polish_enabled)
+                    else (
+                        "energy_factor" if bool(energy_polish_enabled) else "balanced"
+                    )
+                ),
                 "theta_candidates": [float(x) for x in theta_candidates.tolist()],
                 "energy_candidates": [float(x) for x in energy_candidates.tolist()],
                 "score_candidates": [float(x) for x in score_candidates.tolist()],
+                "section_score_candidates": (
+                    None
+                    if section_score_candidates is None
+                    else [float(x) for x in section_score_candidates.tolist()]
+                ),
                 "energy_factor_candidates": (
                     None
                     if energy_factor_candidates is None
@@ -2128,6 +2193,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     ap.add_argument("--theta-optimize-postcheck", action="store_true")
     ap.add_argument("--theta-optimize-parity-polish", action="store_true")
     ap.add_argument("--theta-optimize-energy-polish", action="store_true")
+    ap.add_argument("--theta-optimize-section-polish", action="store_true")
     ap.add_argument("--theta-polish-delta", type=float, default=1.0e-4)
     ap.add_argument("--theta-polish-points", type=int, default=3)
     ap.add_argument(
@@ -2272,6 +2338,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             theta_optimize_postcheck=args.theta_optimize_postcheck,
             theta_optimize_parity_polish=args.theta_optimize_parity_polish,
             theta_optimize_energy_polish=args.theta_optimize_energy_polish,
+            theta_optimize_section_polish=args.theta_optimize_section_polish,
             theta_polish_delta=args.theta_polish_delta,
             theta_polish_points=args.theta_polish_points,
             optimize_preset=args.optimize_preset,
