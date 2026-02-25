@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from tools.diagnostics.flat_disk_kh_error_source_audit import (
     _rank_effects,
+    run_flat_disk_kh_discrete_quality_safe_refine_trend,
     run_flat_disk_kh_discrete_quality_safe_sweep,
     run_flat_disk_kh_discrete_quality_sweep,
     run_flat_disk_kh_error_source_audit,
@@ -353,3 +354,99 @@ def test_flat_disk_kh_discrete_quality_safe_sweep_filters_rows(
     assert sum(1 for row in rows if bool(row["eligible"])) == 2
     assert report["selected_best"]["outer_local_refine_rmax_lambda"] == 9.0
     assert report["selected_best"]["outer_local_vertex_average_steps"] == 3
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_discrete_quality_safe_refine_trend_emits_deltas_and_flags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_error_source_audit as mod
+
+    def _fake_safe_sweep(**kwargs):
+        lvl = int(kwargs["refine_level"])
+        data = {
+            2: {
+                "realized_refine_level": 2,
+                "theta_factor": 1.03,
+                "energy_factor": 1.09,
+                "section_score_internal_bands_finite_outer_l2_log": 0.12,
+                "disk_ratio": 1.18,
+                "outer_near_ratio": 1.11,
+                "outer_far_ratio": 0.90,
+                "eligible": True,
+            },
+            3: {
+                "realized_refine_level": 3,
+                "theta_factor": 1.02,
+                "energy_factor": 1.06,
+                "section_score_internal_bands_finite_outer_l2_log": 0.09,
+                "disk_ratio": 1.15,
+                "outer_near_ratio": 1.08,
+                "outer_far_ratio": 0.93,
+                "eligible": True,
+            },
+            4: {
+                "realized_refine_level": 4,
+                "theta_factor": 1.01,
+                "energy_factor": 1.04,
+                "section_score_internal_bands_finite_outer_l2_log": 0.08,
+                "disk_ratio": 1.12,
+                "outer_near_ratio": 1.05,
+                "outer_far_ratio": 0.95,
+                "eligible": True,
+            },
+        }[lvl]
+        return {"selected_best": data}
+
+    monkeypatch.setattr(
+        mod, "run_flat_disk_kh_discrete_quality_safe_sweep", _fake_safe_sweep
+    )
+    report = run_flat_disk_kh_discrete_quality_safe_refine_trend(
+        optimize_preset="kh_strict_outerfield_best",
+        refine_levels=(2, 3, 4),
+        outer_local_refine_rmax_lambda=8.0,
+        outer_local_vertex_average_steps=2,
+        outer_far_floor=0.85,
+    )
+    assert report["meta"]["mode"] == "kh_discrete_quality_safe_refine_trend"
+    rows = report["trend"]["rows"]
+    assert [int(r["refine_level"]) for r in rows] == [2, 3, 4]
+    assert len(report["trend"]["deltas"]) == 2
+    flags = report["trend"]["monotone_flags"]
+    assert bool(flags["section_score_non_worsening"]) is True
+    assert bool(flags["disk_abs_log_error_non_worsening"]) is True
+    assert bool(flags["outer_near_abs_log_error_non_worsening"]) is True
+    assert bool(flags["outer_far_abs_log_error_non_worsening"]) is True
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_discrete_quality_safe_refine_trend_rejects_pinned_refine(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_error_source_audit as mod
+
+    def _fake_safe_sweep(**kwargs):
+        return {
+            "selected_best": {
+                "realized_refine_level": 2,
+                "theta_factor": 1.03,
+                "energy_factor": 1.09,
+                "section_score_internal_bands_finite_outer_l2_log": 0.12,
+                "disk_ratio": 1.18,
+                "outer_near_ratio": 1.11,
+                "outer_far_ratio": 0.90,
+                "eligible": True,
+            }
+        }
+
+    monkeypatch.setattr(
+        mod, "run_flat_disk_kh_discrete_quality_safe_sweep", _fake_safe_sweep
+    )
+    with pytest.raises(ValueError, match="realized refine_level"):
+        run_flat_disk_kh_discrete_quality_safe_refine_trend(
+            optimize_preset="kh_strict_outerfield_best",
+            refine_levels=(2, 3),
+            outer_local_refine_rmax_lambda=8.0,
+            outer_local_vertex_average_steps=2,
+            outer_far_floor=0.85,
+        )
