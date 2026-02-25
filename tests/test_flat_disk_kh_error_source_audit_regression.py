@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from tools.diagnostics.flat_disk_kh_error_source_audit import (
     _rank_effects,
+    run_flat_disk_kh_discrete_quality_safe_sweep,
     run_flat_disk_kh_discrete_quality_sweep,
     run_flat_disk_kh_error_source_audit,
     run_flat_disk_kh_error_source_candidate_bakeoff,
@@ -296,3 +297,59 @@ def test_flat_disk_kh_discrete_quality_sweep_emits_rows_and_deltas(
         assert np.isfinite(float(row["delta_energy_factor_vs_baseline"]))
         assert np.isfinite(float(row["delta_section_score_vs_baseline"]))
     assert int(report["selected_best"]["local_edge_flip_steps"]) == 1
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_discrete_quality_safe_sweep_filters_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_error_source_audit as mod
+
+    def _fake_quality_sweep(**kwargs):
+        return {
+            "meta": {
+                "fixture": "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml"
+            },
+            "rows": [
+                {
+                    "outer_local_refine_rmax_lambda": 8.0,
+                    "outer_local_vertex_average_steps": 2,
+                    "theta_factor": 1.03,
+                    "energy_factor": 1.04,
+                    "section_score_internal_bands_finite_outer_l2_log": 0.09,
+                    "outer_far_ratio": 0.90,
+                },
+                {
+                    "outer_local_refine_rmax_lambda": 10.0,
+                    "outer_local_vertex_average_steps": 2,
+                    "theta_factor": 1.03,
+                    "energy_factor": 1.03,
+                    "section_score_internal_bands_finite_outer_l2_log": 0.40,
+                    "outer_far_ratio": 0.35,
+                },
+                {
+                    "outer_local_refine_rmax_lambda": 9.0,
+                    "outer_local_vertex_average_steps": 3,
+                    "theta_factor": 1.02,
+                    "energy_factor": 1.03,
+                    "section_score_internal_bands_finite_outer_l2_log": 0.08,
+                    "outer_far_ratio": 0.91,
+                },
+            ],
+        }
+
+    monkeypatch.setattr(
+        mod, "run_flat_disk_kh_discrete_quality_sweep", _fake_quality_sweep
+    )
+    report = run_flat_disk_kh_discrete_quality_safe_sweep(
+        optimize_preset="kh_strict_outerfield_best",
+        refine_level=2,
+        outer_far_floor=0.85,
+    )
+    assert report["meta"]["mode"] == "kh_discrete_quality_safe_sweep"
+    assert float(report["meta"]["constraints"]["outer_far_floor"]) == 0.85
+    rows = report["rows"]
+    assert len(rows) == 3
+    assert sum(1 for row in rows if bool(row["eligible"])) == 2
+    assert report["selected_best"]["outer_local_refine_rmax_lambda"] == 9.0
+    assert report["selected_best"]["outer_local_vertex_average_steps"] == 3
