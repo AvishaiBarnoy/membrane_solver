@@ -8,6 +8,13 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "reproduce_flat_disk_one_leaflet.py"
+
+sys.path.insert(0, str(ROOT))
+from tools.reproduce_flat_disk_one_leaflet import (  # noqa: E402
+    DEFAULT_FIXTURE,
+    run_flat_disk_one_leaflet_benchmark,
+)
+
 BASELINES = {
     "legacy_disabled": ROOT
     / "tests"
@@ -180,3 +187,50 @@ def test_reproduce_flat_disk_one_leaflet_matches_yaml_baseline_with_tolerances(
 
     expect_meets_factor_2 = bool(meta.get("expect_meets_factor_2", True))
     assert bool(report["parity"]["meets_factor_2"]) is expect_meets_factor_2
+
+
+@pytest.mark.acceptance
+def test_unpinned_preset_preserves_requested_refine_levels() -> None:
+    r2 = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=2,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_strict_outerfield_unpinned",
+        theta_optimize_steps=1,
+        theta_optimize_inner_steps=1,
+    )
+    r3 = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=3,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_strict_outerfield_unpinned",
+        theta_optimize_steps=1,
+        theta_optimize_inner_steps=1,
+    )
+    assert int(r2["meta"]["refine_level_requested"]) == 2
+    assert int(r2["meta"]["refine_level_effective"]) == 2
+    assert int(r3["meta"]["refine_level_requested"]) == 3
+    assert int(r3["meta"]["refine_level_effective"]) == 3
+
+
+@pytest.mark.acceptance
+def test_strict_best_preset_keeps_legacy_refine_pin_to_two() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=3,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_strict_outerfield_best",
+        theta_optimize_steps=1,
+        theta_optimize_inner_steps=1,
+    )
+    assert int(report["meta"]["refine_level_requested"]) == 3
+    assert int(report["meta"]["refine_level_effective"]) == 2

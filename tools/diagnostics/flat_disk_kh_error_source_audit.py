@@ -605,16 +605,22 @@ def run_flat_disk_kh_discrete_quality_sweep(
 def run_flat_disk_kh_discrete_quality_safe_sweep(
     *,
     fixture: Path | str = DEFAULT_FIXTURE,
-    optimize_preset: str = "kh_strict_outerfield_best",
+    optimize_preset: str = "kh_strict_outerfield_unpinned",
     refine_level: int = 2,
-    outer_local_refine_rmax_lambda_values: Sequence[float] = (8.0, 9.0, 10.0),
-    outer_local_vertex_average_steps_values: Sequence[int] = (2, 3),
+    outer_local_refine_rmax_lambda_values: Sequence[float] = (7.0, 8.0, 9.0),
+    outer_local_vertex_average_steps_values: Sequence[int] = (1, 2, 3),
     outer_far_floor: float = 0.85,
+    outer_far_ceiling: float = 1.20,
 ) -> dict[str, Any]:
     """Run bounded quality sweep with outer-far eligibility filtering."""
     floor = float(outer_far_floor)
     if not np.isfinite(floor) or floor <= 0.0:
         raise ValueError("outer_far_floor must be finite and > 0.")
+    ceiling = float(outer_far_ceiling)
+    if ceiling <= 0.0:
+        raise ValueError("outer_far_ceiling must be > 0.")
+    if ceiling < floor:
+        raise ValueError("outer_far_ceiling must be >= outer_far_floor.")
     report = run_flat_disk_kh_discrete_quality_sweep(
         fixture=fixture,
         optimize_preset=optimize_preset,
@@ -634,7 +640,7 @@ def run_flat_disk_kh_discrete_quality_safe_sweep(
                 np.log(max(energy_factor, 1e-18)),
             )
         )
-        row["eligible"] = bool(np.isfinite(outer_far) and outer_far >= floor)
+        row["eligible"] = bool(np.isfinite(outer_far) and floor <= outer_far <= ceiling)
     eligible_rows = [row for row in rows if bool(row["eligible"])]
     if len(eligible_rows) == 0:
         raise ValueError(
@@ -661,6 +667,7 @@ def run_flat_disk_kh_discrete_quality_safe_sweep(
             "constraints": {
                 "flip_steps": 0,
                 "outer_far_floor": floor,
+                "outer_far_ceiling": ceiling,
             },
         },
         "rows": rows,
@@ -671,8 +678,8 @@ def run_flat_disk_kh_discrete_quality_safe_sweep(
 def run_flat_disk_kh_discrete_quality_safe_refine_trend(
     *,
     fixture: Path | str = DEFAULT_FIXTURE,
-    optimize_preset: str = "kh_strict_outerfield_best",
-    refine_levels: Sequence[int] = (2, 3, 4),
+    optimize_preset: str = "kh_strict_outerfield_unpinned",
+    refine_levels: Sequence[int] = (2, 3),
     outer_local_refine_rmax_lambda: float = 8.0,
     outer_local_vertex_average_steps: int = 2,
     outer_far_floor: float = 0.85,
@@ -683,19 +690,23 @@ def run_flat_disk_kh_discrete_quality_safe_refine_trend(
         raise ValueError("refine_levels must be non-empty.")
     rows: list[dict[str, Any]] = []
     for level in levels:
-        report = run_flat_disk_kh_discrete_quality_safe_sweep(
+        report = run_flat_disk_kh_discrete_quality_sweep(
             fixture=fixture,
             optimize_preset=optimize_preset,
             refine_level=int(level),
             outer_local_refine_rmax_lambda_values=(
                 float(outer_local_refine_rmax_lambda),
             ),
+            local_edge_flip_steps_values=(0,),
             outer_local_vertex_average_steps_values=(
                 int(outer_local_vertex_average_steps),
             ),
-            outer_far_floor=float(outer_far_floor),
         )
-        row = dict(report["selected_best"])
+        row = dict(report["rows"][0])
+        outer_far = float(row["outer_far_ratio"])
+        row["eligible"] = bool(
+            np.isfinite(outer_far) and outer_far >= float(outer_far_floor)
+        )
         realized_refine = int(row["realized_refine_level"])
         if realized_refine != int(level):
             raise ValueError(
@@ -790,7 +801,11 @@ def run_flat_disk_kh_discrete_quality_safe_refine_trend(
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="KH strict error-source attribution audit."
+        description=(
+            "KH strict error-source attribution audit. "
+            "Note: pinned strict presets intentionally fail in "
+            "--quality-safe-refine-trend if requested refine differs from realized."
+        )
     )
     ap.add_argument("--fixture", type=Path, default=DEFAULT_FIXTURE)
     ap.add_argument("--primary-preset", type=str, default="kh_strict_outerfield_tight")
@@ -829,17 +844,16 @@ def main() -> int:
         "--quality-average-steps-values", type=int, nargs="+", default=[2, 3]
     )
     ap.add_argument(
-        "--quality-safe-rmax-values", type=float, nargs="+", default=[8.0, 9.0, 10.0]
+        "--quality-safe-rmax-values", type=float, nargs="+", default=[7.0, 8.0, 9.0]
     )
     ap.add_argument(
-        "--quality-safe-average-steps-values", type=int, nargs="+", default=[2, 3]
+        "--quality-safe-average-steps-values", type=int, nargs="+", default=[1, 2, 3]
     )
-    ap.add_argument(
-        "--quality-safe-refine-levels", type=int, nargs="+", default=[2, 3, 4]
-    )
+    ap.add_argument("--quality-safe-refine-levels", type=int, nargs="+", default=[2, 3])
     ap.add_argument("--quality-safe-rmax", type=float, default=8.0)
     ap.add_argument("--quality-safe-avg-steps", type=int, default=2)
     ap.add_argument("--outer-far-floor", type=float, default=0.85)
+    ap.add_argument("--outer-far-ceiling", type=float, default=1.20)
     ap.add_argument("--output", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args()
     if bool(args.candidate_bakeoff):
@@ -869,20 +883,27 @@ def main() -> int:
             ),
         )
     elif bool(args.quality_safe_sweep):
+        preset = str(args.primary_preset)
+        if preset == "kh_strict_outerfield_tight":
+            preset = "kh_strict_outerfield_unpinned"
         report = run_flat_disk_kh_discrete_quality_safe_sweep(
             fixture=args.fixture,
-            optimize_preset=str(args.primary_preset),
+            optimize_preset=preset,
             refine_level=int(args.refine_level),
             outer_local_refine_rmax_lambda_values=tuple(args.quality_safe_rmax_values),
             outer_local_vertex_average_steps_values=tuple(
                 args.quality_safe_average_steps_values
             ),
             outer_far_floor=float(args.outer_far_floor),
+            outer_far_ceiling=float(args.outer_far_ceiling),
         )
     elif bool(args.quality_safe_refine_trend):
+        preset = str(args.primary_preset)
+        if preset == "kh_strict_outerfield_tight":
+            preset = "kh_strict_outerfield_unpinned"
         report = run_flat_disk_kh_discrete_quality_safe_refine_trend(
             fixture=args.fixture,
-            optimize_preset=str(args.primary_preset),
+            optimize_preset=preset,
             refine_levels=tuple(args.quality_safe_refine_levels),
             outer_local_refine_rmax_lambda=float(args.quality_safe_rmax),
             outer_local_vertex_average_steps=int(args.quality_safe_avg_steps),
