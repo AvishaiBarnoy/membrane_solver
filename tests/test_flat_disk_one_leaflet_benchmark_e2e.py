@@ -846,6 +846,93 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_best_non_worsening_vs_ou
 
 
 @pytest.mark.benchmark
+def test_flat_disk_optimize_section_polish_non_worsening_outer_section_score() -> None:
+    base = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=2,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        optimize_preset="kh_strict_outerfield_best",
+        parameterization="kh_physical",
+        tilt_mass_mode_in="consistent",
+    )
+    polished = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=2,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        optimize_preset="kh_strict_outerfield_best",
+        parameterization="kh_physical",
+        tilt_mass_mode_in="consistent",
+        theta_optimize_section_polish=True,
+    )
+    assert polished["optimize"]["parity_polish"] is not None
+    assert (
+        polished["optimize"]["parity_polish"]["objective"]
+        == "section_internal_bands_finite_outer"
+    )
+    section_candidates = polished["optimize"]["parity_polish"][
+        "section_score_candidates"
+    ]
+    assert section_candidates is not None
+    for val in section_candidates:
+        assert np.isfinite(float(val))
+
+    def _audit_row(report: dict) -> dict:
+        audit = run_flat_disk_kh_term_audit(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(report["meta"]["refine_level"]),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_nm=7.0,
+            length_scale_nm=15.0,
+            drive_physical=(2.0 / 0.7),
+            theta_values=(float(report["mesh"]["theta_star"]),),
+            tilt_mass_mode_in="consistent",
+            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
+            rim_local_refine_band_lambda=float(
+                report["meta"]["rim_local_refine_band_lambda"]
+            ),
+            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
+            outer_local_refine_rmin_lambda=float(
+                report["meta"]["outer_local_refine_rmin_lambda"]
+            ),
+            outer_local_refine_rmax_lambda=float(
+                report["meta"]["outer_local_refine_rmax_lambda"]
+            ),
+            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
+            local_edge_flip_rmin_lambda=float(
+                report["meta"]["local_edge_flip_rmin_lambda"]
+            ),
+            local_edge_flip_rmax_lambda=float(
+                report["meta"]["local_edge_flip_rmax_lambda"]
+            ),
+            outer_local_vertex_average_steps=int(
+                report["meta"]["outer_local_vertex_average_steps"]
+            ),
+            outer_local_vertex_average_rmin_lambda=float(
+                report["meta"]["outer_local_vertex_average_rmin_lambda"]
+            ),
+            outer_local_vertex_average_rmax_lambda=float(
+                report["meta"]["outer_local_vertex_average_rmax_lambda"]
+            ),
+        )
+        return audit["rows"][0]
+
+    base_row = _audit_row(base)
+    polished_row = _audit_row(polished)
+    base_score = float(base_row["section_score_internal_bands_finite_outer_l2_log"])
+    polished_score = float(
+        polished_row["section_score_internal_bands_finite_outer_l2_log"]
+    )
+    assert polished_score <= (base_score + 1.0e-10)
+
+
+@pytest.mark.benchmark
 def test_flat_disk_kh_strict_outerfield_averaged_sweep_baseline_non_worsening() -> None:
     report = run_flat_disk_kh_outerfield_averaged_sweep(
         fixture=DEFAULT_FIXTURE,
