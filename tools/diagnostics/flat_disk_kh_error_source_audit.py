@@ -416,6 +416,256 @@ def run_flat_disk_kh_error_source_candidate_bakeoff(
     }
 
 
+def run_flat_disk_kh_discrete_quality_sweep(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    optimize_preset: str = "kh_strict_outerfield_best",
+    refine_level: int = 2,
+    outer_local_refine_rmax_lambda_values: Sequence[float] = (8.0, 9.0, 10.0),
+    local_edge_flip_steps_values: Sequence[int] = (0, 1),
+    outer_local_vertex_average_steps_values: Sequence[int] = (2, 3),
+) -> dict[str, Any]:
+    """Run bounded mesh-quality sweep and report total+section parity per change."""
+    fixture_path = Path(fixture)
+    if not fixture_path.is_absolute():
+        fixture_path = (ROOT / fixture_path).resolve()
+    if not fixture_path.exists():
+        raise FileNotFoundError(f"Fixture not found: {fixture_path}")
+
+    rmax_values = [float(x) for x in outer_local_refine_rmax_lambda_values]
+    flip_values = [int(x) for x in local_edge_flip_steps_values]
+    avg_values = [int(x) for x in outer_local_vertex_average_steps_values]
+    if len(rmax_values) == 0 or len(flip_values) == 0 or len(avg_values) == 0:
+        raise ValueError("quality sweep value lists must be non-empty.")
+
+    rows: list[dict[str, Any]] = []
+    for rmax in rmax_values:
+        for flip_steps in flip_values:
+            for avg_steps in avg_values:
+                bench = run_flat_disk_one_leaflet_benchmark(
+                    fixture=fixture_path,
+                    refine_level=int(refine_level),
+                    outer_mode="disabled",
+                    smoothness_model="splay_twist",
+                    theta_mode="optimize",
+                    optimize_preset=str(optimize_preset),
+                    parameterization="kh_physical",
+                    tilt_mass_mode_in="consistent",
+                    outer_local_refine_steps=1,
+                    outer_local_refine_rmin_lambda=1.0,
+                    outer_local_refine_rmax_lambda=float(rmax),
+                    local_edge_flip_steps=int(flip_steps),
+                    local_edge_flip_rmin_lambda=2.0,
+                    local_edge_flip_rmax_lambda=6.0,
+                    outer_local_vertex_average_steps=int(avg_steps),
+                    outer_local_vertex_average_rmin_lambda=4.0,
+                    outer_local_vertex_average_rmax_lambda=12.0,
+                )
+                theta = float(bench["mesh"]["theta_star"])
+                audit = run_flat_disk_kh_term_audit(
+                    fixture=fixture_path,
+                    refine_level=int(bench["meta"]["refine_level"]),
+                    outer_mode="disabled",
+                    smoothness_model="splay_twist",
+                    kappa_physical=10.0,
+                    kappa_t_physical=10.0,
+                    radius_nm=7.0,
+                    length_scale_nm=15.0,
+                    drive_physical=(2.0 / 0.7),
+                    theta_values=(theta,),
+                    tilt_mass_mode_in="consistent",
+                    rim_local_refine_steps=int(bench["meta"]["rim_local_refine_steps"]),
+                    rim_local_refine_band_lambda=float(
+                        bench["meta"]["rim_local_refine_band_lambda"]
+                    ),
+                    outer_local_refine_steps=int(
+                        bench["meta"]["outer_local_refine_steps"]
+                    ),
+                    outer_local_refine_rmin_lambda=float(
+                        bench["meta"]["outer_local_refine_rmin_lambda"]
+                    ),
+                    outer_local_refine_rmax_lambda=float(
+                        bench["meta"]["outer_local_refine_rmax_lambda"]
+                    ),
+                    local_edge_flip_steps=int(bench["meta"]["local_edge_flip_steps"]),
+                    local_edge_flip_rmin_lambda=float(
+                        bench["meta"]["local_edge_flip_rmin_lambda"]
+                    ),
+                    local_edge_flip_rmax_lambda=float(
+                        bench["meta"]["local_edge_flip_rmax_lambda"]
+                    ),
+                    outer_local_vertex_average_steps=int(
+                        bench["meta"]["outer_local_vertex_average_steps"]
+                    ),
+                    outer_local_vertex_average_rmin_lambda=float(
+                        bench["meta"]["outer_local_vertex_average_rmin_lambda"]
+                    ),
+                    outer_local_vertex_average_rmax_lambda=float(
+                        bench["meta"]["outer_local_vertex_average_rmax_lambda"]
+                    ),
+                    partition_mode="fractional",
+                )
+                row = audit["rows"][0]
+                out_row = {
+                    "optimize_preset": str(optimize_preset),
+                    "outer_local_refine_rmax_lambda": float(rmax),
+                    "local_edge_flip_steps": int(flip_steps),
+                    "outer_local_vertex_average_steps": int(avg_steps),
+                    "theta_star": float(theta),
+                    "theta_factor": float(bench["parity"]["theta_factor"]),
+                    "energy_factor": float(bench["parity"]["energy_factor"]),
+                    "section_score_internal_bands_finite_outer_l2_log": float(
+                        row["section_score_internal_bands_finite_outer_l2_log"]
+                    ),
+                    "disk_ratio": float(row["internal_disk_ratio_mesh_over_theory"]),
+                    "outer_near_ratio": float(
+                        row["internal_outer_near_ratio_mesh_over_theory_finite"]
+                    ),
+                    "outer_far_ratio": float(
+                        row["internal_outer_far_ratio_mesh_over_theory_finite"]
+                    ),
+                }
+                for key in (
+                    "theta_factor",
+                    "energy_factor",
+                    "section_score_internal_bands_finite_outer_l2_log",
+                    "disk_ratio",
+                    "outer_near_ratio",
+                    "outer_far_ratio",
+                ):
+                    if not np.isfinite(float(out_row[key])):
+                        raise ValueError(f"Non-finite quality metric {key}: {out_row}")
+                rows.append(out_row)
+
+    baseline = next(
+        (
+            row
+            for row in rows
+            if float(row["outer_local_refine_rmax_lambda"]) == 8.0
+            and int(row["local_edge_flip_steps"]) == 0
+            and int(row["outer_local_vertex_average_steps"]) == 2
+        ),
+        rows[0],
+    )
+    for row in rows:
+        row["delta_theta_factor_vs_baseline"] = float(row["theta_factor"]) - float(
+            baseline["theta_factor"]
+        )
+        row["delta_energy_factor_vs_baseline"] = float(row["energy_factor"]) - float(
+            baseline["energy_factor"]
+        )
+        row["delta_section_score_vs_baseline"] = float(
+            row["section_score_internal_bands_finite_outer_l2_log"]
+        ) - float(baseline["section_score_internal_bands_finite_outer_l2_log"])
+        row["delta_disk_ratio_vs_baseline"] = float(row["disk_ratio"]) - float(
+            baseline["disk_ratio"]
+        )
+        row["delta_outer_near_ratio_vs_baseline"] = float(
+            row["outer_near_ratio"]
+        ) - float(baseline["outer_near_ratio"])
+        row["delta_outer_far_ratio_vs_baseline"] = float(
+            row["outer_far_ratio"]
+        ) - float(baseline["outer_far_ratio"])
+
+    selected = min(
+        rows,
+        key=lambda row: (
+            float(row["section_score_internal_bands_finite_outer_l2_log"]),
+            float(
+                np.hypot(
+                    np.log(max(float(row["theta_factor"]), 1e-18)),
+                    np.log(max(float(row["energy_factor"]), 1e-18)),
+                )
+            ),
+            abs(float(row["delta_theta_factor_vs_baseline"])),
+            abs(float(row["delta_energy_factor_vs_baseline"])),
+        ),
+    )
+    return {
+        "meta": {
+            "mode": "kh_discrete_quality_sweep",
+            "fixture": str(fixture_path.relative_to(ROOT)),
+            "optimize_preset": str(optimize_preset),
+            "refine_level": int(refine_level),
+            "baseline_outer_local_refine_rmax_lambda": float(
+                baseline["outer_local_refine_rmax_lambda"]
+            ),
+            "baseline_local_edge_flip_steps": int(baseline["local_edge_flip_steps"]),
+            "baseline_outer_local_vertex_average_steps": int(
+                baseline["outer_local_vertex_average_steps"]
+            ),
+        },
+        "rows": rows,
+        "selected_best": selected,
+    }
+
+
+def run_flat_disk_kh_discrete_quality_safe_sweep(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    optimize_preset: str = "kh_strict_outerfield_best",
+    refine_level: int = 2,
+    outer_local_refine_rmax_lambda_values: Sequence[float] = (8.0, 9.0, 10.0),
+    outer_local_vertex_average_steps_values: Sequence[int] = (2, 3),
+    outer_far_floor: float = 0.85,
+) -> dict[str, Any]:
+    """Run bounded quality sweep with outer-far eligibility filtering."""
+    floor = float(outer_far_floor)
+    if not np.isfinite(floor) or floor <= 0.0:
+        raise ValueError("outer_far_floor must be finite and > 0.")
+    report = run_flat_disk_kh_discrete_quality_sweep(
+        fixture=fixture,
+        optimize_preset=optimize_preset,
+        refine_level=refine_level,
+        outer_local_refine_rmax_lambda_values=outer_local_refine_rmax_lambda_values,
+        local_edge_flip_steps_values=(0,),
+        outer_local_vertex_average_steps_values=outer_local_vertex_average_steps_values,
+    )
+    rows = list(report["rows"])
+    for row in rows:
+        theta_factor = float(row["theta_factor"])
+        energy_factor = float(row["energy_factor"])
+        outer_far = float(row["outer_far_ratio"])
+        row["balanced_parity_score"] = float(
+            np.hypot(
+                np.log(max(theta_factor, 1e-18)),
+                np.log(max(energy_factor, 1e-18)),
+            )
+        )
+        row["eligible"] = bool(np.isfinite(outer_far) and outer_far >= floor)
+    eligible_rows = [row for row in rows if bool(row["eligible"])]
+    if len(eligible_rows) == 0:
+        raise ValueError(
+            f"No eligible safe-sweep rows for outer_far_floor={floor:.6g}; "
+            f"rows_tested={len(rows)}."
+        )
+    selected = min(
+        eligible_rows,
+        key=lambda row: (
+            float(row["section_score_internal_bands_finite_outer_l2_log"]),
+            float(row["balanced_parity_score"]),
+            abs(float(row["energy_factor"]) - 1.0),
+            abs(float(row["theta_factor"]) - 1.0),
+            float(row["outer_local_refine_rmax_lambda"]),
+            int(row["outer_local_vertex_average_steps"]),
+        ),
+    )
+    return {
+        "meta": {
+            "mode": "kh_discrete_quality_safe_sweep",
+            "fixture": str(report["meta"]["fixture"]),
+            "optimize_preset": str(optimize_preset),
+            "refine_level": int(refine_level),
+            "constraints": {
+                "flip_steps": 0,
+                "outer_far_floor": floor,
+            },
+        },
+        "rows": rows,
+        "selected_best": selected,
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="KH strict error-source attribution audit."
@@ -435,6 +685,8 @@ def main() -> int:
     )
     ap.add_argument("--candidate-bakeoff", action="store_true")
     ap.add_argument("--fractional-refinement-trend", action="store_true")
+    ap.add_argument("--quality-candidate-sweep", action="store_true")
+    ap.add_argument("--quality-safe-sweep", action="store_true")
     ap.add_argument(
         "--optimize-presets",
         type=str,
@@ -446,6 +698,20 @@ def main() -> int:
         ],
     )
     ap.add_argument("--refine-level", type=int, default=2)
+    ap.add_argument(
+        "--quality-rmax-values", type=float, nargs="+", default=[8.0, 9.0, 10.0]
+    )
+    ap.add_argument("--quality-flip-steps-values", type=int, nargs="+", default=[0, 1])
+    ap.add_argument(
+        "--quality-average-steps-values", type=int, nargs="+", default=[2, 3]
+    )
+    ap.add_argument(
+        "--quality-safe-rmax-values", type=float, nargs="+", default=[8.0, 9.0, 10.0]
+    )
+    ap.add_argument(
+        "--quality-safe-average-steps-values", type=int, nargs="+", default=[2, 3]
+    )
+    ap.add_argument("--outer-far-floor", type=float, default=0.85)
     ap.add_argument("--output", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args()
     if bool(args.candidate_bakeoff):
@@ -462,6 +728,28 @@ def main() -> int:
             optimize_preset=str(args.primary_preset),
             refine_levels=tuple(args.refine_levels),
             mass_mode=str(args.mass_modes[0]),
+        )
+    elif bool(args.quality_candidate_sweep):
+        report = run_flat_disk_kh_discrete_quality_sweep(
+            fixture=args.fixture,
+            optimize_preset=str(args.primary_preset),
+            refine_level=int(args.refine_level),
+            outer_local_refine_rmax_lambda_values=tuple(args.quality_rmax_values),
+            local_edge_flip_steps_values=tuple(args.quality_flip_steps_values),
+            outer_local_vertex_average_steps_values=tuple(
+                args.quality_average_steps_values
+            ),
+        )
+    elif bool(args.quality_safe_sweep):
+        report = run_flat_disk_kh_discrete_quality_safe_sweep(
+            fixture=args.fixture,
+            optimize_preset=str(args.primary_preset),
+            refine_level=int(args.refine_level),
+            outer_local_refine_rmax_lambda_values=tuple(args.quality_safe_rmax_values),
+            outer_local_vertex_average_steps_values=tuple(
+                args.quality_safe_average_steps_values
+            ),
+            outer_far_floor=float(args.outer_far_floor),
         )
     else:
         report = run_flat_disk_kh_error_source_audit(
