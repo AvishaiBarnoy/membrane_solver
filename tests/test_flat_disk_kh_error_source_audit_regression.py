@@ -10,6 +10,7 @@ from tools.diagnostics.flat_disk_kh_error_source_audit import (
     _rank_effects,
     run_flat_disk_kh_error_source_audit,
     run_flat_disk_kh_error_source_candidate_bakeoff,
+    run_flat_disk_kh_fractional_refinement_trend,
 )
 
 
@@ -76,6 +77,7 @@ def test_flat_disk_kh_error_source_audit_emits_finite_rows(
         partition_modes=("centroid", "fractional"),
     )
     assert report["meta"]["mode"] == "kh_error_source_audit"
+    assert report["meta"]["primary_partition_mode"] == "fractional"
     assert len(report["runs"]) == 16
     assert report["meta"]["partition_modes"] == ["centroid", "fractional"]
     for row in report["runs"]:
@@ -151,3 +153,47 @@ def test_flat_disk_kh_error_source_candidate_bakeoff_selects_best(
         assert np.isfinite(float(row["balanced_parity_score"]))
         assert np.isfinite(float(row["runtime_seconds"]))
     assert report["selected_best"]["optimize_preset"] == "kh_strict_outerfield_averaged"
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_fractional_refinement_trend_emits_rows_and_monotonic_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_error_source_audit as mod
+
+    def _fake_error_source_audit(**kwargs):
+        level = int(kwargs["refine_levels"][0])
+        score = {1: 0.22, 2: 0.14, 3: 0.10}[level]
+        return {
+            "runs": [
+                {
+                    "preset": str(kwargs["primary_preset"]),
+                    "refine_level": int(level),
+                    "tilt_mass_mode_in": "consistent",
+                    "partition_mode": "fractional",
+                    "disk_ratio": 1.1,
+                    "outer_near_ratio": 1.05,
+                    "outer_far_ratio": 0.98,
+                    "section_score_internal_bands_finite_outer_l2_log": float(score),
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        mod, "run_flat_disk_kh_error_source_audit", _fake_error_source_audit
+    )
+    report = run_flat_disk_kh_fractional_refinement_trend(
+        optimize_preset="kh_strict_outerfield_best",
+        refine_levels=(1, 2, 3),
+        mass_mode="consistent",
+    )
+    assert report["meta"]["mode"] == "kh_fractional_refinement_trend"
+    assert report["meta"]["primary_partition_mode"] == "fractional"
+    rows = report["trend"]["rows"]
+    assert len(rows) == 3
+    assert [int(r["refine_level"]) for r in rows] == [1, 2, 3]
+    assert bool(report["trend"]["monotone_non_worsening"]) is True
+    for row in rows:
+        assert np.isfinite(
+            float(row["section_score_internal_bands_finite_outer_l2_log"])
+        )
