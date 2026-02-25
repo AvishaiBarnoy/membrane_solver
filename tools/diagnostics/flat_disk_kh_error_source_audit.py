@@ -508,6 +508,8 @@ def run_flat_disk_kh_discrete_quality_sweep(
                 row = audit["rows"][0]
                 out_row = {
                     "optimize_preset": str(optimize_preset),
+                    "requested_refine_level": int(refine_level),
+                    "realized_refine_level": int(bench["meta"]["refine_level"]),
                     "outer_local_refine_rmax_lambda": float(rmax),
                     "local_edge_flip_steps": int(flip_steps),
                     "outer_local_vertex_average_steps": int(avg_steps),
@@ -666,6 +668,126 @@ def run_flat_disk_kh_discrete_quality_safe_sweep(
     }
 
 
+def run_flat_disk_kh_discrete_quality_safe_refine_trend(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    optimize_preset: str = "kh_strict_outerfield_best",
+    refine_levels: Sequence[int] = (2, 3, 4),
+    outer_local_refine_rmax_lambda: float = 8.0,
+    outer_local_vertex_average_steps: int = 2,
+    outer_far_floor: float = 0.85,
+) -> dict[str, Any]:
+    """Measure refine-level convergence for a locked safe-quality recipe."""
+    levels = [int(x) for x in refine_levels]
+    if len(levels) == 0:
+        raise ValueError("refine_levels must be non-empty.")
+    rows: list[dict[str, Any]] = []
+    for level in levels:
+        report = run_flat_disk_kh_discrete_quality_safe_sweep(
+            fixture=fixture,
+            optimize_preset=optimize_preset,
+            refine_level=int(level),
+            outer_local_refine_rmax_lambda_values=(
+                float(outer_local_refine_rmax_lambda),
+            ),
+            outer_local_vertex_average_steps_values=(
+                int(outer_local_vertex_average_steps),
+            ),
+            outer_far_floor=float(outer_far_floor),
+        )
+        row = dict(report["selected_best"])
+        realized_refine = int(row["realized_refine_level"])
+        if realized_refine != int(level):
+            raise ValueError(
+                "quality-safe-refine-trend requested refine_level="
+                f"{int(level)} but optimize_preset={optimize_preset} realized "
+                f"refine_level={realized_refine}. Use an unpinned preset."
+            )
+        rows.append(
+            {
+                "refine_level": int(level),
+                "requested_refine_level": int(level),
+                "realized_refine_level": realized_refine,
+                "theta_factor": float(row["theta_factor"]),
+                "energy_factor": float(row["energy_factor"]),
+                "section_score_internal_bands_finite_outer_l2_log": float(
+                    row["section_score_internal_bands_finite_outer_l2_log"]
+                ),
+                "disk_ratio": float(row["disk_ratio"]),
+                "outer_near_ratio": float(row["outer_near_ratio"]),
+                "outer_far_ratio": float(row["outer_far_ratio"]),
+                "outer_far_eligible": bool(row["eligible"]),
+            }
+        )
+
+    def _log_abs_ratio(v: float) -> float:
+        return float(abs(np.log(max(float(v), 1e-18))))
+
+    deltas: list[dict[str, Any]] = []
+    for i in range(len(rows) - 1):
+        a = rows[i]
+        b = rows[i + 1]
+        deltas.append(
+            {
+                "from_refine": int(a["refine_level"]),
+                "to_refine": int(b["refine_level"]),
+                "delta_theta_factor": float(b["theta_factor"])
+                - float(a["theta_factor"]),
+                "delta_energy_factor": float(b["energy_factor"])
+                - float(a["energy_factor"]),
+                "delta_section_score": float(
+                    b["section_score_internal_bands_finite_outer_l2_log"]
+                )
+                - float(a["section_score_internal_bands_finite_outer_l2_log"]),
+                "delta_disk_abs_log_error": _log_abs_ratio(float(b["disk_ratio"]))
+                - _log_abs_ratio(float(a["disk_ratio"])),
+                "delta_outer_near_abs_log_error": _log_abs_ratio(
+                    float(b["outer_near_ratio"])
+                )
+                - _log_abs_ratio(float(a["outer_near_ratio"])),
+                "delta_outer_far_abs_log_error": _log_abs_ratio(
+                    float(b["outer_far_ratio"])
+                )
+                - _log_abs_ratio(float(a["outer_far_ratio"])),
+            }
+        )
+    monotone = {
+        "section_score_non_worsening": all(
+            float(d["delta_section_score"]) <= 1e-12 for d in deltas
+        ),
+        "disk_abs_log_error_non_worsening": all(
+            float(d["delta_disk_abs_log_error"]) <= 1e-12 for d in deltas
+        ),
+        "outer_near_abs_log_error_non_worsening": all(
+            float(d["delta_outer_near_abs_log_error"]) <= 1e-12 for d in deltas
+        ),
+        "outer_far_abs_log_error_non_worsening": all(
+            float(d["delta_outer_far_abs_log_error"]) <= 1e-12 for d in deltas
+        ),
+    }
+    return {
+        "meta": {
+            "mode": "kh_discrete_quality_safe_refine_trend",
+            "fixture": str(Path(fixture)),
+            "optimize_preset": str(optimize_preset),
+            "constraints": {
+                "flip_steps": 0,
+                "outer_far_floor": float(outer_far_floor),
+                "outer_local_refine_rmax_lambda": float(outer_local_refine_rmax_lambda),
+                "outer_local_vertex_average_steps": int(
+                    outer_local_vertex_average_steps
+                ),
+            },
+            "refine_levels": levels,
+        },
+        "trend": {
+            "rows": rows,
+            "deltas": deltas,
+            "monotone_flags": monotone,
+        },
+    }
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="KH strict error-source attribution audit."
@@ -687,6 +809,7 @@ def main() -> int:
     ap.add_argument("--fractional-refinement-trend", action="store_true")
     ap.add_argument("--quality-candidate-sweep", action="store_true")
     ap.add_argument("--quality-safe-sweep", action="store_true")
+    ap.add_argument("--quality-safe-refine-trend", action="store_true")
     ap.add_argument(
         "--optimize-presets",
         type=str,
@@ -711,6 +834,11 @@ def main() -> int:
     ap.add_argument(
         "--quality-safe-average-steps-values", type=int, nargs="+", default=[2, 3]
     )
+    ap.add_argument(
+        "--quality-safe-refine-levels", type=int, nargs="+", default=[2, 3, 4]
+    )
+    ap.add_argument("--quality-safe-rmax", type=float, default=8.0)
+    ap.add_argument("--quality-safe-avg-steps", type=int, default=2)
     ap.add_argument("--outer-far-floor", type=float, default=0.85)
     ap.add_argument("--output", type=Path, default=DEFAULT_OUT)
     args = ap.parse_args()
@@ -749,6 +877,15 @@ def main() -> int:
             outer_local_vertex_average_steps_values=tuple(
                 args.quality_safe_average_steps_values
             ),
+            outer_far_floor=float(args.outer_far_floor),
+        )
+    elif bool(args.quality_safe_refine_trend):
+        report = run_flat_disk_kh_discrete_quality_safe_refine_trend(
+            fixture=args.fixture,
+            optimize_preset=str(args.primary_preset),
+            refine_levels=tuple(args.quality_safe_refine_levels),
+            outer_local_refine_rmax_lambda=float(args.quality_safe_rmax),
+            outer_local_vertex_average_steps=int(args.quality_safe_avg_steps),
             outer_far_floor=float(args.outer_far_floor),
         )
     else:
