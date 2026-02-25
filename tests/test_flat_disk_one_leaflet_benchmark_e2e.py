@@ -66,6 +66,7 @@ def _kh_opt_report(
         "kh_strict_outerfield_quality",
         "kh_strict_outerfield_tailmatch",
         "kh_strict_outerfield_averaged",
+        "kh_strict_outerfield_best",
         "kh_strict_outertail_balanced",
         "kh_strict_partition_tight",
         "kh_strict_robust",
@@ -81,6 +82,7 @@ def _kh_opt_report(
                 "kh_strict_outerfield_quality",
                 "kh_strict_outerfield_tailmatch",
                 "kh_strict_outerfield_averaged",
+                "kh_strict_outerfield_best",
                 "kh_strict_outertail_balanced",
             }
             else 1
@@ -761,6 +763,84 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_averaged_improves_finite
         float(outerfield["parity"]["theta_factor"]) * 1.01
     )
     assert float(averaged["parity"]["energy_factor"]) <= (
+        float(outerfield["parity"]["energy_factor"]) * 1.01
+    )
+
+
+@pytest.mark.benchmark
+def test_flat_disk_optimize_preset_kh_strict_outerfield_best_non_worsening_vs_outerfield_tight() -> (
+    None
+):
+    outerfield = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_tight",
+    )
+    best = _kh_opt_report(
+        refine_level=1,
+        optimize_preset="kh_strict_outerfield_best",
+    )
+
+    assert best["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_best"
+    assert int(best["meta"]["refine_level"]) == 2
+    assert int(best["meta"]["rim_local_refine_steps"]) == 1
+    assert int(best["meta"]["outer_local_refine_steps"]) == 1
+    assert int(best["meta"]["outer_local_vertex_average_steps"]) == 2
+
+    def _audit_row(report: dict, *, theta_value: float) -> dict:
+        audit = run_flat_disk_kh_term_audit(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(report["meta"]["refine_level"]),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            kappa_physical=10.0,
+            kappa_t_physical=10.0,
+            radius_nm=7.0,
+            length_scale_nm=15.0,
+            drive_physical=(2.0 / 0.7),
+            theta_values=(float(theta_value),),
+            tilt_mass_mode_in="consistent",
+            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
+            rim_local_refine_band_lambda=float(
+                report["meta"]["rim_local_refine_band_lambda"]
+            ),
+            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
+            outer_local_refine_rmin_lambda=float(
+                report["meta"]["outer_local_refine_rmin_lambda"]
+            ),
+            outer_local_refine_rmax_lambda=float(
+                report["meta"]["outer_local_refine_rmax_lambda"]
+            ),
+            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
+            local_edge_flip_rmin_lambda=float(
+                report["meta"]["local_edge_flip_rmin_lambda"]
+            ),
+            local_edge_flip_rmax_lambda=float(
+                report["meta"]["local_edge_flip_rmax_lambda"]
+            ),
+            outer_local_vertex_average_steps=int(
+                report["meta"]["outer_local_vertex_average_steps"]
+            ),
+            outer_local_vertex_average_rmin_lambda=float(
+                report["meta"]["outer_local_vertex_average_rmin_lambda"]
+            ),
+            outer_local_vertex_average_rmax_lambda=float(
+                report["meta"]["outer_local_vertex_average_rmax_lambda"]
+            ),
+        )
+        return audit["rows"][0]
+
+    outerfield_row = _audit_row(outerfield, theta_value=0.138)
+    best_row = _audit_row(best, theta_value=0.138)
+    score_outerfield = float(
+        outerfield_row["section_score_internal_bands_finite_outer_l2_log"]
+    )
+    score_best = float(best_row["section_score_internal_bands_finite_outer_l2_log"])
+    assert score_best <= (score_outerfield - 1.0e-3)
+
+    assert float(best["parity"]["theta_factor"]) <= (
+        float(outerfield["parity"]["theta_factor"]) * 1.01
+    )
+    assert float(best["parity"]["energy_factor"]) <= (
         float(outerfield["parity"]["energy_factor"]) * 1.01
     )
 

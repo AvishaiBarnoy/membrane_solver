@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from tools.diagnostics.flat_disk_kh_error_source_audit import (
     _rank_effects,
     run_flat_disk_kh_error_source_audit,
+    run_flat_disk_kh_error_source_candidate_bakeoff,
 )
 
 
@@ -89,3 +90,64 @@ def test_flat_disk_kh_error_source_audit_emits_finite_rows(
         "operator_effect",
     }
     assert float(report["attribution"]["effect_sizes"]["partition_effect"]) > 0.0
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_error_source_candidate_bakeoff_selects_best(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_error_source_audit as mod
+
+    def _fake_benchmark(**kwargs):
+        preset = str(kwargs["optimize_preset"])
+        if "outerfield_averaged" in preset:
+            return {"parity": {"theta_factor": 1.06, "energy_factor": 1.10}}
+        if "outerband" in preset:
+            return {"parity": {"theta_factor": 1.09, "energy_factor": 1.14}}
+        return {"parity": {"theta_factor": 1.12, "energy_factor": 1.18}}
+
+    def _fake_error_source_audit(**kwargs):
+        preset = str(kwargs["primary_preset"])
+        if "outerfield_averaged" in preset:
+            near, far, part = 1.04, 0.98, 0.02
+        elif "outerband" in preset:
+            near, far, part = 1.08, 0.96, 0.03
+        else:
+            near, far, part = 1.12, 0.92, 0.04
+        return {
+            "runs": [
+                {"outer_near_ratio": near, "outer_far_ratio": far},
+                {"outer_near_ratio": near, "outer_far_ratio": far},
+            ],
+            "attribution": {
+                "dominant_source": "partition_effect",
+                "effect_sizes": {
+                    "partition_effect": part,
+                    "mass_effect": 0.01,
+                    "resolution_effect": 0.02,
+                    "operator_effect": 0.03,
+                },
+            },
+        }
+
+    monkeypatch.setattr(mod, "run_flat_disk_one_leaflet_benchmark", _fake_benchmark)
+    monkeypatch.setattr(
+        mod, "run_flat_disk_kh_error_source_audit", _fake_error_source_audit
+    )
+
+    report = run_flat_disk_kh_error_source_candidate_bakeoff(
+        optimize_presets=(
+            "kh_strict_outerfield_tight",
+            "kh_strict_outerband_tight",
+            "kh_strict_outerfield_averaged",
+        ),
+        refine_level=2,
+    )
+    assert report["meta"]["mode"] == "kh_error_source_candidate_bakeoff"
+    rows = report["candidates"]
+    assert len(rows) == 3
+    for row in rows:
+        assert np.isfinite(float(row["outer_section_score"]))
+        assert np.isfinite(float(row["balanced_parity_score"]))
+        assert np.isfinite(float(row["runtime_seconds"]))
+    assert report["selected_best"]["optimize_preset"] == "kh_strict_outerfield_averaged"

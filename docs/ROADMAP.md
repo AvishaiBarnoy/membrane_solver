@@ -151,6 +151,11 @@ intended for development and planning; users should consult `README.md` and
    - [x] Added opt-in outer-annulus local vertex-averaging controls and
          `kh_strict_outerfield_averaged` preset (`[R+4λ, R+12λ]`, two passes)
          for finite-domain outer-band section-score tightening without changing KH coefficients.
+   - [x] Added strict KH diagnostics candidate bakeoff mode
+         (`tools/diagnostics/flat_disk_kh_error_source_audit.py --candidate-bakeoff`)
+         with deterministic `selected_best` ranking for bounded preset matrices.
+   - [x] Added opt-in `kh_strict_outerfield_best` preset for one-command
+         reproduction of the diagnostics-selected strict outer-field controls.
    - [x] Tightened strict parity e2e acceptance caps to `<=1.2` for fast/balanced/continuity.
    - [ ] Continue narrowing strict-KH residual mismatch without changing KH/TeX parameter ratios.
 
