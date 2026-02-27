@@ -388,6 +388,8 @@ Interactive commands:
     `--optimize-preset kh_strict_outerfield_best` for the diagnostics-selected
     strict outer-field preset (currently aligned with the best-known averaged
     outer-field controls).
+    `--optimize-preset kh_strict_outerfield_unpinned` for strict outer-field
+    controls without preset-level refine pinning (uses requested `--refine-level`).
   - Strict optimize polish controls:
     `--theta-optimize-postcheck` performs local energy postcheck around theta*;
     `--theta-optimize-parity-polish` performs local parity-score polish around
@@ -395,6 +397,12 @@ Interactive commands:
   - Candidate bakeoff diagnostics:
     `python tools/diagnostics/flat_disk_kh_error_source_audit.py --candidate-bakeoff`
     emits bounded strict-candidate rows and `selected_best` in YAML.
+  - Section-objective bounded candidate sweep (strict-unpinned, flip fixed to 0):
+    `python tools/diagnostics/flat_disk_kh_error_source_audit.py --quality-safe-sweep --primary-preset kh_strict_outerfield_unpinned --refine-level 2 --quality-safe-rmax-values 7 8 9 --quality-safe-average-steps-values 1 2 3 --outer-far-floor 0.85 --outer-far-ceiling 1.20`.
+  - Strict-unpinned convergence trend (refine 2->3):
+    `python tools/diagnostics/flat_disk_kh_error_source_audit.py --quality-safe-refine-trend --primary-preset kh_strict_outerfield_unpinned --quality-safe-refine-levels 2 3 --quality-safe-rmax 8 --quality-safe-avg-steps 2 --outer-far-floor 0.85`.
+    Note: pinned strict presets (for example `kh_strict_outerfield_best`) are
+    expected to fail this mode when requested refine differs from realized refine.
   - Splay calibration control (benchmark-local):
     `--splay-modulus-scale-in` scales inner `tilt_splay_modulus_in` when
     `--smoothness-model splay_twist` (for refine-3 parity tuning experiments).

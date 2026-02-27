@@ -156,6 +156,16 @@ intended for development and planning; users should consult `README.md` and
          with deterministic `selected_best` ranking for bounded preset matrices.
    - [x] Added opt-in `kh_strict_outerfield_best` preset for one-command
          reproduction of the diagnostics-selected strict outer-field controls.
+   - [x] Added opt-in `kh_strict_outerfield_unpinned` preset for strict
+         outer-field controls without preset-level refine pinning.
+   - [x] Added strict-unpinned convergence diagnostics (`refine=2,3`) with
+         explicit requested-vs-realized refine guards to prevent false
+         convergence claims from pinned strict presets.
+   - [x] Added bounded section-objective strict-unpinned candidate sweep
+         (rmax `7,8,9`; averaging `1,2,3`; `flip=0`) with outer-far eligibility
+         window `[0.85, 1.20]` and deterministic best-row ranking.
+   - [x] Added strict-unpinned section non-worsening benchmark gate
+         (`refine 2 -> 3`) based on per-section abs-log errors and section score.
    - [x] Tightened strict parity e2e acceptance caps to `<=1.2` for fast/balanced/continuity.
    - [ ] Continue narrowing strict-KH residual mismatch without changing KH/TeX parameter ratios.
 

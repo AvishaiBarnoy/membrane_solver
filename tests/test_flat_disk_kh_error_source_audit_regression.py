@@ -362,7 +362,7 @@ def test_flat_disk_kh_discrete_quality_safe_refine_trend_emits_deltas_and_flags(
 ) -> None:
     import tools.diagnostics.flat_disk_kh_error_source_audit as mod
 
-    def _fake_safe_sweep(**kwargs):
+    def _fake_quality_sweep(**kwargs):
         lvl = int(kwargs["refine_level"])
         data = {
             2: {
@@ -393,13 +393,12 @@ def test_flat_disk_kh_discrete_quality_safe_refine_trend_emits_deltas_and_flags(
                 "disk_ratio": 1.12,
                 "outer_near_ratio": 1.05,
                 "outer_far_ratio": 0.95,
-                "eligible": True,
             },
         }[lvl]
-        return {"selected_best": data}
+        return {"rows": [data]}
 
     monkeypatch.setattr(
-        mod, "run_flat_disk_kh_discrete_quality_safe_sweep", _fake_safe_sweep
+        mod, "run_flat_disk_kh_discrete_quality_sweep", _fake_quality_sweep
     )
     report = run_flat_disk_kh_discrete_quality_safe_refine_trend(
         optimize_preset="kh_strict_outerfield_best",
@@ -425,22 +424,23 @@ def test_flat_disk_kh_discrete_quality_safe_refine_trend_rejects_pinned_refine(
 ) -> None:
     import tools.diagnostics.flat_disk_kh_error_source_audit as mod
 
-    def _fake_safe_sweep(**kwargs):
+    def _fake_quality_sweep(**kwargs):
         return {
-            "selected_best": {
-                "realized_refine_level": 2,
-                "theta_factor": 1.03,
-                "energy_factor": 1.09,
-                "section_score_internal_bands_finite_outer_l2_log": 0.12,
-                "disk_ratio": 1.18,
-                "outer_near_ratio": 1.11,
-                "outer_far_ratio": 0.90,
-                "eligible": True,
-            }
+            "rows": [
+                {
+                    "realized_refine_level": 2,
+                    "theta_factor": 1.03,
+                    "energy_factor": 1.09,
+                    "section_score_internal_bands_finite_outer_l2_log": 0.12,
+                    "disk_ratio": 1.18,
+                    "outer_near_ratio": 1.11,
+                    "outer_far_ratio": 0.90,
+                }
+            ]
         }
 
     monkeypatch.setattr(
-        mod, "run_flat_disk_kh_discrete_quality_safe_sweep", _fake_safe_sweep
+        mod, "run_flat_disk_kh_discrete_quality_sweep", _fake_quality_sweep
     )
     with pytest.raises(ValueError, match="realized refine_level"):
         run_flat_disk_kh_discrete_quality_safe_refine_trend(
@@ -450,3 +450,89 @@ def test_flat_disk_kh_discrete_quality_safe_refine_trend_rejects_pinned_refine(
             outer_local_vertex_average_steps=2,
             outer_far_floor=0.85,
         )
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_discrete_quality_safe_sweep_applies_outer_far_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_error_source_audit as mod
+
+    def _fake_quality_sweep(**kwargs):
+        return {
+            "meta": {
+                "fixture": "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml"
+            },
+            "rows": [
+                {
+                    "outer_local_refine_rmax_lambda": 7.0,
+                    "outer_local_vertex_average_steps": 1,
+                    "theta_factor": 1.03,
+                    "energy_factor": 1.04,
+                    "section_score_internal_bands_finite_outer_l2_log": 0.09,
+                    "outer_far_ratio": 0.90,
+                },
+                {
+                    "outer_local_refine_rmax_lambda": 8.0,
+                    "outer_local_vertex_average_steps": 2,
+                    "theta_factor": 1.01,
+                    "energy_factor": 1.02,
+                    "section_score_internal_bands_finite_outer_l2_log": 0.07,
+                    "outer_far_ratio": 1.30,
+                },
+            ],
+        }
+
+    monkeypatch.setattr(
+        mod, "run_flat_disk_kh_discrete_quality_sweep", _fake_quality_sweep
+    )
+    report = run_flat_disk_kh_discrete_quality_safe_sweep(
+        optimize_preset="kh_strict_outerfield_unpinned",
+        refine_level=2,
+        outer_far_floor=0.85,
+        outer_far_ceiling=1.20,
+    )
+    rows = report["rows"]
+    assert bool(rows[0]["eligible"]) is True
+    assert bool(rows[1]["eligible"]) is False
+    assert float(report["meta"]["constraints"]["outer_far_ceiling"]) == pytest.approx(
+        1.2
+    )
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_discrete_quality_safe_refine_trend_rows_have_requested_and_realized(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_error_source_audit as mod
+
+    def _fake_quality_sweep(**kwargs):
+        level = int(kwargs["refine_level"])
+        return {
+            "rows": [
+                {
+                    "realized_refine_level": level,
+                    "theta_factor": 1.02,
+                    "energy_factor": 1.03,
+                    "section_score_internal_bands_finite_outer_l2_log": 0.09,
+                    "disk_ratio": 1.11,
+                    "outer_near_ratio": 1.08,
+                    "outer_far_ratio": 0.93,
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        mod, "run_flat_disk_kh_discrete_quality_sweep", _fake_quality_sweep
+    )
+    report = run_flat_disk_kh_discrete_quality_safe_refine_trend(
+        optimize_preset="kh_strict_outerfield_unpinned",
+        refine_levels=(2, 3),
+        outer_local_refine_rmax_lambda=8.0,
+        outer_local_vertex_average_steps=2,
+        outer_far_floor=0.85,
+    )
+    rows = report["trend"]["rows"]
+    assert [int(row["refine_level"]) for row in rows] == [2, 3]
+    assert [int(row["requested_refine_level"]) for row in rows] == [2, 3]
+    assert [int(row["realized_refine_level"]) for row in rows] == [2, 3]

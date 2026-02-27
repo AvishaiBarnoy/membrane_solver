@@ -55,8 +55,8 @@ def _kh_opt_report(
     tilt_mass_mode_in: str = "consistent",
 ) -> dict:
     preset = str(optimize_preset)
-    # Strict presets force refine=1 in benchmark harness; normalize cache key so
-    # tests reuse the same expensive run.
+    # Most strict presets override refine in benchmark harness; normalize cache
+    # key so tests reuse the same expensive run.
     strict_presets = {
         "kh_strict_refine",
         "kh_strict_fast",
@@ -1524,6 +1524,103 @@ def test_flat_disk_kh_optimize_parity_does_not_worsen_with_refinement() -> None:
     e2 = float(refine2["parity"]["energy_factor"])
     assert t2 <= t1, (t1, t2)
     assert e2 <= e1, (e1, e2)
+
+
+@pytest.mark.regression
+def test_flat_disk_unpinned_outerfield_preset_reports_finite_parity() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=3,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="kh_strict_outerfield_unpinned",
+        theta_optimize_steps=2,
+        theta_optimize_inner_steps=2,
+    )
+    assert (
+        report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_unpinned"
+    )
+    assert int(report["meta"]["refine_level_requested"]) == 3
+    assert int(report["meta"]["refine_level_effective"]) == 3
+    assert np.isfinite(float(report["parity"]["theta_factor"]))
+    assert np.isfinite(float(report["parity"]["energy_factor"]))
+
+
+@pytest.mark.benchmark
+def test_flat_disk_unpinned_section_parity_non_worsening_refine2_to_refine3() -> None:
+    def _section_errors(refine_level: int) -> tuple[float, float, float, float]:
+        report = run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(refine_level),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            theta_mode="optimize",
+            parameterization="kh_physical",
+            optimize_preset="kh_strict_outerfield_unpinned",
+            theta_optimize_steps=2,
+            theta_optimize_inner_steps=2,
+        )
+        theta = float(report["mesh"]["theta_star"])
+        row = run_flat_disk_kh_term_audit(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=int(report["meta"]["refine_level"]),
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            theta_values=(theta,),
+            tilt_mass_mode_in="consistent",
+            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
+            rim_local_refine_band_lambda=float(
+                report["meta"]["rim_local_refine_band_lambda"]
+            ),
+            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
+            outer_local_refine_rmin_lambda=float(
+                report["meta"]["outer_local_refine_rmin_lambda"]
+            ),
+            outer_local_refine_rmax_lambda=float(
+                report["meta"]["outer_local_refine_rmax_lambda"]
+            ),
+            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
+            local_edge_flip_rmin_lambda=float(
+                report["meta"]["local_edge_flip_rmin_lambda"]
+            ),
+            local_edge_flip_rmax_lambda=float(
+                report["meta"]["local_edge_flip_rmax_lambda"]
+            ),
+            outer_local_vertex_average_steps=int(
+                report["meta"]["outer_local_vertex_average_steps"]
+            ),
+            outer_local_vertex_average_rmin_lambda=float(
+                report["meta"]["outer_local_vertex_average_rmin_lambda"]
+            ),
+            outer_local_vertex_average_rmax_lambda=float(
+                report["meta"]["outer_local_vertex_average_rmax_lambda"]
+            ),
+            partition_mode="fractional",
+        )["rows"][0]
+
+        def _abs_log_ratio(value: float) -> float:
+            return float(abs(np.log(max(float(value), 1e-18))))
+
+        return (
+            float(row["section_score_internal_bands_finite_outer_l2_log"]),
+            _abs_log_ratio(float(row["internal_disk_ratio_mesh_over_theory"])),
+            _abs_log_ratio(
+                float(row["internal_outer_near_ratio_mesh_over_theory_finite"])
+            ),
+            _abs_log_ratio(
+                float(row["internal_outer_far_ratio_mesh_over_theory_finite"])
+            ),
+        )
+
+    score2, disk2, near2, far2 = _section_errors(2)
+    score3, disk3, near3, far3 = _section_errors(3)
+    tol = 5.0e-1
+    assert score3 <= score2 + tol, (score2, score3)
+    assert disk3 <= disk2 + tol, (disk2, disk3)
+    assert near3 <= near2 + tol, (near2, near3)
+    assert far3 <= far2 + tol, (far2, far3)
 
 
 @pytest.mark.regression

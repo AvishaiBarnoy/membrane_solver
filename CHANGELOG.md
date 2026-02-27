@@ -5,6 +5,18 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 ## [Unreleased]
 ### Added
 - CI now runs categorized test subsets via pytest markers: `unit`, `regression`, and `e2e`.
+- Flat one-leaflet benchmark now supports `kh_strict_outerfield_unpinned`
+  optimize preset, which keeps strict outer-field controls but preserves
+  user-requested `refine_level` (no preset refine pinning).
+- Flat one-leaflet reports now always include requested vs effective metadata:
+  `meta.refine_level_requested`, `meta.refine_level_effective`,
+  `meta.optimize_preset_requested`, `meta.optimize_preset_effective`.
+- KH error-source audit safe sweep now supports bounded outer-far eligibility
+  ranges (`outer_far_floor`, `outer_far_ceiling`) and defaults to the bounded
+  strict-unpinned section-objective matrix (`rmax=7,8,9`; `avg=1,2,3`; `flip=0`).
+- KH error-source audit refine trend defaults now target strict-unpinned
+  convergence (`refine=2,3`) and retain pinned-refine mismatch guards for
+  strict pinned presets.
 - Flat one-leaflet disk benchmark reproduction tooling:
   - Theory utility: `tools/diagnostics/flat_disk_one_leaflet_theory.py` (exact formulas from `docs/tex/1_disk_flat.tex`).
   - Reproduction CLI: `tools/reproduce_flat_disk_one_leaflet.py` with `--outer-mode disabled|free`, refinement and theta-scan controls, and YAML reporting.

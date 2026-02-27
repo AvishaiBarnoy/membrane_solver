@@ -300,6 +300,19 @@ def _resolve_optimize_preset(
             ),
             "kh_strict_outerfield_best",
         )
+    if preset == "kh_strict_outerfield_unpinned":
+        return (
+            BenchmarkOptimizeConfig(
+                theta_initial=float(optimize_cfg.theta_initial),
+                optimize_steps=30,
+                optimize_every=1,
+                optimize_delta=6.0e-3,
+                optimize_inner_steps=14,
+                plateau_patience=12,
+                plateau_abs_tol=1.0e-12,
+            ),
+            "kh_strict_outerfield_unpinned",
+        )
     if preset == "kh_strict_outertail_balanced":
         return (
             BenchmarkOptimizeConfig(
@@ -346,7 +359,7 @@ def _resolve_optimize_preset(
         "'kh_strict_section_tight', 'kh_strict_outerband_tight', "
         "'kh_strict_outerfield_tight', 'kh_strict_outerfield_quality', "
         "'kh_strict_outerfield_tailmatch', 'kh_strict_outerfield_averaged', "
-        "'kh_strict_outerfield_best', "
+        "'kh_strict_outerfield_best', 'kh_strict_outerfield_unpinned', "
         "'kh_strict_outertail_balanced', "
         "'kh_strict_partition_tight', "
         "or 'kh_strict_robust'."
@@ -1143,25 +1156,29 @@ def run_flat_disk_one_leaflet_benchmark(
         "kh_strict_outerfield_tailmatch",
         "kh_strict_outerfield_averaged",
         "kh_strict_outerfield_best",
+        "kh_strict_outerfield_unpinned",
         "kh_strict_outertail_balanced",
         "kh_strict_partition_tight",
         "kh_strict_robust",
     }:
-        effective_refine_level = (
-            2
-            if optimize_preset_raw
-            in {
-                "kh_strict_section_tight",
-                "kh_strict_outerband_tight",
-                "kh_strict_outerfield_tight",
-                "kh_strict_outerfield_quality",
-                "kh_strict_outerfield_tailmatch",
-                "kh_strict_outerfield_averaged",
-                "kh_strict_outerfield_best",
-                "kh_strict_outertail_balanced",
-            }
-            else 1
-        )
+        if optimize_preset_raw == "kh_strict_outerfield_unpinned":
+            effective_refine_level = int(raw_refine_level)
+        else:
+            effective_refine_level = (
+                2
+                if optimize_preset_raw
+                in {
+                    "kh_strict_section_tight",
+                    "kh_strict_outerband_tight",
+                    "kh_strict_outerfield_tight",
+                    "kh_strict_outerfield_quality",
+                    "kh_strict_outerfield_tailmatch",
+                    "kh_strict_outerfield_averaged",
+                    "kh_strict_outerfield_best",
+                    "kh_strict_outertail_balanced",
+                }
+                else 1
+            )
         if int(raw_rim_local_refine_steps) > 0:
             effective_rim_local_refine_steps = int(raw_rim_local_refine_steps)
         else:
@@ -1213,6 +1230,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_outerfield_tailmatch",
             "kh_strict_outerfield_averaged",
             "kh_strict_outerfield_best",
+            "kh_strict_outerfield_unpinned",
             "kh_strict_outertail_balanced",
         }:
             effective_outer_local_refine_steps = 1
@@ -1228,6 +1246,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_outerfield_tailmatch",
             "kh_strict_outerfield_averaged",
             "kh_strict_outerfield_best",
+            "kh_strict_outerfield_unpinned",
             "kh_strict_outertail_balanced",
         }:
             effective_outer_local_refine_rmin_lambda = 1.0
@@ -1246,6 +1265,8 @@ def run_flat_disk_one_leaflet_benchmark(
         elif optimize_preset_raw == "kh_strict_outerfield_averaged":
             effective_outer_local_refine_rmax_lambda = 8.0
         elif optimize_preset_raw == "kh_strict_outerfield_best":
+            effective_outer_local_refine_rmax_lambda = 8.0
+        elif optimize_preset_raw == "kh_strict_outerfield_unpinned":
             effective_outer_local_refine_rmax_lambda = 8.0
         elif optimize_preset_raw == "kh_strict_outertail_balanced":
             effective_outer_local_refine_rmax_lambda = 10.0
@@ -1273,6 +1294,8 @@ def run_flat_disk_one_leaflet_benchmark(
             effective_local_edge_flip_steps = 0
         elif optimize_preset_raw == "kh_strict_outerfield_best":
             effective_local_edge_flip_steps = 0
+        elif optimize_preset_raw == "kh_strict_outerfield_unpinned":
+            effective_local_edge_flip_steps = 0
         else:
             effective_local_edge_flip_steps = 0
         if int(raw_outer_local_vertex_average_steps) > 0:
@@ -1292,6 +1315,10 @@ def run_flat_disk_one_leaflet_benchmark(
             effective_outer_local_vertex_average_rmin_lambda = 4.0
             effective_outer_local_vertex_average_rmax_lambda = 12.0
         elif optimize_preset_raw == "kh_strict_outerfield_best":
+            effective_outer_local_vertex_average_steps = 2
+            effective_outer_local_vertex_average_rmin_lambda = 4.0
+            effective_outer_local_vertex_average_rmax_lambda = 12.0
+        elif optimize_preset_raw == "kh_strict_outerfield_unpinned":
             effective_outer_local_vertex_average_steps = 2
             effective_outer_local_vertex_average_rmin_lambda = 4.0
             effective_outer_local_vertex_average_rmax_lambda = 12.0
@@ -1425,6 +1452,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_outerfield_tailmatch",
             "kh_strict_outerfield_averaged",
             "kh_strict_outerfield_best",
+            "kh_strict_outerfield_unpinned",
             "kh_strict_outertail_balanced",
             "kh_strict_partition_tight",
         }:
@@ -1438,6 +1466,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "kh_strict_outerfield_tailmatch",
             "kh_strict_outerfield_averaged",
             "kh_strict_outerfield_best",
+            "kh_strict_outerfield_unpinned",
             "kh_strict_outertail_balanced",
         }:
             energy_polish_enabled = True
@@ -1911,7 +1940,9 @@ def run_flat_disk_one_leaflet_benchmark(
     report = {
         "meta": {
             "fixture": str(fixture_path.relative_to(ROOT)),
+            "refine_level_requested": int(raw_refine_level),
             "refine_level": int(effective_refine_level),
+            "refine_level_effective": int(effective_refine_level),
             "outer_mode": str(outer_mode),
             "smoothness_model": str(smoothness_model),
             "parameterization": str(mode),
@@ -1924,6 +1955,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "radius_dimless": float(params.radius),
             "theta_mode": str(theta_mode_str),
             "optimize_preset": str(optimize_preset).lower(),
+            "optimize_preset_requested": str(optimize_preset).lower(),
             "optimize_preset_effective": str(effective_optimize_preset),
             "splay_modulus_scale_in": float(splay_modulus_scale_in),
             "tilt_mass_mode_in": str(mass_mode),
@@ -2215,6 +2247,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             "kh_strict_outerfield_tailmatch",
             "kh_strict_outerfield_averaged",
             "kh_strict_outerfield_best",
+            "kh_strict_outerfield_unpinned",
             "kh_strict_outertail_balanced",
             "kh_strict_partition_tight",
             "kh_strict_robust",
