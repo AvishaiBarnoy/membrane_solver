@@ -9,6 +9,8 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "reproduce_theory_parity.py"
 
+pytestmark = pytest.mark.exhaustive
+
 
 @pytest.mark.acceptance
 def test_reproduce_theory_parity_fixed_polish_keeps_finite_and_sign_relations(

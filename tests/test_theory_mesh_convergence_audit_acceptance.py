@@ -11,6 +11,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "audit_theory_mesh_convergence.py"
 
+pytestmark = pytest.mark.exhaustive
+
 
 @pytest.mark.acceptance
 def test_theory_mesh_convergence_audit_writes_yaml_and_passes(tmp_path) -> None:

@@ -13,6 +13,8 @@ from tools.theory_parity_drift_triage import format_triage, top_offenders
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "theory_parity_drift_triage.py"
 
+pytestmark = pytest.mark.exhaustive
+
 
 def _trend() -> dict:
     return {

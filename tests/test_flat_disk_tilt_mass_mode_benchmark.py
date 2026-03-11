@@ -10,6 +10,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from benchmarks.benchmark_flat_disk_tilt_mass_mode import benchmark_tilt_mass_mode
 
+pytestmark = pytest.mark.exhaustive
+
 
 @pytest.mark.benchmark
 def test_flat_disk_tilt_mass_mode_benchmark_smoke() -> None:

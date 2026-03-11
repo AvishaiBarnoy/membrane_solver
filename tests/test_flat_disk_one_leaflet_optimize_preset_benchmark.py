@@ -13,6 +13,8 @@ from tools.reproduce_flat_disk_one_leaflet import (
     run_flat_disk_one_leaflet_benchmark,
 )
 
+pytestmark = pytest.mark.exhaustive
+
 
 @pytest.mark.benchmark
 def test_flat_disk_optimize_preset_fast_r3_improves_runtime_with_stable_parity() -> (

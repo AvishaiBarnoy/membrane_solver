@@ -12,6 +12,8 @@ from tools.diagnostics.flat_disk_kh_region_parity import (  # noqa: E402
     run_flat_disk_kh_region_parity,
 )
 
+pytestmark = pytest.mark.exhaustive
+
 
 @pytest.mark.regression
 def test_flat_disk_kh_region_parity_emits_ranked_rows(

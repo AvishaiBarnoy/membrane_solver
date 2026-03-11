@@ -14,6 +14,8 @@ from tools.reproduce_theory_parity import (  # noqa: E402
     update_expansion_state,
 )
 
+pytestmark = pytest.mark.exhaustive
+
 ROOT = Path(__file__).resolve().parent.parent
 POLICY_PATH = ROOT / "tests" / "fixtures" / "theory_parity_expansion_policy.yaml"
 
