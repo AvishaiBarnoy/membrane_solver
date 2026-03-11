@@ -11,6 +11,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "audit_theory_scaling.py"
 
+pytestmark = pytest.mark.exhaustive
+
 
 @pytest.mark.acceptance
 def test_theory_scaling_audit_reports_expected_monotonic_trends(tmp_path) -> None:

@@ -16,6 +16,8 @@ MANIFEST = ROOT / "tests" / "fixtures" / "theory_coverage_manifest.yaml"
 FIXTURE = ROOT / "tests" / "fixtures" / "kozlov_1disk_3d_free_disk_theory_parity.yaml"
 TEX = ROOT / "docs" / "tex" / "1_disk_3d.tex"
 
+pytestmark = pytest.mark.exhaustive
+
 
 @pytest.mark.acceptance
 def test_theory_coverage_audit_reports_all_required_present(tmp_path) -> None:

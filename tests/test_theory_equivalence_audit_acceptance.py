@@ -12,6 +12,8 @@ ROOT = Path(__file__).resolve().parent.parent
 REPRO_SCRIPT = ROOT / "tools" / "reproduce_theory_parity.py"
 AUDIT_SCRIPT = ROOT / "tools" / "audit_theory_equivalence.py"
 
+pytestmark = pytest.mark.exhaustive
+
 
 @pytest.mark.acceptance
 def test_theory_equivalence_audit_fixed_lane_passes(tmp_path) -> None:

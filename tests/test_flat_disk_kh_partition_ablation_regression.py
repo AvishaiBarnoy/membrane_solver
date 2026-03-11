@@ -12,6 +12,8 @@ from tools.diagnostics.flat_disk_kh_partition_ablation import (  # noqa: E402
     run_flat_disk_kh_partition_ablation,
 )
 
+pytestmark = pytest.mark.exhaustive
+
 
 @pytest.mark.regression
 def test_flat_disk_kh_partition_ablation_emits_baseline_delta(

@@ -13,6 +13,8 @@ from tools.sweep_theory_protocol_suffixes import rank_candidates
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "sweep_theory_protocol_suffixes.py"
 
+pytestmark = pytest.mark.exhaustive
+
 
 def test_rank_candidates_is_deterministic() -> None:
     entries = [
