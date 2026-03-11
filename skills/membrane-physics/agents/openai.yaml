@@ -1,0 +1,4 @@
+interface:
+  display_name: "Membrane Physics"
+  short_description: "Helfrich and KH tilt guidance"
+  default_prompt: "Use $membrane-physics to implement, review, or debug Helfrich or Kozlov-Hamm membrane-physics work in this repo."

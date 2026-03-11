@@ -1,0 +1,4 @@
+interface:
+  display_name: "Surface Geometry"
+  short_description: "Discrete surface geometry"
+  default_prompt: "Use $surface-geometry to implement, review, or debug the discrete triangle-mesh geometry operators used in this repo."
