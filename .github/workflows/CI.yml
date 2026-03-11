@@ -182,7 +182,7 @@ jobs:
 
       - name: Run exploratory parity checks
         run: |
-          pytest -q tests/test_theory_parity_expansion_exploratory.py
+          pytest -q -o addopts='' -m "exhaustive" tests/test_theory_parity_expansion_exploratory.py
 
   parity-fixed-trend:
     name: Theory parity fixed trend (guarded gate)
