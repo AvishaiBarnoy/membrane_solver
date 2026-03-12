@@ -45,6 +45,10 @@ Parameters
 - `rim_slope_match_outer_group`: outer ring group name (string; required).
 - `rim_slope_match_disk_group`: disk ring group name just inside the rim
   (string; optional).
+- `rim_slope_match_mode`: discrete interface law. `pointwise_radial_v1` and
+  `ring_average_radial_v1` evaluate leaflet tilts on the physical rim rows;
+  `shared_rim_staggered_v1` evaluates leaflet tilts on the first free outer
+  ring while still measuring geometry from the rim-to-outer secant.
 - `rim_slope_match_strength`: k (float; default 0).
 - `rim_slope_match_center`: 3D center point (default [0,0,0]).
 - `rim_slope_match_normal`: plane normal (default [0,0,1] if fit fails).
@@ -102,6 +106,21 @@ def _resolve_center(param_resolver) -> np.ndarray:
     if center is None:
         center = [0.0, 0.0, 0.0]
     return np.asarray(center, dtype=float).reshape(3)
+
+
+def _resolve_matching_mode(param_resolver) -> str:
+    raw = param_resolver.get(None, "rim_slope_match_mode")
+    mode = "pointwise_radial_v1" if raw is None else str(raw).strip().lower()
+    if mode not in {
+        "pointwise_radial_v1",
+        "ring_average_radial_v1",
+        "shared_rim_staggered_v1",
+    }:
+        raise ValueError(
+            "rim_slope_match_mode must be 'pointwise_radial_v1' or "
+            "'ring_average_radial_v1' or 'shared_rim_staggered_v1'."
+        )
+    return mode
 
 
 def _resolve_normal(param_resolver) -> np.ndarray | None:
@@ -228,6 +247,77 @@ def _interp_ring_positions(
     return interp, idx0, idx1, w0, w1
 
 
+def _tilt_match_rows_and_directions(
+    *,
+    matching_mode: str,
+    rim_rows: np.ndarray,
+    outer_rows: np.ndarray,
+    outer_idx0: np.ndarray,
+    outer_idx1: np.ndarray,
+    outer_w0: np.ndarray,
+    outer_w1: np.ndarray,
+    r_hat: np.ndarray,
+    normals: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, str]:
+    """Return tilt rows and tangent radial directions for the active mode."""
+    active_mode = matching_mode
+
+    if active_mode == "shared_rim_staggered_v1":
+        tilt_rows0 = outer_rows[outer_idx0]
+        tilt_rows1 = outer_rows[outer_idx1]
+        tilt_normals = (
+            outer_w0[:, None] * normals[tilt_rows0]
+            + outer_w1[:, None] * normals[tilt_rows1]
+        )
+        tilt_normals_norm = np.linalg.norm(tilt_normals, axis=1)
+        good_normals = tilt_normals_norm > 1.0e-12
+        tilt_normals = np.divide(
+            tilt_normals,
+            tilt_normals_norm[:, None],
+            out=np.zeros_like(tilt_normals),
+            where=good_normals[:, None],
+        )
+        r_dir = (
+            r_hat - np.einsum("ij,ij->i", r_hat, tilt_normals)[:, None] * tilt_normals
+        )
+        r_dir_norm = np.linalg.norm(r_dir, axis=1)
+        good_dir = r_dir_norm > 1.0e-12
+        r_dir = np.divide(
+            r_dir,
+            r_dir_norm[:, None],
+            out=np.zeros_like(r_dir),
+            where=good_dir[:, None],
+        )
+        return (
+            tilt_rows0.astype(int, copy=False),
+            tilt_rows1.astype(int, copy=False),
+            np.asarray(outer_w0, dtype=float),
+            np.asarray(outer_w1, dtype=float),
+            r_dir,
+            good_dir & good_normals,
+            active_mode,
+        )
+
+    tilt_rows = rim_rows.astype(int, copy=False)
+    r_dir = np.asarray(r_hat, dtype=float)
+    good_dir = np.linalg.norm(r_dir, axis=1) > 1.0e-12
+    r_dir = np.divide(
+        r_dir,
+        np.linalg.norm(r_dir, axis=1)[:, None],
+        out=np.zeros_like(r_dir),
+        where=good_dir[:, None],
+    )
+    return (
+        tilt_rows,
+        tilt_rows,
+        np.ones(len(tilt_rows)),
+        np.zeros(len(tilt_rows)),
+        r_dir,
+        good_dir,
+        active_mode,
+    )
+
+
 def compute_energy_and_gradient(
     mesh: Mesh, global_params, param_resolver, *, compute_gradient: bool = True
 ) -> (
@@ -296,6 +386,7 @@ def compute_energy_and_gradient_array(
     outer_group = _resolve_group(param_resolver, "rim_slope_match_outer_group")
     disk_group = _resolve_group(param_resolver, "rim_slope_match_disk_group")
     disk_group = _sanitize_disk_group(rim_group=group, disk_group=disk_group)
+    matching_mode = _resolve_matching_mode(param_resolver)
     if group is None or outer_group is None:
         return 0.0
 
@@ -362,6 +453,26 @@ def compute_energy_and_gradient_array(
 
     r_hat = np.zeros_like(r_vec)
     r_hat[good] = r_vec[good] / r_len[good][:, None]
+    normals = mesh.vertex_normals(positions=positions)
+    (
+        tilt_rows0,
+        tilt_rows1,
+        tilt_w0,
+        tilt_w1,
+        r_dir,
+        good_dir,
+        matching_mode,
+    ) = _tilt_match_rows_and_directions(
+        matching_mode=matching_mode,
+        rim_rows=rim_rows,
+        outer_rows=outer_rows,
+        outer_idx0=outer_idx0,
+        outer_idx1=outer_idx1,
+        outer_w0=outer_w0,
+        outer_w1=outer_w1,
+        r_hat=r_hat,
+        normals=normals,
+    )
 
     # Small-slope geometric slope along the normal.
     h_rim = np.einsum("ij,j->i", rim_pos - center[None, :], normal)
@@ -375,12 +486,15 @@ def compute_energy_and_gradient_array(
     dr_safe = np.where(np.abs(dr) > 1e-8, dr, np.nan)
 
     phi = (h_out - h_rim) / dr_safe
-    valid = np.isfinite(phi) & good
+    valid = np.isfinite(phi) & good & good_dir
     if not np.any(valid):
         return 0.0
 
-    t_out = tilts_out[rim_rows]
-    tilt_radial = np.einsum("ij,ij->i", t_out, r_hat)
+    t_out0 = tilts_out[tilt_rows0]
+    t_out1 = tilts_out[tilt_rows1]
+    tilt_radial = tilt_w0 * np.einsum("ij,ij->i", t_out0, r_dir) + tilt_w1 * np.einsum(
+        "ij,ij->i", t_out1, r_dir
+    )
 
     weights = _arc_length_weights(rim_pos, np.arange(len(rim_rows)))
     weights = np.where(valid, weights, 0.0)
@@ -431,7 +545,11 @@ def compute_energy_and_gradient_array(
                     )
 
     if theta_disk is not None:
-        tilt_in_rim = np.einsum("ij,ij->i", tilts_in[rim_rows], r_hat)
+        t_in0 = tilts_in[tilt_rows0]
+        t_in1 = tilts_in[tilt_rows1]
+        tilt_in_rim = tilt_w0 * np.einsum(
+            "ij,ij->i", t_in0, r_dir
+        ) + tilt_w1 * np.einsum("ij,ij->i", t_in1, r_dir)
         if local_disk:
             diff_in[valid] = tilt_in_rim[valid] - (theta_disk[valid] - phi[valid])
         else:
@@ -445,15 +563,19 @@ def compute_energy_and_gradient_array(
         tilt_out_grad_arr = np.asarray(tilt_out_grad_arr, dtype=float)
         if tilt_out_grad_arr.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilt_out_grad_arr must have shape (N_vertices, 3)")
-        contrib = (k_match * weights * diff)[:, None] * r_hat
-        np.add.at(tilt_out_grad_arr, rim_rows, contrib)
+        contrib = (k_match * weights * diff)[:, None] * r_dir
+        np.add.at(tilt_out_grad_arr, tilt_rows0, contrib * tilt_w0[:, None])
+        if np.any((tilt_rows1 != tilt_rows0) | (np.abs(tilt_w1) > 1.0e-12)):
+            np.add.at(tilt_out_grad_arr, tilt_rows1, contrib * tilt_w1[:, None])
 
     if theta_disk is not None and tilt_in_grad_arr is not None:
         tilt_in_grad_arr = np.asarray(tilt_in_grad_arr, dtype=float)
         if tilt_in_grad_arr.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilt_in_grad_arr must have shape (N_vertices, 3)")
-        contrib_in = (k_match * weights * diff_in)[:, None] * r_hat
-        np.add.at(tilt_in_grad_arr, rim_rows, contrib_in)
+        contrib_in = (k_match * weights * diff_in)[:, None] * r_dir
+        np.add.at(tilt_in_grad_arr, tilt_rows0, contrib_in * tilt_w0[:, None])
+        if np.any((tilt_rows1 != tilt_rows0) | (np.abs(tilt_w1) > 1.0e-12)):
+            np.add.at(tilt_in_grad_arr, tilt_rows1, contrib_in * tilt_w1[:, None])
         if (
             disk_rows is not None
             and disk_rows.size

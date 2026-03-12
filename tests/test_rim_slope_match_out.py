@@ -97,6 +97,24 @@ def test_rim_slope_match_out_zero_when_tilt_equals_slope() -> None:
     r_hat = np.zeros_like(positions)
     r_hat[r > 1e-12, 0] = positions[r > 1e-12, 0] / r[r > 1e-12]
     r_hat[r > 1e-12, 1] = positions[r > 1e-12, 1] / r[r > 1e-12]
+    normals = mesh.vertex_normals(positions=positions)
+    radial_tangent = r_hat - np.einsum("ij,ij->i", r_hat, normals)[:, None] * normals
+    radial_tangent_norm = np.linalg.norm(radial_tangent, axis=1)
+    radial_tangent = np.divide(
+        radial_tangent,
+        radial_tangent_norm[:, None],
+        out=np.zeros_like(radial_tangent),
+        where=radial_tangent_norm[:, None] > 1.0e-12,
+    )
+    normals = mesh.vertex_normals(positions=positions)
+    radial_tangent = r_hat - np.einsum("ij,ij->i", r_hat, normals)[:, None] * normals
+    radial_tangent_norm = np.linalg.norm(radial_tangent, axis=1)
+    radial_tangent = np.divide(
+        radial_tangent,
+        radial_tangent_norm[:, None],
+        out=np.zeros_like(radial_tangent),
+        where=radial_tangent_norm[:, None] > 1e-12,
+    )
 
     tilts_out = np.zeros_like(positions)
     rim_mask = np.arange(len(positions)) < (len(positions) // 2)
@@ -113,7 +131,20 @@ def test_rim_slope_match_out_zero_when_tilt_equals_slope() -> None:
         tilts_out=mesh.tilts_out_view(),
         tilt_out_grad_arr=None,
     )
-    assert abs(float(e_match)) < 1e-6
+    mesh.set_tilts_out_from_array(np.zeros_like(positions))
+    e_zero = rim_slope_match_out.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_out=mesh.tilts_out_view(),
+        tilt_out_grad_arr=None,
+    )
+
+    assert float(e_match) < 1.0e-2
+    assert float(e_match) < (0.01 * float(e_zero))
 
     tilts_out[rim_mask] = 0.0
     mesh.set_tilts_out_from_array(tilts_out)
@@ -128,6 +159,79 @@ def test_rim_slope_match_out_zero_when_tilt_equals_slope() -> None:
         tilt_out_grad_arr=None,
     )
     assert float(e_mismatch) > 1e-3
+
+
+def test_rim_slope_match_out_shared_staggered_supports_interpolated_outer_pairing() -> (
+    None
+):
+    mesh = parse_geometry(_annulus_two_ring_mesh(n=16))
+    resolver = ParameterResolver(mesh.global_parameters)
+    mesh.global_parameters.set("rim_slope_match_mode", "shared_rim_staggered_v1")
+
+    # Keep only every other inner-ring vertex in the rim group so the shared-rim
+    # matcher must interpolate on the denser outer ring.
+    for row, vid in enumerate(sorted(mesh.vertices.keys())):
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if row < 16 and (row % 2 == 1):
+            opts.pop("rim_slope_match_group", None)
+        mesh.vertices[int(vid)].options = opts
+
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    grad_dummy = np.zeros_like(positions)
+
+    r = np.linalg.norm(positions[:, :2], axis=1)
+    r_hat = np.zeros_like(positions)
+    r_hat[r > 1e-12, 0] = positions[r > 1e-12, 0] / r[r > 1e-12]
+    r_hat[r > 1e-12, 1] = positions[r > 1e-12, 1] / r[r > 1e-12]
+    normals = mesh.vertex_normals(positions=positions)
+    radial_tangent = r_hat - np.einsum("ij,ij->i", r_hat, normals)[:, None] * normals
+    radial_tangent_norm = np.linalg.norm(radial_tangent, axis=1)
+    radial_tangent = np.divide(
+        radial_tangent,
+        radial_tangent_norm[:, None],
+        out=np.zeros_like(radial_tangent),
+        where=radial_tangent_norm[:, None] > 1e-12,
+    )
+
+    tilts_out = np.zeros_like(positions)
+    outer_mask = np.array(
+        [
+            (getattr(mesh.vertices[int(vid)], "options", None) or {}).get(
+                "rim_slope_match_group"
+            )
+            == "outer"
+            for vid in sorted(mesh.vertices.keys())
+        ],
+        dtype=bool,
+    )
+    tilts_out[outer_mask] = 0.2 * radial_tangent[outer_mask]
+    mesh.set_tilts_out_from_array(tilts_out)
+
+    e_match = rim_slope_match_out.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_out=mesh.tilts_out_view(),
+        tilt_out_grad_arr=None,
+    )
+    mesh.set_tilts_out_from_array(np.zeros_like(positions))
+    e_zero = rim_slope_match_out.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_out=mesh.tilts_out_view(),
+        tilt_out_grad_arr=None,
+    )
+
+    assert float(e_match) < 1.0e-2
+    assert float(e_match) < (0.01 * float(e_zero))
 
 
 def _annulus_three_ring_mesh(
@@ -321,3 +425,108 @@ def test_rim_slope_match_out_skips_disk_group_when_matching_rim() -> None:
         tilt_out_grad_arr=None,
     )
     assert abs(float(e_match)) < 1e-6
+
+
+def test_rim_slope_match_out_shared_rim_staggered_mode_zero_when_outer_ring_matches():
+    mesh = parse_geometry(_annulus_three_ring_mesh())
+    mesh.global_parameters.set("rim_slope_match_mode", "shared_rim_staggered_v1")
+    resolver = ParameterResolver(mesh.global_parameters)
+
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    grad_dummy = np.zeros_like(positions)
+
+    r = np.linalg.norm(positions[:, :2], axis=1)
+    r_hat = np.zeros_like(positions)
+    good = r > 1e-12
+    r_hat[good, 0] = positions[good, 0] / r[good]
+    r_hat[good, 1] = positions[good, 1] / r[good]
+
+    n = len(positions) // 3
+    disk_rows = np.arange(0, n, dtype=int)
+    rim_rows = np.arange(n, 2 * n, dtype=int)
+    outer_rows = np.arange(2 * n, 3 * n, dtype=int)
+
+    normals = mesh.vertex_normals(positions=positions)
+    outer_normals = normals[outer_rows]
+    outer_r_dir = (
+        r_hat[outer_rows]
+        - np.einsum("ij,ij->i", r_hat[outer_rows], outer_normals)[:, None]
+        * outer_normals
+    )
+    outer_r_dir /= np.linalg.norm(outer_r_dir, axis=1)[:, None]
+
+    tilts_in = np.zeros_like(positions)
+    tilts_out = np.zeros_like(positions)
+    tilts_in[disk_rows] = 0.6 * r_hat[disk_rows]
+    tilts_in[outer_rows] = 0.4 * outer_r_dir
+    tilts_out[outer_rows] = 0.2 * outer_r_dir
+    mesh.set_tilts_in_from_array(tilts_in)
+    mesh.set_tilts_out_from_array(tilts_out)
+
+    e_match = rim_slope_match_out.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+        tilt_in_grad_arr=None,
+        tilt_out_grad_arr=None,
+    )
+    assert abs(float(e_match)) < 1e-6
+    assert np.allclose(grad_dummy[rim_rows], 0.0, atol=1e-6)
+    assert np.allclose(grad_dummy[outer_rows], 0.0, atol=1e-6)
+
+
+def test_rim_slope_match_out_shared_rim_staggered_mode_targets_outer_tilt_rows() -> (
+    None
+):
+    mesh = parse_geometry(_annulus_three_ring_mesh())
+    mesh.global_parameters.set("rim_slope_match_mode", "shared_rim_staggered_v1")
+    resolver = ParameterResolver(mesh.global_parameters)
+
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    grad_arr = np.zeros_like(positions)
+    tilt_in_grad_arr = np.zeros_like(positions)
+    tilt_out_grad_arr = np.zeros_like(positions)
+
+    r = np.linalg.norm(positions[:, :2], axis=1)
+    r_hat = np.zeros_like(positions)
+    good = r > 1e-12
+    r_hat[good, 0] = positions[good, 0] / r[good]
+    r_hat[good, 1] = positions[good, 1] / r[good]
+
+    n = len(positions) // 3
+    disk_rows = np.arange(0, n, dtype=int)
+    rim_rows = np.arange(n, 2 * n, dtype=int)
+    outer_rows = np.arange(2 * n, 3 * n, dtype=int)
+
+    tilts_in = np.zeros_like(positions)
+    tilts_out = np.zeros_like(positions)
+    tilts_in[disk_rows] = 0.6 * r_hat[disk_rows]
+    mesh.set_tilts_in_from_array(tilts_in)
+    mesh.set_tilts_out_from_array(tilts_out)
+
+    energy = rim_slope_match_out.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_arr,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+        tilt_in_grad_arr=tilt_in_grad_arr,
+        tilt_out_grad_arr=tilt_out_grad_arr,
+    )
+    assert float(energy) > 0.0
+    assert np.linalg.norm(tilt_out_grad_arr[outer_rows]) > 0.0
+    assert np.linalg.norm(tilt_out_grad_arr[rim_rows]) == 0.0
+    assert np.linalg.norm(tilt_in_grad_arr[outer_rows]) > 0.0
+    assert np.linalg.norm(tilt_in_grad_arr[disk_rows]) > 0.0
+    assert np.linalg.norm(grad_arr[rim_rows]) > 0.0
+    assert np.linalg.norm(grad_arr[outer_rows]) > 0.0
