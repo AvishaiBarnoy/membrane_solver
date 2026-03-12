@@ -2,6 +2,7 @@ import os
 import sys
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -193,6 +194,76 @@ def test_rim_slope_match_out_constraint_enforces_radial_tilts():
     assert np.allclose(t_in_rad, target_in, atol=1e-6)
 
 
+def test_rim_slope_match_out_ring_average_mode_enforces_average_radial_tilts():
+    data = _build_rim_match_geometry(z_bump=0.12)
+    data["global_parameters"]["rim_slope_match_mode"] = "ring_average_radial_v1"
+    mesh = parse_geometry(data)
+
+    positions = mesh.positions_view()
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_out = mesh.tilts_out_view().copy(order="F")
+
+    rim_rows = _collect_group_rows(mesh, "rim")
+    disk_rows = _collect_group_rows(mesh, "disk")
+    outer_rows = _collect_group_rows(mesh, "outer")
+
+    normal = np.array([0.0, 0.0, 1.0], dtype=float)
+    rim_order = _order_by_angle(positions[rim_rows], normal)
+    disk_order = _order_by_angle(positions[disk_rows], normal)
+    outer_order = _order_by_angle(positions[outer_rows], normal)
+
+    rim_rows = rim_rows[rim_order]
+    disk_rows = disk_rows[disk_order]
+    outer_rows = outer_rows[outer_order]
+
+    r_vec = positions[rim_rows].copy()
+    r_vec[:, 2] = 0.0
+    r_hat = r_vec / np.linalg.norm(r_vec, axis=1)[:, None]
+    normals = mesh.vertex_normals(positions=positions)
+    rim_normals = normals[rim_rows]
+    r_dir = r_hat - np.einsum("ij,ij->i", r_hat, rim_normals)[:, None] * rim_normals
+    r_dir /= np.linalg.norm(r_dir, axis=1)[:, None]
+
+    r_vec_disk = positions[disk_rows].copy()
+    r_vec_disk[:, 2] = 0.0
+    r_hat_disk = r_vec_disk / np.linalg.norm(r_vec_disk, axis=1)[:, None]
+
+    target_out_profile = np.linspace(-0.04, 0.03, rim_rows.size)
+    target_in_profile = np.linspace(0.08, -0.02, rim_rows.size)
+    tilts_out[rim_rows] = target_out_profile[:, None] * r_dir
+    tilts_in[rim_rows] = target_in_profile[:, None] * r_dir
+    tilts_in[disk_rows] = 0.2 * r_hat_disk
+
+    mesh.set_tilts_in_from_array(tilts_in)
+    mesh.set_tilts_out_from_array(tilts_out)
+
+    from modules.constraints import rim_slope_match_out as constraint
+
+    h_rim = positions[rim_rows][:, 2]
+    h_out = positions[outer_rows][:, 2]
+    r_rim = np.linalg.norm(positions[rim_rows][:, :2], axis=1)
+    r_out = np.linalg.norm(positions[outer_rows][:, :2], axis=1)
+    phi = (h_out - h_rim) / (r_out - r_rim)
+    theta_disk_before = np.einsum("ij,ij->i", tilts_in[disk_rows], r_hat_disk)
+    out_res_before = np.mean(target_out_profile - phi)
+    in_res_before = np.mean(target_in_profile - (theta_disk_before - phi))
+
+    constraint.enforce_tilt_constraint(mesh, global_params=mesh.global_parameters)
+
+    tilts_in = mesh.tilts_in_view()
+    tilts_out = mesh.tilts_out_view()
+    t_out_rad = np.einsum("ij,ij->i", tilts_out[rim_rows], r_dir)
+    t_in_rad = np.einsum("ij,ij->i", tilts_in[rim_rows], r_dir)
+    theta_disk_after = np.einsum("ij,ij->i", tilts_in[disk_rows], r_hat_disk)
+    out_res_after = np.mean(t_out_rad - phi)
+    in_res_after = np.mean(t_in_rad - (theta_disk_after - phi))
+
+    assert abs(out_res_before) > 1.0e-6
+    assert abs(in_res_before) > 1.0e-6
+    assert out_res_after == pytest.approx(0.0, abs=1.0e-8)
+    assert in_res_after == pytest.approx(0.0, abs=1.0e-8)
+
+
 def test_group_rows_cache_keeps_multiple_groups() -> None:
     data = _build_rim_match_geometry()
     mesh = parse_geometry(data)
@@ -231,3 +302,60 @@ def test_matching_data_cache_reuses_and_invalidates_on_version_change() -> None:
     positions2 = mesh.positions_view()
     d3 = constraint._build_matching_data(mesh, gp, positions2)
     assert d3 is not d2
+
+
+def test_rim_slope_match_out_shared_rim_staggered_mode_targets_outer_ring() -> None:
+    data = _build_rim_match_geometry(z_bump=0.12)
+    data["global_parameters"]["rim_slope_match_mode"] = "shared_rim_staggered_v1"
+    data["global_parameters"]["rim_slope_match_thetaB_param"] = "tilt_thetaB_value"
+    data["global_parameters"]["tilt_thetaB_value"] = 0.2
+    mesh = parse_geometry(data)
+
+    positions = mesh.positions_view()
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_out = mesh.tilts_out_view().copy(order="F")
+
+    rim_rows = _collect_group_rows(mesh, "rim")
+    outer_rows = _collect_group_rows(mesh, "outer")
+
+    normal = np.array([0.0, 0.0, 1.0], dtype=float)
+    rim_order = _order_by_angle(positions[rim_rows], normal)
+    outer_order = _order_by_angle(positions[outer_rows], normal)
+
+    rim_rows = rim_rows[rim_order]
+    outer_rows = outer_rows[outer_order]
+
+    r_vec_outer = positions[outer_rows].copy()
+    r_vec_outer[:, 2] = 0.0
+    r_hat_outer = r_vec_outer / np.linalg.norm(r_vec_outer, axis=1)[:, None]
+    normals = mesh.vertex_normals(positions=positions)
+    outer_normals = normals[outer_rows]
+    r_dir_outer = (
+        r_hat_outer
+        - np.einsum("ij,ij->i", r_hat_outer, outer_normals)[:, None] * outer_normals
+    )
+    r_dir_outer /= np.linalg.norm(r_dir_outer, axis=1)[:, None]
+
+    tilts_out[outer_rows] = 0.02 * r_dir_outer
+    tilts_in[outer_rows] = 0.01 * r_dir_outer
+    mesh.set_tilts_in_from_array(tilts_in)
+    mesh.set_tilts_out_from_array(tilts_out)
+
+    from modules.constraints import rim_slope_match_out as constraint
+
+    constraint.enforce_tilt_constraint(mesh, global_params=mesh.global_parameters)
+
+    tilts_in = mesh.tilts_in_view()
+    tilts_out = mesh.tilts_out_view()
+
+    h_rim = positions[rim_rows][:, 2]
+    h_out = positions[outer_rows][:, 2]
+    r_rim = np.linalg.norm(positions[rim_rows][:, :2], axis=1)
+    r_out = np.linalg.norm(positions[outer_rows][:, :2], axis=1)
+    phi = (h_out - h_rim) / (r_out - r_rim)
+
+    t_out_rad = np.einsum("ij,ij->i", tilts_out[outer_rows], r_dir_outer)
+    t_in_rad = np.einsum("ij,ij->i", tilts_in[outer_rows], r_dir_outer)
+
+    assert np.allclose(t_out_rad, phi, atol=1.0e-6)
+    assert np.allclose(t_in_rad, 0.2 - phi, atol=1.0e-6)

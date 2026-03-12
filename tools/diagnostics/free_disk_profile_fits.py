@@ -55,6 +55,18 @@ def _disk_radius(data: dict, center: np.ndarray, normal: np.ndarray) -> float:
     for v in data.get("vertices", []):
         if isinstance(v, list) and v and isinstance(v[-1], dict):
             opt = v[-1]
+            if opt.get("rim_slope_match_group") == "disk":
+                p = np.asarray(v[:3], dtype=float)
+                rvec = p - center
+                rvec = rvec - np.dot(rvec, normal) * normal
+                rs.append(float(np.linalg.norm(rvec)))
+    if rs:
+        return float(np.median(rs))
+
+    rs = []
+    for v in data.get("vertices", []):
+        if isinstance(v, list) and v and isinstance(v[-1], dict):
+            opt = v[-1]
             if opt.get("pin_to_circle_group") != "disk":
                 continue
             p = np.asarray(v[:3], dtype=float)
@@ -62,7 +74,7 @@ def _disk_radius(data: dict, center: np.ndarray, normal: np.ndarray) -> float:
             rvec = rvec - np.dot(rvec, normal) * normal
             rs.append(float(np.linalg.norm(rvec)))
     if rs:
-        return float(np.median(rs))
+        return float(np.max(rs))
     return float(data.get("global_parameters", {}).get("pin_to_circle_radius", 0.0))
 
 
@@ -223,6 +235,310 @@ def _height_profile(
         r.append(rr)
         z.append(float(p[2]))
     return np.asarray(r, dtype=float), np.asarray(z, dtype=float)
+
+
+def _disk_radius_mesh(mesh, center: np.ndarray, normal: np.ndarray) -> float:
+    positions = mesh.positions_view()
+    rs: list[float] = []
+    for vid in mesh.vertex_ids:
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if opts.get("rim_slope_match_group") == "disk":
+            row = mesh.vertex_index_to_row[int(vid)]
+            p = positions[row]
+            rvec = p - center
+            rvec = rvec - np.dot(rvec, normal) * normal
+            rs.append(float(np.linalg.norm(rvec)))
+    if rs:
+        return float(np.median(rs))
+
+    rs = []
+    for vid in mesh.vertex_ids:
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if opts.get("pin_to_circle_group") != "disk":
+            continue
+        row = mesh.vertex_index_to_row[int(vid)]
+        p = positions[row]
+        rvec = p - center
+        rvec = rvec - np.dot(rvec, normal) * normal
+        rs.append(float(np.linalg.norm(rvec)))
+    if rs:
+        return float(np.max(rs))
+    return float(mesh.global_parameters.get("pin_to_circle_radius") or 0.0)
+
+
+def _radial_components_mesh(
+    mesh, *, center: np.ndarray, normal: np.ndarray
+) -> Dict[str, np.ndarray]:
+    positions = mesh.positions_view()
+    tin_all = mesh.tilts_in_view()
+    tout_all = mesh.tilts_out_view()
+    r_all: list[float] = []
+    tin_rad: list[float] = []
+    tout_rad: list[float] = []
+    for row, _vid in enumerate(mesh.vertex_ids):
+        p = positions[row]
+        rvec = p - center
+        rvec = rvec - np.dot(rvec, normal) * normal
+        r = float(np.linalg.norm(rvec))
+        if r < 1e-12:
+            continue
+        rhat = rvec / r
+        r_all.append(r)
+        tin_rad.append(float(np.dot(tin_all[row], rhat)))
+        tout_rad.append(float(np.dot(tout_all[row], rhat)))
+    return {
+        "r": np.asarray(r_all, dtype=float),
+        "tin": np.asarray(tin_rad, dtype=float),
+        "tout": np.asarray(tout_rad, dtype=float),
+    }
+
+
+def _height_profile_mesh(
+    mesh, *, center: np.ndarray, normal: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    positions = mesh.positions_view()
+    r = []
+    z = []
+    for row, _vid in enumerate(mesh.vertex_ids):
+        p = positions[row]
+        rvec = p - center
+        rvec = rvec - np.dot(rvec, normal) * normal
+        rr = float(np.linalg.norm(rvec))
+        if rr < 1e-12:
+            continue
+        r.append(rr)
+        z.append(float(p[2]))
+    return np.asarray(r, dtype=float), np.asarray(z, dtype=float)
+
+
+def _outer_fit_rmax_mesh(mesh, *, center: np.ndarray, normal: np.ndarray) -> float:
+    positions = mesh.positions_view()
+    radii: list[float] = []
+    for row, vid in enumerate(mesh.vertex_ids):
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if opts.get("pin_to_circle_group") == "outer":
+            continue
+        p = positions[row]
+        rvec = p - center
+        rvec = rvec - np.dot(rvec, normal) * normal
+        radii.append(float(np.linalg.norm(rvec)))
+    if not radii:
+        raise AssertionError("No free outer rows available for profile analysis")
+    return float(np.max(radii))
+
+
+def _relative_rmse(y: np.ndarray, yhat: np.ndarray) -> float:
+    scale = float(np.max(np.abs(y))) if y.size else 0.0
+    if scale <= 1.0e-30:
+        return float("inf")
+    return _rmse(y, yhat) / scale
+
+
+def _bandwise_residual_summary(
+    r: np.ndarray,
+    y: np.ndarray,
+    yhat: np.ndarray,
+    *,
+    labels: tuple[str, ...] = ("near", "mid", "far"),
+    reference_scale: float | None = None,
+) -> dict | None:
+    if r.size == 0 or y.size == 0 or yhat.size == 0:
+        return None
+    if not (r.size == y.size == yhat.size):
+        raise ValueError("Residual summary inputs must have matching shapes")
+
+    r_min = float(np.min(r))
+    r_max = float(np.max(r))
+    if not np.isfinite(r_min) or not np.isfinite(r_max) or r_max <= r_min:
+        return None
+    if reference_scale is None:
+        reference_scale = float(np.max(np.abs(y))) if y.size else 0.0
+    reference_scale = float(reference_scale)
+
+    edges = np.linspace(r_min, r_max, len(labels) + 1)
+    bands: dict[str, dict[str, float | int]] = {}
+    dominant_band = None
+    dominant_rel = -np.inf
+    for i, label in enumerate(labels):
+        lo = float(edges[i])
+        hi = float(edges[i + 1])
+        if i == len(labels) - 1:
+            mask = (r >= lo) & (r <= hi)
+        else:
+            mask = (r >= lo) & (r < hi)
+        count = int(np.sum(mask))
+        if count == 0:
+            bands[str(label)] = {
+                "count": 0,
+                "rmse": float("nan"),
+                "rel_rmse": float("nan"),
+                "max_abs_error": float("nan"),
+                "r_min": lo,
+                "r_max": hi,
+            }
+            continue
+        yy = y[mask]
+        yyhat = yhat[mask]
+        rmse = float(_rmse(yy, yyhat))
+        rel_rmse_local = float(_relative_rmse(yy, yyhat))
+        if reference_scale <= 1.0e-30:
+            rel_rmse_global = float("inf")
+        else:
+            rel_rmse_global = rmse / reference_scale
+        max_abs = float(np.max(np.abs(yy - yyhat)))
+        bands[str(label)] = {
+            "count": count,
+            "rmse": rmse,
+            "rel_rmse": rel_rmse_global,
+            "rel_rmse_local": rel_rmse_local,
+            "max_abs_error": max_abs,
+            "r_min": lo,
+            "r_max": hi,
+        }
+        if np.isfinite(rel_rmse_global) and rel_rmse_global > dominant_rel:
+            dominant_rel = rel_rmse_global
+            dominant_band = str(label)
+
+    return {
+        "bands": bands,
+        "dominant_band": dominant_band,
+        "reference_scale": reference_scale,
+    }
+
+
+def analyze_mesh_profiles(
+    mesh,
+    *,
+    bins: int = 40,
+    flip_tilt_out: bool = True,
+    include_curvature: bool = True,
+    r_outer_max: float | None = None,
+) -> dict:
+    """Return radial-fit diagnostics directly from an in-memory mesh state."""
+    params = mesh.global_parameters.to_dict()
+    center, normal = _center_normal(params)
+    R = _disk_radius_mesh(mesh, center, normal)
+    if R <= 0.0:
+        raise AssertionError("Could not determine free-disk boundary radius")
+
+    if r_outer_max is None:
+        r_outer_max = _outer_fit_rmax_mesh(mesh, center=center, normal=normal)
+    r_outer_max = float(r_outer_max)
+    if r_outer_max <= R:
+        raise AssertionError("Outer fit range must extend beyond the disk radius")
+
+    radial = _radial_components_mesh(mesh, center=center, normal=normal)
+    r = radial["r"]
+    tin = radial["tin"]
+    tout = radial["tout"]
+    if flip_tilt_out:
+        tout = -tout
+
+    rin, tin_med, _ = _bin_profile(r, tin, rmin=0.0, rmax=R, bins=bins)
+    inner_fit = None
+    if rin.size >= 3 and np.any(np.isfinite(tin_med)):
+        theta_r, lam, rmse = _fit_i1(rin, tin_med, R)
+        yhat = theta_r * i1(lam * rin) / i1(lam * R)
+        ref_scale = float(np.max(np.abs(tin_med))) if tin_med.size else 0.0
+        inner_fit = {
+            "theta_R": float(theta_r),
+            "lambda": float(lam),
+            "rmse": float(rmse),
+            "rel_rmse": float(_relative_rmse(tin_med, yhat)),
+            "residual_bands": _bandwise_residual_summary(
+                rin, tin_med, yhat, reference_scale=ref_scale
+            ),
+        }
+
+    rout, tout_med, _ = _bin_profile(r, tout, rmin=R, rmax=r_outer_max, bins=bins)
+    outer_fit = None
+    if rout.size >= 3 and np.any(np.isfinite(tout_med)):
+        theta_r, lam, rmse = _fit_k1(rout, tout_med, R)
+        yhat = theta_r * k1(lam * rout) / k1(lam * R)
+        ref_scale = float(np.max(np.abs(tout_med))) if tout_med.size else 0.0
+        outer_fit = {
+            "theta_R": float(theta_r),
+            "lambda": float(lam),
+            "rmse": float(rmse),
+            "rel_rmse": float(_relative_rmse(tout_med, yhat)),
+            "residual_bands": _bandwise_residual_summary(
+                rout, tout_med, yhat, reference_scale=ref_scale
+            ),
+        }
+
+    curvature_fit = None
+    if include_curvature:
+        r_h, h = _curvature_profile(mesh, center=center, normal=normal)
+        r_hb, h_med, _ = _bin_profile(r_h, h, rmin=R, rmax=r_outer_max, bins=bins)
+        if r_hb.size >= 3 and np.any(np.isfinite(h_med)):
+            amp, psi, rmse = _fit_k0(r_hb, h_med)
+            yhat = amp * k0(psi * r_hb)
+            ref_scale = float(np.max(np.abs(h_med))) if h_med.size else 0.0
+            curvature_fit = {
+                "amp": float(amp),
+                "psi": float(psi),
+                "rmse": float(rmse),
+                "rel_rmse": float(_relative_rmse(h_med, yhat)),
+                "residual_bands": _bandwise_residual_summary(
+                    r_hb, h_med, yhat, reference_scale=ref_scale
+                ),
+            }
+
+    tension = float(params.get("surface_tension") or 0.0)
+    r_z, z = _height_profile_mesh(mesh, center=center, normal=normal)
+    z_fit = None
+    if r_z.size >= 3:
+        rzb, z_med, _ = _bin_profile(r_z, z, rmin=R, rmax=r_outer_max, bins=bins)
+        if rzb.size >= 3 and np.any(np.isfinite(z_med)):
+            if tension <= 0.0:
+                z0, a, rmse = _fit_log(rzb, z_med, R)
+                yhat = z0 + a * np.log(rzb / R)
+                ref_scale = float(np.max(np.abs(z_med))) if z_med.size else 0.0
+                z_fit = {
+                    "model": "log",
+                    "z0": float(z0),
+                    "a": float(a),
+                    "rmse": float(rmse),
+                    "rel_rmse": float(_relative_rmse(z_med, yhat)),
+                    "residual_bands": _bandwise_residual_summary(
+                        rzb, z_med, yhat, reference_scale=ref_scale
+                    ),
+                }
+            else:
+                z0, amp, psi, rmse = _fit_k0_offset(rzb, z_med)
+                yhat = z0 + amp * k0(psi * rzb)
+                ref_scale = float(np.max(np.abs(z_med))) if z_med.size else 0.0
+                z_fit = {
+                    "model": "k0",
+                    "z0": float(z0),
+                    "amp": float(amp),
+                    "psi": float(psi),
+                    "rmse": float(rmse),
+                    "rel_rmse": float(_relative_rmse(z_med, yhat)),
+                    "residual_bands": _bandwise_residual_summary(
+                        rzb, z_med, yhat, reference_scale=ref_scale
+                    ),
+                }
+
+    inner_mask = (r_z > 0) & (r_z <= R)
+    z_flat = None
+    if np.any(inner_mask):
+        z_inner = z[inner_mask]
+        z_flat = {
+            "z_mean": float(np.mean(z_inner)),
+            "z_std": float(np.std(z_inner)),
+            "count": int(z_inner.size),
+        }
+
+    return {
+        "R": float(R),
+        "r_outer_max": float(r_outer_max),
+        "inner_fit_I1": inner_fit,
+        "outer_fit_K1": outer_fit,
+        "curvature_fit_K0": curvature_fit,
+        "height_fit": z_fit,
+        "disk_flatness": z_flat,
+    }
 
 
 def main(argv: Iterable[str] | None = None) -> int:

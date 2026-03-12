@@ -73,6 +73,28 @@ def test_rim_slope_match_out_rows_match_dense_for_shape_constraints():
         assert np.allclose(rebuilt, dense_g, atol=1e-12, rtol=0.0)
 
 
+def test_rim_slope_match_out_ring_average_mode_aggregates_shape_constraints():
+    mesh = _build_mismatch_mesh()
+    mesh.global_parameters.set("rim_slope_match_mode", "ring_average_radial_v1")
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    dense = constraint_gradients_array(
+        mesh, mesh.global_parameters, positions=positions, index_map=index_map
+    )
+    rows = constraint_gradients_rows_array(
+        mesh, mesh.global_parameters, positions=positions, index_map=index_map
+    )
+
+    assert dense is not None
+    assert rows is not None
+    assert len(dense) == 1
+    assert len(rows) == 1
+    rebuilt = np.zeros_like(positions)
+    np.add.at(rebuilt, rows[0][0], rows[0][1])
+    assert np.allclose(rebuilt, dense[0], atol=1e-12, rtol=0.0)
+
+
 def test_rim_slope_match_out_rows_match_dense_for_tilt_constraints():
     mesh = _build_mismatch_mesh()
     positions = mesh.positions_view()
@@ -113,6 +135,44 @@ def test_rim_slope_match_out_rows_match_dense_for_tilt_constraints():
             rebuilt_out = np.zeros_like(positions)
             np.add.at(rebuilt_out, row_out[0], row_out[1])
             assert np.allclose(rebuilt_out, dense_out, atol=1e-12, rtol=0.0)
+
+
+def test_rim_slope_match_out_ring_average_mode_aggregates_tilt_constraints():
+    mesh = _build_mismatch_mesh()
+    mesh.global_parameters.set("rim_slope_match_mode", "ring_average_radial_v1")
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    dense = constraint_gradients_tilt_array(
+        mesh,
+        mesh.global_parameters,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+    )
+    rows = constraint_gradients_tilt_rows_array(
+        mesh,
+        mesh.global_parameters,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+    )
+
+    assert dense is not None
+    assert rows is not None
+    assert len(dense) == 1
+    assert len(rows) == 1
+    dense_in, dense_out = dense[0]
+    row_in, row_out = rows[0]
+    assert dense_in is None
+    assert row_in is None
+    assert dense_out is not None
+    assert row_out is not None
+    rebuilt_out = np.zeros_like(positions)
+    np.add.at(rebuilt_out, row_out[0], row_out[1])
+    assert np.allclose(rebuilt_out, dense_out, atol=1e-12, rtol=0.0)
 
 
 def test_rim_slope_match_out_energy_allows_mismatched_counts():

@@ -167,6 +167,11 @@ intended for development and planning; users should consult `README.md` and
    - [x] Added strict-unpinned section non-worsening benchmark gate
          (`refine 2 -> 3`) based on per-section abs-log errors and section score.
    - [x] Tightened strict parity e2e acceptance caps to `<=1.2` for fast/balanced/continuity.
+   - [x] Promoted strict fixed-theta parity baseline to refine=3 with
+         `v2/finite_bvp`, fractional partitioning, adaptive theta-relax
+         (`max_repeats=5`), and post-relax tilt polish controls
+         (`tilt_post_relax_inner_steps=40`, `tilt_post_relax_step_size=0.005`,
+         `tilt_post_relax_passes=1`) captured in staged parity fixtures.
    - [ ] Continue narrowing strict-KH residual mismatch without changing KH/TeX parameter ratios.
 
 ## 5. Mesh tooling for targeted refinement
@@ -244,7 +249,7 @@ intended for development and planning; users should consult `README.md` and
      - [x] Sign test: swapping `tilt_rim_source_in`↔`tilt_rim_source_out` flips
            the preferred curvature direction (up/down invagination).
 
-   - [ ] **Milestone E: 1_disk_3d rim matching (disk + outer membrane)**
+   - [x] **Milestone E: 1_disk_3d rim matching (disk + outer membrane)**
      - [x] Enable rim-source selection on *internal* rims
            (`tilt_rim_source_edge_mode: all`).
      - [x] Add a rim-matching energy/constraint that enforces the small-slope
@@ -276,8 +281,11 @@ intended for development and planning; users should consult `README.md` and
     - [x] Added strict-KH diagnostics for radial-only projected fields and
           bandwise anisotropy/leakage attribution, plus optional local
           edge-flip annulus quality controls in the flat benchmark harness.
-    - [ ] E2E regression: for γ=0, recover the 1_disk_3d predictions
-          (`θ^p(r)=θ^d(r)` in the outer region and `φ*≈θ_B/2`).
+    - [x] Canonical curved free-disk acceptance now runs through the
+          shared-rim stage-2 protocol, with near-rim parity
+          (`θ_in(R+)≈θ_out(R+)≈φ(R+)≈θ_B/2`), outer-band parity, and
+          profile-fit acceptance coverage. The old coarse free-disk
+          theory fixture is retained only as a flat-surrogate diagnostic.
      - [ ] Future: enforce/validate that interacting tilt sources on a given
            membrane are defined on the same leaflet side (distal/top = `tilt_in`)
            to avoid mixed-side source interference.

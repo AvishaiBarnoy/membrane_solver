@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -7,84 +8,53 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry  # noqa: E402
-from runtime.constraint_manager import ConstraintModuleManager  # noqa: E402
-from runtime.energy_manager import EnergyModuleManager  # noqa: E402
-from runtime.minimizer import Minimizer  # noqa: E402
-from runtime.steppers.gradient_descent import GradientDescent  # noqa: E402
-from tests.test_kozlov_free_disk_theory_parity_e2e import (  # noqa: E402
-    _tensionless_thetaB_prediction,
+from tools.diagnostics.free_disk_profile_protocol import (  # noqa: E402
+    optimize_free_disk_theta_b,
+    run_free_disk_curved_bilayer_theta_sweep,
 )
 
 
-def _run_thetaB_history(*, mesh, n_steps: int) -> list[float]:
-    gp = mesh.global_parameters
-
-    # Keep this diagnostic deterministic and reasonably fast.
-    # Use the fixture's theory-mode parameters by default; we only pin the
-    # shape step size to keep runtime bounded across platforms.
-    gp.set("step_size_mode", "fixed")
-    gp.set("step_size", 1.0e-3)
-
-    minim = Minimizer(
-        mesh,
-        gp,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-        tol=1e-8,
-    )
-
-    hist: list[float] = []
-
-    def cb(_mesh, _i):
-        hist.append(float(gp.get("tilt_thetaB_value") or 0.0))
-
-    minim.minimize(n_steps=n_steps, callback=cb)
-    hist.append(float(gp.get("tilt_thetaB_value") or 0.0))
-    return hist
-
-
-@pytest.mark.e2e
-def test_kozlov_free_disk_thetaB_converges_toward_tex_prediction() -> None:
+@pytest.mark.regression
+def test_kozlov_free_disk_flat_thetaB_scan_stays_on_flat_surrogate_branch() -> None:
+    """Diagnostic: the legacy flat free-disk scan still lands on the flat branch."""
     path = os.path.join(
         os.path.dirname(__file__),
         "fixtures",
         "kozlov_1disk_3d_free_disk_theory_parity.yaml",
     )
-    mesh0 = parse_geometry(load_data(path))
+    mesh = parse_geometry(load_data(path))
+    theta_b = optimize_free_disk_theta_b(mesh, scans=4)
 
-    gp0 = mesh0.global_parameters
-    kappa_in = float(gp0.get("bending_modulus_in") or gp0.get("bending_modulus") or 0.0)
-    kappa_out = float(
-        gp0.get("bending_modulus_out") or gp0.get("bending_modulus") or 0.0
+    assert theta_b == pytest.approx(0.04, abs=0.02)
+    assert float(np.ptp(mesh.positions_view()[:, 2])) == pytest.approx(0.0, abs=1.0e-12)
+
+
+@pytest.mark.e2e
+def test_kozlov_free_disk_curved_theta_sweep_scales_linearly_with_imposed_drive() -> (
+    None
+):
+    """E2E: the curved shared-rim protocol tracks imposed thetaB on the named mesh."""
+    mesh_path = (
+        Path(__file__).resolve().parent.parent
+        / "meshes"
+        / "caveolin"
+        / "kozlov_1disk_3d_tensionless_single_leaflet_profile_hard_rim_R12_free_disk.yaml"
     )
-    kappa = float(kappa_in + kappa_out)
-    kappa_t_in = float(gp0.get("tilt_modulus_in") or 0.0)
-    kappa_t_out = float(gp0.get("tilt_modulus_out") or 0.0)
-    kappa_t = float(kappa_t_in + kappa_t_out)
-    drive = float(gp0.get("tilt_thetaB_contact_strength_in") or 0.0)
-
-    R = 7.0 / 15.0
-    theta_star, *_ = _tensionless_thetaB_prediction(
-        kappa=kappa, kappa_t=kappa_t, drive=drive, R=R
-    )
-    assert theta_star > 0.0
-
-    hist0 = _run_thetaB_history(mesh=mesh0, n_steps=6)
-    theta_final0 = float(hist0[-1])
-
-    # Convergence toward the predicted value (not necessarily monotone).
-    # Use the same broad tolerance as the existing parity test, but make the
-    # failure message include the whole thetaB history for diagnosis.
-    assert theta_final0 == pytest.approx(theta_star, rel=0.40, abs=0.03), (
-        f"thetaB*={theta_star:.6g}, hist={np.array(hist0)}"
+    rows = run_free_disk_curved_bilayer_theta_sweep(
+        [0.02, 0.04, 0.10],
+        curved_path=mesh_path,
     )
 
-    # NOTE: We intentionally do *not* assert refinement stability yet.
-    #
-    # In the current codebase, the remaining elastic-parity gap (tracked by an
-    # xfail in `tests/test_kozlov_free_disk_theory_parity_e2e.py`) can shift the
-    # reduced-energy optimum for thetaB under refinement. Once that physics gap
-    # is closed, we should tighten this diagnostic by adding a refinement-level
-    # stability assertion here.
+    assert len(rows) == 3
+    for row in rows:
+        target = 0.5 * row["theta_b"]
+        assert row["theta_disk"] == pytest.approx(row["theta_b"], rel=0.05, abs=1.0e-3)
+        assert row["theta_outer_in"] == pytest.approx(target, rel=0.05, abs=1.0e-3)
+        assert row["theta_outer_out"] == pytest.approx(target, rel=0.05, abs=1.0e-3)
+        assert row["phi_abs"] == pytest.approx(target, rel=0.05, abs=1.0e-3)
+        assert row["closure_error"] == pytest.approx(0.0, abs=1.0e-3)
+
+    phi_vals = np.asarray([row["phi_abs"] for row in rows], dtype=float)
+    theta_vals = np.asarray([row["theta_b"] for row in rows], dtype=float)
+    assert np.all(np.diff(phi_vals) > 0.0)
+    assert np.allclose(phi_vals / theta_vals, 0.5, rtol=0.05, atol=1.0e-3)

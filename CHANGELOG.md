@@ -4,6 +4,48 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 
 ## [Unreleased]
 ### Added
+- Added PR1 physics-sweep scaffolding tool
+  (`tools/diagnostics/physics_sweep.py`) with an inventory gate against
+  `tests/fixtures/physics_sweep_matrix.yaml` and acceptance/unit coverage.
+- Strict KH fixed-theta baseline fixtures now target a refine-3 lane with
+  fractional partitioning, adaptive theta-relaxation (`max_repeats=5`),
+  and optional post-relax tilt polish (`tilt_post_relax_*`) enabled
+  (`tests/fixtures/flat_disk_kh_term_audit_v2_5pct_target.yaml`,
+  `tests/fixtures/flat_disk_kh_term_audit_v2_p10_target.yaml`,
+  `tests/fixtures/flat_disk_kh_term_audit_v2_p5_target.yaml`).
+- KH term audit now supports additive fixed-theta relaxation controls:
+  `--theta-relax-repeats` and `--theta-reset-mode {cold,warm}`. Reports now
+  emit corresponding metadata fields (`theta_relax_repeats`,
+  `theta_reset_mode`) per run/row while preserving default behavior.
+- KH term audit now also supports additive adaptive per-theta stopping controls:
+  `--theta-relax-mode {fixed,adaptive}`, `--theta-relax-max-repeats`,
+  `--theta-relax-energy-abs-tol`, and `--theta-relax-plateau-patience`.
+- KH refine-sweep diagnostics now support optional adaptive cross-refine guard
+  (`--adaptive-cross-refine-guard`, `--adaptive-err2-max`) and emit additive
+  summary fields (`err2_v2`, `err3_v2`, `adaptive_guard_pass`,
+  `adaptive_guard_reason`).
+- KH refine-sweep diagnostics now support an additive two-stage relax mode
+  (`--two-stage-relax`) with per-level controls for refine-2 and refine-3
+  (`--two-stage-refine2-*`, `--two-stage-refine3-*`) to evaluate cross-refine
+  stability without changing default single-lane behavior.
+- KH term audit and flat one-leaflet benchmark now support an additive optional
+  outer-band isotropy preprocessing lane (`isotropy_pass`, `isotropy_iters`,
+  `isotropy_rmin_lambda`, `isotropy_rmax_lambda`). Audit output now emits
+  isotropy metadata/row diagnostics (`isotropy_iterations_applied/skipped`,
+  `isotropy_r_min/r_max`) while preserving default behavior when isotropy is off.
+  `isotropy_pass` now also supports `outer_far_flip_only` for flip-only
+  isotropy passes (no vertex averaging).
+- KH term audit now supports staged parity gating (`--parity-target {p10,p5}`),
+  axial symmetry gating (`--axial-symmetry-gate {monitor,hard,off}`), and
+  optional free-theta guardrail verification (`--free-theta-verify`). Reports
+  now include additive staged booleans (`meets_10pct_v2`,
+  `meets_parity_target_v2`, `axial_symmetry_pass`,
+  `meets_full_staged_target_v2`) plus axial leakage summaries.
+- KH term-audit diagnostics now support additive `v2` section-ratio reporting with
+  `--ratio-version {v1,v2}` and `--theory-outer-mode {infinite,finite_bvp}` CLI controls,
+  plus finite-BVP outer-theory helpers. `v2` now uses strict raw mesh/theory ratios
+  for parity gating (`meets_5pct_v2`) and reports leakage-adjusted ratios only as
+  auxiliary diagnostics.
 - CI now runs categorized test subsets via pytest markers: `unit`, `regression`, and `e2e`.
 - Flat one-leaflet benchmark now supports `kh_strict_outerfield_unpinned`
   optimize preset, which keeps strict outer-field controls but preserves
@@ -155,6 +197,10 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Analytic regression benchmark for the 1-disk model (tensionless: distal/proximal tilts match; `docs/tex/1_disk_3d.pdf`).
 - θ_B bilayer rim source energy module `tilt_rim_source_bilayer` (single source definition; equivalent to `tilt_rim_source_in` + `tilt_rim_source_out` with equal parameters).
 - Acceptance E2E parity test for the named free-disk mesh (`tests/test_kozlov_free_disk_mesh_theory_parity_acceptance_e2e.py`) against `docs/tex/1_disk_3d.tex` with 15% tolerance on `theta_B` and energy plus convergence-trend checks.
+- Curved free-disk acceptance now uses the shared-rim stage-2 protocol as the
+  canonical lane: near-rim parity, outer-band parity, and profile-fit coverage
+  run on the curved bilayer protocol, while the old coarse free-disk theory
+  fixture is kept only as a flat-surrogate diagnostic.
 
 ### Fixed
 - Reduced repeated geometry work in `tilt_splay_twist_in` by reusing mesh-cached P1 triangle shape gradients and triangle normals during inner tilt loops, improving flat-disk `refine_level=3` optimize runtime while preserving parity.
@@ -250,6 +296,12 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Added a movable circular-rim demo mesh: `meshes/bench_moving_circle_fit.yaml` (now a real facet with stabilized rim spacing).
 
 ### Changed
+- `runtime.refinement.refine_triangle_mesh` now computes refinable edge
+  eligibility in linear time over facets/edges (removing the nested
+  facet-membership scan).
+- KH term audit now shares per-triangle internal decomposition between region
+  and band diagnostics, and caches repeated theory band-split integrals for
+  repeated sweep calls.
 - `history` command now records expanded macro commands and skips unknown instructions.
 - Compiled Fortran kernels are built explicitly (e.g. `python -m membrane_solver.build_ext`) and always fall back to NumPy when unavailable.
 - Bending energy now defaults to the Helfrich model (`bending_energy_model="helfrich"`) with zero spontaneous curvature unless overridden.

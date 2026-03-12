@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from tools.diagnostics.free_disk_profile_fits import (
+    _bandwise_residual_summary,
     _fit_i1,
     _fit_k0,
     _fit_k0_offset,
@@ -74,3 +75,37 @@ def test_fit_k0_offset_recovers_params() -> None:
     assert abs(z0_hat - z0) / max(abs(z0), 1e-6) < 0.05
     assert abs(amp_hat - amp) / amp < 0.05
     assert abs(psi_hat - psi) / psi < 0.05
+
+
+def test_bandwise_residual_summary_identifies_dominant_band() -> None:
+    r = np.asarray([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], dtype=float)
+    y = np.asarray([1.0, 1.0, 1.0, 1.0, 1.0, 1.0], dtype=float)
+    yhat = np.asarray([1.0, 0.95, 1.0, 0.7, 1.0, 0.98], dtype=float)
+
+    out = _bandwise_residual_summary(r, y, yhat)
+
+    assert out is not None
+    assert out["dominant_band"] == "mid"
+    bands = out["bands"]
+    assert int(bands["near"]["count"]) == 2
+    assert int(bands["mid"]["count"]) == 2
+    assert int(bands["far"]["count"]) == 2
+    assert float(bands["mid"]["rel_rmse"]) > float(bands["near"]["rel_rmse"])
+    assert float(bands["mid"]["rel_rmse"]) > float(bands["far"]["rel_rmse"])
+
+
+def test_bandwise_residual_summary_uses_global_reference_scale() -> None:
+    r = np.asarray([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], dtype=float)
+    y = np.asarray([10.0, 8.0, 1.0e-3, 8.0e-4, 5.0e-4, 2.0e-4], dtype=float)
+    yhat = np.asarray([9.0, 7.0, 5.0e-4, 4.0e-4, 0.0, 0.0], dtype=float)
+
+    out = _bandwise_residual_summary(
+        r, y, yhat, reference_scale=float(np.max(np.abs(y)))
+    )
+
+    assert out is not None
+    assert out["dominant_band"] == "near"
+    bands = out["bands"]
+    assert float(bands["near"]["rel_rmse"]) > float(bands["mid"]["rel_rmse"])
+    assert float(bands["near"]["rel_rmse"]) > float(bands["far"]["rel_rmse"])
+    assert float(bands["mid"]["rel_rmse_local"]) > float(bands["mid"]["rel_rmse"])
