@@ -10,6 +10,7 @@ from geometry.bending_derivatives import grad_triangle_area
 from geometry.curvature import compute_curvature_data
 from geometry.entities import Mesh
 from geometry.tilt_operators import (
+    _resolve_transport_model,
     compute_divergence_from_basis,
     p1_triangle_divergence,
 )
@@ -71,23 +72,224 @@ def _assume_J0_presets(global_params, *, cache_tag: str) -> tuple[str, ...]:
     return tuple(presets)
 
 
+def _assume_J0_radius_max(global_params, *, cache_tag: str) -> float | None:
+    """Optional config: radial cap for theory-mode J0 suppression rows."""
+    if global_params is None:
+        return None
+    raw = global_params.get(f"{_ASSUME_J0_PRESETS_KEY}_radius_max_{cache_tag}")
+    if raw is None:
+        raw = global_params.get(f"{_ASSUME_J0_PRESETS_KEY}_radius_max")
+    if raw is None:
+        return None
+    radius_max = float(raw)
+    if radius_max < 0.0:
+        raise ValueError("bending_tilt_assume_J0_presets_radius_max must be >= 0.")
+    return radius_max
+
+
+def _assume_J0_center_xy(global_params) -> np.ndarray:
+    """Return the xy center used for radial J0-suppression clipping."""
+    if global_params is None:
+        return np.zeros(2, dtype=float)
+    raw = global_params.get("tilt_thetaB_center")
+    if raw is None:
+        raw = global_params.get("pin_to_circle_point")
+    if raw is None:
+        return np.zeros(2, dtype=float)
+    arr = np.asarray(raw, dtype=float).reshape(-1)
+    if arr.size < 2:
+        return np.zeros(2, dtype=float)
+    return arr[:2].astype(float, copy=False)
+
+
+def _base_term_region_mode(global_params) -> str:
+    """Return optional benchmark-scoped base-term region mode."""
+    if global_params is None:
+        return "off"
+    raw = global_params.get("bending_tilt_base_term_region_mode")
+    mode = str(raw or "off").strip().lower()
+    if mode not in {"off", "physical_disk_split_v1", "disk_only_base_term_v1"}:
+        raise ValueError(
+            "bending_tilt_base_term_region_mode must be 'off' or "
+            "'physical_disk_split_v1' or 'disk_only_base_term_v1'."
+        )
+    return mode
+
+
+def _base_term_region_radius(global_params) -> float | None:
+    """Return physical disk radius used by base-term region modes."""
+    if global_params is None:
+        return None
+    raw = global_params.get("bending_tilt_base_term_region_radius")
+    if raw is None:
+        return None
+    radius = float(raw)
+    if radius < 0.0:
+        raise ValueError("bending_tilt_base_term_region_radius must be >= 0.")
+    return radius
+
+
+def _bending_tilt_in_update_mode(global_params) -> str:
+    """Return optional benchmark-scoped inner bending-tilt update mode."""
+    if global_params is None:
+        return "off"
+    raw = global_params.get("bending_tilt_in_update_mode")
+    mode = str(raw or "off").strip().lower()
+    if mode not in {
+        "off",
+        "outer_near_divergence_cap_v1",
+        "radial_cross_term_off_v1",
+    }:
+        raise ValueError(
+            "bending_tilt_in_update_mode must be 'off' or "
+            "'outer_near_divergence_cap_v1' or 'radial_cross_term_off_v1'."
+        )
+    return mode
+
+
+def _inner_bending_tilt_dE_ddiv(
+    *,
+    mesh: Mesh,
+    global_params,
+    cache_tag: str,
+    kappa_tri: np.ndarray,
+    base_tri: np.ndarray,
+    div_term: np.ndarray,
+    va0_eff: np.ndarray,
+    va1_eff: np.ndarray,
+    va2_eff: np.ndarray,
+) -> tuple[np.ndarray, dict[str, float | int | bool | str]]:
+    """Return inner divergence gradient contribution under benchmark modes."""
+    mode = _bending_tilt_in_update_mode(global_params)
+    stats = {
+        "enabled": bool(mode != "off"),
+        "mode": str(mode),
+        "candidate_tri_count": 0,
+        "capped_tri_count": 0,
+        "rim_tri_count": 0,
+        "cap_magnitude": 0.0,
+        "cross_term_removed": False,
+    }
+    if str(cache_tag) != "in":
+        return (
+            (kappa_tri[:, 0] * (base_tri[:, 0] + div_term) * va0_eff)
+            + (kappa_tri[:, 1] * (base_tri[:, 1] + div_term) * va1_eff)
+            + (kappa_tri[:, 2] * (base_tri[:, 2] + div_term) * va2_eff),
+            stats,
+        )
+    if mode == "radial_cross_term_off_v1":
+        stats["cross_term_removed"] = True
+        setattr(mesh, "_last_bending_tilt_in_update_mode_stats", stats)
+        return (
+            (kappa_tri[:, 0] * div_term * va0_eff)
+            + (kappa_tri[:, 1] * div_term * va1_eff)
+            + (kappa_tri[:, 2] * div_term * va2_eff)
+        ), stats
+    return (
+        (kappa_tri[:, 0] * (base_tri[:, 0] + div_term) * va0_eff)
+        + (kappa_tri[:, 1] * (base_tri[:, 1] + div_term) * va1_eff)
+        + (kappa_tri[:, 2] * (base_tri[:, 2] + div_term) * va2_eff)
+    ), stats
+
+
+def _apply_inner_divergence_update_mode(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+    cache_tag: str,
+    div_term: np.ndarray,
+) -> np.ndarray:
+    """Apply benchmark-only inner divergence cap beyond the rim."""
+    stats_attr = "_last_bending_tilt_in_update_mode_stats"
+    mode = _bending_tilt_in_update_mode(global_params)
+    stats = {
+        "enabled": bool(mode != "off"),
+        "mode": str(mode),
+        "candidate_tri_count": 0,
+        "capped_tri_count": 0,
+        "rim_tri_count": 0,
+        "cap_magnitude": 0.0,
+        "cross_term_removed": False,
+    }
+    if str(cache_tag) != "in":
+        return div_term
+    if mode == "off" or tri_rows.size == 0:
+        setattr(mesh, stats_attr, stats)
+        return div_term
+    if mode == "radial_cross_term_off_v1":
+        stats["cross_term_removed"] = True
+        setattr(mesh, stats_attr, stats)
+        return div_term
+
+    radius = float(global_params.get("benchmark_disk_radius") or 0.0)
+    lambda_value = float(global_params.get("benchmark_lambda_value") or 0.0)
+    if radius <= 0.0 or lambda_value <= 0.0:
+        setattr(mesh, stats_attr, stats)
+        return div_term
+
+    center = _assume_J0_center_xy(global_params)
+    tri_xy = np.mean(positions[tri_rows, :2], axis=1)
+    tri_radii = np.linalg.norm(tri_xy - center[None, :], axis=1)
+    rim_w = float(lambda_value)
+    near_w = 4.0 * float(lambda_value)
+    rim_mask = np.abs(tri_radii - radius) <= rim_w
+    outer_near_mask = (tri_radii > (radius + rim_w)) & (tri_radii <= (radius + near_w))
+    stats["candidate_tri_count"] = int(np.sum(outer_near_mask))
+    stats["rim_tri_count"] = int(np.sum(rim_mask))
+    rim_mag = np.abs(div_term[rim_mask])
+    if rim_mag.size == 0:
+        setattr(mesh, stats_attr, stats)
+        return div_term
+
+    cap_magnitude = float(1.05 * np.median(rim_mag))
+    stats["cap_magnitude"] = cap_magnitude
+    if cap_magnitude <= 0.0 or not np.any(outer_near_mask):
+        setattr(mesh, stats_attr, stats)
+        return div_term
+
+    updated = np.array(div_term, copy=True)
+    hit = outer_near_mask & (np.abs(updated) > cap_magnitude)
+    updated[hit] = np.sign(updated[hit]) * cap_magnitude
+    stats["capped_tri_count"] = int(np.sum(hit))
+    setattr(mesh, stats_attr, stats)
+    return updated
+
+
 def _collect_preset_rows(
     mesh: Mesh,
     *,
     presets: tuple[str, ...],
     cache_tag: str,
     index_map: Dict[int, int],
+    radius_max: float | None = None,
+    center_xy: np.ndarray | None = None,
 ) -> np.ndarray:
     """Return vertex-row indices whose ``preset`` option is in ``presets``."""
     if not presets:
         return np.zeros(0, dtype=int)
-    cache_key = (mesh._vertex_ids_version, presets)
+    radius_key = None if radius_max is None else float(radius_max)
+    center_key = None
+    if center_xy is not None:
+        center_arr = np.asarray(center_xy, dtype=float).reshape(-1)
+        if center_arr.size >= 2:
+            center_key = (float(center_arr[0]), float(center_arr[1]))
+    cache_key = (mesh._vertex_ids_version, presets, radius_key, center_key)
     cache_attr = f"_bending_tilt_assume_J0_rows_cache_{cache_tag}"
     cached = getattr(mesh, cache_attr, None)
     if cached is not None and cached.get("key") == cache_key:
         return cached["rows"]
     presets_set = set(presets)
     present: set[str] = set()
+    center = (
+        np.zeros(2, dtype=float)
+        if center_xy is None
+        else np.asarray(center_xy, dtype=float)
+        .reshape(-1)[:2]
+        .astype(float, copy=False)
+    )
+    radius_tol = 1.0e-12
 
     rows: list[int] = []
     for vid in mesh.vertex_ids:
@@ -97,6 +299,11 @@ def _collect_preset_rows(
         if preset in presets_set:
             row = index_map.get(int(vid))
             if row is not None:
+                if radius_max is not None:
+                    pos = np.asarray(mesh.vertices[int(vid)].position, dtype=float)
+                    radius = float(np.linalg.norm(pos[:2] - center))
+                    if radius > float(radius_max) + radius_tol:
+                        continue
                 rows.append(int(row))
 
     unknown = presets_set - present
@@ -131,6 +338,60 @@ def _collect_group_rows(
     out = np.asarray(rows, dtype=int)
     setattr(mesh, cache_attr, {"key": cache_key, "rows": out})
     return out
+
+
+def _base_term_region_zero_rows(
+    mesh: Mesh,
+    global_params,
+    *,
+    cache_tag: str,
+    index_map: Dict[int, int],
+) -> np.ndarray:
+    """Return extra rows zeroed by benchmark-scoped base-term region modes."""
+    mode = _base_term_region_mode(global_params)
+    if mode == "off":
+        return np.zeros(0, dtype=int)
+    radius = _base_term_region_radius(global_params)
+    if radius is None:
+        raise ValueError(
+            "bending_tilt_base_term_region_radius is required when "
+            "bending_tilt_base_term_region_mode is enabled."
+        )
+    if mode in {"physical_disk_split_v1", "disk_only_base_term_v1"}:
+        if mode == "physical_disk_split_v1" and str(cache_tag) != "out":
+            return np.zeros(0, dtype=int)
+        if mode == "disk_only_base_term_v1" and str(cache_tag) != "in":
+            return np.zeros(0, dtype=int)
+        center = _assume_J0_center_xy(global_params)
+        cache_key = (
+            mesh._vertex_ids_version,
+            str(cache_tag),
+            str(mode),
+            float(radius),
+            float(center[0]),
+            float(center[1]),
+        )
+        cache_attr = "_bending_tilt_base_term_region_rows_cache"
+        cached = getattr(mesh, cache_attr, None)
+        if cached is not None and cached.get("key") == cache_key:
+            return cached["rows"]
+        rows: list[int] = []
+        for vid in mesh.vertex_ids:
+            row = index_map.get(int(vid))
+            if row is None:
+                continue
+            pos = np.asarray(mesh.vertices[int(vid)].position, dtype=float)
+            row_radius = float(np.linalg.norm(pos[:2] - center))
+            if mode == "physical_disk_split_v1":
+                if row_radius <= radius + 1.0e-12:
+                    rows.append(int(row))
+            else:
+                if row_radius > radius + 1.0e-12:
+                    rows.append(int(row))
+        out = np.asarray(rows, dtype=int)
+        setattr(mesh, cache_attr, {"key": cache_key, "rows": out})
+        return out
+    raise AssertionError("unreachable")
 
 
 def _base_term_boundary_group(global_params, *, cache_tag: str) -> str | None:
@@ -299,10 +560,27 @@ def _total_energy_leaflet(
     if tri_rows.size == 0:
         return 0.0
 
+    transport_model = _resolve_transport_model(
+        global_params.get("tilt_transport_model", "ambient_v1")
+        if global_params is not None
+        else "ambient_v1"
+    )
     div_tri, _, _, _, _ = p1_triangle_divergence(
-        positions=positions, tilts=tilts, tri_rows=tri_rows
+        mesh=mesh,
+        positions=positions,
+        tilts=tilts,
+        tri_rows=tri_rows,
+        transport_model=transport_model,
     )
     div_term = float(div_sign) * div_tri
+    div_term = _apply_inner_divergence_update_mode(
+        mesh,
+        global_params,
+        positions=positions,
+        tri_rows=tri_rows,
+        cache_tag=cache_tag,
+        div_term=div_term,
+    )
 
     _, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
         mesh, positions, tri_rows, weights, index_map
@@ -327,13 +605,29 @@ def _total_energy_leaflet(
     base_term[~is_interior] = 0.0
     presets = _assume_J0_presets(global_params, cache_tag=cache_tag)
     if presets:
+        radius_max = _assume_J0_radius_max(global_params, cache_tag=cache_tag)
+        center_xy = _assume_J0_center_xy(global_params)
         rows = _collect_preset_rows(
-            mesh, presets=presets, cache_tag=cache_tag, index_map=index_map
+            mesh,
+            presets=presets,
+            cache_tag=cache_tag,
+            index_map=index_map,
+            radius_max=radius_max,
+            center_xy=center_xy,
         )
         if rows.size:
             base_term[rows] = 0.0
+    region_rows = _base_term_region_zero_rows(
+        mesh,
+        global_params,
+        cache_tag=cache_tag,
+        index_map=index_map,
+    )
+    if region_rows.size:
+        base_term[region_rows] = 0.0
 
-    term_tri = base_term[tri_rows] + div_term[:, None]
+    base_tri = base_term[tri_rows]
+    term_tri = base_tri + div_term[:, None]
     va_eff = np.stack([va0_eff, va1_eff, va2_eff], axis=1)
     kappa_tri = kappa_arr[tri_rows]
 
@@ -415,8 +709,8 @@ def compute_energy_and_gradient_array_leaflet(
     tri_rows_full = tri_rows
     weights_full = weights
     tri_keep = np.array([], dtype=bool)
-    if cache_tag == "out":
-        absent_mask = leaflet_absent_vertex_mask(mesh, global_params, leaflet="out")
+    if cache_tag in {"in", "out"}:
+        absent_mask = leaflet_absent_vertex_mask(mesh, global_params, leaflet=cache_tag)
         tri_keep = leaflet_present_triangle_mask(
             mesh, tri_rows_full, absent_vertex_mask=absent_mask
         )
@@ -430,25 +724,45 @@ def compute_energy_and_gradient_array_leaflet(
     if tilts.shape != (len(mesh.vertex_ids), 3):
         raise ValueError("tilts must have shape (N_vertices, 3)")
 
+    transport_model = _resolve_transport_model(
+        global_params.get("tilt_transport_model", "ambient_v1")
+        if global_params is not None
+        else "ambient_v1"
+    )
+
     # Use cached triangle P1 basis gradients when geometry is frozen/cached.
-    if ctx is not None:
-        area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
-            ctx.geometry.p1_triangle_shape_gradients(mesh, positions)
-        )
+    if transport_model == "ambient_v1":
+        if ctx is not None:
+            area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
+                ctx.geometry.p1_triangle_shape_gradients(mesh, positions)
+            )
+        else:
+            area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
+                mesh.p1_triangle_shape_gradient_cache(positions)
+            )
     else:
-        area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
-            mesh.p1_triangle_shape_gradient_cache(positions)
-        )
+        area_cache = np.zeros(0, dtype=float)
+        g0_cache = np.zeros((0, 3), dtype=float)
+        g1_cache = np.zeros((0, 3), dtype=float)
+        g2_cache = np.zeros((0, 3), dtype=float)
+        tri_rows_cache = np.zeros((0, 3), dtype=np.int32)
     if tri_rows_cache.size and tri_rows_cache.shape[0] == tri_rows_full.shape[0]:
         g0_use = g0_cache
         g1_use = g1_cache
         g2_use = g2_cache
-        if cache_tag == "out" and tri_keep.size:
+        if tri_keep.size:
             g0_use = g0_use[tri_keep]
             g1_use = g1_use[tri_keep]
             g2_use = g2_use[tri_keep]
         div_tri = compute_divergence_from_basis(
-            tilts=tilts, tri_rows=tri_rows, g0=g0_use, g1=g1_use, g2=g2_use
+            mesh=mesh,
+            tilts=tilts,
+            tri_rows=tri_rows,
+            g0=g0_use,
+            g1=g1_use,
+            g2=g2_use,
+            positions=positions,
+            transport_model=transport_model,
         )
         # Keep using the standard divergence routine for gradients (g0,g1,g2)
         # which we already have in cached form.
@@ -456,9 +770,21 @@ def compute_energy_and_gradient_array_leaflet(
         _ = area_cache
     else:
         div_tri, _, g0, g1, g2 = p1_triangle_divergence(
-            positions=positions, tilts=tilts, tri_rows=tri_rows
+            mesh=mesh,
+            positions=positions,
+            tilts=tilts,
+            tri_rows=tri_rows,
+            transport_model=transport_model,
         )
     div_term = float(div_sign) * div_tri
+    div_term = _apply_inner_divergence_update_mode(
+        mesh,
+        global_params,
+        positions=positions,
+        tri_rows=tri_rows,
+        cache_tag=cache_tag,
+        div_term=div_term,
+    )
 
     vertex_areas_eff, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
         mesh,
@@ -499,13 +825,29 @@ def compute_energy_and_gradient_array_leaflet(
     base_term[~is_interior] = 0.0
     presets = _assume_J0_presets(global_params, cache_tag=cache_tag)
     if presets:
+        radius_max = _assume_J0_radius_max(global_params, cache_tag=cache_tag)
+        center_xy = _assume_J0_center_xy(global_params)
         rows = _collect_preset_rows(
-            mesh, presets=presets, cache_tag=cache_tag, index_map=index_map
+            mesh,
+            presets=presets,
+            cache_tag=cache_tag,
+            index_map=index_map,
+            radius_max=radius_max,
+            center_xy=center_xy,
         )
         if rows.size:
             base_term[rows] = 0.0
+    region_rows = _base_term_region_zero_rows(
+        mesh,
+        global_params,
+        cache_tag=cache_tag,
+        index_map=index_map,
+    )
+    if region_rows.size:
+        base_term[region_rows] = 0.0
 
-    term_tri = base_term[tri_rows] + div_term[:, None]
+    base_tri = base_term[tri_rows]
+    term_tri = base_tri + div_term[:, None]
     kappa_tri = kappa_arr[tri_rows]
     total_energy = float(
         0.5
@@ -552,11 +894,20 @@ def compute_energy_and_gradient_array_leaflet(
             if tilt_grad_arr.shape != (len(mesh.vertex_ids), 3):
                 raise ValueError("tilt_grad_arr must have shape (N_vertices, 3)")
 
-            dE_ddiv = float(div_sign) * (
-                (kappa_tri[:, 0] * term_tri[:, 0] * va0_eff)
-                + (kappa_tri[:, 1] * term_tri[:, 1] * va1_eff)
-                + (kappa_tri[:, 2] * term_tri[:, 2] * va2_eff)
+            dE_ddiv_base, mode_stats = _inner_bending_tilt_dE_ddiv(
+                mesh=mesh,
+                global_params=global_params,
+                cache_tag=cache_tag,
+                kappa_tri=kappa_tri,
+                base_tri=base_tri,
+                div_term=div_term,
+                va0_eff=va0_eff,
+                va1_eff=va1_eff,
+                va2_eff=va2_eff,
             )
+            if str(cache_tag) == "in":
+                setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
+            dE_ddiv = float(div_sign) * dE_ddiv_base
             factor = dE_ddiv[:, None]
 
             np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
@@ -796,11 +1147,20 @@ def compute_energy_and_gradient_array_leaflet(
         if tilt_grad_arr.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilt_grad_arr must have shape (N_vertices, 3)")
 
-        dE_ddiv = float(div_sign) * (
-            (kappa_tri[:, 0] * term_tri[:, 0] * va0_eff)
-            + (kappa_tri[:, 1] * term_tri[:, 1] * va1_eff)
-            + (kappa_tri[:, 2] * term_tri[:, 2] * va2_eff)
+        dE_ddiv_base, mode_stats = _inner_bending_tilt_dE_ddiv(
+            mesh=mesh,
+            global_params=global_params,
+            cache_tag=cache_tag,
+            kappa_tri=kappa_tri,
+            base_tri=base_tri,
+            div_term=div_term,
+            va0_eff=va0_eff,
+            va1_eff=va1_eff,
+            va2_eff=va2_eff,
         )
+        if str(cache_tag) == "in":
+            setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
+        dE_ddiv = float(div_sign) * dE_ddiv_base
         factor = dE_ddiv[:, None]
 
         np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
