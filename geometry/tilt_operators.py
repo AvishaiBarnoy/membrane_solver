@@ -31,6 +31,100 @@ import numpy as np
 
 from fortran_kernels.loader import get_tilt_divergence_kernel
 from geometry.entities import _fast_cross
+from geometry.tangent_transport import (
+    minimal_rotation_transport,
+    transport_vectors,
+    triangle_plane_transport_data,
+)
+
+
+def _resolve_transport_model(transport_model: str) -> str:
+    """Validate and normalize divergence transport model."""
+    mode = str(transport_model or "ambient_v1").strip().lower()
+    if mode not in {"ambient_v1", "connection_v1"}:
+        raise ValueError(
+            "tilt_transport_model must be 'ambient_v1' or 'connection_v1'."
+        )
+    return mode
+
+
+def _vertex_normals_from_positions(
+    *, positions: np.ndarray, tri_rows: np.ndarray
+) -> np.ndarray:
+    """Return area-weighted vertex normals from positions and triangle rows."""
+    normals = np.zeros_like(positions, dtype=float)
+    if tri_rows.size == 0:
+        return normals
+
+    v0 = positions[tri_rows[:, 0]]
+    v1 = positions[tri_rows[:, 1]]
+    v2 = positions[tri_rows[:, 2]]
+    tri_normals = _fast_cross(v1 - v0, v2 - v0)
+    np.add.at(normals, tri_rows[:, 0], tri_normals)
+    np.add.at(normals, tri_rows[:, 1], tri_normals)
+    np.add.at(normals, tri_rows[:, 2], tri_normals)
+    norms = np.linalg.norm(normals, axis=1)
+    good = norms > 1.0e-15
+    normals[good] /= norms[good][:, None]
+    return normals
+
+
+def _transport_tilts_to_triangle_plane(
+    *,
+    mesh=None,
+    positions: np.ndarray,
+    tilts: np.ndarray,
+    tri_rows: np.ndarray,
+    normals: np.ndarray | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return triangle-plane transported tilts and effective tilt gradients."""
+    tri_rows = np.asarray(tri_rows, dtype=np.int32)
+    if tri_rows.size == 0:
+        zeros = np.zeros((0, 3), dtype=float)
+        return zeros, zeros, zeros, zeros, zeros, zeros
+
+    if normals is None:
+        data = triangle_plane_transport_data(
+            mesh, positions, tri_rows, cache_tag="tilt_divergence"
+        )
+        r0 = data["r0"]
+        r1 = data["r1"]
+        r2 = data["r2"]
+        g0_eff_rot = data["r0_t"]
+        g1_eff_rot = data["r1_t"]
+        g2_eff_rot = data["r2_t"]
+    else:
+        normals = np.asarray(normals, dtype=float)
+        if normals.shape != positions.shape:
+            raise ValueError("normals must have shape (N_vertices, 3).")
+        v0 = positions[tri_rows[:, 0]]
+        v1 = positions[tri_rows[:, 1]]
+        v2 = positions[tri_rows[:, 2]]
+        tri_normals = _fast_cross(v1 - v0, v2 - v0)
+        tri_norms = np.linalg.norm(tri_normals, axis=1)
+        if np.any(tri_norms <= 1.0e-15):
+            raise ValueError(
+                "Degenerate triangle encountered in connection_v1 divergence."
+            )
+        tri_normals /= tri_norms[:, None]
+        n0 = normals[tri_rows[:, 0]]
+        n1 = normals[tri_rows[:, 1]]
+        n2 = normals[tri_rows[:, 2]]
+        r0 = minimal_rotation_transport(n0, tri_normals)
+        r1 = minimal_rotation_transport(n1, tri_normals)
+        r2 = minimal_rotation_transport(n2, tri_normals)
+        g0_eff_rot = np.swapaxes(r0, 1, 2)
+        g1_eff_rot = np.swapaxes(r1, 1, 2)
+        g2_eff_rot = np.swapaxes(r2, 1, 2)
+
+    t0 = tilts[tri_rows[:, 0]]
+    t1 = tilts[tri_rows[:, 1]]
+    t2 = tilts[tri_rows[:, 2]]
+
+    t0_tri = transport_vectors(t0, r0)
+    t1_tri = transport_vectors(t1, r1)
+    t2_tri = transport_vectors(t2, r2)
+    return t0_tri, t1_tri, t2_tri, g0_eff_rot, g1_eff_rot, g2_eff_rot
 
 
 def p1_triangle_shape_gradients(
@@ -96,9 +190,12 @@ def compute_p1_basis(
 
 def p1_triangle_divergence(
     *,
+    mesh=None,
     positions: np.ndarray,
     tilts: np.ndarray,
     tri_rows: np.ndarray,
+    transport_model: str = "ambient_v1",
+    normals: np.ndarray | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Compute triangle-wise P1 divergence of a vertex vector field.
 
@@ -120,13 +217,16 @@ def p1_triangle_divergence(
     g0, g1, g2:
         Arrays of shape ``(N_triangles, 3)`` with P1 basis gradients.
     """
+    transport_mode = _resolve_transport_model(transport_model)
     tri_rows = np.asarray(tri_rows)
     if tri_rows.size == 0:
         zeros1 = np.zeros(0, dtype=float)
         zeros3 = np.zeros((0, 3), dtype=float)
         return zeros1, zeros1, zeros3, zeros3, zeros3
 
-    kernel_spec = get_tilt_divergence_kernel()
+    kernel_spec = (
+        get_tilt_divergence_kernel() if transport_mode == "ambient_v1" else None
+    )
     if kernel_spec is not None:
         strict = os.environ.get("MEMBRANE_FORTRAN_STRICT_NOCOPY") in {
             "1",
@@ -203,25 +303,44 @@ def p1_triangle_divergence(
         positions=positions, tri_rows=tri_rows
     )
 
-    t0 = tilts[tri_rows[:, 0]]
-    t1 = tilts[tri_rows[:, 1]]
-    t2 = tilts[tri_rows[:, 2]]
+    if transport_mode == "ambient_v1":
+        t0 = tilts[tri_rows[:, 0]]
+        t1 = tilts[tri_rows[:, 1]]
+        t2 = tilts[tri_rows[:, 2]]
+        g0_eff = g0
+        g1_eff = g1
+        g2_eff = g2
+    else:
+        t0, t1, t2, r0_t, r1_t, r2_t = _transport_tilts_to_triangle_plane(
+            mesh=mesh,
+            positions=positions,
+            tilts=tilts,
+            tri_rows=tri_rows,
+            normals=normals,
+        )
+        g0_eff = np.einsum("nij,nj->ni", r0_t, g0)
+        g1_eff = np.einsum("nij,nj->ni", r1_t, g1)
+        g2_eff = np.einsum("nij,nj->ni", r2_t, g2)
 
     div_tri = (
         np.einsum("ij,ij->i", t0, g0)
         + np.einsum("ij,ij->i", t1, g1)
         + np.einsum("ij,ij->i", t2, g2)
     )
-    return div_tri, area, g0, g1, g2
+    return div_tri, area, g0_eff, g1_eff, g2_eff
 
 
 def p1_triangle_divergence_from_shape_gradients(
     *,
+    mesh=None,
     tilts: np.ndarray,
     tri_rows: np.ndarray,
     g0: np.ndarray,
     g1: np.ndarray,
     g2: np.ndarray,
+    positions: np.ndarray | None = None,
+    transport_model: str = "ambient_v1",
+    normals: np.ndarray | None = None,
 ) -> np.ndarray:
     """Compute triangle-wise P1 divergence using precomputed basis gradients.
 
@@ -243,9 +362,21 @@ def p1_triangle_divergence_from_shape_gradients(
     if tri_rows.size == 0:
         return np.zeros(0, dtype=float)
 
-    t0 = tilts[tri_rows[:, 0]]
-    t1 = tilts[tri_rows[:, 1]]
-    t2 = tilts[tri_rows[:, 2]]
+    transport_mode = _resolve_transport_model(transport_model)
+    if transport_mode == "ambient_v1":
+        t0 = tilts[tri_rows[:, 0]]
+        t1 = tilts[tri_rows[:, 1]]
+        t2 = tilts[tri_rows[:, 2]]
+    else:
+        if positions is None:
+            raise ValueError("positions are required for connection_v1 divergence.")
+        t0, t1, t2, _r0_t, _r1_t, _r2_t = _transport_tilts_to_triangle_plane(
+            mesh=mesh,
+            positions=np.asarray(positions, dtype=float),
+            tilts=tilts,
+            tri_rows=tri_rows,
+            normals=normals,
+        )
 
     return (
         np.einsum("ij,ij->i", t0, g0)
@@ -256,24 +387,39 @@ def p1_triangle_divergence_from_shape_gradients(
 
 def compute_divergence_from_basis(
     *,
+    mesh=None,
     tilts: np.ndarray,
     tri_rows: np.ndarray,
     g0: np.ndarray,
     g1: np.ndarray,
     g2: np.ndarray,
+    positions: np.ndarray | None = None,
+    transport_model: str = "ambient_v1",
+    normals: np.ndarray | None = None,
 ) -> np.ndarray:
     """Compute triangle-wise P1 divergence from precomputed basis gradients."""
     return p1_triangle_divergence_from_shape_gradients(
-        tilts=tilts, tri_rows=tri_rows, g0=g0, g1=g1, g2=g2
+        tilts=tilts,
+        mesh=mesh,
+        tri_rows=tri_rows,
+        g0=g0,
+        g1=g1,
+        g2=g2,
+        positions=positions,
+        transport_model=transport_model,
+        normals=normals,
     )
 
 
 def p1_vertex_divergence(
     *,
     n_vertices: int,
+    mesh=None,
     positions: np.ndarray,
     tilts: np.ndarray,
     tri_rows: np.ndarray,
+    transport_model: str = "ambient_v1",
+    normals: np.ndarray | None = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Return a barycentric-area-averaged vertex divergence field.
 
@@ -293,7 +439,12 @@ def p1_vertex_divergence(
         return np.zeros(0, dtype=float), np.zeros(0, dtype=float)
 
     div_tri, area, *_ = p1_triangle_divergence(
-        positions=positions, tilts=tilts, tri_rows=tri_rows
+        positions=positions,
+        mesh=mesh,
+        tilts=tilts,
+        tri_rows=tri_rows,
+        transport_model=transport_model,
+        normals=normals,
     )
     if div_tri.size == 0:
         return np.zeros(n_vertices, dtype=float), np.zeros(n_vertices, dtype=float)
