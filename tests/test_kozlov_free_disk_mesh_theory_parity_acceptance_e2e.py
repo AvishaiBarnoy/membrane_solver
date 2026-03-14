@@ -30,16 +30,24 @@ def _build_minimizer(mesh) -> Minimizer:
     )
 
 
-@pytest.mark.e2e
-def test_kozlov_named_mesh_matches_curved_shared_rim_protocol() -> None:
-    """Acceptance: the named free-disk mesh reproduces the curved near-rim split."""
+@pytest.fixture(scope="module")
+def _named_mesh_protocol_result():
+    """Cache the named-mesh curved shared-rim protocol run for this file."""
     mesh_path = (
         Path(__file__).resolve().parent.parent
         / "meshes"
         / "caveolin"
         / "kozlov_1disk_3d_tensionless_single_leaflet_profile_hard_rim_R12_free_disk.yaml"
     )
-    mesh, theta_b = run_free_disk_curved_bilayer_protocol(curved_path=mesh_path)
+    return run_free_disk_curved_bilayer_protocol(curved_path=mesh_path)
+
+
+@pytest.mark.e2e
+def test_kozlov_named_mesh_matches_curved_shared_rim_protocol(
+    _named_mesh_protocol_result,
+) -> None:
+    """Acceptance: the named free-disk mesh reproduces the curved near-rim split."""
+    mesh, theta_b = _named_mesh_protocol_result
     metrics = measure_free_disk_curved_bilayer_near_rim(mesh, theta_b=theta_b)
     target = 0.5 * theta_b
 
@@ -52,15 +60,11 @@ def test_kozlov_named_mesh_matches_curved_shared_rim_protocol() -> None:
 
 
 @pytest.mark.e2e
-def test_kozlov_named_mesh_has_active_outer_relaxation_channels() -> None:
+def test_kozlov_named_mesh_has_active_outer_relaxation_channels(
+    _named_mesh_protocol_result,
+) -> None:
     """Acceptance: the named free-disk mesh activates curvature and outer tilt."""
-    mesh_path = (
-        Path(__file__).resolve().parent.parent
-        / "meshes"
-        / "caveolin"
-        / "kozlov_1disk_3d_tensionless_single_leaflet_profile_hard_rim_R12_free_disk.yaml"
-    )
-    mesh, theta_b = run_free_disk_curved_bilayer_protocol(curved_path=mesh_path)
+    mesh, theta_b = _named_mesh_protocol_result
     minim = _build_minimizer(mesh)
     breakdown = minim.compute_energy_breakdown()
     metrics = measure_free_disk_curved_bilayer_near_rim(mesh, theta_b=theta_b)
