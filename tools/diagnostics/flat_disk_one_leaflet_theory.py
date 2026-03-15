@@ -290,6 +290,96 @@ def compute_flat_disk_kh_physical_theory(
     )
 
 
+def solve_kh_outer_finite_bvp_coefficients(
+    theta: float,
+    *,
+    radius: float,
+    lambda_value: float,
+    outer_r_max: float,
+) -> tuple[float, float]:
+    """Solve finite-domain KH outer-profile coefficients.
+
+    Solves for ``a`` and ``b`` in:
+      t(r) = a I1(r/lambda) + b K1(r/lambda)
+    under Dirichlet boundary conditions:
+      t(radius) = theta
+      t(outer_r_max) = 0
+    """
+    radius_f = float(radius)
+    lam = float(lambda_value)
+    r_max = float(outer_r_max)
+    if radius_f <= 0.0:
+        raise ValueError("radius must be > 0 for finite-BVP solve.")
+    if lam <= 0.0:
+        raise ValueError("lambda_value must be > 0 for finite-BVP solve.")
+    if r_max <= radius_f:
+        raise ValueError(
+            "outer_r_max must be > radius for finite-BVP solve "
+            f"(got outer_r_max={r_max:.12g}, radius={radius_f:.12g})."
+        )
+
+    x_r = float(radius_f / lam)
+    x_m = float(r_max / lam)
+    i1_r = float(special.iv(1, x_r))
+    k1_r = float(special.kv(1, x_r))
+    i1_m = float(special.iv(1, x_m))
+    k1_m = float(special.kv(1, x_m))
+    det = float((i1_r * k1_m) - (k1_r * i1_m))
+    if abs(det) <= 1e-18:
+        raise ValueError(
+            "Degenerate finite-BVP outer KH solve: "
+            f"det={det:.12g}, radius={radius_f:.12g}, "
+            f"lambda={lam:.12g}, outer_r_max={r_max:.12g}."
+        )
+
+    theta_f = float(theta)
+    coeff_i1 = float(theta_f * k1_m / det)
+    coeff_k1 = float(-theta_f * i1_m / det)
+    return coeff_i1, coeff_k1
+
+
+def build_kh_outer_finite_bvp_profile(
+    theta: float,
+    *,
+    radius: float,
+    lambda_value: float,
+    outer_r_max: float,
+):
+    """Build finite-domain KH outer-profile evaluators for ``t`` and ``div t``."""
+    coeff_i1, coeff_k1 = solve_kh_outer_finite_bvp_coefficients(
+        theta=float(theta),
+        radius=float(radius),
+        lambda_value=float(lambda_value),
+        outer_r_max=float(outer_r_max),
+    )
+    lam = float(lambda_value)
+
+    def _t_outer(rr: float) -> float:
+        x = float(rr) / max(lam, 1e-18)
+        return float(
+            (coeff_i1 * float(special.iv(1, x))) + (coeff_k1 * float(special.kv(1, x)))
+        )
+
+    def _div_outer(rr: float) -> float:
+        x = float(rr) / max(lam, 1e-18)
+        return float(
+            (coeff_i1 / lam) * float(special.iv(0, x))
+            - (coeff_k1 / lam) * float(special.kv(0, x))
+        )
+
+    return (
+        _t_outer,
+        _div_outer,
+        {
+            "coeff_i1": float(coeff_i1),
+            "coeff_k1": float(coeff_k1),
+            "outer_r_max": float(outer_r_max),
+            "radius": float(radius),
+            "lambda_value": float(lambda_value),
+        },
+    )
+
+
 def solver_mapping_from_theory(
     params: FlatDiskTheoryParams, *, parameterization: str = "legacy"
 ) -> dict[str, float]:
@@ -365,10 +455,12 @@ __all__ = [
     "FlatDiskTheoryParams",
     "FlatDiskTheoryResult",
     "QuadraticFitResult",
+    "build_kh_outer_finite_bvp_profile",
     "compute_flat_disk_theory",
     "compute_flat_disk_kh_physical_theory",
     "physical_to_dimensionless_theory_params",
     "quadratic_min_from_scan",
+    "solve_kh_outer_finite_bvp_coefficients",
     "solver_mapping_from_theory",
     "tex_reference_params",
     "validate_theory_params",
