@@ -916,7 +916,7 @@ def _run_single_level(
     outer_local_vertex_average_rmax_lambda: float,
     radial_projection_diagnostic: bool,
     partition_mode: str,
-    ratio_version: str,
+    ratio_version: str = "v1",
 ) -> dict[str, Any]:
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
