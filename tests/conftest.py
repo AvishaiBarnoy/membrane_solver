@@ -7,8 +7,28 @@ We keep the codebase's existing flat `tests/` layout, but categorize tests into
 from __future__ import annotations
 
 import pathlib
+import sys
 
 import pytest
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from tools.diagnostics.free_disk_profile_protocol import (
+    run_free_disk_curved_bilayer_protocol,
+    run_free_disk_two_stage_profile_protocol,
+)
+
+
+@pytest.fixture(scope="session")
+def canonical_curved_protocol_result():
+    """Cache the canonical curved shared-rim protocol run across test files."""
+    return run_free_disk_curved_bilayer_protocol()
+
+
+@pytest.fixture(scope="session")
+def canonical_profile_protocol_result():
+    """Cache the two-stage profile protocol run across test files."""
+    return run_free_disk_two_stage_profile_protocol()
 
 
 def pytest_collection_modifyitems(

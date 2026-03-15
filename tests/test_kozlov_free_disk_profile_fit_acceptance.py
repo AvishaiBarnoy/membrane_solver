@@ -6,14 +6,13 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.free_disk_profile_fits import analyze_mesh_profiles  # noqa: E402
-from tools.diagnostics.free_disk_profile_protocol import (  # noqa: E402
-    run_free_disk_two_stage_profile_protocol,
-)
 
 
 @pytest.mark.acceptance
-def test_free_disk_two_stage_protocol_produces_fittable_radial_profiles() -> None:
-    mesh, theta_b = run_free_disk_two_stage_profile_protocol()
+def test_free_disk_two_stage_protocol_produces_fittable_radial_profiles(
+    canonical_profile_protocol_result,
+) -> None:
+    mesh, theta_b = canonical_profile_protocol_result
     assert theta_b > 0.0
 
     report = analyze_mesh_profiles(mesh, bins=16, flip_tilt_out=True)
