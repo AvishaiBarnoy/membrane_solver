@@ -757,6 +757,98 @@ def _fit_outer_radial_slope_samples(
     }
 
 
+def _boundary_at_R_parity_metrics(
+    mesh,
+    *,
+    theory_theta_value: float | None,
+    outer_slope_estimator: str | None = None,
+) -> dict[str, Any]:
+    """Compute kink-angle and leaflet-tilt parity at the disk boundary r=R."""
+    from modules.constraints.local_interface_shells import (
+        build_local_interface_shell_data,
+    )
+
+    positions = mesh.positions_view()
+    shell_data = build_local_interface_shell_data(mesh, positions=positions)
+    disk_rows = shell_data.disk_rows
+    rim_rows = shell_data.rim_rows
+    outer_rows = shell_data.outer_rows
+    rim_rows_matched = shell_data.rim_rows_matched
+    disk_rows_matched = shell_data.disk_rows_matched
+    r_hat_rim = shell_data.rim_r_hat
+    r_hat_disk = shell_data.disk_r_hat
+    kink_samples, slope_meta = _fit_outer_radial_slope_samples(
+        positions,
+        rim_rows_matched=rim_rows_matched,
+        shell_count=3,
+        estimator=str(
+            outer_slope_estimator
+            or mesh.global_parameters.get("boundary_outer_slope_estimator")
+            or "outer_linear_fit"
+        ),
+    )
+    tilt_in_rim = np.einsum(
+        "ij,ij->i", mesh.tilts_in_view()[rim_rows_matched], r_hat_rim
+    )
+    tilt_out_rim = np.einsum(
+        "ij,ij->i", mesh.tilts_out_view()[rim_rows_matched], r_hat_rim
+    )
+    tilt_in_disk = np.einsum(
+        "ij,ij->i", mesh.tilts_in_view()[disk_rows_matched], r_hat_disk
+    )
+
+    out: dict[str, Any] = {
+        "sample_count": int(outer_rows.size),
+        "theory_model": "small_slope_half_split_proxy",
+        "disk_source": "disk_boundary_group",
+        "rim_source": "first_shell_outside_disk",
+        "outer_source": "second_shell_outside_disk",
+        "disk_count": int(disk_rows.size),
+        "rim_count": int(rim_rows.size),
+        "outer_count": int(outer_rows.size),
+        "disk_radius": float(shell_data.disk_radius),
+        "rim_radius": float(shell_data.rim_radius),
+        "outer_radius": float(shell_data.outer_radius),
+        "outer_slope_estimator": str(slope_meta["outer_slope_estimator"]),
+        "outer_slope_shell_count": int(slope_meta["outer_slope_shell_count"]),
+        "outer_slope_shell_radii": list(slope_meta["outer_slope_shell_radii"]),
+        "kink_angle_mesh_median": float(np.median(kink_samples)),
+        "kink_angle_mesh_mean": float(np.mean(kink_samples)),
+        "tilt_in_mesh_median": float(np.median(tilt_in_rim)),
+        "tilt_out_mesh_median": float(np.median(tilt_out_rim)),
+        "tilt_in_disk_mesh_median": float(np.median(tilt_in_disk)),
+        "tilt_out_minus_kink_mesh_median": float(
+            np.median(tilt_out_rim - kink_samples)
+        ),
+        "tilt_in_plus_kink_minus_disk_mesh_median": float(
+            np.median(tilt_in_rim + kink_samples - tilt_in_disk)
+        ),
+    }
+
+    theory_theta = None if theory_theta_value is None else float(theory_theta_value)
+    if theory_theta is None or not np.isfinite(theory_theta):
+        out["available"] = False
+        out["reason"] = "non_finite_theory_theta"
+        return out
+
+    half_theta = 0.5 * theory_theta
+    out["available"] = True
+    out["reason"] = "ok"
+    out["kink_angle_theory"] = float(half_theta)
+    out["tilt_in_theory"] = float(half_theta)
+    out["tilt_out_theory"] = float(half_theta)
+    out["kink_angle_factor"] = float(
+        _factor_difference(out["kink_angle_mesh_median"], half_theta)
+    )
+    out["tilt_in_factor"] = float(
+        _factor_difference(out["tilt_in_mesh_median"], half_theta)
+    )
+    out["tilt_out_factor"] = float(
+        _factor_difference(out["tilt_out_mesh_median"], half_theta)
+    )
+    return out
+
+
 def _configure_benchmark_mesh(
     mesh,
     *,
