@@ -158,42 +158,37 @@ def _triangle_radial_interval_fraction(
     return frac
 
 
-def _mesh_internal_region_split(
+def _mesh_internal_triangle_terms(
     mesh,
     *,
     smoothness_model: str,
-    radius: float,
-) -> dict[str, float]:
-    """Split mesh internal energy into disk (r<R) and outer (r>R) regions."""
+) -> dict[str, Any]:
+    """Return shared per-triangle internal energy terms for region/band diagnostics."""
     from modules.energy import tilt_smoothness as tilt_smoothness_base
 
     gp = mesh.global_parameters
     positions = mesh.positions_view()
     tilts_in = mesh.tilts_in_view()
-
     area, g0, g1, g2, tri_rows = mesh.p1_triangle_shape_gradient_cache(
         positions=positions
     )
     if tri_rows is None or len(tri_rows) == 0:
         return {
-            "mesh_internal_disk": 0.0,
-            "mesh_internal_outer": 0.0,
-            "mesh_internal_total_from_regions": 0.0,
-            "mesh_tilt_disk": 0.0,
-            "mesh_tilt_outer": 0.0,
-            "mesh_smooth_disk": 0.0,
-            "mesh_smooth_outer": 0.0,
+            "positions": positions,
+            "tri_rows": np.zeros((0, 3), dtype=int),
+            "tilt_tri": np.zeros(0, dtype=float),
+            "smooth_tri": np.zeros(0, dtype=float),
+            "internal_tri": np.zeros(0, dtype=float),
         }
 
-    disk_frac = _triangle_inside_fraction(positions, tri_rows, radius=float(radius))
-    outer_frac = 1.0 - disk_frac
-
+    tri_rows_arr = np.asarray(tri_rows, dtype=int)
     k_tilt = float(gp.get("tilt_modulus_in") or 0.0)
     tilt_sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
-    tri_tilt_sq_sum = tilt_sq[tri_rows].sum(axis=1)
+    tri_tilt_sq_sum = tilt_sq[tri_rows_arr].sum(axis=1)
     tilt_tri = 0.5 * k_tilt * area * (tri_tilt_sq_sum / 3.0)
 
-    if str(smoothness_model) == "splay_twist":
+    mode = str(smoothness_model)
+    if mode == "splay_twist":
         k_splay = gp.get("tilt_splay_modulus_in")
         if k_splay is None:
             k_splay = gp.get("bending_modulus_in")
@@ -201,22 +196,19 @@ def _mesh_internal_region_split(
             k_splay = gp.get("bending_modulus")
         k_splay_f = float(k_splay or 0.0)
         k_twist_f = float(gp.get("tilt_twist_modulus_in") or 0.0)
-
-        t0 = tilts_in[tri_rows[:, 0]]
-        t1 = tilts_in[tri_rows[:, 1]]
-        t2 = tilts_in[tri_rows[:, 2]]
+        t0 = tilts_in[tri_rows_arr[:, 0]]
+        t1 = tilts_in[tri_rows_arr[:, 1]]
+        t2 = tilts_in[tri_rows_arr[:, 2]]
         div_tri = (
             np.einsum("ij,ij->i", t0, g0)
             + np.einsum("ij,ij->i", t1, g1)
             + np.einsum("ij,ij->i", t2, g2)
         )
-
         n = mesh.triangle_normals(positions=positions)
         n_norm = np.linalg.norm(n, axis=1)
         n_hat = np.zeros_like(n)
         good = n_norm > 1e-20
         n_hat[good] = n[good] / n_norm[good, None]
-
         curl_vec = np.cross(g0, t0) + np.cross(g1, t1) + np.cross(g2, t2)
         curl_n = np.einsum("ij,ij->i", curl_vec, n_hat)
         smooth_tri = (
@@ -224,7 +216,7 @@ def _mesh_internal_region_split(
             * area
             * ((k_splay_f * div_tri * div_tri) + (k_twist_f * curl_n * curl_n))
         )
-    elif str(smoothness_model) == "dirichlet":
+    elif mode == "dirichlet":
         k_smooth = gp.get("bending_modulus_in")
         if k_smooth is None:
             k_smooth = gp.get("bending_modulus")
@@ -236,18 +228,18 @@ def _mesh_internal_region_split(
         )
         if smooth_tri_rows is None:
             smooth_tri = np.zeros_like(tilt_tri)
-            smooth_frac = np.zeros_like(smooth_tri)
         else:
+            rows = np.asarray(smooth_tri_rows, dtype=int)
             c0 = weights[:, 0]
             c1 = weights[:, 1]
             c2 = weights[:, 2]
-            t0 = tilts_in[smooth_tri_rows[:, 0]]
-            t1 = tilts_in[smooth_tri_rows[:, 1]]
-            t2 = tilts_in[smooth_tri_rows[:, 2]]
+            t0 = tilts_in[rows[:, 0]]
+            t1 = tilts_in[rows[:, 1]]
+            t2 = tilts_in[rows[:, 2]]
             d12 = t1 - t2
             d20 = t2 - t0
             d01 = t0 - t1
-            smooth_tri = (
+            smooth_raw = (
                 0.25
                 * k_smooth_f
                 * (
@@ -256,27 +248,62 @@ def _mesh_internal_region_split(
                     + c2 * np.einsum("ij,ij->i", d01, d01)
                 )
             )
-            smooth_frac = _triangle_inside_fraction(
-                positions, smooth_tri_rows, radius=float(radius)
-            )
-
-        smooth_disk = float(np.sum(smooth_tri * smooth_frac))
-        smooth_outer = float(np.sum(smooth_tri * (1.0 - smooth_frac)))
-        tilt_disk = float(np.sum(tilt_tri * disk_frac))
-        tilt_outer = float(np.sum(tilt_tri * outer_frac))
-        return {
-            "mesh_internal_disk": float(tilt_disk + smooth_disk),
-            "mesh_internal_outer": float(tilt_outer + smooth_outer),
-            "mesh_internal_total_from_regions": float(
-                tilt_disk + smooth_disk + tilt_outer + smooth_outer
-            ),
-            "mesh_tilt_disk": tilt_disk,
-            "mesh_tilt_outer": tilt_outer,
-            "mesh_smooth_disk": smooth_disk,
-            "mesh_smooth_outer": smooth_outer,
-        }
+            if rows.shape == tri_rows_arr.shape and np.array_equal(rows, tri_rows_arr):
+                smooth_tri = smooth_raw
+            else:
+                smooth_tri = np.zeros(tri_rows_arr.shape[0], dtype=float)
+                tri_lookup = {
+                    tuple(sorted(int(v) for v in tri.tolist())): idx
+                    for idx, tri in enumerate(tri_rows_arr)
+                }
+                for row_vals, value in zip(rows, smooth_raw):
+                    idx = tri_lookup.get(
+                        tuple(sorted(int(v) for v in row_vals.tolist()))
+                    )
+                    if idx is not None:
+                        smooth_tri[idx] += float(value)
     else:
         raise ValueError("smoothness_model must be 'dirichlet' or 'splay_twist'.")
+
+    return {
+        "positions": positions,
+        "tri_rows": tri_rows_arr,
+        "tilt_tri": np.asarray(tilt_tri, dtype=float),
+        "smooth_tri": np.asarray(smooth_tri, dtype=float),
+        "internal_tri": np.asarray(tilt_tri + smooth_tri, dtype=float),
+    }
+
+
+def _mesh_internal_region_split(
+    mesh,
+    *,
+    smoothness_model: str,
+    radius: float,
+    triangle_terms: dict[str, Any] | None = None,
+) -> dict[str, float]:
+    """Split mesh internal energy into disk (r<R) and outer (r>R) regions."""
+    terms = (
+        _mesh_internal_triangle_terms(mesh, smoothness_model=smoothness_model)
+        if triangle_terms is None
+        else triangle_terms
+    )
+    tri_rows = np.asarray(terms["tri_rows"], dtype=int)
+    if tri_rows.size == 0:
+        return {
+            "mesh_internal_disk": 0.0,
+            "mesh_internal_outer": 0.0,
+            "mesh_internal_total_from_regions": 0.0,
+            "mesh_tilt_disk": 0.0,
+            "mesh_tilt_outer": 0.0,
+            "mesh_smooth_disk": 0.0,
+            "mesh_smooth_outer": 0.0,
+        }
+
+    positions = np.asarray(terms["positions"], dtype=float)
+    tilt_tri = np.asarray(terms["tilt_tri"], dtype=float)
+    smooth_tri = np.asarray(terms["smooth_tri"], dtype=float)
+    disk_frac = _triangle_inside_fraction(positions, tri_rows, radius=float(radius))
+    outer_frac = 1.0 - disk_frac
 
     tilt_disk = float(np.sum(tilt_tri * disk_frac))
     tilt_outer = float(np.sum(tilt_tri * outer_frac))
@@ -304,17 +331,17 @@ def _mesh_internal_band_split(
     rim_half_width_lambda: float = 1.0,
     outer_near_width_lambda: float = 4.0,
     partition_mode: str = "centroid",
+    triangle_terms: dict[str, Any] | None = None,
 ) -> dict[str, float]:
     """Split mesh internal energy into radial bands and report rim-band resolution."""
-    from modules.energy import tilt_smoothness as tilt_smoothness_base
-
-    gp = mesh.global_parameters
-    positions = mesh.positions_view()
-    tilts_in = mesh.tilts_in_view()
-    area, g0, g1, g2, tri_rows = mesh.p1_triangle_shape_gradient_cache(
-        positions=positions
+    terms = (
+        _mesh_internal_triangle_terms(mesh, smoothness_model=smoothness_model)
+        if triangle_terms is None
+        else triangle_terms
     )
-    if tri_rows is None or len(tri_rows) == 0:
+    positions = np.asarray(terms["positions"], dtype=float)
+    tri_rows = np.asarray(terms["tri_rows"], dtype=int)
+    if tri_rows.size == 0:
         return {
             "mesh_internal_disk_core": 0.0,
             "mesh_internal_rim_band": 0.0,
@@ -323,75 +350,9 @@ def _mesh_internal_band_split(
             "rim_band_tri_count": 0.0,
             "rim_band_h_over_lambda_median": float("nan"),
         }
-
-    k_tilt = float(gp.get("tilt_modulus_in") or 0.0)
-    tilt_sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
-    tri_tilt_sq_sum = tilt_sq[tri_rows].sum(axis=1)
-    tilt_tri = 0.5 * k_tilt * area * (tri_tilt_sq_sum / 3.0)
-
-    if str(smoothness_model) == "splay_twist":
-        k_splay = gp.get("tilt_splay_modulus_in")
-        if k_splay is None:
-            k_splay = gp.get("bending_modulus_in")
-        if k_splay is None:
-            k_splay = gp.get("bending_modulus")
-        k_splay_f = float(k_splay or 0.0)
-        k_twist_f = float(gp.get("tilt_twist_modulus_in") or 0.0)
-        t0 = tilts_in[tri_rows[:, 0]]
-        t1 = tilts_in[tri_rows[:, 1]]
-        t2 = tilts_in[tri_rows[:, 2]]
-        div_tri = (
-            np.einsum("ij,ij->i", t0, g0)
-            + np.einsum("ij,ij->i", t1, g1)
-            + np.einsum("ij,ij->i", t2, g2)
-        )
-        n = mesh.triangle_normals(positions=positions)
-        n_norm = np.linalg.norm(n, axis=1)
-        n_hat = np.zeros_like(n)
-        good = n_norm > 1e-20
-        n_hat[good] = n[good] / n_norm[good, None]
-        curl_vec = np.cross(g0, t0) + np.cross(g1, t1) + np.cross(g2, t2)
-        curl_n = np.einsum("ij,ij->i", curl_vec, n_hat)
-        smooth_tri = (
-            0.5
-            * area
-            * ((k_splay_f * div_tri * div_tri) + (k_twist_f * curl_n * curl_n))
-        )
-    elif str(smoothness_model) == "dirichlet":
-        k_smooth = gp.get("bending_modulus_in")
-        if k_smooth is None:
-            k_smooth = gp.get("bending_modulus")
-        k_smooth_f = float(k_smooth or 0.0)
-        weights, smooth_tri_rows = tilt_smoothness_base._get_weights_and_tris(
-            mesh,
-            positions=positions,
-            index_map=mesh.vertex_index_to_row,
-        )
-        if smooth_tri_rows is None:
-            smooth_tri = np.zeros_like(tilt_tri)
-        else:
-            c0 = weights[:, 0]
-            c1 = weights[:, 1]
-            c2 = weights[:, 2]
-            t0 = tilts_in[smooth_tri_rows[:, 0]]
-            t1 = tilts_in[smooth_tri_rows[:, 1]]
-            t2 = tilts_in[smooth_tri_rows[:, 2]]
-            d12 = t1 - t2
-            d20 = t2 - t0
-            d01 = t0 - t1
-            smooth_tri = (
-                0.25
-                * k_smooth_f
-                * (
-                    c0 * np.einsum("ij,ij->i", d12, d12)
-                    + c1 * np.einsum("ij,ij->i", d20, d20)
-                    + c2 * np.einsum("ij,ij->i", d01, d01)
-                )
-            )
-    else:
-        raise ValueError("smoothness_model must be 'dirichlet' or 'splay_twist'.")
-
-    internal_tri = tilt_tri + smooth_tri
+    tilt_tri = np.asarray(terms["tilt_tri"], dtype=float)
+    smooth_tri = np.asarray(terms["smooth_tri"], dtype=float)
+    internal_tri = np.asarray(terms["internal_tri"], dtype=float)
     rim_w = float(rim_half_width_lambda) * float(lambda_value)
     outer_near_w = float(outer_near_width_lambda) * float(lambda_value)
     partition = str(partition_mode).strip().lower()
