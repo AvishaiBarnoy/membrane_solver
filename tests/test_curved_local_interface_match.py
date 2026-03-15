@@ -40,6 +40,64 @@ def test_curved_local_interface_data_uses_shared_shell_builder() -> None:
     assert data["rim_rows"].shape == data["outer_rows"].shape
 
 
+def test_curved_local_interface_enforce_tilt_constraint_matches_in_plane_average() -> (
+    None
+):
+    mesh = _load_mesh()
+    positions = mesh.positions_view()
+    data = curved_local_interface_match._build_local_interface_data(
+        mesh,
+        mesh.global_parameters,
+        positions,
+    )
+    assert data is not None
+
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_out = mesh.tilts_out_view().copy(order="F")
+    tilts_in[:] = 0.0
+    tilts_out[:] = 0.0
+
+    for idx, rim_row in enumerate(data["rim_rows"]):
+        disk_row = int(data["disk_rows"][idx])
+        rim_row = int(rim_row)
+        u_vec = data["basis_u"][idx]
+        v_vec = data["basis_v"][idx]
+        tilts_in[disk_row] = 0.8 * u_vec - 0.2 * v_vec
+        tilts_in[rim_row] = -0.4 * u_vec + 0.6 * v_vec
+        tilts_out[disk_row] = 0.3 * u_vec + 0.9 * v_vec
+        tilts_out[rim_row] = -0.1 * u_vec - 0.5 * v_vec
+
+    mesh.set_tilts_in_from_array(tilts_in)
+    mesh.set_tilts_out_from_array(tilts_out)
+
+    curved_local_interface_match.enforce_tilt_constraint(
+        mesh,
+        global_params=mesh.global_parameters,
+    )
+
+    tilts_in = mesh.tilts_in_view()
+    tilts_out = mesh.tilts_out_view()
+    for idx, rim_row in enumerate(data["rim_rows"]):
+        disk_row = int(data["disk_rows"][idx])
+        rim_row = int(rim_row)
+        u_vec = data["basis_u"][idx]
+        v_vec = data["basis_v"][idx]
+        in_disk = np.array(
+            [np.dot(tilts_in[disk_row], u_vec), np.dot(tilts_in[disk_row], v_vec)]
+        )
+        in_rim = np.array(
+            [np.dot(tilts_in[rim_row], u_vec), np.dot(tilts_in[rim_row], v_vec)]
+        )
+        out_disk = np.array(
+            [np.dot(tilts_out[disk_row], u_vec), np.dot(tilts_out[disk_row], v_vec)]
+        )
+        out_rim = np.array(
+            [np.dot(tilts_out[rim_row], u_vec), np.dot(tilts_out[rim_row], v_vec)]
+        )
+        assert in_disk == pytest.approx(in_rim, abs=1.0e-9)
+        assert out_disk == pytest.approx(out_rim, abs=1.0e-9)
+
+
 def test_curved_local_interface_dense_tilt_gradients_match_sparse_rows() -> None:
     mesh = _load_mesh()
     positions = mesh.positions_view()

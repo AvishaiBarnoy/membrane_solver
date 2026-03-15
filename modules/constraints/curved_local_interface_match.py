@@ -157,8 +157,91 @@ def constraint_gradients_tilt_array(
     return constraints or None
 
 
+def _project_pair(
+    *,
+    disk_vec: np.ndarray,
+    rim_vec: np.ndarray,
+    basis_u: np.ndarray,
+    basis_v: np.ndarray,
+    disk_fixed: bool,
+    rim_fixed: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Project one matched pair onto the local in-plane continuity manifold."""
+    coeff_disk = np.array(
+        [float(np.dot(disk_vec, basis_u)), float(np.dot(disk_vec, basis_v))],
+        dtype=float,
+    )
+    coeff_rim = np.array(
+        [float(np.dot(rim_vec, basis_u)), float(np.dot(rim_vec, basis_v))],
+        dtype=float,
+    )
+
+    if disk_fixed and rim_fixed:
+        target = coeff_rim
+    elif disk_fixed:
+        target = coeff_disk
+    elif rim_fixed:
+        target = coeff_rim
+    else:
+        target = 0.5 * (coeff_disk + coeff_rim)
+
+    def _apply(vec: np.ndarray, coeff_now: np.ndarray) -> np.ndarray:
+        delta = (target[0] - coeff_now[0]) * basis_u + (
+            target[1] - coeff_now[1]
+        ) * basis_v
+        return vec + delta
+
+    new_disk = disk_vec if disk_fixed else _apply(disk_vec, coeff_disk)
+    new_rim = rim_vec if rim_fixed else _apply(rim_vec, coeff_rim)
+    return new_disk, new_rim
+
+
+def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
+    """Project both leaflet tilt fields onto local in-plane continuity."""
+    positions = mesh.positions_view()
+    data = _build_local_interface_data(mesh, global_params, positions)
+    if data is None:
+        return
+
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_out = mesh.tilts_out_view().copy(order="F")
+    for idx, rim_row in enumerate(data["rim_rows"]):
+        disk_row = int(data["disk_rows"][idx])
+        rim_row = int(rim_row)
+        disk_vid = int(mesh.vertex_ids[disk_row])
+        rim_vid = int(mesh.vertex_ids[rim_row])
+        basis_u = data["basis_u"][idx]
+        basis_v = data["basis_v"][idx]
+
+        new_disk_in, new_rim_in = _project_pair(
+            disk_vec=tilts_in[disk_row],
+            rim_vec=tilts_in[rim_row],
+            basis_u=basis_u,
+            basis_v=basis_v,
+            disk_fixed=bool(getattr(mesh.vertices[disk_vid], "tilt_fixed_in", False)),
+            rim_fixed=bool(getattr(mesh.vertices[rim_vid], "tilt_fixed_in", False)),
+        )
+        tilts_in[disk_row] = new_disk_in
+        tilts_in[rim_row] = new_rim_in
+
+        new_disk_out, new_rim_out = _project_pair(
+            disk_vec=tilts_out[disk_row],
+            rim_vec=tilts_out[rim_row],
+            basis_u=basis_u,
+            basis_v=basis_v,
+            disk_fixed=bool(getattr(mesh.vertices[disk_vid], "tilt_fixed_out", False)),
+            rim_fixed=bool(getattr(mesh.vertices[rim_vid], "tilt_fixed_out", False)),
+        )
+        tilts_out[disk_row] = new_disk_out
+        tilts_out[rim_row] = new_rim_out
+
+    mesh.set_tilts_in_from_array(tilts_in)
+    mesh.set_tilts_out_from_array(tilts_out)
+
+
 __all__ = [
     "_build_local_interface_data",
     "constraint_gradients_tilt_array",
     "constraint_gradients_tilt_rows_array",
+    "enforce_tilt_constraint",
 ]
