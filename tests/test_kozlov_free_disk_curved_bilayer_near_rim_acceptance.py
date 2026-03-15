@@ -6,10 +6,6 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from tools.diagnostics.free_disk_profile_protocol import (  # noqa: E402
-    run_free_disk_curved_bilayer_protocol,
-)
-
 
 def _radial_tilts(mesh) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     positions = mesh.positions_view()
@@ -46,8 +42,10 @@ def _first_free_ring_radius(r: np.ndarray, *, R: float) -> float:
 
 
 @pytest.mark.acceptance
-def test_curved_bilayer_near_rim_matches_tensionless_theory() -> None:
-    mesh, theta_b = run_free_disk_curved_bilayer_protocol()
+def test_curved_bilayer_near_rim_matches_tensionless_theory(
+    canonical_curved_protocol_result,
+) -> None:
+    mesh, theta_b = canonical_curved_protocol_result
     positions, r, theta_in, theta_out = _radial_tilts(mesh)
 
     R = 7.0 / 15.0

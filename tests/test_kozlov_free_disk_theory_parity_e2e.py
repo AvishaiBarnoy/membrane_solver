@@ -14,7 +14,6 @@ from runtime.minimizer import Minimizer  # noqa: E402
 from runtime.steppers.gradient_descent import GradientDescent  # noqa: E402
 from tools.diagnostics.free_disk_profile_protocol import (  # noqa: E402
     measure_free_disk_curved_bilayer_near_rim,
-    run_free_disk_curved_bilayer_protocol,
 )
 
 
@@ -111,18 +110,12 @@ def _build_minimizer(mesh) -> Minimizer:
     )
 
 
-@pytest.fixture(scope="module")
-def _curved_protocol_result():
-    """Cache the canonical curved shared-rim protocol run for this file."""
-    return run_free_disk_curved_bilayer_protocol()
-
-
 @pytest.mark.e2e
 def test_kozlov_free_disk_curved_protocol_matches_near_rim_tensionless_split(
-    _curved_protocol_result,
+    canonical_curved_protocol_result,
 ) -> None:
     """E2E: the curved shared-rim protocol reproduces the near-rim theory split."""
-    mesh, theta_b = _curved_protocol_result
+    mesh, theta_b = canonical_curved_protocol_result
     metrics = measure_free_disk_curved_bilayer_near_rim(mesh, theta_b=theta_b)
     target = 0.5 * theta_b
 
@@ -136,10 +129,10 @@ def test_kozlov_free_disk_curved_protocol_matches_near_rim_tensionless_split(
 
 @pytest.mark.e2e
 def test_kozlov_free_disk_curved_protocol_has_active_outer_relaxation_channels(
-    _curved_protocol_result,
+    canonical_curved_protocol_result,
 ) -> None:
     """E2E: the curved protocol activates shape and outer-leaflet relaxation."""
-    mesh, theta_b = _curved_protocol_result
+    mesh, theta_b = canonical_curved_protocol_result
     minim = _build_minimizer(mesh)
     breakdown = minim.compute_energy_breakdown()
 

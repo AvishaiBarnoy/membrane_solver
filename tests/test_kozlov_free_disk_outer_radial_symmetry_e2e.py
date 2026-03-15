@@ -6,10 +6,6 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from tools.diagnostics.free_disk_profile_protocol import (  # noqa: E402
-    run_free_disk_curved_bilayer_protocol,
-)
-
 
 def _outer_band_mask(mesh, *, r_min: float, r_max: float) -> np.ndarray:
     """Return a boolean mask for vertices in the requested radial band."""
@@ -45,9 +41,11 @@ def _outer_radial_symmetry_metric(
 
 
 @pytest.mark.e2e
-def test_kozlov_free_disk_outer_radial_tilts_match_in_outer_band() -> None:
+def test_kozlov_free_disk_outer_radial_tilts_match_in_outer_band(
+    canonical_curved_protocol_result,
+) -> None:
     """E2E: curved shared-rim protocol matches the outer-band opposite-sign branch."""
-    mesh, _ = run_free_disk_curved_bilayer_protocol()
+    mesh, _ = canonical_curved_protocol_result
 
     m_same, m_oppo, m_ref = _outer_radial_symmetry_metric(mesh, r_min=1.5, r_max=10.5)
     assert m_ref > 0.0

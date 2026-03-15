@@ -6,10 +6,6 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from tools.diagnostics.free_disk_profile_protocol import (  # noqa: E402
-    run_free_disk_two_stage_profile_protocol,
-)
-
 
 def _outer_band_radial_tilt_metrics(
     mesh, *, r_min: float, r_max: float
@@ -69,8 +65,10 @@ def _rim_slope_proxy(mesh) -> float:
 
 
 @pytest.mark.acceptance
-def test_free_disk_coupled_bandwise_observables_match_tensionless_theory() -> None:
-    mesh, theta_b = run_free_disk_two_stage_profile_protocol()
+def test_free_disk_coupled_bandwise_observables_match_tensionless_theory(
+    canonical_profile_protocol_result,
+) -> None:
+    mesh, theta_b = canonical_profile_protocol_result
 
     diff_same, diff_oppo, signal = _outer_band_radial_tilt_metrics(
         mesh, r_min=1.5, r_max=10.5
