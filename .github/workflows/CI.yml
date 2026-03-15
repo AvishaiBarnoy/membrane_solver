@@ -114,8 +114,8 @@ jobs:
         run: |
           pytest -q -m "regression and not benchmark"
 
-  e2e:
-    name: E2E tests (py3.12)
+  e2e-free-disk-convergence:
+    name: E2E free-disk convergence (py3.12)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -132,9 +132,55 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e .
 
-      - name: Run E2E tests
+      - name: Run free-disk convergence E2E tests
         run: |
-          pytest -q -m "e2e"
+          pytest -q -m "e2e" tests/test_kozlov_free_disk_thetaB_convergence_e2e.py
+
+  e2e-flat-benchmark:
+    name: E2E flat benchmark (py3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e .
+
+      - name: Run flat benchmark E2E tests
+        run: |
+          pytest -q -m "e2e" tests/test_flat_disk_one_leaflet_benchmark_e2e.py
+
+  e2e-other:
+    name: E2E other (py3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e .
+
+      - name: Run remaining E2E tests
+        run: |
+          pytest -q -m "e2e" \
+            --ignore=tests/test_kozlov_free_disk_thetaB_convergence_e2e.py \
+            --ignore=tests/test_flat_disk_one_leaflet_benchmark_e2e.py
 
   benchmark-smoke:
     name: Smoke benchmark (non-blocking)
