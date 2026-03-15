@@ -644,6 +644,119 @@ def _factor_difference(measured: float, target: float) -> float:
     return float(max(ratio, 1.0 / ratio))
 
 
+def _collect_group_rows(
+    mesh, *, option_key: str | tuple[str, ...], group: str
+) -> np.ndarray:
+    """Return mesh rows tagged by one or more vertex option/group pairs."""
+    keys = (option_key,) if isinstance(option_key, str) else tuple(option_key)
+    rows: list[int] = []
+    for vid in mesh.vertex_ids:
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if not any(opts.get(str(key)) == group for key in keys):
+            continue
+        row = mesh.vertex_index_to_row.get(int(vid))
+        if row is not None:
+            rows.append(int(row))
+    out = np.asarray(rows, dtype=int)
+    if out.size == 0:
+        raise AssertionError(f"Missing or empty vertex group for {keys!r}={group!r}")
+    return out
+
+
+def _order_rows_by_angle(positions: np.ndarray, rows: np.ndarray) -> np.ndarray:
+    """Return row indices sorted by azimuthal angle."""
+    from modules.constraints.local_interface_shells import order_rows_by_angle
+
+    return order_rows_by_angle(positions, rows)
+
+
+def _collect_outer_radial_slope_samples(
+    positions: np.ndarray,
+    *,
+    rim_rows_matched: np.ndarray,
+    shell_count: int = 3,
+) -> tuple[np.ndarray, np.ndarray, list[float], list[int]]:
+    """Collect one-sided outer-shell samples for local radial slope estimation."""
+    radii = np.linalg.norm(positions[:, :2], axis=1)
+    rim_r = radii[rim_rows_matched]
+    phi_rim = np.mod(
+        np.arctan2(positions[rim_rows_matched, 1], positions[rim_rows_matched, 0]),
+        2.0 * np.pi,
+    )
+    tol_base = max(1.0e-9, 1.0e-5 * max(1.0, float(np.max(radii))))
+    unique_radii = np.unique(np.round(radii, 12))
+    shell_radii = [
+        float(rv) for rv in unique_radii if float(rv) > float(np.max(rim_r) + tol_base)
+    ]
+    if len(shell_radii) < max(1, int(shell_count)):
+        raise AssertionError("Missing enough non-disk outer shells for slope fit.")
+
+    use_radii = shell_radii[: int(shell_count)]
+    sample_r = [rim_r.astype(float)]
+    sample_h = [positions[rim_rows_matched, 2].astype(float)]
+    used_counts: list[int] = [int(rim_rows_matched.size)]
+
+    for radius in use_radii:
+        tol = max(1.0e-9, 1.0e-5 * max(1.0, abs(radius)))
+        shell_rows = np.flatnonzero(np.abs(radii - radius) <= tol)
+        if shell_rows.size == 0:
+            raise AssertionError("Encountered empty outer shell during slope fit.")
+        phi_shell = np.mod(
+            np.arctan2(positions[shell_rows, 1], positions[shell_rows, 0]), 2.0 * np.pi
+        )
+        dphi = np.abs(phi_shell[:, None] - phi_rim[None, :])
+        dphi = np.minimum(dphi, 2.0 * np.pi - dphi)
+        nearest = np.argmin(dphi, axis=0)
+        matched_rows = shell_rows[nearest]
+        sample_r.append(radii[matched_rows].astype(float))
+        sample_h.append(positions[matched_rows, 2].astype(float))
+        used_counts.append(int(matched_rows.size))
+
+    r_matrix = np.stack(sample_r, axis=1)
+    h_matrix = np.stack(sample_h, axis=1)
+    return r_matrix, h_matrix, [float(v) for v in use_radii], used_counts
+
+
+def _fit_outer_radial_slope_samples(
+    positions: np.ndarray,
+    *,
+    rim_rows_matched: np.ndarray,
+    shell_count: int = 3,
+    estimator: str = "outer_linear_fit",
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Estimate one-sided outer radial slope from the corrected outer-shell family."""
+    r_matrix, h_matrix, use_radii, used_counts = _collect_outer_radial_slope_samples(
+        positions,
+        rim_rows_matched=rim_rows_matched,
+        shell_count=shell_count,
+    )
+    phi = np.zeros(rim_rows_matched.size, dtype=float)
+    estimator_mode = str(estimator).strip().lower()
+    if estimator_mode == "outer_linear_fit":
+        for idx in range(rim_rows_matched.size):
+            coeff = np.polyfit(r_matrix[idx], h_matrix[idx], 1)
+            phi[idx] = float(coeff[0])
+    elif estimator_mode == "outer_multistencil_fd":
+        x0 = r_matrix[:, 0]
+        dx = r_matrix - x0[:, None]
+        for idx in range(rim_rows_matched.size):
+            vand = np.vander(dx[idx], N=dx.shape[1], increasing=True).T
+            rhs = np.zeros(dx.shape[1], dtype=float)
+            if rhs.size > 1:
+                rhs[1] = 1.0
+            weights = np.linalg.solve(vand, rhs)
+            phi[idx] = float(np.dot(weights, h_matrix[idx]))
+    else:
+        raise ValueError(f"Unsupported outer slope estimator: {estimator}")
+
+    return phi, {
+        "outer_slope_estimator": estimator_mode,
+        "outer_slope_shell_count": int(len(use_radii)),
+        "outer_slope_shell_radii": [float(v) for v in use_radii],
+        "outer_slope_sample_counts": [int(v) for v in used_counts],
+    }
+
+
 def _configure_benchmark_mesh(
     mesh,
     *,
