@@ -225,3 +225,89 @@ def test_curved_local_interface_mixed_mode_projection_uses_outer_shell_kink_prox
     assert out_rim[0] == pytest.approx(phi_target, abs=1.0e-9)
     assert in_disk[1] == pytest.approx(in_rim[1], abs=1.0e-9)
     assert out_disk[1] == pytest.approx(out_rim[1], abs=1.0e-9)
+
+
+def test_curved_local_interface_rim_to_disk_projection_uses_rim_coefficients() -> None:
+    mesh = _load_mesh()
+    positions = mesh.positions_view()
+    mesh.global_parameters.set("curved_local_interface_match_mode", "rim_to_disk")
+    data = curved_local_interface_match._build_local_interface_data(
+        mesh, mesh.global_parameters, positions
+    )
+    assert data is not None
+
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_out = mesh.tilts_out_view().copy(order="F")
+    idx = 0
+    disk_row = int(data["disk_rows"][idx])
+    rim_row = int(data["rim_rows"][idx])
+    u_vec = data["basis_u"][idx]
+    v_vec = data["basis_v"][idx]
+    tilts_in[disk_row] = 0.8 * u_vec - 0.2 * v_vec
+    tilts_in[rim_row] = -0.4 * u_vec + 0.6 * v_vec
+    tilts_out[disk_row] = 0.3 * u_vec + 0.9 * v_vec
+    tilts_out[rim_row] = -0.1 * u_vec - 0.5 * v_vec
+    mesh.set_tilts_in_from_array(tilts_in)
+    mesh.set_tilts_out_from_array(tilts_out)
+
+    curved_local_interface_match.enforce_tilt_constraint(
+        mesh, global_params=mesh.global_parameters
+    )
+
+    new_in = mesh.tilts_in_view()
+    new_out = mesh.tilts_out_view()
+    rim_in = np.array(
+        [np.dot(tilts_in[rim_row], u_vec), np.dot(tilts_in[rim_row], v_vec)]
+    )
+    rim_out = np.array(
+        [np.dot(tilts_out[rim_row], u_vec), np.dot(tilts_out[rim_row], v_vec)]
+    )
+    assert np.array(
+        [np.dot(new_in[disk_row], u_vec), np.dot(new_in[disk_row], v_vec)]
+    ) == pytest.approx(rim_in, abs=1.0e-9)
+    assert np.array(
+        [np.dot(new_out[disk_row], u_vec), np.dot(new_out[disk_row], v_vec)]
+    ) == pytest.approx(rim_out, abs=1.0e-9)
+
+
+def test_curved_local_interface_disk_to_rim_projection_uses_disk_coefficients() -> None:
+    mesh = _load_mesh()
+    positions = mesh.positions_view()
+    mesh.global_parameters.set("curved_local_interface_match_mode", "disk_to_rim")
+    data = curved_local_interface_match._build_local_interface_data(
+        mesh, mesh.global_parameters, positions
+    )
+    assert data is not None
+
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_out = mesh.tilts_out_view().copy(order="F")
+    idx = 0
+    disk_row = int(data["disk_rows"][idx])
+    rim_row = int(data["rim_rows"][idx])
+    u_vec = data["basis_u"][idx]
+    v_vec = data["basis_v"][idx]
+    tilts_in[disk_row] = 0.8 * u_vec - 0.2 * v_vec
+    tilts_in[rim_row] = -0.4 * u_vec + 0.6 * v_vec
+    tilts_out[disk_row] = 0.3 * u_vec + 0.9 * v_vec
+    tilts_out[rim_row] = -0.1 * u_vec - 0.5 * v_vec
+    mesh.set_tilts_in_from_array(tilts_in)
+    mesh.set_tilts_out_from_array(tilts_out)
+
+    curved_local_interface_match.enforce_tilt_constraint(
+        mesh, global_params=mesh.global_parameters
+    )
+
+    new_in = mesh.tilts_in_view()
+    new_out = mesh.tilts_out_view()
+    disk_in = np.array(
+        [np.dot(tilts_in[disk_row], u_vec), np.dot(tilts_in[disk_row], v_vec)]
+    )
+    disk_out = np.array(
+        [np.dot(tilts_out[disk_row], u_vec), np.dot(tilts_out[disk_row], v_vec)]
+    )
+    assert np.array(
+        [np.dot(new_in[rim_row], u_vec), np.dot(new_in[rim_row], v_vec)]
+    ) == pytest.approx(disk_in, abs=1.0e-9)
+    assert np.array(
+        [np.dot(new_out[rim_row], u_vec), np.dot(new_out[rim_row], v_vec)]
+    ) == pytest.approx(disk_out, abs=1.0e-9)

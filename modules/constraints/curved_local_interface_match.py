@@ -42,6 +42,10 @@ def _resolve_projection_mode(global_params) -> str:
         else global_params.get("curved_local_interface_match_mode")
     )
     mode = str(raw or "vector_average").strip().lower()
+    if mode in {"rim_to_disk", "rim2disk"}:
+        return "rim_to_disk"
+    if mode in {"disk_to_rim", "disk2rim"}:
+        return "disk_to_rim"
     if mode in {"local_mixed_match_v1", "mixed"}:
         return "local_mixed_match_v1"
     return "vector_average"
@@ -203,6 +207,7 @@ def _project_pair(
     rim_vec: np.ndarray,
     basis_u: np.ndarray,
     basis_v: np.ndarray,
+    mode: str,
     disk_fixed: bool,
     rim_fixed: bool,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -221,6 +226,10 @@ def _project_pair(
     elif disk_fixed:
         target = coeff_disk
     elif rim_fixed:
+        target = coeff_rim
+    elif mode == "disk_to_rim":
+        target = coeff_disk
+    elif mode == "rim_to_disk":
         target = coeff_rim
     else:
         target = 0.5 * (coeff_disk + coeff_rim)
@@ -333,6 +342,7 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
             rim_vec=tilts_in[rim_row],
             basis_u=basis_u,
             basis_v=basis_v,
+            mode=mode,
             disk_fixed=bool(getattr(mesh.vertices[disk_vid], "tilt_fixed_in", False)),
             rim_fixed=bool(getattr(mesh.vertices[rim_vid], "tilt_fixed_in", False)),
         )
@@ -344,6 +354,7 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
             rim_vec=tilts_out[rim_row],
             basis_u=basis_u,
             basis_v=basis_v,
+            mode=mode,
             disk_fixed=bool(getattr(mesh.vertices[disk_vid], "tilt_fixed_out", False)),
             rim_fixed=bool(getattr(mesh.vertices[rim_vid], "tilt_fixed_out", False)),
         )
