@@ -138,3 +138,90 @@ def test_curved_local_interface_dense_tilt_gradients_match_sparse_rows() -> None
             np.add.at(expected_out, rows, vecs)
             assert dense_out is not None
             assert dense_out == pytest.approx(expected_out, abs=1.0e-12)
+
+
+def test_curved_local_interface_mixed_mode_constrains_only_tangential_component() -> (
+    None
+):
+    mesh = _load_mesh()
+    positions = mesh.positions_view()
+    mesh.global_parameters.set(
+        "curved_local_interface_match_mode", "local_mixed_match_v1"
+    )
+    data = curved_local_interface_match._build_local_interface_data(
+        mesh,
+        mesh.global_parameters,
+        positions,
+    )
+    assert data is not None
+
+    row_constraints = curved_local_interface_match.constraint_gradients_tilt_rows_array(
+        mesh,
+        mesh.global_parameters,
+        positions=positions,
+        index_map={},
+    )
+
+    assert row_constraints is not None
+    assert len(row_constraints) == 2
+    rows_in, _ = row_constraints[0]
+    assert rows_in is not None
+    _, vecs = rows_in
+    assert vecs[0] == pytest.approx(data["basis_v"][0], abs=1.0e-12)
+
+
+def test_curved_local_interface_mixed_mode_projection_uses_outer_shell_kink_proxy() -> (
+    None
+):
+    mesh = _load_mesh()
+    positions = mesh.positions_view()
+    mesh.global_parameters.set(
+        "curved_local_interface_match_mode", "local_mixed_match_v1"
+    )
+    data = curved_local_interface_match._build_local_interface_data(
+        mesh,
+        mesh.global_parameters,
+        positions,
+    )
+    assert data is not None
+
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_out = mesh.tilts_out_view().copy(order="F")
+    tilts_in[:] = 0.0
+    tilts_out[:] = 0.0
+    mesh.set_tilts_in_from_array(tilts_in)
+    mesh.set_tilts_out_from_array(tilts_out)
+
+    curved_local_interface_match.enforce_tilt_constraint(
+        mesh,
+        global_params=mesh.global_parameters,
+    )
+
+    tilts_in = mesh.tilts_in_view()
+    tilts_out = mesh.tilts_out_view()
+    idx = 0
+    disk_row = int(data["disk_rows"][idx])
+    rim_row = int(data["rim_rows"][idx])
+    basis_u = data["basis_u"][idx]
+    basis_v = data["basis_v"][idx]
+    phi_target = float(data["phi"][idx])
+
+    in_disk = np.array(
+        [np.dot(tilts_in[disk_row], basis_u), np.dot(tilts_in[disk_row], basis_v)]
+    )
+    in_rim = np.array(
+        [np.dot(tilts_in[rim_row], basis_u), np.dot(tilts_in[rim_row], basis_v)]
+    )
+    out_disk = np.array(
+        [np.dot(tilts_out[disk_row], basis_u), np.dot(tilts_out[disk_row], basis_v)]
+    )
+    out_rim = np.array(
+        [np.dot(tilts_out[rim_row], basis_u), np.dot(tilts_out[rim_row], basis_v)]
+    )
+
+    assert in_disk[0] == pytest.approx(-phi_target, abs=1.0e-9)
+    assert in_rim[0] == pytest.approx(-phi_target, abs=1.0e-9)
+    assert out_disk[0] == pytest.approx(phi_target, abs=1.0e-9)
+    assert out_rim[0] == pytest.approx(phi_target, abs=1.0e-9)
+    assert in_disk[1] == pytest.approx(in_rim[1], abs=1.0e-9)
+    assert out_disk[1] == pytest.approx(out_rim[1], abs=1.0e-9)
