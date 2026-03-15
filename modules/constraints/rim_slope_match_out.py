@@ -940,8 +940,10 @@ def constraint_gradients_tilt_rows_array(
     valid = data["valid"]
     local_disk = data["local_disk"]
     disk_weights = data["disk_weights"]
+    weight_sqrt = data["weight_sqrt"]
     theta_scalar = data["theta_scalar"]
     matching_mode = _resolve_matching_mode(global_params)
+    weight_sqrt = data["weight_sqrt"]
 
     normals = mesh.vertex_normals(positions=positions)
 

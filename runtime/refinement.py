@@ -670,25 +670,18 @@ def refine_triangle_mesh(mesh):
     # This follows Evolver behavior: original boundary edges are refinable unless explicitly marked no_refine
     edges_to_refine = set()
 
-    # Collect edges that should be refined
+    refinable_edge_ids: set[int] = set()
     for facet in mesh.facets.values():
+        if facet.options.get("no_refine", False):
+            continue
         for ei in facet.edge_indices:
-            edge_idx = abs(ei)
-            edge = mesh.get_edge(edge_idx)
-            # Edge should be refined if:
-            # 1. It's not marked no_refine itself
-            # 2. At least one facet containing this edge is refinable
-            if not edge.options.get("no_refine", False):
-                # Check if this edge belongs to at least one refinable facet
-                belongs_to_refinable_facet = False
-                for other_facet in mesh.facets.values():
-                    if edge_idx in [abs(e) for e in other_facet.edge_indices]:
-                        if not other_facet.options.get("no_refine", False):
-                            belongs_to_refinable_facet = True
-                            break
+            refinable_edge_ids.add(abs(int(ei)))
 
-                if belongs_to_refinable_facet:
-                    edges_to_refine.add(edge_idx)
+    # Collect edges that should be refined
+    for edge_idx in refinable_edge_ids:
+        edge = mesh.get_edge(int(edge_idx))
+        if not edge.options.get("no_refine", False):
+            edges_to_refine.add(int(edge_idx))
 
     # Step 1: Compute midpoint vertices only for edges that will be refined
     for edge_idx in edges_to_refine:
