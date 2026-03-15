@@ -3,15 +3,18 @@ import sys
 
 import numpy as np
 import pytest
+from scipy import special
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.flat_disk_one_leaflet_theory import (
     FlatDiskTheoryParams,
+    build_kh_outer_finite_bvp_profile,
     compute_flat_disk_kh_physical_theory,
     compute_flat_disk_theory,
     physical_to_dimensionless_theory_params,
     quadratic_min_from_scan,
+    solve_kh_outer_finite_bvp_coefficients,
     solver_mapping_from_theory,
     tex_reference_params,
 )
@@ -162,3 +165,57 @@ def test_flat_disk_kh_physical_theory_reference_values() -> None:
     assert result.elastic_inner == pytest.approx(0.4773577391, rel=5e-7, abs=1e-10)
     assert result.elastic_outer == pytest.approx(0.4132237519, rel=5e-7, abs=1e-10)
     assert result.total == pytest.approx(-0.8905814910, rel=5e-7, abs=1e-10)
+
+
+@pytest.mark.unit
+def test_kh_outer_finite_bvp_converges_to_infinite_profile_at_large_rmax() -> None:
+    params = physical_to_dimensionless_theory_params(
+        kappa_physical=10.0,
+        kappa_t_physical=10.0,
+        radius_physical=7.0,
+        drive_physical=(2.0 / 0.7),
+        length_scale=15.0,
+    )
+    result = compute_flat_disk_kh_physical_theory(params)
+    radius = float(result.radius)
+    lam = float(result.lambda_value)
+    theta = 0.138
+    sample_r = radius + (2.5 * lam)
+
+    t_finite, div_finite, _ = build_kh_outer_finite_bvp_profile(
+        theta,
+        radius=radius,
+        lambda_value=lam,
+        outer_r_max=radius + (20.0 * lam),
+    )
+    amp_inf = float(theta / special.kv(1, radius / lam))
+    t_inf = float(amp_inf * special.kv(1, sample_r / lam))
+    div_inf = float(-(amp_inf / lam) * special.kv(0, sample_r / lam))
+    assert float(t_finite(sample_r)) == pytest.approx(t_inf, rel=1e-6, abs=1e-10)
+    assert float(div_finite(sample_r)) == pytest.approx(div_inf, rel=1e-6, abs=1e-10)
+
+
+@pytest.mark.unit
+def test_kh_outer_finite_bvp_coefficients_are_stable_and_sign_consistent() -> None:
+    params = physical_to_dimensionless_theory_params(
+        kappa_physical=10.0,
+        kappa_t_physical=10.0,
+        radius_physical=7.0,
+        drive_physical=(2.0 / 0.7),
+        length_scale=15.0,
+    )
+    result = compute_flat_disk_kh_physical_theory(params)
+    radius = float(result.radius)
+    lam = float(result.lambda_value)
+    theta = 0.138
+
+    coeff_i1, coeff_k1 = solve_kh_outer_finite_bvp_coefficients(
+        theta,
+        radius=radius,
+        lambda_value=lam,
+        outer_r_max=radius + (10.0 * lam),
+    )
+    assert np.isfinite(coeff_i1)
+    assert np.isfinite(coeff_k1)
+    assert float(coeff_k1) > 0.0
+    assert abs(float(coeff_i1)) <= (1e-9 * abs(float(coeff_k1)))
