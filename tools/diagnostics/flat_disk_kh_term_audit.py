@@ -916,6 +916,7 @@ def _run_single_level(
     outer_local_vertex_average_rmax_lambda: float,
     radial_projection_diagnostic: bool,
     partition_mode: str,
+    ratio_version: str,
 ) -> dict[str, Any]:
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -1005,6 +1006,9 @@ def _run_single_level(
         mass_mode = mass_mode_raw
     else:
         raise ValueError("tilt_mass_mode_in must be 'auto', 'lumped', or 'consistent'.")
+    ratio_version_mode = str(ratio_version).strip().lower()
+    if ratio_version_mode not in {"v1", "v2"}:
+        raise ValueError("ratio_version must be 'v1' or 'v2'.")
 
     _configure_benchmark_mesh(
         mesh,
@@ -1258,6 +1262,7 @@ def _run_single_level(
                 ),
                 "contact_ratio_mesh_over_theory": _ratio(mesh_contact, th_contact),
                 "internal_disk_ratio_mesh_over_theory": ratio_internal_disk,
+                "internal_disk_ratio_mesh_over_theory_v2": ratio_internal_disk,
                 "internal_outer_ratio_mesh_over_theory": ratio_internal_outer,
                 "mesh_internal_disk_core": float(mesh_bands["mesh_internal_disk_core"]),
                 "mesh_internal_rim_band": float(mesh_bands["mesh_internal_rim_band"]),
@@ -1316,6 +1321,12 @@ def _run_single_level(
                     ratio_internal_outer_near_finite
                 ),
                 "internal_outer_far_ratio_mesh_over_theory_finite": (
+                    ratio_internal_outer_far_finite
+                ),
+                "internal_outer_near_ratio_mesh_over_theory_v2": (
+                    ratio_internal_outer_near_finite
+                ),
+                "internal_outer_far_ratio_mesh_over_theory_v2": (
                     ratio_internal_outer_far_finite
                 ),
                 "tilt_disk_core_ratio_mesh_over_theory": ratio_tilt_disk_core,
@@ -1431,6 +1442,7 @@ def _run_single_level(
             ),
             "radial_projection_diagnostic": bool(radial_projection_diagnostic),
             "partition_mode": str(partition_mode),
+            "ratio_version": str(ratio_version_mode),
         },
         "theory": {
             "kappa": float(theory.kappa),
@@ -1473,6 +1485,7 @@ def run_flat_disk_kh_term_audit(
     outer_local_vertex_average_rmax_lambda: float = 0.0,
     radial_projection_diagnostic: bool = False,
     partition_mode: str = "centroid",
+    ratio_version: str = "v1",
 ) -> dict[str, Any]:
     """Evaluate per-theta mesh/theory split terms in KH physical lane."""
     _ensure_repo_root_on_sys_path()
@@ -1512,6 +1525,7 @@ def run_flat_disk_kh_term_audit(
         ),
         radial_projection_diagnostic=bool(radial_projection_diagnostic),
         partition_mode=str(partition_mode),
+        ratio_version=str(ratio_version),
     )
 
 
@@ -2128,6 +2142,7 @@ def run_flat_disk_kh_outerfield_averaged_sweep(
     outer_local_vertex_average_steps_values: Sequence[int] | None = None,
     outer_local_vertex_average_rmin_lambda_values: Sequence[float] = (3.5, 4.0, 4.5),
     outer_local_vertex_average_rmax_lambda_values: Sequence[float] = (10.0, 11.0, 12.0),
+    ratio_version: str = "v1",
 ) -> dict[str, Any]:
     """Sweep averaged outer-field mesh controls on a fixed-theta strict KH lane."""
     fixture_path = Path(fixture)
@@ -2170,6 +2185,9 @@ def run_flat_disk_kh_outerfield_averaged_sweep(
         raise ValueError(
             "outer_local_vertex_average_rmax_lambda_values must be non-empty."
         )
+    ratio_version_mode = str(ratio_version).strip().lower()
+    if ratio_version_mode not in {"v1", "v2"}:
+        raise ValueError("ratio_version must be 'v1' or 'v2'.")
 
     rows: list[dict[str, float | int | str]] = []
     complexity_rank = 0
@@ -2222,6 +2240,7 @@ def run_flat_disk_kh_outerfield_averaged_sweep(
                                 outer_local_vertex_average_steps=int(avg_steps),
                                 outer_local_vertex_average_rmin_lambda=float(avg_rmin),
                                 outer_local_vertex_average_rmax_lambda=float(avg_rmax),
+                                ratio_version=str(ratio_version_mode),
                             )
                             runtime_seconds = float(perf_counter() - t0)
                             if len(audit.get("rows", [])) == 0:
@@ -2230,17 +2249,32 @@ def run_flat_disk_kh_outerfield_averaged_sweep(
                                     "outerfield averaged sweep."
                                 )
                             row0 = audit["rows"][0]
-                            disk_ratio = float(
-                                row0["internal_disk_ratio_mesh_over_theory"]
-                            )
-                            near_ratio = float(
-                                row0[
-                                    "internal_outer_near_ratio_mesh_over_theory_finite"
-                                ]
-                            )
-                            far_ratio = float(
-                                row0["internal_outer_far_ratio_mesh_over_theory_finite"]
-                            )
+                            if ratio_version_mode == "v2":
+                                disk_ratio = float(
+                                    row0["internal_disk_ratio_mesh_over_theory_v2"]
+                                )
+                                near_ratio = float(
+                                    row0[
+                                        "internal_outer_near_ratio_mesh_over_theory_v2"
+                                    ]
+                                )
+                                far_ratio = float(
+                                    row0["internal_outer_far_ratio_mesh_over_theory_v2"]
+                                )
+                            else:
+                                disk_ratio = float(
+                                    row0["internal_disk_ratio_mesh_over_theory"]
+                                )
+                                near_ratio = float(
+                                    row0[
+                                        "internal_outer_near_ratio_mesh_over_theory_finite"
+                                    ]
+                                )
+                                far_ratio = float(
+                                    row0[
+                                        "internal_outer_far_ratio_mesh_over_theory_finite"
+                                    ]
+                                )
                             section_score = float(
                                 row0["section_score_internal_bands_finite_outer_l2_log"]
                             )
@@ -2301,6 +2335,15 @@ def run_flat_disk_kh_outerfield_averaged_sweep(
                                     "internal_outer_far_ratio_mesh_over_theory_finite": float(
                                         far_ratio
                                     ),
+                                    "internal_disk_ratio_mesh_over_theory_v2": float(
+                                        disk_ratio
+                                    ),
+                                    "internal_outer_near_ratio_mesh_over_theory_v2": float(
+                                        near_ratio
+                                    ),
+                                    "internal_outer_far_ratio_mesh_over_theory_v2": float(
+                                        far_ratio
+                                    ),
                                     "section_score_internal_bands_finite_outer_l2_log": float(
                                         section_score
                                     ),
@@ -2333,6 +2376,7 @@ def run_flat_disk_kh_outerfield_averaged_sweep(
             "tilt_mass_mode_in": str(tilt_mass_mode_in),
             "outer_mode": str(outer_mode),
             "smoothness_model": str(smoothness_model),
+            "ratio_version": str(ratio_version_mode),
             "theta_value": float(theta_value),
             "refine_level": int(refine_level),
             "rim_local_refine_steps": int(rim_local_refine_steps),
