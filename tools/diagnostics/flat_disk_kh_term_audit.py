@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import itertools
 import sys
+from functools import lru_cache
 from pathlib import Path
 from time import perf_counter
 from typing import Any, Sequence
@@ -487,7 +488,7 @@ def _mesh_internal_band_split(
     }
 
 
-def _theory_term_band_split(
+def _theory_term_band_split_uncached(
     *,
     theta: float,
     kappa: float,
@@ -497,13 +498,21 @@ def _theory_term_band_split(
     rim_half_width_lambda: float,
     outer_near_width_lambda: float,
     outer_r_max: float | None = None,
-) -> dict[str, float]:
+    theory_outer_mode: str = "infinite",
+) -> dict[str, Any]:
     """Compute KH theory tilt/splay term split across radial bands at fixed theta."""
+    from tools.diagnostics.flat_disk_one_leaflet_theory import (
+        build_kh_outer_finite_bvp_profile,
+    )
+
     theta_f = float(theta)
     kappa_f = float(kappa)
     kappa_t_f = float(kappa_t)
     radius_f = float(radius)
     lam = float(lambda_value)
+    outer_mode = str(theory_outer_mode).strip().lower()
+    if outer_mode not in {"infinite", "finite_bvp"}:
+        raise ValueError("theory_outer_mode must be 'infinite' or 'finite_bvp'.")
 
     x = radius_f / max(lam, 1e-18)
     i1_x = float(special.iv(1, x))
@@ -520,11 +529,28 @@ def _theory_term_band_split(
     def _div_inner(r: float) -> float:
         return float((a_inner / lam) * special.iv(0, r / lam))
 
-    def _t_outer(r: float) -> float:
-        return float(b_outer * special.kv(1, r / lam))
+    if outer_mode == "infinite":
 
-    def _div_outer(r: float) -> float:
-        return float(-(b_outer / lam) * special.kv(0, r / lam))
+        def _t_outer(r: float) -> float:
+            return float(b_outer * special.kv(1, r / lam))
+
+        def _div_outer(r: float) -> float:
+            return float(-(b_outer / lam) * special.kv(0, r / lam))
+
+        r_max_outer = None if outer_r_max is None else float(outer_r_max)
+    else:
+        if outer_r_max is None or not np.isfinite(float(outer_r_max)):
+            raise ValueError(
+                "finite_bvp outer mode requires finite outer_r_max "
+                f"(got outer_r_max={outer_r_max})."
+            )
+        r_max_outer = float(outer_r_max)
+        _t_outer, _div_outer, _ = build_kh_outer_finite_bvp_profile(
+            theta_f,
+            radius=radius_f,
+            lambda_value=lam,
+            outer_r_max=r_max_outer,
+        )
 
     def _integrate_term(
         fn, lo: float, hi: float, *, use_inf: bool = False, coeff: float
@@ -590,8 +616,28 @@ def _theory_term_band_split(
         coeff=kappa_f,
     )
     r_far_start = max(radius_f, r_outer_near_end)
-    r_max = None if outer_r_max is None else max(float(outer_r_max), r_far_start)
-    if r_max is None:
+    if outer_mode == "finite_bvp":
+        r_max = max(float(r_max_outer), radius_f)
+        near_upper = min(max(radius_f, r_outer_near_end), r_max)
+        tilt_outer_near = _integrate_term(
+            _t_outer,
+            max(radius_f, r_out_rim_end),
+            near_upper,
+            coeff=kappa_t_f,
+        )
+        smooth_outer_near = _integrate_term(
+            _div_outer,
+            max(radius_f, r_out_rim_end),
+            near_upper,
+            coeff=kappa_f,
+        )
+        tilt_outer_far = _integrate_term(_t_outer, r_far_start, r_max, coeff=kappa_t_f)
+        smooth_outer_far = _integrate_term(
+            _div_outer, r_far_start, r_max, coeff=kappa_f
+        )
+    else:
+        r_max = None if outer_r_max is None else max(float(outer_r_max), r_far_start)
+    if outer_mode == "infinite" and r_max is None:
         tilt_outer_far = _integrate_term(
             _t_outer, r_far_start, 0.0, use_inf=True, coeff=kappa_t_f
         )
@@ -622,7 +668,80 @@ def _theory_term_band_split(
         "theory_internal_outer_near": float(tilt_outer_near + smooth_outer_near),
         "theory_internal_outer_far": float(tilt_outer_far + smooth_outer_far),
         "theory_outer_r_max": float(r_max) if r_max is not None else float("inf"),
+        "theory_outer_mode": str(outer_mode),
     }
+
+
+_THEORY_BAND_SPLIT_FIELD_ORDER: tuple[str, ...] = (
+    "theory_tilt_disk_core",
+    "theory_tilt_rim_band",
+    "theory_tilt_outer_near",
+    "theory_tilt_outer_far",
+    "theory_smooth_disk_core",
+    "theory_smooth_rim_band",
+    "theory_smooth_outer_near",
+    "theory_smooth_outer_far",
+    "theory_internal_disk_core",
+    "theory_internal_rim_band",
+    "theory_internal_outer_near",
+    "theory_internal_outer_far",
+    "theory_outer_r_max",
+    "theory_outer_mode",
+)
+
+
+@lru_cache(maxsize=2048)
+def _theory_term_band_split_cached(
+    *,
+    theta: float,
+    kappa: float,
+    kappa_t: float,
+    radius: float,
+    lambda_value: float,
+    rim_half_width_lambda: float,
+    outer_near_width_lambda: float,
+    outer_r_max: float | None = None,
+    theory_outer_mode: str = "infinite",
+) -> tuple[object, ...]:
+    result = _theory_term_band_split_uncached(
+        theta=float(theta),
+        kappa=float(kappa),
+        kappa_t=float(kappa_t),
+        radius=float(radius),
+        lambda_value=float(lambda_value),
+        rim_half_width_lambda=float(rim_half_width_lambda),
+        outer_near_width_lambda=float(outer_near_width_lambda),
+        outer_r_max=None if outer_r_max is None else float(outer_r_max),
+        theory_outer_mode=str(theory_outer_mode),
+    )
+    return tuple(result[name] for name in _THEORY_BAND_SPLIT_FIELD_ORDER)
+
+
+def _theory_term_band_split(
+    *,
+    theta: float,
+    kappa: float,
+    kappa_t: float,
+    radius: float,
+    lambda_value: float,
+    rim_half_width_lambda: float,
+    outer_near_width_lambda: float,
+    outer_r_max: float | None = None,
+    theory_outer_mode: str = "infinite",
+) -> dict[str, Any]:
+    """Compute KH theory tilt/splay term split across radial bands at fixed theta."""
+    values = _theory_term_band_split_cached(
+        theta=float(theta),
+        kappa=float(kappa),
+        kappa_t=float(kappa_t),
+        radius=float(radius),
+        lambda_value=float(lambda_value),
+        rim_half_width_lambda=float(rim_half_width_lambda),
+        outer_near_width_lambda=float(outer_near_width_lambda),
+        outer_r_max=None if outer_r_max is None else float(outer_r_max),
+        theory_outer_mode=str(theory_outer_mode),
+    )
+    return dict(zip(_THEORY_BAND_SPLIT_FIELD_ORDER, values, strict=True))
 
 
 def _boundary_realization_metrics(
@@ -990,6 +1109,7 @@ def _run_single_level(
     radial_projection_diagnostic: bool,
     partition_mode: str,
     ratio_version: str = "v1",
+    theory_outer_mode: str = "infinite",
     parity_target: str = "p10",
     axial_symmetry_gate: str | None = None,
     isotropy_pass: str = "off",
@@ -1096,6 +1216,9 @@ def _run_single_level(
     ratio_version_mode = str(ratio_version).strip().lower()
     if ratio_version_mode not in {"v1", "v2"}:
         raise ValueError("ratio_version must be 'v1' or 'v2'.")
+    theory_outer_mode_requested = str(theory_outer_mode).strip().lower()
+    if theory_outer_mode_requested not in {"infinite", "finite_bvp"}:
+        raise ValueError("theory_outer_mode must be 'infinite' or 'finite_bvp'.")
     parity_target_mode = _validate_parity_target(str(parity_target))
     axial_symmetry_mode = _resolve_axial_symmetry_mode(
         parity_target=parity_target_mode,
@@ -1124,6 +1247,21 @@ def _run_single_level(
         if isotropy_pass_mode == "outer_far_flip_only"
         else "flip_then_average"
     )
+    theory_outer_mode_v2 = (
+        "finite_bvp"
+        if ratio_version_mode == "v2" and theory_outer_mode_requested == "infinite"
+        else theory_outer_mode_requested
+    )
+    theory_outer_r_max_v2 = float(mesh_r_max)
+    if (
+        theory_outer_mode_v2 == "finite_bvp"
+        and float(outer_local_refine_rmax_lambda) > 0.0
+    ):
+        candidate_r_max = float(theory.radius) + float(
+            outer_local_refine_rmax_lambda
+        ) * float(theory.lambda_value)
+        if candidate_r_max > float(theory.radius):
+            theory_outer_r_max_v2 = float(candidate_r_max)
     isotropy_stats = {
         "iterations_requested": isotropy_iters_value,
         "iterations_applied": 0,
@@ -1240,6 +1378,18 @@ def _run_single_level(
             rim_half_width_lambda=1.0,
             outer_near_width_lambda=4.0,
             outer_r_max=mesh_r_max,
+            theory_outer_mode="infinite",
+        )
+        th_bands_v2 = _theory_term_band_split(
+            theta=theta_f,
+            kappa=float(theory.kappa),
+            kappa_t=float(theory.kappa_t),
+            radius=float(theory.radius),
+            lambda_value=float(theory.lambda_value),
+            rim_half_width_lambda=1.0,
+            outer_near_width_lambda=4.0,
+            outer_r_max=theory_outer_r_max_v2,
+            theory_outer_mode=theory_outer_mode_v2,
         )
 
         def _ratio(mesh_val: float, theory_val: float) -> float:
@@ -1346,22 +1496,35 @@ def _run_single_level(
             float(mesh_bands["mesh_smooth_outer_far"]),
             float(th_bands["theory_smooth_outer_far"]),
         )
+        ratio_internal_disk_v2_raw = float(ratio_internal_disk)
+        ratio_internal_outer_near_v2_raw = _ratio(
+            float(mesh_bands["mesh_internal_outer_near"]),
+            float(th_bands_v2["theory_internal_outer_near"]),
+        )
+        ratio_internal_outer_far_v2_raw = _ratio(
+            float(mesh_bands["mesh_internal_outer_far"]),
+            float(th_bands_v2["theory_internal_outer_far"]),
+        )
+        ratio_internal_disk_v2 = float(ratio_internal_disk_v2_raw)
+        ratio_internal_outer_near_v2 = float(ratio_internal_outer_near_v2_raw)
+        ratio_internal_outer_far_v2 = float(ratio_internal_outer_far_v2_raw)
+
         meets_10pct_v2 = _meets_ratio_target(
-            disk_ratio=float(ratio_internal_disk),
-            outer_near_ratio=float(ratio_internal_outer_near_finite),
-            outer_far_ratio=float(ratio_internal_outer_far_finite),
+            disk_ratio=float(ratio_internal_disk_v2),
+            outer_near_ratio=float(ratio_internal_outer_near_v2),
+            outer_far_ratio=float(ratio_internal_outer_far_v2),
             parity_target="p10",
         )
         meets_5pct_v2 = _meets_ratio_target(
-            disk_ratio=float(ratio_internal_disk),
-            outer_near_ratio=float(ratio_internal_outer_near_finite),
-            outer_far_ratio=float(ratio_internal_outer_far_finite),
+            disk_ratio=float(ratio_internal_disk_v2),
+            outer_near_ratio=float(ratio_internal_outer_near_v2),
+            outer_far_ratio=float(ratio_internal_outer_far_v2),
             parity_target="p5",
         )
         meets_parity_target_v2 = _meets_ratio_target(
-            disk_ratio=float(ratio_internal_disk),
-            outer_near_ratio=float(ratio_internal_outer_near_finite),
-            outer_far_ratio=float(ratio_internal_outer_far_finite),
+            disk_ratio=float(ratio_internal_disk_v2),
+            outer_near_ratio=float(ratio_internal_outer_near_v2),
+            outer_far_ratio=float(ratio_internal_outer_far_v2),
             parity_target=str(parity_target_mode),
         )
         axial_symmetry_pass = _evaluate_axial_symmetry(
@@ -1462,7 +1625,32 @@ def _run_single_level(
                 ),
                 "contact_ratio_mesh_over_theory": _ratio(mesh_contact, th_contact),
                 "internal_disk_ratio_mesh_over_theory": ratio_internal_disk,
-                "internal_disk_ratio_mesh_over_theory_v2": ratio_internal_disk,
+                "internal_disk_ratio_mesh_over_theory_v2": ratio_internal_disk_v2,
+                "internal_outer_near_ratio_mesh_over_theory_v2": (
+                    ratio_internal_outer_near_v2
+                ),
+                "internal_outer_far_ratio_mesh_over_theory_v2": (
+                    ratio_internal_outer_far_v2
+                ),
+                "internal_disk_ratio_mesh_over_theory_v2_raw": ratio_internal_disk_v2_raw,
+                "internal_outer_near_ratio_mesh_over_theory_v2_raw": (
+                    ratio_internal_outer_near_v2_raw
+                ),
+                "internal_outer_far_ratio_mesh_over_theory_v2_raw": (
+                    ratio_internal_outer_far_v2_raw
+                ),
+                "internal_disk_ratio_mesh_over_theory_v2_leakage_adjusted": (
+                    ratio_internal_disk_v2_raw
+                ),
+                "internal_outer_near_ratio_mesh_over_theory_v2_leakage_adjusted": (
+                    ratio_internal_outer_near_v2_raw
+                ),
+                "internal_outer_far_ratio_mesh_over_theory_v2_leakage_adjusted": (
+                    ratio_internal_outer_far_v2_raw
+                ),
+                "v2_disk_leakage_correction_factor": 1.0,
+                "v2_outer_near_leakage_correction_factor": 1.0,
+                "v2_outer_far_leakage_correction_factor": 1.0,
                 "internal_outer_ratio_mesh_over_theory": ratio_internal_outer,
                 "mesh_internal_disk_core": float(mesh_bands["mesh_internal_disk_core"]),
                 "mesh_internal_rim_band": float(mesh_bands["mesh_internal_rim_band"]),
@@ -1497,6 +1685,17 @@ def _run_single_level(
                 "theory_internal_outer_far_finite": float(
                     th_bands_finite["theory_internal_outer_far"]
                 ),
+                "theory_internal_disk_core_v2": float(
+                    th_bands_v2["theory_internal_disk_core"]
+                ),
+                "theory_internal_outer_near_v2": float(
+                    th_bands_v2["theory_internal_outer_near"]
+                ),
+                "theory_internal_outer_far_v2": float(
+                    th_bands_v2["theory_internal_outer_far"]
+                ),
+                "theory_outer_mode_v2": str(th_bands_v2["theory_outer_mode"]),
+                "theory_outer_r_max_v2": float(th_bands_v2["theory_outer_r_max"]),
                 "theory_outer_r_max": float(th_bands_finite["theory_outer_r_max"]),
                 "theory_internal_total_from_bands": float(
                     float(th_bands["theory_internal_disk_core"])
@@ -1521,12 +1720,6 @@ def _run_single_level(
                     ratio_internal_outer_near_finite
                 ),
                 "internal_outer_far_ratio_mesh_over_theory_finite": (
-                    ratio_internal_outer_far_finite
-                ),
-                "internal_outer_near_ratio_mesh_over_theory_v2": (
-                    ratio_internal_outer_near_finite
-                ),
-                "internal_outer_far_ratio_mesh_over_theory_v2": (
                     ratio_internal_outer_far_finite
                 ),
                 "meets_10pct_v2": bool(meets_10pct_v2),
@@ -1689,8 +1882,16 @@ def _run_single_level(
             "radial_projection_diagnostic": bool(radial_projection_diagnostic),
             "partition_mode": str(partition_mode),
             "ratio_version": str(ratio_version_mode),
+            "ratio_version_requested": str(ratio_version_mode),
             "parity_target": str(parity_target_mode),
+            "parity_target_bounds": list(
+                _ratio_target_bounds(parity_target=parity_target_mode)
+            ),
+            "v2_ratio_semantics": "strict_raw",
             "axial_symmetry_mode_effective": str(axial_symmetry_mode),
+            "theory_outer_mode_requested": str(theory_outer_mode_requested),
+            "theory_outer_mode_v2_effective": str(theory_outer_mode_v2),
+            "theory_outer_r_max_v2_effective": float(theory_outer_r_max_v2),
             "theta_relax_mode": str(theta_relax_mode_value),
             "theta_relax_max_repeats": int(theta_relax_max_repeats_value),
             "theta_relax_energy_abs_tol": float(theta_relax_energy_abs_tol_value),
@@ -1748,6 +1949,7 @@ def run_flat_disk_kh_term_audit(
     radial_projection_diagnostic: bool = False,
     partition_mode: str = "centroid",
     ratio_version: str = "v1",
+    theory_outer_mode: str = "infinite",
     parity_target: str = "p10",
     axial_symmetry_gate: str | None = None,
     isotropy_pass: str = "off",
@@ -1804,6 +2006,7 @@ def run_flat_disk_kh_term_audit(
         radial_projection_diagnostic=bool(radial_projection_diagnostic),
         partition_mode=str(partition_mode),
         ratio_version=str(ratio_version),
+        theory_outer_mode=str(theory_outer_mode),
         parity_target=str(parity_target),
         axial_symmetry_gate=axial_symmetry_gate,
         isotropy_pass=str(isotropy_pass),
@@ -1849,6 +2052,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     tilt_post_relax_passes: int = 1,
     radial_projection_diagnostic: bool = False,
     partition_mode: str = "centroid",
+    theory_outer_mode: str = "infinite",
     theta_relax_mode: str = "fixed",
     theta_relax_max_repeats: int = 1,
     theta_relax_energy_abs_tol: float = 1.0e-10,
@@ -1903,6 +2107,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             tilt_post_relax_passes=int(tilt_post_relax_passes),
             radial_projection_diagnostic=bool(radial_projection_diagnostic),
             partition_mode=str(partition_mode),
+            theory_outer_mode=str(theory_outer_mode),
             theta_relax_mode=str(theta_relax_mode),
             theta_relax_max_repeats=int(theta_relax_max_repeats),
             theta_relax_energy_abs_tol=float(theta_relax_energy_abs_tol),
@@ -1939,6 +2144,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             "tilt_post_relax_passes": int(tilt_post_relax_passes),
             "radial_projection_diagnostic": bool(radial_projection_diagnostic),
             "partition_mode": str(partition_mode),
+            "theory_outer_mode_requested": str(theory_outer_mode),
             "theta_relax_mode": str(theta_relax_mode).strip().lower(),
             "theta_relax_max_repeats": int(theta_relax_max_repeats),
             "theta_relax_energy_abs_tol": float(theta_relax_energy_abs_tol),

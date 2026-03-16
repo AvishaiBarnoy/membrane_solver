@@ -321,6 +321,38 @@ def test_flat_disk_kh_term_audit_theta_relax_controls_validate() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_kh_term_audit_theory_outer_mode_emits_v2_metadata() -> None:
+    report = run_flat_disk_kh_term_audit(
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.138,),
+        ratio_version="v2",
+        theory_outer_mode="finite_bvp",
+    )
+    assert report["meta"]["theory_outer_mode_requested"] == "finite_bvp"
+    assert report["meta"]["theory_outer_mode_v2_effective"] == "finite_bvp"
+    assert report["meta"]["v2_ratio_semantics"] == "strict_raw"
+    row = report["rows"][0]
+    assert row["theory_outer_mode_v2"] == "finite_bvp"
+    assert np.isfinite(float(row["theory_outer_r_max_v2"]))
+    assert np.isfinite(float(row["internal_outer_near_ratio_mesh_over_theory_v2_raw"]))
+    assert np.isfinite(float(row["internal_outer_far_ratio_mesh_over_theory_v2_raw"]))
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_theory_outer_mode_validates() -> None:
+    with pytest.raises(
+        ValueError, match="theory_outer_mode must be 'infinite' or 'finite_bvp'"
+    ):
+        run_flat_disk_kh_term_audit(
+            refine_level=1,
+            theta_values=(0.0,),
+            theory_outer_mode="bad_mode",
+        )
+
+
+@pytest.mark.regression
 def test_flat_disk_kh_term_audit_refine_sweep_relax_projection_controls_emit_metadata() -> (
     None
 ):
