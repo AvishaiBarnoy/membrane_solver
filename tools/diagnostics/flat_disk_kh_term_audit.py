@@ -996,6 +996,10 @@ def _run_single_level(
     isotropy_iters: int = 0,
     isotropy_rmin_lambda: float = 0.0,
     isotropy_rmax_lambda: float = 0.0,
+    theta_relax_mode: str = "fixed",
+    theta_relax_max_repeats: int = 1,
+    theta_relax_energy_abs_tol: float = 1.0e-10,
+    theta_relax_plateau_patience: int = 2,
 ) -> dict[str, Any]:
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -1009,7 +1013,6 @@ def _run_single_level(
         _load_mesh_from_fixture,
         _refine_mesh_locally_in_outer_annulus,
         _refine_mesh_locally_near_rim,
-        _run_theta_relaxation,
         _vertex_average_locally_in_annulus,
     )
 
@@ -1104,6 +1107,18 @@ def _run_single_level(
         raise ValueError("isotropy_iters must be >= 0.")
     isotropy_rmin_lambda_value = float(isotropy_rmin_lambda)
     isotropy_rmax_lambda_value = float(isotropy_rmax_lambda)
+    theta_relax_mode_value = str(theta_relax_mode).strip().lower()
+    if theta_relax_mode_value not in {"fixed", "adaptive"}:
+        raise ValueError("theta_relax_mode must be 'fixed' or 'adaptive'.")
+    theta_relax_max_repeats_value = int(theta_relax_max_repeats)
+    if theta_relax_max_repeats_value < 1:
+        raise ValueError("theta_relax_max_repeats must be >= 1.")
+    theta_relax_energy_abs_tol_value = float(theta_relax_energy_abs_tol)
+    if theta_relax_energy_abs_tol_value < 0.0:
+        raise ValueError("theta_relax_energy_abs_tol must be >= 0.")
+    theta_relax_plateau_patience_value = int(theta_relax_plateau_patience)
+    if theta_relax_plateau_patience_value < 1:
+        raise ValueError("theta_relax_plateau_patience must be >= 1.")
     isotropy_operator_mode = (
         "flip_only"
         if isotropy_pass_mode == "outer_far_flip_only"
@@ -1148,9 +1163,42 @@ def _run_single_level(
     rows: list[dict[str, float]] = []
     for theta in np.asarray(theta_values, dtype=float).tolist():
         theta_f = float(theta)
-        mesh_total = float(
-            _run_theta_relaxation(minim, theta_value=theta_f, reset_outer=True)
+        repeats_planned = (
+            int(theta_relax_max_repeats_value)
+            if theta_relax_mode_value == "adaptive"
+            else 1
         )
+        repeats_applied = 0
+        converged = False
+        prev_energy = None
+        plateau_count = 0
+        mesh_total = float("nan")
+        for relax_rep in range(repeats_planned):
+            gp = mesh.global_parameters
+            gp.set("tilt_thetaB_value", float(theta_f))
+            if int(relax_rep) == 0:
+                tin = np.zeros_like(mesh.tilts_in_view())
+                mesh.set_tilts_in_from_array(tin)
+                tout = np.zeros_like(mesh.tilts_out_view())
+                mesh.set_tilts_out_from_array(tout)
+            minim._relax_leaflet_tilts(positions=mesh.positions_view(), mode="coupled")
+            mesh_total = float(minim.compute_energy())
+            if not np.isfinite(mesh_total):
+                raise ValueError(
+                    f"Non-finite energy during theta scan at theta={theta_f}."
+                )
+            repeats_applied = int(relax_rep) + 1
+            if theta_relax_mode_value == "adaptive":
+                if prev_energy is not None:
+                    delta = abs(float(mesh_total) - float(prev_energy))
+                    if delta <= float(theta_relax_energy_abs_tol_value):
+                        plateau_count += 1
+                    else:
+                        plateau_count = 0
+                    if plateau_count >= int(theta_relax_plateau_patience_value):
+                        converged = True
+                        break
+                prev_energy = float(mesh_total)
         breakdown = minim.compute_energy_breakdown()
         mesh_contact = float(breakdown.get("tilt_thetaB_contact_in", 0.0))
         mesh_internal = float(mesh_total - mesh_contact)
@@ -1486,6 +1534,10 @@ def _run_single_level(
                 "meets_parity_target_v2": bool(meets_parity_target_v2),
                 "axial_symmetry_mode": str(axial_symmetry_mode),
                 "axial_symmetry_pass": bool(axial_symmetry_pass),
+                "theta_relax_mode": str(theta_relax_mode_value),
+                "theta_relax_max_repeats": int(theta_relax_max_repeats_value),
+                "theta_relax_repeats_applied": int(repeats_applied),
+                "theta_relax_converged": bool(converged),
                 "isotropy_pass": str(isotropy_pass_mode),
                 "isotropy_iterations_requested": int(
                     isotropy_stats["iterations_requested"]
@@ -1639,6 +1691,10 @@ def _run_single_level(
             "ratio_version": str(ratio_version_mode),
             "parity_target": str(parity_target_mode),
             "axial_symmetry_mode_effective": str(axial_symmetry_mode),
+            "theta_relax_mode": str(theta_relax_mode_value),
+            "theta_relax_max_repeats": int(theta_relax_max_repeats_value),
+            "theta_relax_energy_abs_tol": float(theta_relax_energy_abs_tol_value),
+            "theta_relax_plateau_patience": int(theta_relax_plateau_patience_value),
         },
         "theory": {
             "kappa": float(theory.kappa),
@@ -1698,6 +1754,10 @@ def run_flat_disk_kh_term_audit(
     isotropy_iters: int = 0,
     isotropy_rmin_lambda: float = 0.0,
     isotropy_rmax_lambda: float = 0.0,
+    theta_relax_mode: str = "fixed",
+    theta_relax_max_repeats: int = 1,
+    theta_relax_energy_abs_tol: float = 1.0e-10,
+    theta_relax_plateau_patience: int = 2,
 ) -> dict[str, Any]:
     """Evaluate per-theta mesh/theory split terms in KH physical lane."""
     _ensure_repo_root_on_sys_path()
@@ -1750,6 +1810,10 @@ def run_flat_disk_kh_term_audit(
         isotropy_iters=int(isotropy_iters),
         isotropy_rmin_lambda=float(isotropy_rmin_lambda),
         isotropy_rmax_lambda=float(isotropy_rmax_lambda),
+        theta_relax_mode=str(theta_relax_mode),
+        theta_relax_max_repeats=int(theta_relax_max_repeats),
+        theta_relax_energy_abs_tol=float(theta_relax_energy_abs_tol),
+        theta_relax_plateau_patience=int(theta_relax_plateau_patience),
     )
 
 
@@ -1785,6 +1849,10 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     tilt_post_relax_passes: int = 1,
     radial_projection_diagnostic: bool = False,
     partition_mode: str = "centroid",
+    theta_relax_mode: str = "fixed",
+    theta_relax_max_repeats: int = 1,
+    theta_relax_energy_abs_tol: float = 1.0e-10,
+    theta_relax_plateau_patience: int = 2,
 ) -> dict[str, Any]:
     """Run KH term audit across multiple refinement levels."""
     _ensure_repo_root_on_sys_path()
@@ -1835,6 +1903,10 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             tilt_post_relax_passes=int(tilt_post_relax_passes),
             radial_projection_diagnostic=bool(radial_projection_diagnostic),
             partition_mode=str(partition_mode),
+            theta_relax_mode=str(theta_relax_mode),
+            theta_relax_max_repeats=int(theta_relax_max_repeats),
+            theta_relax_energy_abs_tol=float(theta_relax_energy_abs_tol),
+            theta_relax_plateau_patience=int(theta_relax_plateau_patience),
         )
         for level in levels
     ]
@@ -1867,6 +1939,10 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             "tilt_post_relax_passes": int(tilt_post_relax_passes),
             "radial_projection_diagnostic": bool(radial_projection_diagnostic),
             "partition_mode": str(partition_mode),
+            "theta_relax_mode": str(theta_relax_mode).strip().lower(),
+            "theta_relax_max_repeats": int(theta_relax_max_repeats),
+            "theta_relax_energy_abs_tol": float(theta_relax_energy_abs_tol),
+            "theta_relax_plateau_patience": int(theta_relax_plateau_patience),
         },
         "runs": runs,
     }
