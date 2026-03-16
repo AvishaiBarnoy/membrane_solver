@@ -2403,6 +2403,112 @@ def run_flat_disk_kh_outerfield_averaged_sweep(
     }
 
 
+def run_flat_disk_kh_disk_refinement_characterization(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    outer_mode: str = "disabled",
+    smoothness_model: str = "splay_twist",
+    kappa_physical: float = 10.0,
+    kappa_t_physical: float = 10.0,
+    radius_nm: float = 7.0,
+    length_scale_nm: float = 15.0,
+    drive_physical: float = (2.0 / 0.7),
+    tilt_mass_mode_in: str = "consistent",
+    tilt_divergence_mode_in: str = "native",
+    theta_value: float = 0.138,
+    refine_levels: Sequence[int] = (2, 3),
+    rim_local_steps_values: Sequence[int] = (0, 1, 2),
+    rim_local_band_lambda_values: Sequence[float] = (2.0, 3.0, 4.0),
+    ratio_version: str = "v1",
+    theory_outer_mode: str = "infinite",
+) -> dict[str, Any]:
+    """Characterize strict-KH parity sensitivity to disk/rim-local refinement."""
+    fixture_path = Path(fixture)
+    if not fixture_path.is_absolute():
+        fixture_path = (ROOT / fixture_path).resolve()
+    if not fixture_path.exists():
+        raise FileNotFoundError(f"Fixture not found: {fixture_path}")
+
+    refine_vals = [int(x) for x in refine_levels]
+    rim_steps_vals = [int(x) for x in rim_local_steps_values]
+    rim_band_vals = [float(x) for x in rim_local_band_lambda_values]
+    if len(refine_vals) == 0:
+        raise ValueError("refine_levels must be non-empty.")
+    if len(rim_steps_vals) == 0:
+        raise ValueError("rim_local_steps_values must be non-empty.")
+    if len(rim_band_vals) == 0:
+        raise ValueError("rim_local_band_lambda_values must be non-empty.")
+    if any(level < 0 for level in refine_vals):
+        raise ValueError("refine_levels must be >= 0.")
+    if any(step < 0 for step in rim_steps_vals):
+        raise ValueError("rim_local_steps_values must be >= 0.")
+    if any(band <= 0.0 for band in rim_band_vals):
+        raise ValueError("rim_local_band_lambda_values must be > 0.")
+    ratio_version_mode = str(ratio_version).strip().lower()
+    if ratio_version_mode not in {"v1", "v2"}:
+        raise ValueError("ratio_version must be 'v1' or 'v2'.")
+
+    rows: list[dict[str, float | int | str]] = []
+    complexity_rank = 0
+    for refine_level in refine_vals:
+        for rim_steps in rim_steps_vals:
+            bands = [0.0] if rim_steps == 0 else rim_band_vals
+            for rim_band in bands:
+                report = run_flat_disk_kh_term_audit(
+                    fixture=fixture_path,
+                    refine_level=refine_level,
+                    outer_mode=outer_mode,
+                    smoothness_model=smoothness_model,
+                    kappa_physical=kappa_physical,
+                    kappa_t_physical=kappa_t_physical,
+                    radius_nm=radius_nm,
+                    length_scale_nm=length_scale_nm,
+                    drive_physical=drive_physical,
+                    theta_values=(theta_value,),
+                    tilt_mass_mode_in=tilt_mass_mode_in,
+                    tilt_divergence_mode_in=tilt_divergence_mode_in,
+                    rim_local_refine_steps=rim_steps,
+                    rim_local_refine_band_lambda=rim_band,
+                    ratio_version=ratio_version_mode,
+                    theory_outer_mode=theory_outer_mode,
+                )
+                row = dict(report["rows"][0])
+                row["refine_level"] = int(refine_level)
+                row["rim_local_refine_steps"] = int(rim_steps)
+                row["rim_local_refine_band_lambda"] = float(rim_band)
+                row["complexity_rank"] = complexity_rank
+                rows.append(row)
+                complexity_rank += 1
+
+    selected = min(
+        rows,
+        key=lambda row: (
+            float(row["section_score_internal_bands_finite_outer_l2_log"]),
+            abs(float(row["internal_disk_ratio_mesh_over_theory"]) - 1.0),
+            abs(float(row["internal_outer_near_ratio_mesh_over_theory"]) - 1.0),
+            abs(float(row["internal_outer_far_ratio_mesh_over_theory"]) - 1.0),
+            float(row["complexity_rank"]),
+        ),
+    )
+    return {
+        "meta": {
+            "mode": "strict_disk_refinement_characterization",
+            "fixture": str(fixture_path.relative_to(ROOT)),
+            "parameterization": "kh_physical",
+            "outer_mode": str(outer_mode),
+            "smoothness_model": str(smoothness_model),
+            "theta_value": float(theta_value),
+            "ratio_version": str(ratio_version_mode),
+            "theory_outer_mode_requested": str(theory_outer_mode),
+            "refine_levels": [int(x) for x in refine_vals],
+            "rim_local_steps_values": [int(x) for x in rim_steps_vals],
+            "rim_local_band_lambda_values": [float(x) for x in rim_band_vals],
+        },
+        "rows": rows,
+        "selected_best": selected,
+    }
+
+
 def main() -> int:
     _ensure_repo_root_on_sys_path()
     ap = argparse.ArgumentParser()
