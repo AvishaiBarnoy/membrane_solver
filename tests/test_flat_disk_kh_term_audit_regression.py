@@ -269,12 +269,54 @@ def test_flat_disk_kh_term_audit_divergence_mode_emits_metadata() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_kh_term_audit_theta_relax_controls_emit_metadata() -> None:
+    report = run_flat_disk_kh_term_audit(
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.0, 0.138),
+        tilt_mass_mode_in="consistent",
+        theta_relax_mode="adaptive",
+        theta_relax_max_repeats=3,
+        theta_relax_energy_abs_tol=1.0e-6,
+        theta_relax_plateau_patience=1,
+    )
+    assert report["meta"]["theta_relax_mode"] == "adaptive"
+    assert int(report["meta"]["theta_relax_max_repeats"]) == 3
+    assert float(report["meta"]["theta_relax_energy_abs_tol"]) == pytest.approx(1.0e-6)
+    assert int(report["meta"]["theta_relax_plateau_patience"]) == 1
+    for row in report["rows"]:
+        assert row["theta_relax_mode"] == "adaptive"
+        assert int(row["theta_relax_max_repeats"]) == 3
+        assert 1 <= int(row["theta_relax_repeats_applied"]) <= 3
+        assert isinstance(bool(row["theta_relax_converged"]), bool)
+
+
+@pytest.mark.regression
 def test_flat_disk_kh_term_audit_invalid_partition_mode_raises() -> None:
     with pytest.raises(ValueError, match="partition_mode"):
         run_flat_disk_kh_term_audit(
             refine_level=1,
             theta_values=(0.0,),
             partition_mode="bad_mode",
+        )
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_theta_relax_controls_validate() -> None:
+    with pytest.raises(
+        ValueError, match="theta_relax_mode must be 'fixed' or 'adaptive'"
+    ):
+        run_flat_disk_kh_term_audit(
+            refine_level=1,
+            theta_values=(0.0,),
+            theta_relax_mode="bad_mode",
+        )
+    with pytest.raises(ValueError, match="theta_relax_max_repeats must be >= 1"):
+        run_flat_disk_kh_term_audit(
+            refine_level=1,
+            theta_values=(0.0,),
+            theta_relax_max_repeats=0,
         )
 
 
@@ -302,6 +344,27 @@ def test_flat_disk_kh_term_audit_refine_sweep_relax_projection_controls_emit_met
         assert int(run["meta"]["tilt_post_relax_inner_steps"]) == 20
         assert float(run["meta"]["tilt_post_relax_step_size"]) == pytest.approx(0.02)
         assert int(run["meta"]["tilt_post_relax_passes"]) == 2
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_refine_sweep_theta_relax_controls_emit_metadata() -> (
+    None
+):
+    report = run_flat_disk_kh_term_audit_refine_sweep(
+        refine_levels=(1, 2),
+        theta_values=(0.0,),
+        theta_relax_mode="adaptive",
+        theta_relax_max_repeats=2,
+        theta_relax_energy_abs_tol=1.0e-6,
+        theta_relax_plateau_patience=1,
+    )
+    assert report["meta"]["theta_relax_mode"] == "adaptive"
+    assert int(report["meta"]["theta_relax_max_repeats"]) == 2
+    assert float(report["meta"]["theta_relax_energy_abs_tol"]) == pytest.approx(1.0e-6)
+    assert int(report["meta"]["theta_relax_plateau_patience"]) == 1
+    for run in report["runs"]:
+        assert run["meta"]["theta_relax_mode"] == "adaptive"
+        assert int(run["meta"]["theta_relax_max_repeats"]) == 2
 
 
 @pytest.mark.regression
