@@ -110,6 +110,12 @@ class Minimizer:
         self._last_mesh_op_tilt_constraints_enforced: bool | None = None
         self._energy_context: EnergyContext | None = None
         self._module_accepts_ctx: dict[int, bool] = {}
+        self._last_tilt_projection_stats: dict[str, float | int | str] = {
+            "projection_cadence": "per_step",
+            "projection_interval": 1,
+            "projection_apply_count": 0,
+            "tilt_projection_norm_loss_outer_far": 0.0,
+        }
 
     def _validate_energy_modules_array(self) -> None:
         """Ensure energy modules support the array API required by minimization."""
@@ -1169,6 +1175,30 @@ class Minimizer:
         mode: str,
     ) -> None:
         """Relax inner/outer leaflet tilt vectors according to solve mode."""
+        projection_cadence = (
+            str(
+                self.global_params.get("tilt_projection_cadence", "per_step")
+                or "per_step"
+            )
+            .strip()
+            .lower()
+        )
+        if projection_cadence not in {"per_step", "per_pass"}:
+            raise ValueError(
+                "tilt_projection_cadence must be 'per_step' or 'per_pass'."
+            )
+        projection_interval = int(
+            self.global_params.get("tilt_projection_interval", 1) or 1
+        )
+        if projection_interval < 1:
+            raise ValueError("tilt_projection_interval must be >= 1.")
+        self._last_tilt_projection_stats = {
+            "projection_cadence": str(projection_cadence),
+            "projection_interval": int(projection_interval),
+            "projection_apply_count": 0,
+            "tilt_projection_norm_loss_outer_far": 0.0,
+        }
+
         mode_norm = str(mode or "").strip().lower()
         if mode_norm in ("", "none", "off", "false", "fixed"):
             return
@@ -1282,6 +1312,67 @@ class Minimizer:
 
             tilt_in_grad = np.zeros_like(tilts_in)
             tilt_out_grad = np.zeros_like(tilts_out)
+            accepted_steps = 0
+            projection_apply_count = 0
+            projection_norm_loss_outer_far = 0.0
+            projection_norm_ref_outer_far = 0.0
+
+            outer_far_rows = np.asarray([], dtype=int)
+            projection_loss_radius = float(
+                self.global_params.get("tilt_projection_loss_radius", 0.0) or 0.0
+            )
+            projection_loss_lambda = float(
+                self.global_params.get("tilt_projection_loss_lambda", 0.0) or 0.0
+            )
+            projection_loss_outer_near_width = float(
+                self.global_params.get(
+                    "tilt_projection_loss_outer_near_width_lambda", 4.0
+                )
+                or 4.0
+            )
+            if projection_loss_radius > 0.0 and projection_loss_lambda > 0.0:
+                rxy = np.linalg.norm(positions[:, :2], axis=1)
+                outer_far_rows = np.flatnonzero(
+                    rxy
+                    >= (
+                        projection_loss_radius
+                        + projection_loss_outer_near_width * projection_loss_lambda
+                    )
+                )
+
+            def _refresh_tilts_from_constraints_and_project() -> None:
+                nonlocal tilts_in, tilts_out
+                nonlocal projection_apply_count
+                nonlocal projection_norm_loss_outer_far, projection_norm_ref_outer_far
+
+                before_norm = None
+                if outer_far_rows.size > 0:
+                    before_norm = np.linalg.norm(tilts_in[outer_far_rows], axis=1)
+                self._set_leaflet_tilts_from_arrays_fast(tilts_in, tilts_out)
+                if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
+                    self.constraint_manager.enforce_tilt_constraints(
+                        self.mesh, global_params=self.global_params
+                    )
+                tilts_in = self.mesh.tilts_in_view().copy(order="F")
+                tilts_out = self.mesh.tilts_out_view().copy(order="F")
+                tilts_in = self._project_tilts_to_tangent_array(tilts_in, normals)
+                tilts_out = self._project_tilts_to_tangent_array(tilts_out, normals)
+                tilts_in, tilts_out = project_leaflet_tilts_with_optional_axisymmetry(
+                    global_params=self.global_params,
+                    positions=positions,
+                    normals=normals,
+                    tilts_in=tilts_in,
+                    tilts_out=tilts_out,
+                    fixed_mask_in=fixed_mask_in,
+                    fixed_mask_out=fixed_mask_out,
+                )
+                projection_apply_count += 1
+                if before_norm is not None:
+                    after_norm = np.linalg.norm(tilts_in[outer_far_rows], axis=1)
+                    projection_norm_loss_outer_far += float(
+                        np.sum(np.maximum(before_norm - after_norm, 0.0))
+                    )
+                    projection_norm_ref_outer_far += float(np.sum(before_norm))
 
             def _leaflet_tilt_gradients() -> tuple[float, float]:
                 E0 = self._compute_energy_and_leaflet_tilt_gradients_array(
@@ -1375,33 +1466,12 @@ class Minimizer:
                     if not accepted:
                         break
 
-                    if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
-                        # Tilt constraints operate on the mesh state, so scatter the
-                        # accepted tilt arrays, enforce, then re-load for continued
-                        # relaxation steps.
-                        self._set_leaflet_tilts_from_arrays_fast(tilts_in, tilts_out)
-                        self.constraint_manager.enforce_tilt_constraints(
-                            self.mesh, global_params=self.global_params
-                        )
-                        tilts_in = self.mesh.tilts_in_view().copy(order="F")
-                        tilts_out = self.mesh.tilts_out_view().copy(order="F")
-                        tilts_in = self._project_tilts_to_tangent_array(
-                            tilts_in, normals
-                        )
-                        tilts_out = self._project_tilts_to_tangent_array(
-                            tilts_out, normals
-                        )
-                        tilts_in, tilts_out = (
-                            project_leaflet_tilts_with_optional_axisymmetry(
-                                global_params=self.global_params,
-                                positions=positions,
-                                normals=normals,
-                                tilts_in=tilts_in,
-                                tilts_out=tilts_out,
-                                fixed_mask_in=fixed_mask_in,
-                                fixed_mask_out=fixed_mask_out,
-                            )
-                        )
+                    accepted_steps += 1
+                    if (
+                        projection_cadence == "per_step"
+                        and (accepted_steps % projection_interval) == 0
+                    ):
+                        _refresh_tilts_from_constraints_and_project()
             else:
                 M_inv_in = None
                 M_inv_out = None
@@ -1477,30 +1547,12 @@ class Minimizer:
                     if not accepted:
                         break
 
-                    if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
-                        self._set_leaflet_tilts_from_arrays_fast(tilts_in, tilts_out)
-                        self.constraint_manager.enforce_tilt_constraints(
-                            self.mesh, global_params=self.global_params
-                        )
-                        tilts_in = self.mesh.tilts_in_view().copy(order="F")
-                        tilts_out = self.mesh.tilts_out_view().copy(order="F")
-                        tilts_in = self._project_tilts_to_tangent_array(
-                            tilts_in, normals
-                        )
-                        tilts_out = self._project_tilts_to_tangent_array(
-                            tilts_out, normals
-                        )
-                        tilts_in, tilts_out = (
-                            project_leaflet_tilts_with_optional_axisymmetry(
-                                global_params=self.global_params,
-                                positions=positions,
-                                normals=normals,
-                                tilts_in=tilts_in,
-                                tilts_out=tilts_out,
-                                fixed_mask_in=fixed_mask_in,
-                                fixed_mask_out=fixed_mask_out,
-                            )
-                        )
+                    accepted_steps += 1
+                    if (
+                        projection_cadence == "per_step"
+                        and (accepted_steps % projection_interval) == 0
+                    ):
+                        _refresh_tilts_from_constraints_and_project()
 
                     E0, gnorm = _leaflet_tilt_gradients()
                     if gnorm == 0.0 or (tol > 0.0 and gnorm < tol):
@@ -1523,6 +1575,27 @@ class Minimizer:
                     dir_in = z_in + beta * dir_in
                     dir_out = z_out + beta * dir_out
                     rz_old = rz_new
+
+            if accepted_steps > 0:
+                if projection_cadence == "per_pass":
+                    _refresh_tilts_from_constraints_and_project()
+                elif (accepted_steps % projection_interval) != 0:
+                    _refresh_tilts_from_constraints_and_project()
+
+            loss_outer_far_ratio = (
+                float(
+                    projection_norm_loss_outer_far
+                    / max(projection_norm_ref_outer_far, 1.0e-18)
+                )
+                if projection_norm_ref_outer_far > 0.0
+                else 0.0
+            )
+            self._last_tilt_projection_stats = {
+                "projection_cadence": str(projection_cadence),
+                "projection_interval": int(projection_interval),
+                "projection_apply_count": int(projection_apply_count),
+                "tilt_projection_norm_loss_outer_far": float(loss_outer_far_ratio),
+            }
 
         self._set_leaflet_tilts_from_arrays_fast(tilts_in, tilts_out)
         if hasattr(self.constraint_manager, "enforce_tilt_constraints"):

@@ -1686,6 +1686,30 @@ def test_flat_disk_reports_tilt_projection_and_post_relax_meta() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_post_relax_projection_emits_apply_count() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="scan",
+        theta_min=0.0,
+        theta_max=0.0014,
+        theta_count=8,
+        tilt_projection_cadence="per_step",
+        tilt_projection_interval=1,
+        tilt_post_relax_inner_steps=20,
+        tilt_post_relax_step_size=0.005,
+        tilt_post_relax_passes=1,
+    )
+    projection = report["diagnostics"]["tilt_projection"]
+    assert projection["projection_cadence"] == "per_step"
+    assert int(projection["projection_interval"]) == 1
+    assert int(projection["projection_apply_count"]) > 0
+    assert np.isfinite(float(projection["tilt_projection_norm_loss_outer_far"]))
+
+
+@pytest.mark.regression
 def test_flat_disk_rejects_invalid_tilt_divergence_mode() -> None:
     with pytest.raises(
         ValueError,
