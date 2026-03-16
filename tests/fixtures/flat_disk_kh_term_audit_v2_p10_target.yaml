@@ -1,0 +1,37 @@
+meta:
+  mode: kh_term_audit_v2_fixed_theta_staged_p10
+  theta_value: 0.138
+  ratio_version: v2
+  parity_target: p10
+  axial_symmetry_gate: monitor
+  theory_outer_mode: finite_bvp
+  v2_ratio_semantics: strict_raw
+  controls:
+    refine_level: 3
+    rim_local_refine_steps: 1
+    rim_local_refine_band_lambda: 1.5
+    outer_local_refine_steps: 1
+    outer_local_refine_rmin_lambda: 0.5
+    outer_local_refine_rmax_lambda: 8.0
+    outer_local_vertex_average_steps: 5
+    outer_local_vertex_average_rmin_lambda: 8.0
+    outer_local_vertex_average_rmax_lambda: 12.0
+    isotropy_pass: "off"
+    isotropy_iters: 0
+    partition_mode: fractional
+    tilt_mass_mode_in: consistent
+    tilt_divergence_mode_in: native
+    theta_relax_mode: adaptive
+    theta_relax_max_repeats: 5
+    theta_relax_energy_abs_tol: 1.0e-10
+    theta_relax_plateau_patience: 2
+    tilt_projection_cadence: per_step
+    tilt_projection_interval: 1
+    tilt_post_relax_inner_steps: 40
+    tilt_post_relax_step_size: 0.005
+    tilt_post_relax_passes: 1
+expected:
+  meets_10pct_v2: true
+  meets_parity_target_v2: true
+runtime_gate:
+  max_v2_over_v1: 2.0
