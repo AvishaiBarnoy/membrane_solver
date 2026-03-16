@@ -11,12 +11,16 @@ import yaml
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data
+from runtime.refinement import refine_triangle_mesh
 from tools.diagnostics.flat_disk_kh_error_source_audit import (
     run_flat_disk_kh_fractional_refinement_trend,
 )
 from tools.diagnostics.flat_disk_kh_term_audit import (
     run_flat_disk_kh_outerfield_averaged_sweep,
     run_flat_disk_kh_term_audit,
+)
+from tools.diagnostics.flat_disk_one_leaflet_theory import (
+    physical_to_dimensionless_theory_params,
 )
 from tools.reproduce_flat_disk_one_leaflet import (
     DEFAULT_FIXTURE,
@@ -1707,6 +1711,65 @@ def test_flat_disk_post_relax_projection_emits_apply_count() -> None:
     assert int(projection["projection_interval"]) == 1
     assert int(projection["projection_apply_count"]) > 0
     assert np.isfinite(float(projection["tilt_projection_norm_loss_outer_far"]))
+
+
+@pytest.mark.regression
+def test_run_theta_relaxation_can_preserve_inner_state_between_repeats() -> None:
+    params = physical_to_dimensionless_theory_params(
+        kappa_physical=10.0,
+        kappa_t_physical=10.0,
+        radius_physical=7.0,
+        drive_physical=(2.0 / 0.7),
+        length_scale=15.0,
+    )
+    mesh = _load_mesh_from_fixture(DEFAULT_FIXTURE)
+    mesh = refine_triangle_mesh(mesh)
+    _configure_benchmark_mesh(
+        mesh,
+        theory_params=params,
+        parameterization="kh_physical",
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        splay_modulus_scale_in=1.0,
+        tilt_mass_mode_in="consistent",
+        tilt_divergence_mode_in="native",
+        tilt_projection_cadence="per_step",
+        tilt_projection_interval=1,
+        tilt_post_relax_inner_steps=20,
+        tilt_post_relax_step_size=0.005,
+        tilt_post_relax_passes=1,
+    )
+
+    minim = _build_minimizer(mesh)
+    minim.enforce_constraints_after_mesh_ops(mesh)
+    mesh.project_tilts_to_tangent()
+
+    _run_theta_relaxation(
+        minim,
+        theta_value=0.001,
+        reset_outer=True,
+        reset_inner=True,
+    )
+    first_tilts = np.array(mesh.tilts_in_view(), copy=True)
+
+    _run_theta_relaxation(
+        minim,
+        theta_value=0.001,
+        reset_outer=False,
+        reset_inner=False,
+    )
+    warm_repeat_tilts = np.array(mesh.tilts_in_view(), copy=True)
+
+    _run_theta_relaxation(
+        minim,
+        theta_value=0.001,
+        reset_outer=False,
+        reset_inner=True,
+    )
+    cold_repeat_tilts = np.array(mesh.tilts_in_view(), copy=True)
+
+    assert np.linalg.norm(warm_repeat_tilts - first_tilts) > 1.0e-8
+    assert np.linalg.norm(cold_repeat_tilts - first_tilts) == pytest.approx(0.0)
 
 
 @pytest.mark.regression
