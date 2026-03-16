@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -7,6 +8,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.flat_disk_kh_term_audit import (
+    run_flat_disk_kh_discrete_tilt_matrix,
     run_flat_disk_kh_disk_refinement_characterization,
     run_flat_disk_kh_outerfield_averaged_sweep,
     run_flat_disk_kh_outertail_characterization,
@@ -802,6 +804,104 @@ def test_flat_disk_kh_disk_refinement_characterization_emits_matrix_and_best(
 def test_flat_disk_kh_disk_refinement_characterization_empty_values_raise() -> None:
     with pytest.raises(ValueError, match="refine_levels"):
         run_flat_disk_kh_disk_refinement_characterization(refine_levels=())
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_discrete_tilt_matrix_runner_deterministic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_term_audit as audit_mod
+
+    def _fake_refine_sweep(**kwargs):
+        mass = str(kwargs.get("tilt_mass_mode_in", "consistent"))
+        div = str(kwargs.get("tilt_divergence_mode_in", "native"))
+        cadence = str(kwargs.get("tilt_projection_cadence", "per_step"))
+        interval = int(kwargs.get("tilt_projection_interval", 1))
+        iso = str(kwargs.get("isotropy_pass", "off"))
+        avg = int(kwargs.get("outer_local_vertex_average_steps", 0))
+        rmax = float(kwargs.get("outer_local_refine_rmax_lambda", 8.0))
+
+        mass_penalty = 0.01 if mass == "lumped" else 0.0
+        div_penalty = 0.02 if div == "vertex_recovered" else 0.0
+        cadence_shift = (
+            -0.01 if cadence == "per_pass" else (0.005 if interval > 1 else 0.0)
+        )
+        iso_shift = (
+            -0.01
+            if iso == "outer_far"
+            else (-0.005 if iso == "outer_far_flip_only" else 0.0)
+        )
+        avg_shift = -0.002 * float(avg)
+        rmax_shift = 0.004 * (float(rmax) - 8.0)
+
+        far2 = (
+            0.92
+            - mass_penalty
+            - div_penalty
+            + cadence_shift
+            + iso_shift
+            + avg_shift
+            + rmax_shift
+        )
+        far3 = (
+            0.93
+            - mass_penalty
+            - div_penalty
+            + cadence_shift
+            + iso_shift
+            + avg_shift
+            + rmax_shift
+        )
+        disk2 = 0.98
+        near2 = 0.99
+        disk3 = 0.99
+        near3 = 0.98
+        err2 = max(abs(disk2 - 1.0), abs(near2 - 1.0), abs(far2 - 1.0))
+        err3 = max(abs(disk3 - 1.0), abs(near3 - 1.0), abs(far3 - 1.0))
+        return {
+            "runs": [
+                {
+                    "meta": {"refine_level": 2},
+                    "rows": [
+                        {
+                            "internal_disk_ratio_mesh_over_theory_v2": disk2,
+                            "internal_outer_near_ratio_mesh_over_theory_v2": near2,
+                            "internal_outer_far_ratio_mesh_over_theory_v2": far2,
+                        }
+                    ],
+                },
+                {
+                    "meta": {"refine_level": 3},
+                    "rows": [
+                        {
+                            "internal_disk_ratio_mesh_over_theory_v2": disk3,
+                            "internal_outer_near_ratio_mesh_over_theory_v2": near3,
+                            "internal_outer_far_ratio_mesh_over_theory_v2": far3,
+                        }
+                    ],
+                },
+            ],
+            "err2_v2": float(err2),
+            "err3_v2": float(err3),
+            "adaptive_guard_pass": True,
+            "adaptive_guard_reason": "pass",
+        }
+
+    monkeypatch.setattr(
+        audit_mod, "run_flat_disk_kh_term_audit_refine_sweep", _fake_refine_sweep
+    )
+
+    matrix_fixture = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "flat_disk_kh_discrete_tilt_matrix.yaml"
+    )
+    report_a = run_flat_disk_kh_discrete_tilt_matrix(matrix_fixture=matrix_fixture)
+    report_b = run_flat_disk_kh_discrete_tilt_matrix(matrix_fixture=matrix_fixture)
+    assert report_a["meta"]["mode"] == "discrete_tilt_matrix"
+    assert len(report_a["phase1_rows"]) > 0
+    assert len(report_a["phase1_top"]) > 0
+    assert report_a["selected"] == report_b["selected"]
 
 
 def _run_policy_report(**overrides):
