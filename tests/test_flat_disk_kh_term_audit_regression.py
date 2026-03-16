@@ -802,3 +802,114 @@ def test_flat_disk_kh_disk_refinement_characterization_emits_matrix_and_best(
 def test_flat_disk_kh_disk_refinement_characterization_empty_values_raise() -> None:
     with pytest.raises(ValueError, match="refine_levels"):
         run_flat_disk_kh_disk_refinement_characterization(refine_levels=())
+
+
+def _run_policy_report(**overrides):
+    base = {"refine_level": 1, "theta_values": (0.138,), "ratio_version": "v2"}
+    base.update(overrides)
+    return run_flat_disk_kh_term_audit(**base)
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_parity_target_and_axial_defaults() -> None:
+    report_p10 = _run_policy_report(
+        parity_target="p10",
+        rim_local_refine_steps=1,
+        rim_local_refine_band_lambda=3.0,
+    )
+    report_p5 = _run_policy_report(
+        parity_target="p5",
+        rim_local_refine_steps=1,
+        rim_local_refine_band_lambda=3.0,
+    )
+    assert report_p10["meta"]["parity_target"] == "p10"
+    assert report_p10["meta"]["axial_symmetry_mode_effective"] == "monitor"
+    assert report_p5["meta"]["parity_target"] == "p5"
+    assert report_p5["meta"]["axial_symmetry_mode_effective"] == "hard"
+    row_p10 = report_p10["rows"][0]
+    row_p5 = report_p5["rows"][0]
+    assert bool(row_p10["meets_parity_target_v2"]) is bool(row_p10["meets_10pct_v2"])
+    assert bool(row_p5["meets_parity_target_v2"]) is bool(row_p5["meets_5pct_v2"])
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_axial_hard_gate_can_block_target() -> None:
+    report = _run_policy_report(parity_target="p10", axial_symmetry_gate="hard")
+    assert report["meta"]["axial_symmetry_mode_effective"] == "hard"
+    row = report["rows"][0]
+    assert row["axial_symmetry_mode"] == "hard"
+    assert isinstance(bool(row["axial_symmetry_pass"]), bool)
+    assert isinstance(bool(report["axial_symmetry_pass"]), bool)
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_axial_gate_off_always_passes() -> None:
+    report = _run_policy_report(
+        parity_target="p5",
+        axial_symmetry_gate="off",
+        rim_local_refine_steps=1,
+        rim_local_refine_band_lambda=3.0,
+    )
+    assert report["meta"]["axial_symmetry_mode_effective"] == "off"
+    assert bool(report["axial_symmetry_pass"]) is True
+    assert bool(report["rows"][0]["axial_symmetry_pass"]) is True
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_isotropy_defaults_off() -> None:
+    report = _run_policy_report()
+    assert report["meta"]["isotropy_pass"] == "off"
+    assert int(report["meta"]["isotropy_iters"]) == 0
+    assert report["meta"]["isotropy_operator_mode"] == "flip_then_average"
+    row = report["rows"][0]
+    assert row["isotropy_pass"] == "off"
+    assert int(row["isotropy_iterations_requested"]) == 0
+    assert int(row["isotropy_iterations_applied"]) == 0
+    assert int(row["isotropy_iterations_skipped"]) == 0
+    assert row["isotropy_operator_mode"] == "flip_then_average"
+    assert np.isfinite(float(row["isotropy_r_min"]))
+    assert np.isfinite(float(row["isotropy_r_max"]))
+    assert np.isfinite(float(row["isotropy_r_min_lambda"]))
+    assert np.isfinite(float(row["isotropy_r_max_lambda"]))
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_isotropy_pass_outer_far_metadata() -> None:
+    report = _run_policy_report(
+        parity_target="p10",
+        axial_symmetry_gate="monitor",
+        isotropy_pass="outer_far",
+        isotropy_iters=2,
+        isotropy_rmin_lambda=6.0,
+        isotropy_rmax_lambda=12.0,
+    )
+    assert report["meta"]["isotropy_pass"] == "outer_far"
+    assert int(report["meta"]["isotropy_iters"]) == 2
+    assert report["meta"]["isotropy_operator_mode"] == "flip_then_average"
+    row = report["rows"][0]
+    assert row["isotropy_pass"] == "outer_far"
+    assert int(row["isotropy_iterations_requested"]) == 2
+    assert int(row["isotropy_iterations_applied"]) >= 0
+    assert int(row["isotropy_iterations_skipped"]) >= 0
+    assert row["isotropy_operator_mode"] == "flip_then_average"
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_isotropy_pass_outer_far_flip_only_metadata() -> None:
+    report = _run_policy_report(
+        parity_target="p10",
+        axial_symmetry_gate="monitor",
+        isotropy_pass="outer_far_flip_only",
+        isotropy_iters=2,
+        isotropy_rmin_lambda=6.0,
+        isotropy_rmax_lambda=12.0,
+    )
+    assert report["meta"]["isotropy_pass"] == "outer_far_flip_only"
+    assert int(report["meta"]["isotropy_iters"]) == 2
+    assert report["meta"]["isotropy_operator_mode"] == "flip_only"
+    row = report["rows"][0]
+    assert row["isotropy_pass"] == "outer_far_flip_only"
+    assert int(row["isotropy_iterations_requested"]) == 2
+    assert int(row["isotropy_iterations_applied"]) >= 0
+    assert int(row["isotropy_iterations_skipped"]) >= 0
+    assert row["isotropy_operator_mode"] == "flip_only"

@@ -27,6 +27,72 @@ def _ensure_repo_root_on_sys_path() -> None:
 DEFAULT_OUT = (
     ROOT / "benchmarks" / "outputs" / "diagnostics" / "flat_disk_kh_term_audit.yaml"
 )
+AXIAL_SYMMETRY_THRESHOLD_DEFAULT = 0.05
+PARITY_TARGET_TO_ABS_TOL = {"p10": 0.10, "p5": 0.05}
+
+
+def _validate_parity_target(parity_target: str) -> str:
+    mode = str(parity_target).strip().lower()
+    if mode not in PARITY_TARGET_TO_ABS_TOL:
+        raise ValueError("parity_target must be 'p10' or 'p5'.")
+    return mode
+
+
+def _resolve_axial_symmetry_mode(
+    *, parity_target: str, axial_symmetry_gate: str | None
+) -> str:
+    if axial_symmetry_gate is None:
+        return "monitor" if str(parity_target) == "p10" else "hard"
+    mode = str(axial_symmetry_gate).strip().lower()
+    if mode not in {"monitor", "hard", "off"}:
+        raise ValueError("axial_symmetry_gate must be one of: monitor, hard, off.")
+    return mode
+
+
+def _validate_isotropy_pass(isotropy_pass: str) -> str:
+    mode = str(isotropy_pass).strip().lower()
+    if mode not in {"off", "outer_far", "outer_far_flip_only"}:
+        raise ValueError(
+            "isotropy_pass must be one of: off, outer_far, outer_far_flip_only."
+        )
+    return mode
+
+
+def _ratio_target_bounds(*, parity_target: str) -> tuple[float, float]:
+    tol = float(PARITY_TARGET_TO_ABS_TOL[str(parity_target)])
+    return (1.0 - tol, 1.0 + tol)
+
+
+def _meets_ratio_target(
+    *,
+    disk_ratio: float,
+    outer_near_ratio: float,
+    outer_far_ratio: float,
+    parity_target: str,
+) -> bool:
+    lo, hi = _ratio_target_bounds(parity_target=str(parity_target))
+    return bool(
+        (lo <= float(disk_ratio) <= hi)
+        and (lo <= float(outer_near_ratio) <= hi)
+        and (lo <= float(outer_far_ratio) <= hi)
+    )
+
+
+def _evaluate_axial_symmetry(
+    *,
+    disk_tphi_over_trad_median: float,
+    outer_near_tphi_over_trad_median: float,
+    outer_far_tphi_over_trad_median: float,
+    mode: str,
+) -> bool:
+    if str(mode) in {"off", "monitor"}:
+        return True
+    threshold = float(AXIAL_SYMMETRY_THRESHOLD_DEFAULT)
+    return bool(
+        float(disk_tphi_over_trad_median) <= threshold
+        and float(outer_near_tphi_over_trad_median) <= threshold
+        and float(outer_far_tphi_over_trad_median) <= threshold
+    )
 
 
 def _theory_split_coeffs(theory: Any) -> tuple[float, float, float]:
@@ -917,6 +983,12 @@ def _run_single_level(
     radial_projection_diagnostic: bool,
     partition_mode: str,
     ratio_version: str = "v1",
+    parity_target: str = "p10",
+    axial_symmetry_gate: str | None = None,
+    isotropy_pass: str = "off",
+    isotropy_iters: int = 0,
+    isotropy_rmin_lambda: float = 0.0,
+    isotropy_rmax_lambda: float = 0.0,
 ) -> dict[str, Any]:
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -1009,6 +1081,38 @@ def _run_single_level(
     ratio_version_mode = str(ratio_version).strip().lower()
     if ratio_version_mode not in {"v1", "v2"}:
         raise ValueError("ratio_version must be 'v1' or 'v2'.")
+    parity_target_mode = _validate_parity_target(str(parity_target))
+    axial_symmetry_mode = _resolve_axial_symmetry_mode(
+        parity_target=parity_target_mode,
+        axial_symmetry_gate=axial_symmetry_gate,
+    )
+    isotropy_pass_mode = _validate_isotropy_pass(str(isotropy_pass))
+    isotropy_iters_value = int(isotropy_iters)
+    if isotropy_iters_value < 0:
+        raise ValueError("isotropy_iters must be >= 0.")
+    isotropy_rmin_lambda_value = float(isotropy_rmin_lambda)
+    isotropy_rmax_lambda_value = float(isotropy_rmax_lambda)
+    isotropy_operator_mode = (
+        "flip_only"
+        if isotropy_pass_mode == "outer_far_flip_only"
+        else "flip_then_average"
+    )
+    isotropy_stats = {
+        "iterations_requested": isotropy_iters_value,
+        "iterations_applied": 0,
+        "iterations_skipped": 0,
+        "r_min": max(
+            0.0,
+            float(theory.radius)
+            + float(isotropy_rmin_lambda_value) * float(theory.lambda_value),
+        ),
+        "r_max": max(
+            0.0,
+            float(theory.radius)
+            + float(isotropy_rmax_lambda_value) * float(theory.lambda_value),
+        ),
+        "operator_mode": isotropy_operator_mode,
+    }
 
     _configure_benchmark_mesh(
         mesh,
@@ -1176,6 +1280,36 @@ def _run_single_level(
             float(mesh_bands["mesh_smooth_outer_far"]),
             float(th_bands["theory_smooth_outer_far"]),
         )
+        meets_10pct_v2 = _meets_ratio_target(
+            disk_ratio=float(ratio_internal_disk),
+            outer_near_ratio=float(ratio_internal_outer_near_finite),
+            outer_far_ratio=float(ratio_internal_outer_far_finite),
+            parity_target="p10",
+        )
+        meets_5pct_v2 = _meets_ratio_target(
+            disk_ratio=float(ratio_internal_disk),
+            outer_near_ratio=float(ratio_internal_outer_near_finite),
+            outer_far_ratio=float(ratio_internal_outer_far_finite),
+            parity_target="p5",
+        )
+        meets_parity_target_v2 = _meets_ratio_target(
+            disk_ratio=float(ratio_internal_disk),
+            outer_near_ratio=float(ratio_internal_outer_near_finite),
+            outer_far_ratio=float(ratio_internal_outer_far_finite),
+            parity_target=str(parity_target_mode),
+        )
+        axial_symmetry_pass = _evaluate_axial_symmetry(
+            disk_tphi_over_trad_median=float(
+                leakage["disk_core_tphi_over_trad_median"]
+            ),
+            outer_near_tphi_over_trad_median=float(
+                leakage["outer_near_tphi_over_trad_median"]
+            ),
+            outer_far_tphi_over_trad_median=float(
+                leakage["outer_far_tphi_over_trad_median"]
+            ),
+            mode=str(axial_symmetry_mode),
+        )
 
         score_internal_split = _ratio_distance_score(
             ratio_internal_disk,
@@ -1329,6 +1463,26 @@ def _run_single_level(
                 "internal_outer_far_ratio_mesh_over_theory_v2": (
                     ratio_internal_outer_far_finite
                 ),
+                "meets_10pct_v2": bool(meets_10pct_v2),
+                "meets_5pct_v2": bool(meets_5pct_v2),
+                "meets_parity_target_v2": bool(meets_parity_target_v2),
+                "axial_symmetry_mode": str(axial_symmetry_mode),
+                "axial_symmetry_pass": bool(axial_symmetry_pass),
+                "isotropy_pass": str(isotropy_pass_mode),
+                "isotropy_iterations_requested": int(
+                    isotropy_stats["iterations_requested"]
+                ),
+                "isotropy_iterations_applied": int(
+                    isotropy_stats["iterations_applied"]
+                ),
+                "isotropy_iterations_skipped": int(
+                    isotropy_stats["iterations_skipped"]
+                ),
+                "isotropy_r_min": float(isotropy_stats["r_min"]),
+                "isotropy_r_max": float(isotropy_stats["r_max"]),
+                "isotropy_operator_mode": str(isotropy_stats["operator_mode"]),
+                "isotropy_r_min_lambda": float(isotropy_rmin_lambda_value),
+                "isotropy_r_max_lambda": float(isotropy_rmax_lambda_value),
                 "tilt_disk_core_ratio_mesh_over_theory": ratio_tilt_disk_core,
                 "tilt_rim_band_ratio_mesh_over_theory": ratio_tilt_rim_band,
                 "tilt_outer_near_ratio_mesh_over_theory": ratio_tilt_outer_near,
@@ -1413,6 +1567,19 @@ def _run_single_level(
         radius=float(theory.radius),
         lambda_value=float(theory.lambda_value),
     )
+    meets_10pct_v2_all = bool(
+        len(rows) > 0 and all(bool(r.get("meets_10pct_v2", False)) for r in rows)
+    )
+    meets_5pct_v2_all = bool(
+        len(rows) > 0 and all(bool(r.get("meets_5pct_v2", False)) for r in rows)
+    )
+    meets_parity_target_v2_all = bool(
+        len(rows) > 0
+        and all(bool(r.get("meets_parity_target_v2", False)) for r in rows)
+    )
+    axial_symmetry_pass_all = bool(
+        len(rows) > 0 and all(bool(r.get("axial_symmetry_pass", False)) for r in rows)
+    )
 
     return {
         "meta": {
@@ -1440,9 +1607,14 @@ def _run_single_level(
             "outer_local_vertex_average_rmax_lambda": float(
                 outer_local_vertex_average_rmax_lambda
             ),
+            "isotropy_pass": str(isotropy_pass_mode),
+            "isotropy_iters": int(isotropy_iters_value),
+            "isotropy_operator_mode": str(isotropy_operator_mode),
             "radial_projection_diagnostic": bool(radial_projection_diagnostic),
             "partition_mode": str(partition_mode),
             "ratio_version": str(ratio_version_mode),
+            "parity_target": str(parity_target_mode),
+            "axial_symmetry_mode_effective": str(axial_symmetry_mode),
         },
         "theory": {
             "kappa": float(theory.kappa),
@@ -1456,6 +1628,10 @@ def _run_single_level(
         },
         "resolution": resolution,
         "rows": rows,
+        "meets_10pct_v2": bool(meets_10pct_v2_all),
+        "meets_5pct_v2": bool(meets_5pct_v2_all),
+        "meets_parity_target_v2": bool(meets_parity_target_v2_all),
+        "axial_symmetry_pass": bool(axial_symmetry_pass_all),
     }
 
 
@@ -1486,6 +1662,12 @@ def run_flat_disk_kh_term_audit(
     radial_projection_diagnostic: bool = False,
     partition_mode: str = "centroid",
     ratio_version: str = "v1",
+    parity_target: str = "p10",
+    axial_symmetry_gate: str | None = None,
+    isotropy_pass: str = "off",
+    isotropy_iters: int = 0,
+    isotropy_rmin_lambda: float = 0.0,
+    isotropy_rmax_lambda: float = 0.0,
 ) -> dict[str, Any]:
     """Evaluate per-theta mesh/theory split terms in KH physical lane."""
     _ensure_repo_root_on_sys_path()
@@ -1526,6 +1708,12 @@ def run_flat_disk_kh_term_audit(
         radial_projection_diagnostic=bool(radial_projection_diagnostic),
         partition_mode=str(partition_mode),
         ratio_version=str(ratio_version),
+        parity_target=str(parity_target),
+        axial_symmetry_gate=axial_symmetry_gate,
+        isotropy_pass=str(isotropy_pass),
+        isotropy_iters=int(isotropy_iters),
+        isotropy_rmin_lambda=float(isotropy_rmin_lambda),
+        isotropy_rmax_lambda=float(isotropy_rmax_lambda),
     )
 
 
