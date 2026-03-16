@@ -859,6 +859,11 @@ def _configure_benchmark_mesh(
     splay_modulus_scale_in: float,
     tilt_mass_mode_in: str,
     tilt_divergence_mode_in: str = "native",
+    tilt_projection_cadence: str = "per_step",
+    tilt_projection_interval: int = 1,
+    tilt_post_relax_inner_steps: int = 0,
+    tilt_post_relax_step_size: float = 0.0,
+    tilt_post_relax_passes: int = 1,
 ) -> None:
     _ensure_repo_root_on_sys_path()
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -877,6 +882,11 @@ def _configure_benchmark_mesh(
     gp.set("tilt_step_size", 0.08)
     gp.set("tilt_inner_steps", 250)
     gp.set("tilt_tol", 1e-12)
+    gp.set("tilt_projection_cadence", str(tilt_projection_cadence))
+    gp.set("tilt_projection_interval", int(tilt_projection_interval))
+    gp.set("tilt_post_relax_inner_steps", int(tilt_post_relax_inner_steps))
+    gp.set("tilt_post_relax_step_size", float(tilt_post_relax_step_size))
+    gp.set("tilt_post_relax_passes", int(tilt_post_relax_passes))
     gp.set("tilt_kkt_projection_during_relaxation", False)
     gp.set("tilt_thetaB_optimize", False)
     gp.set("tilt_thetaB_group_in", "disk")
@@ -1298,6 +1308,11 @@ def run_flat_disk_one_leaflet_benchmark(
     outer_local_vertex_average_steps: int = 0,
     outer_local_vertex_average_rmin_lambda: float = 0.0,
     outer_local_vertex_average_rmax_lambda: float = 0.0,
+    tilt_projection_cadence: str = "per_step",
+    tilt_projection_interval: int = 1,
+    tilt_post_relax_inner_steps: int = 0,
+    tilt_post_relax_step_size: float = 0.0,
+    tilt_post_relax_passes: int = 1,
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
@@ -1595,6 +1610,21 @@ def run_flat_disk_one_leaflet_benchmark(
         raise ValueError(
             "tilt_divergence_mode_in must be 'native' or 'vertex_recovered'."
         )
+    projection_cadence = str(tilt_projection_cadence).strip().lower()
+    if projection_cadence not in {"per_step", "per_pass"}:
+        raise ValueError("tilt_projection_cadence must be 'per_step' or 'per_pass'.")
+    projection_interval = int(tilt_projection_interval)
+    if projection_interval < 1:
+        raise ValueError("tilt_projection_interval must be >= 1.")
+    post_relax_inner_steps = int(tilt_post_relax_inner_steps)
+    if post_relax_inner_steps < 0:
+        raise ValueError("tilt_post_relax_inner_steps must be >= 0.")
+    post_relax_step_size = float(tilt_post_relax_step_size)
+    if post_relax_step_size < 0.0:
+        raise ValueError("tilt_post_relax_step_size must be >= 0.")
+    post_relax_passes = int(tilt_post_relax_passes)
+    if post_relax_passes < 1:
+        raise ValueError("tilt_post_relax_passes must be >= 1.")
 
     using_physical_scaling = theory_params is None and mode == "kh_physical"
     if theory_params is not None:
@@ -1768,6 +1798,11 @@ def run_flat_disk_one_leaflet_benchmark(
         splay_modulus_scale_in=float(splay_modulus_scale_in),
         tilt_mass_mode_in=mass_mode,
         tilt_divergence_mode_in=div_mode_raw,
+        tilt_projection_cadence=projection_cadence,
+        tilt_projection_interval=projection_interval,
+        tilt_post_relax_inner_steps=post_relax_inner_steps,
+        tilt_post_relax_step_size=post_relax_step_size,
+        tilt_post_relax_passes=post_relax_passes,
     )
     _collect_disk_boundary_rows(mesh, group="disk")
 
@@ -2174,6 +2209,11 @@ def run_flat_disk_one_leaflet_benchmark(
             "splay_modulus_scale_in": float(splay_modulus_scale_in),
             "tilt_mass_mode_in": str(mass_mode),
             "tilt_divergence_mode_in": str(div_mode_raw),
+            "tilt_projection_cadence": str(projection_cadence),
+            "tilt_projection_interval": int(projection_interval),
+            "tilt_post_relax_inner_steps": int(post_relax_inner_steps),
+            "tilt_post_relax_step_size": float(post_relax_step_size),
+            "tilt_post_relax_passes": int(post_relax_passes),
             "rim_local_refine_steps": int(effective_rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(
                 effective_rim_local_refine_band_lambda
