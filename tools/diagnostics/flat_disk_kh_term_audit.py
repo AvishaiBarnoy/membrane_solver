@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import sys
 from pathlib import Path
 from time import perf_counter
@@ -2694,6 +2695,186 @@ def run_flat_disk_kh_disk_refinement_characterization(
         },
         "rows": rows,
         "selected_best": selected,
+    }
+
+
+def _first_theta_row_by_refine(
+    report: dict[str, Any], *, refine_level: int
+) -> dict[str, Any] | None:
+    """Return the first theta row for a given refine level from a sweep report."""
+    for run in report.get("runs", []):
+        if int(run.get("meta", {}).get("refine_level", -1)) != int(refine_level):
+            continue
+        rows = run.get("rows", [])
+        if len(rows) == 0:
+            return None
+        return rows[0]
+    return None
+
+
+def _discrete_tilt_candidate_row(
+    *, candidate: dict[str, Any], report: dict[str, Any]
+) -> dict[str, Any]:
+    """Build a deterministic summary row for one discrete-tilt candidate."""
+    row2 = _first_theta_row_by_refine(report, refine_level=2)
+    row3 = _first_theta_row_by_refine(report, refine_level=3)
+    if row2 is None or row3 is None:
+        raise ValueError("refine sweep report must include refine=2 and refine=3 rows.")
+
+    disk2 = float(row2["internal_disk_ratio_mesh_over_theory_v2"])
+    near2 = float(row2["internal_outer_near_ratio_mesh_over_theory_v2"])
+    far2 = float(row2["internal_outer_far_ratio_mesh_over_theory_v2"])
+    disk3 = float(row3["internal_disk_ratio_mesh_over_theory_v2"])
+    near3 = float(row3["internal_outer_near_ratio_mesh_over_theory_v2"])
+    far3 = float(row3["internal_outer_far_ratio_mesh_over_theory_v2"])
+    err2 = float(report.get("err2_v2", float("nan")))
+    err3 = float(report.get("err3_v2", float("nan")))
+    score = float(abs(far3 - 1.0) + 0.5 * max(err3, 0.0))
+    return {
+        **candidate,
+        "disk_ratio_refine2_v2": float(disk2),
+        "outer_near_ratio_refine2_v2": float(near2),
+        "outer_far_ratio_refine2_v2": float(far2),
+        "disk_ratio_refine3_v2": float(disk3),
+        "outer_near_ratio_refine3_v2": float(near3),
+        "outer_far_ratio_refine3_v2": float(far3),
+        "err2_v2": float(err2),
+        "err3_v2": float(err3),
+        "phase1_score": float(score),
+        "adaptive_guard_pass": report.get("adaptive_guard_pass"),
+        "adaptive_guard_reason": report.get("adaptive_guard_reason"),
+    }
+
+
+def run_flat_disk_kh_discrete_tilt_matrix(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    matrix_fixture: Path | str = (
+        ROOT / "tests" / "fixtures" / "flat_disk_kh_discrete_tilt_matrix.yaml"
+    ),
+) -> dict[str, Any]:
+    """Run a fixture-driven discrete-tilt option matrix and rank candidates."""
+    matrix_path = Path(matrix_fixture)
+    if not matrix_path.is_absolute():
+        matrix_path = (ROOT / matrix_path).resolve()
+    if not matrix_path.exists():
+        raise FileNotFoundError(f"Matrix fixture not found: {matrix_path}")
+    cfg = yaml.safe_load(matrix_path.read_text(encoding="utf-8")) or {}
+
+    base = dict(cfg.get("base_controls", {}))
+    sweep = dict(cfg.get("phase1", {}))
+    phase2 = dict(cfg.get("phase2", {}))
+    err2_max = float(cfg.get("err2_max", 0.10))
+    top_k_phase1 = int(cfg.get("top_k_phase1", 3))
+
+    mass_modes = [str(v) for v in sweep.get("tilt_mass_mode_in", ["consistent"])]
+    div_modes = [str(v) for v in sweep.get("tilt_divergence_mode_in", ["native"])]
+    projections = list(
+        sweep.get(
+            "projection_controls",
+            [{"tilt_projection_cadence": "per_step", "tilt_projection_interval": 1}],
+        )
+    )
+
+    phase1_rows: list[dict[str, Any]] = []
+    for mass_mode, div_mode, projection in itertools.product(
+        mass_modes, div_modes, projections
+    ):
+        candidate = {
+            "tilt_mass_mode_in": str(mass_mode),
+            "tilt_divergence_mode_in": str(div_mode),
+            "tilt_projection_cadence": str(
+                projection.get("tilt_projection_cadence", "per_step")
+            ),
+            "tilt_projection_interval": int(
+                projection.get("tilt_projection_interval", 1)
+            ),
+        }
+        report = run_flat_disk_kh_term_audit_refine_sweep(
+            fixture=fixture,
+            **{**base, **candidate},
+        )
+        phase1_rows.append(
+            _discrete_tilt_candidate_row(candidate=candidate, report=report)
+        )
+    phase1_rows = sorted(
+        phase1_rows,
+        key=lambda row: (
+            float(row["phase1_score"]),
+            float(row["err3_v2"]),
+            float(row["err2_v2"]),
+            str(row["tilt_mass_mode_in"]),
+            str(row["tilt_divergence_mode_in"]),
+            str(row["tilt_projection_cadence"]),
+            int(row["tilt_projection_interval"]),
+        ),
+    )
+    phase1_kept = [
+        row
+        for row in phase1_rows
+        if np.isfinite(float(row["err2_v2"])) and float(row["err2_v2"]) <= err2_max
+    ]
+    top_phase1 = (
+        phase1_kept[:top_k_phase1] if phase1_kept else phase1_rows[:top_k_phase1]
+    )
+
+    phase2_rows: list[dict[str, Any]] = []
+    phase2_enabled = bool(phase2.get("enabled", False))
+    if phase2_enabled and top_phase1:
+        isotropy_values = [str(v) for v in phase2.get("isotropy_pass", ["off"])]
+        avg_steps_values = [
+            int(v) for v in phase2.get("outer_local_vertex_average_steps", [0])
+        ]
+        rmax_values = [
+            float(v) for v in phase2.get("outer_local_refine_rmax_lambda", [8.0])
+        ]
+        for seed, isotropy_pass, avg_steps, rmax_val in itertools.product(
+            top_phase1, isotropy_values, avg_steps_values, rmax_values
+        ):
+            candidate = {
+                "tilt_mass_mode_in": str(seed["tilt_mass_mode_in"]),
+                "tilt_divergence_mode_in": str(seed["tilt_divergence_mode_in"]),
+                "tilt_projection_cadence": str(seed["tilt_projection_cadence"]),
+                "tilt_projection_interval": int(seed["tilt_projection_interval"]),
+                "isotropy_pass": str(isotropy_pass),
+                "outer_local_vertex_average_steps": int(avg_steps),
+                "outer_local_refine_rmax_lambda": float(rmax_val),
+            }
+            report = run_flat_disk_kh_term_audit_refine_sweep(
+                fixture=fixture,
+                **{**base, **candidate},
+            )
+            row = _discrete_tilt_candidate_row(candidate=candidate, report=report)
+            row["phase2_score"] = float(
+                abs(float(row["outer_far_ratio_refine3_v2"]) - 1.0)
+                + 0.5 * max(float(row["err3_v2"]), 0.0)
+            )
+            phase2_rows.append(row)
+        phase2_rows = sorted(
+            phase2_rows,
+            key=lambda row: (
+                float(row["phase2_score"]),
+                float(row["err3_v2"]),
+                float(row["err2_v2"]),
+            ),
+        )
+
+    selected = (
+        phase2_rows[0] if phase2_rows else (top_phase1[0] if top_phase1 else None)
+    )
+    return {
+        "meta": {
+            "mode": "discrete_tilt_matrix",
+            "fixture": str(Path(fixture)),
+            "matrix_fixture": str(matrix_path),
+            "err2_max": float(err2_max),
+            "top_k_phase1": int(top_k_phase1),
+            "phase2_enabled": bool(phase2_enabled),
+        },
+        "phase1_rows": phase1_rows,
+        "phase1_top": top_phase1,
+        "phase2_rows": phase2_rows,
+        "selected": selected,
     }
 
 

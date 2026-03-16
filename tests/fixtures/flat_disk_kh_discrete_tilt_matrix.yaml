@@ -1,0 +1,53 @@
+base_controls:
+  refine_levels: [2, 3]
+  outer_mode: disabled
+  smoothness_model: splay_twist
+  theta_values: [0.138]
+  ratio_version: v2
+  theory_outer_mode: finite_bvp
+  partition_mode: fractional
+  parity_target: p10
+  axial_symmetry_gate: monitor
+  rim_local_refine_steps: 1
+  rim_local_refine_band_lambda: 1.5
+  outer_local_refine_steps: 1
+  outer_local_refine_rmin_lambda: 0.5
+  outer_local_refine_rmax_lambda: 8.0
+  outer_local_vertex_average_steps: 5
+  outer_local_vertex_average_rmin_lambda: 8.0
+  outer_local_vertex_average_rmax_lambda: 12.0
+  isotropy_pass: outer_far
+  isotropy_iters: 2
+  isotropy_rmin_lambda: 6.0
+  isotropy_rmax_lambda: 12.0
+  theta_relax_mode: fixed
+  theta_relax_repeats: 1
+  two_stage_relax: true
+  two_stage_refine2_mode: fixed
+  two_stage_refine2_repeats: 1
+  two_stage_refine2_max_repeats: 1
+  two_stage_refine3_mode: adaptive
+  two_stage_refine3_repeats: 1
+  two_stage_refine3_max_repeats: 5
+  adaptive_cross_refine_guard: true
+  adaptive_err2_max: 0.10
+
+err2_max: 0.10
+top_k_phase1: 3
+
+phase1:
+  tilt_mass_mode_in: [consistent, lumped]
+  tilt_divergence_mode_in: [native, vertex_recovered]
+  projection_controls:
+    - tilt_projection_cadence: per_step
+      tilt_projection_interval: 1
+    - tilt_projection_cadence: per_step
+      tilt_projection_interval: 5
+    - tilt_projection_cadence: per_pass
+      tilt_projection_interval: 1
+
+phase2:
+  enabled: true
+  isotropy_pass: [off, outer_far_flip_only, outer_far]
+  outer_local_vertex_average_steps: [0, 2, 5]
+  outer_local_refine_rmax_lambda: [7.0, 7.5, 8.0, 8.5]
