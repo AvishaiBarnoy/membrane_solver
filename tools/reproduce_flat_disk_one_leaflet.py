@@ -874,6 +874,9 @@ def _configure_benchmark_mesh(
     mapping = solver_mapping_from_theory(
         theory_params, parameterization=str(parameterization)
     )
+    lambda_value = float(
+        np.sqrt(float(theory_params.kappa) / float(theory_params.kappa_t))
+    )
 
     gp.set("surface_tension", 0.0)
     gp.set("step_size_mode", "fixed")
@@ -921,9 +924,14 @@ def _configure_benchmark_mesh(
         raise ValueError("tilt_post_relax_passes must be >= 1.")
     gp.set("tilt_projection_cadence", projection_cadence)
     gp.set("tilt_projection_interval", projection_interval)
+    gp.set("tilt_projection_loss_radius", float(theory_params.radius))
+    gp.set("tilt_projection_loss_lambda", float(lambda_value))
+    gp.set("tilt_projection_loss_outer_near_width_lambda", 4.0)
     gp.set("tilt_post_relax_inner_steps", post_relax_inner_steps)
     gp.set("tilt_post_relax_step_size", post_relax_step_size)
     gp.set("tilt_post_relax_passes", post_relax_passes)
+    gp.set("benchmark_disk_radius", float(theory_params.radius))
+    gp.set("benchmark_lambda_value", float(lambda_value))
     gp.set("tilt_twist_modulus_in", 0.0)
 
     if smoothness_model == "dirichlet":
@@ -2290,7 +2298,32 @@ def run_flat_disk_one_leaflet_benchmark(
                 breakdown={str(k): float(v) for k, v in breakdown.items()},
                 theory=theory,
                 radius=float(theory.radius),
-            )
+            ),
+            "tilt_projection": {
+                "projection_cadence": str(
+                    (getattr(minim, "_last_tilt_projection_stats", None) or {}).get(
+                        "projection_cadence", "unavailable"
+                    )
+                ),
+                "projection_interval": int(
+                    (getattr(minim, "_last_tilt_projection_stats", None) or {}).get(
+                        "projection_interval", 0
+                    )
+                    or 0
+                ),
+                "projection_apply_count": int(
+                    (getattr(minim, "_last_tilt_projection_stats", None) or {}).get(
+                        "projection_apply_count", 0
+                    )
+                    or 0
+                ),
+                "tilt_projection_norm_loss_outer_far": float(
+                    (getattr(minim, "_last_tilt_projection_stats", None) or {}).get(
+                        "tilt_projection_norm_loss_outer_far", 0.0
+                    )
+                    or 0.0
+                ),
+            },
         },
         "parity": {
             "lane": str(mode),
