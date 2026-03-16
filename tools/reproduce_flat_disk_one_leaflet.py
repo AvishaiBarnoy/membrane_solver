@@ -858,6 +858,7 @@ def _configure_benchmark_mesh(
     smoothness_model: str,
     splay_modulus_scale_in: float,
     tilt_mass_mode_in: str,
+    tilt_divergence_mode_in: str = "native",
 ) -> None:
     _ensure_repo_root_on_sys_path()
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -892,6 +893,7 @@ def _configure_benchmark_mesh(
     gp.set("bending_modulus_in", float(mapping["bending_modulus_in"]))
     gp.set("tilt_modulus_in", float(mapping["tilt_modulus_in"]))
     gp.set("tilt_mass_mode_in", str(tilt_mass_mode_in))
+    gp.set("tilt_divergence_mode_in", str(tilt_divergence_mode_in))
     gp.set("tilt_twist_modulus_in", 0.0)
 
     if smoothness_model == "dirichlet":
@@ -1284,6 +1286,7 @@ def run_flat_disk_one_leaflet_benchmark(
     drive_physical: float = (2.0 / 0.7),
     splay_modulus_scale_in: float = 1.0,
     tilt_mass_mode_in: str = "auto",
+    tilt_divergence_mode_in: str = "native",
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
     outer_local_refine_steps: int = 0,
@@ -1587,6 +1590,11 @@ def run_flat_disk_one_leaflet_benchmark(
         mass_mode = mass_mode_raw
     else:
         raise ValueError("tilt_mass_mode_in must be 'auto', 'lumped', or 'consistent'.")
+    div_mode_raw = str(tilt_divergence_mode_in).strip().lower()
+    if div_mode_raw not in {"native", "vertex_recovered"}:
+        raise ValueError(
+            "tilt_divergence_mode_in must be 'native' or 'vertex_recovered'."
+        )
 
     using_physical_scaling = theory_params is None and mode == "kh_physical"
     if theory_params is not None:
@@ -1759,6 +1767,7 @@ def run_flat_disk_one_leaflet_benchmark(
         smoothness_model=smoothness_model,
         splay_modulus_scale_in=float(splay_modulus_scale_in),
         tilt_mass_mode_in=mass_mode,
+        tilt_divergence_mode_in=div_mode_raw,
     )
     _collect_disk_boundary_rows(mesh, group="disk")
 
@@ -2164,6 +2173,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "optimize_preset_effective": str(effective_optimize_preset),
             "splay_modulus_scale_in": float(splay_modulus_scale_in),
             "tilt_mass_mode_in": str(mass_mode),
+            "tilt_divergence_mode_in": str(div_mode_raw),
             "rim_local_refine_steps": int(effective_rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(
                 effective_rim_local_refine_band_lambda
