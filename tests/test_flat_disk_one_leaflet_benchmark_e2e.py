@@ -1662,6 +1662,30 @@ def test_flat_disk_reports_tilt_divergence_mode_meta() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_reports_tilt_projection_and_post_relax_meta() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="scan",
+        theta_min=0.0,
+        theta_max=0.0014,
+        theta_count=8,
+        tilt_projection_cadence="per_pass",
+        tilt_projection_interval=3,
+        tilt_post_relax_inner_steps=20,
+        tilt_post_relax_step_size=0.02,
+        tilt_post_relax_passes=2,
+    )
+    assert report["meta"]["tilt_projection_cadence"] == "per_pass"
+    assert int(report["meta"]["tilt_projection_interval"]) == 3
+    assert int(report["meta"]["tilt_post_relax_inner_steps"]) == 20
+    assert float(report["meta"]["tilt_post_relax_step_size"]) == pytest.approx(0.02)
+    assert int(report["meta"]["tilt_post_relax_passes"]) == 2
+
+
+@pytest.mark.regression
 def test_flat_disk_rejects_invalid_tilt_divergence_mode() -> None:
     with pytest.raises(
         ValueError,
@@ -1677,6 +1701,47 @@ def test_flat_disk_rejects_invalid_tilt_divergence_mode() -> None:
             theta_max=0.0014,
             theta_count=8,
             tilt_divergence_mode_in="bad_mode",
+        )
+
+
+@pytest.mark.regression
+def test_flat_disk_invalid_tilt_projection_and_post_relax_controls_raise() -> None:
+    with pytest.raises(
+        ValueError, match="tilt_projection_cadence must be 'per_step' or 'per_pass'"
+    ):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            tilt_projection_cadence="bad_mode",
+        )
+    with pytest.raises(ValueError, match="tilt_projection_interval must be >= 1"):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            tilt_projection_interval=0,
+        )
+    with pytest.raises(ValueError, match="tilt_post_relax_inner_steps must be >= 0"):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            tilt_post_relax_inner_steps=-1,
+        )
+    with pytest.raises(ValueError, match="tilt_post_relax_step_size must be >= 0"):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            tilt_post_relax_step_size=-1.0e-3,
+        )
+    with pytest.raises(ValueError, match="tilt_post_relax_passes must be >= 1"):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            tilt_post_relax_passes=0,
         )
 
 
