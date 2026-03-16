@@ -7,6 +7,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.flat_disk_kh_term_audit import (
+    run_flat_disk_kh_disk_refinement_characterization,
     run_flat_disk_kh_outerfield_averaged_sweep,
     run_flat_disk_kh_outertail_characterization,
     run_flat_disk_kh_strict_preset_characterization,
@@ -742,3 +743,62 @@ def test_flat_disk_kh_outerfield_averaged_sweep_empty_values_raise() -> None:
         run_flat_disk_kh_outerfield_averaged_sweep(
             outer_local_refine_steps_values=(0,),
         )
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_disk_refinement_characterization_emits_matrix_and_best(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.diagnostics.flat_disk_kh_term_audit as audit_mod
+
+    def _fake_run_flat_disk_kh_term_audit(**kwargs):
+        refine = int(kwargs["refine_level"])
+        rim_steps = int(kwargs["rim_local_refine_steps"])
+        rim_band = float(kwargs["rim_local_refine_band_lambda"])
+        disk_err = abs(refine - 3.0) + 0.5 * abs(rim_steps - 2.0) + abs(rim_band - 3.0)
+        disk_ratio = float(np.exp(0.02 * disk_err))
+        near_ratio = float(np.exp(0.04 * disk_err))
+        far_ratio = float(np.exp(-0.03 * disk_err))
+        return {
+            "rows": [
+                {
+                    "internal_disk_ratio_mesh_over_theory": disk_ratio,
+                    "internal_outer_near_ratio_mesh_over_theory": near_ratio,
+                    "internal_outer_far_ratio_mesh_over_theory": far_ratio,
+                    "section_score_internal_bands_finite_outer_l2_log": 0.1 * disk_err,
+                    "disk_core_hmax_over_hmin_mean": 1.2 + 0.1 * disk_err,
+                    "rim_band_hmax_over_hmin_mean": 1.1 + 0.05 * disk_err,
+                }
+            ]
+        }
+
+    monkeypatch.setattr(
+        audit_mod, "run_flat_disk_kh_term_audit", _fake_run_flat_disk_kh_term_audit
+    )
+
+    report = run_flat_disk_kh_disk_refinement_characterization(
+        refine_levels=(2, 3),
+        rim_local_steps_values=(0, 1, 2),
+        rim_local_band_lambda_values=(2.0, 3.0),
+    )
+    assert report["meta"]["mode"] == "strict_disk_refinement_characterization"
+    rows = report["rows"]
+    assert len(rows) == 10
+    for row in rows:
+        assert np.isfinite(float(row["internal_disk_ratio_mesh_over_theory"]))
+        assert np.isfinite(float(row["internal_outer_near_ratio_mesh_over_theory"]))
+        assert np.isfinite(float(row["internal_outer_far_ratio_mesh_over_theory"]))
+        assert np.isfinite(
+            float(row["section_score_internal_bands_finite_outer_l2_log"])
+        )
+        assert np.isfinite(float(row["disk_core_hmax_over_hmin_mean"]))
+        assert np.isfinite(float(row["rim_band_hmax_over_hmin_mean"]))
+    best = report["selected_best"]
+    assert int(best["refine_level"]) == 3
+    assert int(best["rim_local_refine_steps"]) == 2
+    assert float(best["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
+
+
+def test_flat_disk_kh_disk_refinement_characterization_empty_values_raise() -> None:
+    with pytest.raises(ValueError, match="refine_levels"):
+        run_flat_disk_kh_disk_refinement_characterization(refine_levels=())
