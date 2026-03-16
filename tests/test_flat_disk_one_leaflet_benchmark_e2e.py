@@ -1645,6 +1645,41 @@ def test_flat_disk_kh_default_splay_scale_stays_unmodified() -> None:
     assert float(report["meta"]["splay_modulus_scale_in"]) == pytest.approx(1.0)
 
 
+@pytest.mark.regression
+def test_flat_disk_reports_tilt_divergence_mode_meta() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="scan",
+        theta_min=0.0,
+        theta_max=0.0014,
+        theta_count=8,
+        tilt_divergence_mode_in="vertex_recovered",
+    )
+    assert report["meta"]["tilt_divergence_mode_in"] == "vertex_recovered"
+
+
+@pytest.mark.regression
+def test_flat_disk_rejects_invalid_tilt_divergence_mode() -> None:
+    with pytest.raises(
+        ValueError,
+        match="tilt_divergence_mode_in must be 'native' or 'vertex_recovered'",
+    ):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            smoothness_model="splay_twist",
+            theta_mode="scan",
+            theta_min=0.0,
+            theta_max=0.0014,
+            theta_count=8,
+            tilt_divergence_mode_in="bad_mode",
+        )
+
+
 @pytest.mark.benchmark
 def test_flat_disk_kh_strict_preset_improves_score_vs_baseline() -> None:
     baseline = _kh_opt_report(
