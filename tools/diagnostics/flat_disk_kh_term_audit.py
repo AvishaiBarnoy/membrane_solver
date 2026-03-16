@@ -970,6 +970,7 @@ def _run_single_level(
     drive_physical: float,
     theta_values: Sequence[float],
     tilt_mass_mode_in: str,
+    tilt_divergence_mode_in: str = "native",
     rim_local_refine_steps: int,
     rim_local_refine_band_lambda: float,
     outer_local_refine_steps: int,
@@ -1084,6 +1085,11 @@ def _run_single_level(
         mass_mode = mass_mode_raw
     else:
         raise ValueError("tilt_mass_mode_in must be 'auto', 'lumped', or 'consistent'.")
+    div_mode = str(tilt_divergence_mode_in).strip().lower()
+    if div_mode not in {"native", "vertex_recovered"}:
+        raise ValueError(
+            "tilt_divergence_mode_in must be 'native' or 'vertex_recovered'."
+        )
     ratio_version_mode = str(ratio_version).strip().lower()
     if ratio_version_mode not in {"v1", "v2"}:
         raise ValueError("ratio_version must be 'v1' or 'v2'.")
@@ -1128,6 +1134,7 @@ def _run_single_level(
         smoothness_model=smoothness_model,
         splay_modulus_scale_in=1.0,
         tilt_mass_mode_in=str(mass_mode),
+        tilt_divergence_mode_in=str(div_mode),
         tilt_projection_cadence=str(tilt_projection_cadence),
         tilt_projection_interval=int(tilt_projection_interval),
         tilt_post_relax_inner_steps=int(tilt_post_relax_inner_steps),
@@ -1606,6 +1613,7 @@ def _run_single_level(
             "length_scale_nm": float(length_scale_nm),
             "drive_physical": float(drive_physical),
             "tilt_mass_mode_in": str(mass_mode),
+            "tilt_divergence_mode_in": str(div_mode),
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
             "outer_local_refine_steps": int(outer_local_refine_steps),
@@ -1664,6 +1672,7 @@ def run_flat_disk_kh_term_audit(
     drive_physical: float = (2.0 / 0.7),
     theta_values: Sequence[float] = (0.0, 6.366e-4, 0.004),
     tilt_mass_mode_in: str = "auto",
+    tilt_divergence_mode_in: str = "native",
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
     outer_local_refine_steps: int = 0,
@@ -1711,6 +1720,7 @@ def run_flat_disk_kh_term_audit(
         drive_physical=float(drive_physical),
         theta_values=theta_values,
         tilt_mass_mode_in=str(tilt_mass_mode_in),
+        tilt_divergence_mode_in=str(tilt_divergence_mode_in),
         rim_local_refine_steps=int(rim_local_refine_steps),
         rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
         outer_local_refine_steps=int(outer_local_refine_steps),
@@ -1756,6 +1766,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     drive_physical: float = (2.0 / 0.7),
     theta_values: Sequence[float] = (0.0, 6.366e-4, 0.004),
     tilt_mass_mode_in: str = "auto",
+    tilt_divergence_mode_in: str = "native",
     rim_local_refine_steps: int = 0,
     rim_local_refine_band_lambda: float = 0.0,
     outer_local_refine_steps: int = 0,
@@ -1801,6 +1812,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             drive_physical=float(drive_physical),
             theta_values=theta_values,
             tilt_mass_mode_in=str(tilt_mass_mode_in),
+            tilt_divergence_mode_in=str(tilt_divergence_mode_in),
             rim_local_refine_steps=int(rim_local_refine_steps),
             rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
             outer_local_refine_steps=int(outer_local_refine_steps),
@@ -1835,6 +1847,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             "parameterization": "kh_physical",
             "theory_model": "kh_physical_strict_kh",
             "tilt_mass_mode_in": str(tilt_mass_mode_in).strip().lower(),
+            "tilt_divergence_mode_in": str(tilt_divergence_mode_in).strip().lower(),
             "rim_local_refine_steps": int(rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
             "outer_local_refine_steps": int(outer_local_refine_steps),
