@@ -981,6 +981,11 @@ def _run_single_level(
     outer_local_vertex_average_steps: int,
     outer_local_vertex_average_rmin_lambda: float,
     outer_local_vertex_average_rmax_lambda: float,
+    tilt_projection_cadence: str = "per_step",
+    tilt_projection_interval: int = 1,
+    tilt_post_relax_inner_steps: int = 0,
+    tilt_post_relax_step_size: float = 0.0,
+    tilt_post_relax_passes: int = 1,
     radial_projection_diagnostic: bool,
     partition_mode: str,
     ratio_version: str = "v1",
@@ -1123,6 +1128,11 @@ def _run_single_level(
         smoothness_model=smoothness_model,
         splay_modulus_scale_in=1.0,
         tilt_mass_mode_in=str(mass_mode),
+        tilt_projection_cadence=str(tilt_projection_cadence),
+        tilt_projection_interval=int(tilt_projection_interval),
+        tilt_post_relax_inner_steps=int(tilt_post_relax_inner_steps),
+        tilt_post_relax_step_size=float(tilt_post_relax_step_size),
+        tilt_post_relax_passes=int(tilt_post_relax_passes),
     )
     minim = _build_minimizer(mesh)
     minim.enforce_constraints_after_mesh_ops(mesh)
@@ -1608,6 +1618,11 @@ def _run_single_level(
             "outer_local_vertex_average_rmax_lambda": float(
                 outer_local_vertex_average_rmax_lambda
             ),
+            "tilt_projection_cadence": str(tilt_projection_cadence),
+            "tilt_projection_interval": int(tilt_projection_interval),
+            "tilt_post_relax_inner_steps": int(tilt_post_relax_inner_steps),
+            "tilt_post_relax_step_size": float(tilt_post_relax_step_size),
+            "tilt_post_relax_passes": int(tilt_post_relax_passes),
             "isotropy_pass": str(isotropy_pass_mode),
             "isotropy_iters": int(isotropy_iters_value),
             "isotropy_operator_mode": str(isotropy_operator_mode),
@@ -1660,6 +1675,11 @@ def run_flat_disk_kh_term_audit(
     outer_local_vertex_average_steps: int = 0,
     outer_local_vertex_average_rmin_lambda: float = 0.0,
     outer_local_vertex_average_rmax_lambda: float = 0.0,
+    tilt_projection_cadence: str = "per_step",
+    tilt_projection_interval: int = 1,
+    tilt_post_relax_inner_steps: int = 0,
+    tilt_post_relax_step_size: float = 0.0,
+    tilt_post_relax_passes: int = 1,
     radial_projection_diagnostic: bool = False,
     partition_mode: str = "centroid",
     ratio_version: str = "v1",
@@ -1706,6 +1726,11 @@ def run_flat_disk_kh_term_audit(
         outer_local_vertex_average_rmax_lambda=float(
             outer_local_vertex_average_rmax_lambda
         ),
+        tilt_projection_cadence=str(tilt_projection_cadence),
+        tilt_projection_interval=int(tilt_projection_interval),
+        tilt_post_relax_inner_steps=int(tilt_post_relax_inner_steps),
+        tilt_post_relax_step_size=float(tilt_post_relax_step_size),
+        tilt_post_relax_passes=int(tilt_post_relax_passes),
         radial_projection_diagnostic=bool(radial_projection_diagnostic),
         partition_mode=str(partition_mode),
         ratio_version=str(ratio_version),
@@ -1742,6 +1767,11 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     outer_local_vertex_average_steps: int = 0,
     outer_local_vertex_average_rmin_lambda: float = 0.0,
     outer_local_vertex_average_rmax_lambda: float = 0.0,
+    tilt_projection_cadence: str = "per_step",
+    tilt_projection_interval: int = 1,
+    tilt_post_relax_inner_steps: int = 0,
+    tilt_post_relax_step_size: float = 0.0,
+    tilt_post_relax_passes: int = 1,
     radial_projection_diagnostic: bool = False,
     partition_mode: str = "centroid",
 ) -> dict[str, Any]:
@@ -1786,6 +1816,11 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             outer_local_vertex_average_rmax_lambda=float(
                 outer_local_vertex_average_rmax_lambda
             ),
+            tilt_projection_cadence=str(tilt_projection_cadence),
+            tilt_projection_interval=int(tilt_projection_interval),
+            tilt_post_relax_inner_steps=int(tilt_post_relax_inner_steps),
+            tilt_post_relax_step_size=float(tilt_post_relax_step_size),
+            tilt_post_relax_passes=int(tilt_post_relax_passes),
             radial_projection_diagnostic=bool(radial_projection_diagnostic),
             partition_mode=str(partition_mode),
         )
@@ -1812,6 +1847,11 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             "outer_local_vertex_average_rmax_lambda": float(
                 outer_local_vertex_average_rmax_lambda
             ),
+            "tilt_projection_cadence": str(tilt_projection_cadence),
+            "tilt_projection_interval": int(tilt_projection_interval),
+            "tilt_post_relax_inner_steps": int(tilt_post_relax_inner_steps),
+            "tilt_post_relax_step_size": float(tilt_post_relax_step_size),
+            "tilt_post_relax_passes": int(tilt_post_relax_passes),
             "radial_projection_diagnostic": bool(radial_projection_diagnostic),
             "partition_mode": str(partition_mode),
         },
