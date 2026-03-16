@@ -235,6 +235,27 @@ def test_flat_disk_kh_term_audit_fractional_partition_mode_runs() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_kh_term_audit_relax_projection_controls_emit_metadata() -> None:
+    report = run_flat_disk_kh_term_audit(
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.138,),
+        tilt_mass_mode_in="consistent",
+        tilt_projection_cadence="per_pass",
+        tilt_projection_interval=3,
+        tilt_post_relax_inner_steps=20,
+        tilt_post_relax_step_size=0.02,
+        tilt_post_relax_passes=2,
+    )
+    assert report["meta"]["tilt_projection_cadence"] == "per_pass"
+    assert int(report["meta"]["tilt_projection_interval"]) == 3
+    assert int(report["meta"]["tilt_post_relax_inner_steps"]) == 20
+    assert float(report["meta"]["tilt_post_relax_step_size"]) == pytest.approx(0.02)
+    assert int(report["meta"]["tilt_post_relax_passes"]) == 2
+
+
+@pytest.mark.regression
 def test_flat_disk_kh_term_audit_invalid_partition_mode_raises() -> None:
     with pytest.raises(ValueError, match="partition_mode"):
         run_flat_disk_kh_term_audit(
@@ -242,6 +263,32 @@ def test_flat_disk_kh_term_audit_invalid_partition_mode_raises() -> None:
             theta_values=(0.0,),
             partition_mode="bad_mode",
         )
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_refine_sweep_relax_projection_controls_emit_metadata() -> (
+    None
+):
+    report = run_flat_disk_kh_term_audit_refine_sweep(
+        refine_levels=(1, 2),
+        theta_values=(0.0,),
+        tilt_projection_cadence="per_pass",
+        tilt_projection_interval=3,
+        tilt_post_relax_inner_steps=20,
+        tilt_post_relax_step_size=0.02,
+        tilt_post_relax_passes=2,
+    )
+    assert report["meta"]["tilt_projection_cadence"] == "per_pass"
+    assert int(report["meta"]["tilt_projection_interval"]) == 3
+    assert int(report["meta"]["tilt_post_relax_inner_steps"]) == 20
+    assert float(report["meta"]["tilt_post_relax_step_size"]) == pytest.approx(0.02)
+    assert int(report["meta"]["tilt_post_relax_passes"]) == 2
+    for run in report["runs"]:
+        assert run["meta"]["tilt_projection_cadence"] == "per_pass"
+        assert int(run["meta"]["tilt_projection_interval"]) == 3
+        assert int(run["meta"]["tilt_post_relax_inner_steps"]) == 20
+        assert float(run["meta"]["tilt_post_relax_step_size"]) == pytest.approx(0.02)
+        assert int(run["meta"]["tilt_post_relax_passes"]) == 2
 
 
 @pytest.mark.regression

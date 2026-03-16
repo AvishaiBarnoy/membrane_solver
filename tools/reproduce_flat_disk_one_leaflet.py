@@ -904,6 +904,26 @@ def _configure_benchmark_mesh(
     gp.set("tilt_modulus_in", float(mapping["tilt_modulus_in"]))
     gp.set("tilt_mass_mode_in", str(tilt_mass_mode_in))
     gp.set("tilt_divergence_mode_in", str(tilt_divergence_mode_in))
+    projection_cadence = str(tilt_projection_cadence).strip().lower()
+    if projection_cadence not in {"per_step", "per_pass"}:
+        raise ValueError("tilt_projection_cadence must be 'per_step' or 'per_pass'.")
+    projection_interval = int(tilt_projection_interval)
+    if projection_interval <= 0:
+        raise ValueError("tilt_projection_interval must be >= 1.")
+    post_relax_inner_steps = int(tilt_post_relax_inner_steps)
+    if post_relax_inner_steps < 0:
+        raise ValueError("tilt_post_relax_inner_steps must be >= 0.")
+    post_relax_step_size = float(tilt_post_relax_step_size)
+    if post_relax_step_size < 0.0:
+        raise ValueError("tilt_post_relax_step_size must be >= 0.")
+    post_relax_passes = int(tilt_post_relax_passes)
+    if post_relax_passes <= 0:
+        raise ValueError("tilt_post_relax_passes must be >= 1.")
+    gp.set("tilt_projection_cadence", projection_cadence)
+    gp.set("tilt_projection_interval", projection_interval)
+    gp.set("tilt_post_relax_inner_steps", post_relax_inner_steps)
+    gp.set("tilt_post_relax_step_size", post_relax_step_size)
+    gp.set("tilt_post_relax_passes", post_relax_passes)
     gp.set("tilt_twist_modulus_in", 0.0)
 
     if smoothness_model == "dirichlet":
