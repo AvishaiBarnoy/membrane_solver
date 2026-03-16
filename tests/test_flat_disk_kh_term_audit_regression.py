@@ -744,6 +744,7 @@ def test_flat_disk_kh_outerfield_averaged_sweep_empty_values_raise() -> None:
             outer_local_refine_steps_values=(0,),
         )
 
+
 @pytest.mark.regression
 def test_flat_disk_kh_disk_refinement_characterization_emits_matrix_and_best(
     monkeypatch: pytest.MonkeyPatch,
