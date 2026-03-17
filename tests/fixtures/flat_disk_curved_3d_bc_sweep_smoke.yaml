@@ -1,0 +1,7 @@
+refine_levels: [2]
+z_gauges: ["mean_zero"]
+curved_acceptance_profiles: ["fast"]
+theta_initials: [0.12]
+theta_optimize_steps: [6]
+theta_optimize_deltas: [0.01]
+theta_optimize_inner_steps: [12]
