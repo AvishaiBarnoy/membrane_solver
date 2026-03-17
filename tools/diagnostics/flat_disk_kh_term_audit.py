@@ -1133,6 +1133,7 @@ def _run_single_level(
         _load_mesh_from_fixture,
         _refine_mesh_locally_in_outer_annulus,
         _refine_mesh_locally_near_rim,
+        _run_theta_relaxation,
         _vertex_average_locally_in_annulus,
     )
 
@@ -1311,21 +1312,34 @@ def _run_single_level(
         prev_energy = None
         plateau_count = 0
         mesh_total = float("nan")
+        projection_apply_count = 0
+        projection_norm_loss_outer_far = float("nan")
         for relax_rep in range(repeats_planned):
-            gp = mesh.global_parameters
-            gp.set("tilt_thetaB_value", float(theta_f))
-            if int(relax_rep) == 0:
-                tin = np.zeros_like(mesh.tilts_in_view())
-                mesh.set_tilts_in_from_array(tin)
-                tout = np.zeros_like(mesh.tilts_out_view())
-                mesh.set_tilts_out_from_array(tout)
-            minim._relax_leaflet_tilts(positions=mesh.positions_view(), mode="coupled")
-            mesh_total = float(minim.compute_energy())
-            if not np.isfinite(mesh_total):
-                raise ValueError(
-                    f"Non-finite energy during theta scan at theta={theta_f}."
+            reset_this_rep = int(relax_rep) == 0
+            mesh_total = float(
+                _run_theta_relaxation(
+                    minim,
+                    theta_value=theta_f,
+                    reset_outer=reset_this_rep,
+                    reset_inner=reset_this_rep,
                 )
+            )
             repeats_applied = int(relax_rep) + 1
+            projection_stats = getattr(minim, "_last_tilt_projection_stats", None)
+            if isinstance(projection_stats, dict):
+                projection_apply_count = int(
+                    projection_stats.get(
+                        "projection_apply_count", projection_apply_count
+                    )
+                )
+                loss_val = float(
+                    projection_stats.get(
+                        "tilt_projection_norm_loss_outer_far",
+                        projection_norm_loss_outer_far,
+                    )
+                )
+                if np.isfinite(loss_val):
+                    projection_norm_loss_outer_far = float(loss_val)
             if theta_relax_mode_value == "adaptive":
                 if prev_energy is not None:
                     delta = abs(float(mesh_total) - float(prev_energy))
@@ -1496,7 +1510,10 @@ def _run_single_level(
             float(mesh_bands["mesh_smooth_outer_far"]),
             float(th_bands["theory_smooth_outer_far"]),
         )
-        ratio_internal_disk_v2_raw = float(ratio_internal_disk)
+        ratio_internal_disk_v2_raw = _ratio(
+            float(mesh_bands["mesh_internal_disk_core"]),
+            float(th_bands_v2["theory_internal_disk_core"]),
+        )
         ratio_internal_outer_near_v2_raw = _ratio(
             float(mesh_bands["mesh_internal_outer_near"]),
             float(th_bands_v2["theory_internal_outer_near"]),
@@ -1731,6 +1748,10 @@ def _run_single_level(
                 "theta_relax_max_repeats": int(theta_relax_max_repeats_value),
                 "theta_relax_repeats_applied": int(repeats_applied),
                 "theta_relax_converged": bool(converged),
+                "tilt_projection_apply_count": int(projection_apply_count),
+                "tilt_projection_norm_loss_outer_far": float(
+                    projection_norm_loss_outer_far
+                ),
                 "isotropy_pass": str(isotropy_pass_mode),
                 "isotropy_iterations_requested": int(
                     isotropy_stats["iterations_requested"]

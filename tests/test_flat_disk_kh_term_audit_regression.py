@@ -293,6 +293,63 @@ def test_flat_disk_kh_term_audit_theta_relax_controls_emit_metadata() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_kh_term_audit_staged_v2_relax_path_matches_dirty_branch() -> None:
+    report = run_flat_disk_kh_term_audit(
+        refine_level=3,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.138,),
+        tilt_mass_mode_in="consistent",
+        tilt_divergence_mode_in="native",
+        rim_local_refine_steps=1,
+        rim_local_refine_band_lambda=1.5,
+        outer_local_refine_steps=1,
+        outer_local_refine_rmin_lambda=0.5,
+        outer_local_refine_rmax_lambda=8.0,
+        outer_local_vertex_average_steps=5,
+        outer_local_vertex_average_rmin_lambda=8.0,
+        outer_local_vertex_average_rmax_lambda=12.0,
+        isotropy_pass="off",
+        isotropy_iters=0,
+        partition_mode="fractional",
+        ratio_version="v2",
+        theory_outer_mode="finite_bvp",
+        parity_target="p10",
+        axial_symmetry_gate="monitor",
+        theta_relax_mode="adaptive",
+        theta_relax_max_repeats=5,
+        theta_relax_energy_abs_tol=1.0e-10,
+        theta_relax_plateau_patience=2,
+        tilt_projection_cadence="per_step",
+        tilt_projection_interval=1,
+        tilt_post_relax_inner_steps=40,
+        tilt_post_relax_step_size=0.005,
+        tilt_post_relax_passes=1,
+    )
+
+    row = report["rows"][0]
+    assert int(row["theta_relax_repeats_applied"]) == 5
+    assert int(row["tilt_projection_apply_count"]) == 40
+    assert float(row["internal_disk_ratio_mesh_over_theory_v2"]) == pytest.approx(
+        0.9839900707418473,
+        rel=1.0e-6,
+        abs=1.0e-9,
+    )
+    assert float(row["internal_outer_near_ratio_mesh_over_theory_v2"]) == pytest.approx(
+        0.9794560277853616,
+        rel=1.0e-6,
+        abs=1.0e-9,
+    )
+    assert float(row["internal_outer_far_ratio_mesh_over_theory_v2"]) == pytest.approx(
+        0.9681785253676642,
+        rel=1.0e-6,
+        abs=1.0e-9,
+    )
+    assert bool(row["meets_10pct_v2"]) is True
+    assert bool(row["meets_parity_target_v2"]) is True
+
+
+@pytest.mark.regression
 def test_flat_disk_kh_term_audit_invalid_partition_mode_raises() -> None:
     with pytest.raises(ValueError, match="partition_mode"):
         run_flat_disk_kh_term_audit(
