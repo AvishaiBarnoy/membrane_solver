@@ -1335,6 +1335,7 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_optimize_every: int = 1,
     theta_optimize_delta: float = 2.0e-4,
     theta_optimize_inner_steps: int = 20,
+    theta_optimize_mode: str = "scalar_local",
     theta_optimize_plateau_patience: int = 0,
     theta_optimize_plateau_abs_tol: float = 0.0,
     theta_optimize_postcheck: bool = False,
@@ -1345,6 +1346,9 @@ def run_flat_disk_one_leaflet_benchmark(
     theta_polish_points: int = 3,
     optimize_preset: str = "none",
     parameterization: str = "legacy",
+    geometry_lane: str = "flat_pinned",
+    z_gauge: str = "mean_zero",
+    curved_acceptance_profile: str = "full",
     length_scale_nm: float = 15.0,
     radius_nm: float = 7.0,
     kappa_physical: float = 10.0,
@@ -1369,6 +1373,10 @@ def run_flat_disk_one_leaflet_benchmark(
     tilt_post_relax_inner_steps: int = 0,
     tilt_post_relax_step_size: float = 0.0,
     tilt_post_relax_passes: int = 1,
+    curved_theta_calibration_mode: str = "off",
+    curved_theta_calibration_inner_scale: float = 1.0,
+    curved_theta_calibration_outer_scale: float = 1.0,
+    curved_theta_calibration_contact_scale: float = 1.0,
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
@@ -1404,6 +1412,29 @@ def run_flat_disk_one_leaflet_benchmark(
     )
     raw_outer_local_vertex_average_rmax_lambda = float(
         outer_local_vertex_average_rmax_lambda
+    )
+    geometry_lane_requested = str(geometry_lane).strip().lower()
+    z_gauge_requested = str(z_gauge).strip().lower()
+    theta_optimize_mode_requested = str(theta_optimize_mode).strip().lower()
+    curved_acceptance_profile_requested = str(curved_acceptance_profile).strip().lower()
+    curved_theta_calibration_mode_requested = (
+        str(curved_theta_calibration_mode).strip().lower()
+    )
+    geometry_lane_effective = "flat_pinned"
+    z_gauge_effective = "none"
+    geometry_lane_fallback_reason = (
+        None
+        if geometry_lane_requested == "flat_pinned"
+        else "geometry_lane_not_supported_in_benchmark"
+    )
+    theta_optimize_mode_effective = "scalar_local"
+    theta_optimize_mode_fallback_reason = (
+        None
+        if theta_optimize_mode_requested == "scalar_local"
+        else "theta_optimize_mode_not_supported_in_benchmark"
+    )
+    curved_theta_calibration_requested = bool(
+        curved_theta_calibration_mode_requested != "off"
     )
     optimize_preset_raw = str(optimize_preset).lower()
     effective_refine_level = raw_refine_level
@@ -1865,6 +1896,10 @@ def run_flat_disk_one_leaflet_benchmark(
     minim = _build_minimizer(mesh)
     minim.enforce_constraints_after_mesh_ops(mesh)
     mesh.project_tilts_to_tangent()
+    tilt_in_mean_initial = float(np.mean(np.linalg.norm(mesh.tilts_in_view(), axis=1)))
+    tilt_out_mean_initial = float(
+        np.mean(np.linalg.norm(mesh.tilts_out_view(), axis=1))
+    )
     setup_seconds = float(perf_counter() - t_setup_start)
 
     scan_report: dict[str, Any] | None = None
@@ -2222,6 +2257,66 @@ def run_flat_disk_one_leaflet_benchmark(
     energy_factor = _factor_difference(
         float(abs(total_energy)), float(abs(theory.total))
     )
+    boundary_at_r = _boundary_at_R_parity_metrics(
+        mesh,
+        theory_theta_value=float(theta_star),
+    )
+    try:
+        from geometry.curvature import compute_curvature_fields
+
+        curvature_fields = compute_curvature_fields(
+            mesh, mesh.positions_view(), mesh.vertex_index_to_row
+        )
+        boundary = set(mesh.boundary_vertex_ids or [])
+        interior_rows = [
+            mesh.vertex_index_to_row[int(vid)]
+            for vid in mesh.vertex_ids
+            if int(vid) not in boundary
+        ]
+        if len(interior_rows) == 0:
+            interior_rows = list(range(len(mesh.vertex_ids)))
+        h_vals = np.asarray(curvature_fields.mean_curvature[interior_rows], dtype=float)
+        h_vals = np.abs(h_vals[np.isfinite(h_vals)])
+        if h_vals.size == 0:
+            curvature_diag = {"h_mean": 0.0, "h_p95": 0.0, "h_max": 0.0}
+        else:
+            curvature_diag = {
+                "h_mean": float(np.mean(h_vals)),
+                "h_p95": float(np.percentile(h_vals, 95)),
+                "h_max": float(np.max(h_vals)),
+            }
+    except Exception:
+        curvature_diag = {
+            "h_mean": float("nan"),
+            "h_p95": float("nan"),
+            "h_max": float("nan"),
+        }
+    tilt_in_mean_final = float(np.mean(np.linalg.norm(mesh.tilts_in_view(), axis=1)))
+    tilt_out_mean_final = float(np.mean(np.linalg.norm(mesh.tilts_out_view(), axis=1)))
+    tilt_in_relax_delta = float(tilt_in_mean_initial - tilt_in_mean_final)
+    tilt_out_gain_delta = float(tilt_out_mean_final - tilt_out_mean_initial)
+    tilt_transfer_ratio = float(
+        tilt_out_gain_delta / max(abs(tilt_in_relax_delta), 1.0e-18)
+    )
+    curved_theta_calibration = {
+        "requested": bool(curved_theta_calibration_requested),
+        "applied": bool(curved_theta_calibration_requested),
+        "reason": (
+            "off" if not curved_theta_calibration_requested else "identity_passthrough"
+        ),
+        "mode": str(curved_theta_calibration_mode_requested),
+        "inner_scale": float(curved_theta_calibration_inner_scale),
+        "outer_scale": float(curved_theta_calibration_outer_scale),
+        "contact_scale": float(curved_theta_calibration_contact_scale),
+        "theta_star_raw": float(theta_star),
+        "total_energy_raw": float(total_energy),
+        "theta_factor_raw": float(theta_factor),
+        "energy_factor_raw": float(energy_factor),
+        "theta_star_effective": float(theta_star),
+        "total_energy_effective": float(total_energy),
+        "theta_factor_effective": float(theta_factor),
+        "energy_factor_effective": float(energy_factor),
+    }
     if theta_mode_str == "optimize_full":
         assert theta_factor_raw is not None
         assert energy_factor_raw is not None
@@ -2263,6 +2358,29 @@ def run_flat_disk_one_leaflet_benchmark(
             "optimize_preset_requested": str(optimize_preset).lower(),
             "optimize_preset_effective": str(effective_optimize_preset),
             "splay_modulus_scale_in": float(splay_modulus_scale_in),
+            "geometry_lane": str(geometry_lane_effective),
+            "geometry_lane_requested": str(geometry_lane_requested),
+            "geometry_lane_fallback_reason": geometry_lane_fallback_reason,
+            "z_gauge": str(z_gauge_effective),
+            "z_gauge_requested": str(z_gauge_requested),
+            "curved_acceptance_profile": str(curved_acceptance_profile_requested),
+            "theta_optimize_mode": str(theta_optimize_mode_effective),
+            "theta_optimize_mode_requested": str(theta_optimize_mode_requested),
+            "theta_optimize_mode_fallback_reason": (
+                theta_optimize_mode_fallback_reason
+            ),
+            "curved_theta_calibration_mode": str(
+                curved_theta_calibration_mode_requested
+            ),
+            "curved_theta_calibration_inner_scale": float(
+                curved_theta_calibration_inner_scale
+            ),
+            "curved_theta_calibration_outer_scale": float(
+                curved_theta_calibration_outer_scale
+            ),
+            "curved_theta_calibration_contact_scale": float(
+                curved_theta_calibration_contact_scale
+            ),
             "tilt_mass_mode_in": str(mass_mode),
             "tilt_divergence_mode_in": str(div_mode_raw),
             "tilt_projection_cadence": str(projection_cadence),
@@ -2327,6 +2445,13 @@ def run_flat_disk_one_leaflet_benchmark(
                 theory=theory,
                 radius=float(theory.radius),
             ),
+            "curvature": curvature_diag,
+            "tilt_transfer": {
+                "tilt_in_relax_delta": float(tilt_in_relax_delta),
+                "tilt_out_gain_delta": float(tilt_out_gain_delta),
+                "tilt_transfer_ratio": float(tilt_transfer_ratio),
+            },
+            "curved_theta_calibration": curved_theta_calibration,
             "tilt_projection": {
                 "projection_cadence": str(
                     (getattr(minim, "_last_tilt_projection_stats", None) or {}).get(
@@ -2359,6 +2484,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "energy_factor": float(energy_factor),
             "meets_factor_2": bool(theta_factor <= 2.0 and energy_factor <= 2.0),
             "recommended_mode_for_theory": str(recommended_mode_for_theory),
+            "boundary_at_R": boundary_at_r,
         },
     }
     return report

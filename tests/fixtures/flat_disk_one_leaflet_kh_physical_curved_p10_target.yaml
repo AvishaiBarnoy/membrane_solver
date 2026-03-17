@@ -1,0 +1,47 @@
+meta:
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml
+  theory_reference: kh_physical_radial_integral
+  parameterization: kh_physical
+  geometry_lane: free_z
+  z_gauge: mean_zero
+  curved_acceptance_profile: fast
+  refine_level: 3
+  outer_mode: free
+  smoothness_model: splay_twist
+  theta_mode: optimize
+  theta_initial: 0.12
+  theta_optimize_steps: 25
+  theta_optimize_every: 1
+  theta_optimize_delta: 0.01
+  theta_optimize_inner_steps: 40
+  theta_optimize_mode: two_stage_stable
+  curved_theta_calibration_mode: inner_outer_rescaled
+  curved_theta_calibration_inner_scale: 0.5
+  curved_theta_calibration_outer_scale: 2.0
+  curved_theta_calibration_contact_scale: 1.0
+  kappa_physical: 10.0
+  kappa_t_physical: 10.0
+  length_scale_nm: 15.0
+  radius_nm: 7.0
+  drive_physical: 2.857142857142857
+expected:
+  theta_star: 0.1417
+  theta_star_abs_tol: 0.01
+  total_energy: -0.8906
+  total_energy_abs_tol: 0.05
+  theta_factor_max: 1.10
+  energy_factor_max: 1.10
+observability:
+  required_meta_fields:
+    - geometry_lane
+    - z_gauge
+    - theory_model
+    - theory_source
+  required_curvature_fields:
+    - h_mean
+    - h_p95
+    - h_max
+  required_transfer_fields:
+    - tilt_in_relax_delta
+    - tilt_out_gain_delta
+    - tilt_transfer_ratio
