@@ -1003,18 +1003,46 @@ def _run_theta_relaxation(
     *,
     theta_value: float,
     reset_outer: bool,
+    reset_inner: bool = True,
 ) -> float:
+    """Relax leaflet tilts for a fixed theta_B, with optional warm-started inner repeats."""
     mesh = minim.mesh
     gp = mesh.global_parameters
     gp.set("tilt_thetaB_value", float(theta_value))
 
-    tin = np.zeros_like(mesh.tilts_in_view())
-    mesh.set_tilts_in_from_array(tin)
+    if bool(reset_inner):
+        tin = np.zeros_like(mesh.tilts_in_view())
+        mesh.set_tilts_in_from_array(tin)
     if reset_outer:
         tout = np.zeros_like(mesh.tilts_out_view())
         mesh.set_tilts_out_from_array(tout)
 
-    minim._relax_leaflet_tilts(positions=mesh.positions_view(), mode="coupled")
+    positions = mesh.positions_view()
+    minim._relax_leaflet_tilts(positions=positions, mode="coupled")
+    post_relax_inner_steps = int(gp.get("tilt_post_relax_inner_steps", 0) or 0)
+    post_relax_step_size = float(gp.get("tilt_post_relax_step_size", 0.0) or 0.0)
+    post_relax_passes = int(gp.get("tilt_post_relax_passes", 1) or 1)
+    if (
+        post_relax_inner_steps > 0
+        and post_relax_step_size > 0.0
+        and post_relax_passes > 0
+    ):
+        orig_step = gp.get("tilt_step_size")
+        orig_inner = gp.get("tilt_inner_steps")
+        try:
+            gp.set("tilt_step_size", float(post_relax_step_size))
+            gp.set("tilt_inner_steps", int(post_relax_inner_steps))
+            for _ in range(int(post_relax_passes)):
+                minim._relax_leaflet_tilts(positions=positions, mode="coupled")
+        finally:
+            if orig_step is None:
+                gp.unset("tilt_step_size")
+            else:
+                gp.set("tilt_step_size", orig_step)
+            if orig_inner is None:
+                gp.unset("tilt_inner_steps")
+            else:
+                gp.set("tilt_inner_steps", orig_inner)
     energy = float(minim.compute_energy())
     if not np.isfinite(energy):
         raise ValueError(f"Non-finite energy during theta scan at theta={theta_value}.")
