@@ -1,0 +1,47 @@
+routine_lock:
+  tilt_solver: gd
+  tilt_solve_mode: coupled
+  tilt_step_size: 0.08
+  tilt_inner_steps: 250
+
+required_array_api_modules:
+  - bending
+  - bending_tilt
+  - bending_tilt_in
+  - bending_tilt_out
+  - body_area_penalty
+  - curved_local_interface_law
+  - curved_local_interface_penalty
+  - edge_length_penalty
+  - expression
+  - gaussian_curvature
+  - jordan_area
+  - line_tension
+  - rim_slope_match_out
+  - surface
+  - tilt
+  - tilt_coupling
+  - tilt_disk_contact_in
+  - tilt_disk_target_in
+  - tilt_disk_target_out
+  - tilt_in
+  - tilt_out
+  - tilt_rim_source_bilayer
+  - tilt_rim_source_in
+  - tilt_rim_source_out
+  - tilt_smoothness
+  - tilt_smoothness_in
+  - tilt_smoothness_out
+  - tilt_splay_twist_in
+  - tilt_thetaB_contact_in
+  - volume
+
+required_leaflet_api_modules:
+  - bending_tilt_leaflet
+
+gradient_check_groups:
+  - id: pr2_tilt_family_i
+    pr: PR2
+    tests:
+      - tests/test_tilt_leaflet_splay_twist_in.py
+      - tests/test_tilt_leaflet_pure.py

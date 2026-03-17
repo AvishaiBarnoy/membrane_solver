@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
+import argparse
 import ast
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 ENERGY_DIR = ROOT / "modules" / "energy"
@@ -101,3 +105,90 @@ def evaluate_inventory_contract(
         "inventory_matches_fixture": required_missing_count == 0
         and unexpected_count == 0,
     }
+
+
+def _deferred_status(pr_label: str | None) -> str:
+    """Return the deferred status token for a planned PR stage."""
+
+    if not pr_label:
+        return "deferred"
+    return f"deferred_{pr_label.strip().lower()}"
+
+
+def _build_report(matrix: dict[str, Any], inventory: dict[str, Any]) -> dict[str, Any]:
+    """Build a lightweight physics-sweep report without executing deferred stages."""
+
+    gradient_groups = list(matrix.get("gradient_check_groups", []))
+    gradient_status = _deferred_status(
+        gradient_groups[0].get("pr") if gradient_groups else None
+    )
+    return {
+        "meta": {
+            "mode": "physics_sweep",
+            "format": "yaml",
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "root": str(ROOT),
+        },
+        "summary": {
+            "required_missing_count": inventory["required_missing_count"],
+            "unexpected_count": inventory["unexpected_count"],
+            "inventory_matches_fixture": inventory["inventory_matches_fixture"],
+            "all_pass": inventory["inventory_matches_fixture"],
+        },
+        "routine_lock": matrix.get("routine_lock", {}),
+        "inventory": inventory,
+        "gradient_checks": {
+            "status": gradient_status,
+            "groups": gradient_groups,
+            "executed": False,
+        },
+    }
+
+
+def _write_report(report: dict[str, Any], out_path: Path) -> None:
+    """Write the physics-sweep report as YAML."""
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(yaml.safe_dump(report, sort_keys=False), encoding="utf-8")
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse CLI arguments for the lightweight physics sweep."""
+
+    parser = argparse.ArgumentParser(description="Physics sweep inventory reporter")
+    parser.add_argument(
+        "--matrix",
+        type=Path,
+        default=ROOT / "tests" / "fixtures" / "physics_sweep_matrix.yaml",
+        help="Path to physics sweep matrix YAML",
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=Path("/tmp/physics_sweep_report.yaml"),
+        help="Output YAML report path",
+    )
+    parser.add_argument(
+        "--fail-on-inventory-mismatch",
+        action="store_true",
+        help="Exit non-zero when the inventory does not match the matrix fixture",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the physics-sweep inventory CLI."""
+
+    args = parse_args(argv)
+    matrix = yaml.safe_load(args.matrix.read_text(encoding="utf-8"))
+    discovered = discover_inventory()
+    inventory = evaluate_inventory_contract(matrix=matrix, discovered=discovered)
+    report = _build_report(matrix=matrix, inventory=inventory)
+    _write_report(report, args.out)
+    if args.fail_on_inventory_mismatch and not inventory["inventory_matches_fixture"]:
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
