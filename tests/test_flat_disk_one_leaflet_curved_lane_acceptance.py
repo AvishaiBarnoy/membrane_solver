@@ -112,3 +112,18 @@ def test_flat_disk_curved_lane_matches_3d_updated_signs_p10_target() -> None:
     assert float(calibration["energy_factor_raw"]) <= float(
         expected["energy_factor_max"]
     )
+
+
+@pytest.mark.acceptance
+def test_flat_disk_curved_lane_matches_3d_updated_signs_p5_target() -> None:
+    report = _run_curved_lane_from_fixture(
+        "flat_disk_one_leaflet_kh_physical_curved_p5_target.yaml"
+    )
+    calibration = report["diagnostics"]["curved_theta_calibration"]
+    assert bool(calibration["applied"])
+    assert float(calibration["theta_factor_effective"]) >= float(
+        calibration["theta_factor_raw"]
+    )
+    assert float(calibration["energy_factor_effective"]) >= float(
+        calibration["energy_factor_raw"]
+    )
