@@ -1,11 +1,14 @@
 import os
 import sys
 from pathlib import Path
+from time import perf_counter
 
 import numpy as np
 import pytest
+import yaml
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+ROOT = Path(__file__).resolve().parent.parent
 
 from tools.diagnostics.flat_disk_kh_term_audit import (
     run_flat_disk_kh_discrete_tilt_matrix,
@@ -1132,6 +1135,120 @@ def _run_policy_report(**overrides):
     base = {"refine_level": 1, "theta_values": (0.138,), "ratio_version": "v2"}
     base.update(overrides)
     return run_flat_disk_kh_term_audit(**base)
+
+
+@pytest.mark.acceptance
+def test_flat_disk_kh_term_audit_v2_uses_strict_raw_ratio_semantics() -> None:
+    target_cfg = yaml.safe_load(
+        (
+            ROOT / "tests" / "fixtures" / "flat_disk_kh_term_audit_v2_5pct_target.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    controls = dict(target_cfg["meta"]["controls"])
+    controls.update(
+        {
+            "outer_mode": "disabled",
+            "smoothness_model": "splay_twist",
+            "tilt_mass_mode_in": "consistent",
+            "tilt_divergence_mode_in": "native",
+            "theta_values": (float(target_cfg["meta"]["theta_value"]),),
+        }
+    )
+    t0 = perf_counter()
+    report_v1 = run_flat_disk_kh_term_audit(
+        **controls,
+        ratio_version="v1",
+        theory_outer_mode="infinite",
+    )
+    v1_seconds = float(perf_counter() - t0)
+
+    t1 = perf_counter()
+    report_v2 = run_flat_disk_kh_term_audit(
+        **controls,
+        ratio_version="v2",
+        theory_outer_mode="infinite",
+    )
+    v2_seconds = float(perf_counter() - t1)
+
+    row = report_v2["rows"][0]
+    assert report_v2["meta"]["v2_ratio_semantics"] == "strict_raw"
+    assert float(row["internal_disk_ratio_mesh_over_theory_v2"]) == pytest.approx(
+        float(row["internal_disk_ratio_mesh_over_theory_v2_raw"]),
+        rel=0.0,
+        abs=1e-12,
+    )
+    assert float(row["internal_outer_near_ratio_mesh_over_theory_v2"]) == pytest.approx(
+        float(row["internal_outer_near_ratio_mesh_over_theory_v2_raw"]),
+        rel=0.0,
+        abs=1e-12,
+    )
+    assert float(row["internal_outer_far_ratio_mesh_over_theory_v2"]) == pytest.approx(
+        float(row["internal_outer_far_ratio_mesh_over_theory_v2_raw"]),
+        rel=0.0,
+        abs=1e-12,
+    )
+    meets_row_expected = bool(
+        (0.95 <= float(row["internal_disk_ratio_mesh_over_theory_v2"]) <= 1.05)
+        and (
+            0.95 <= float(row["internal_outer_near_ratio_mesh_over_theory_v2"]) <= 1.05
+        )
+        and (0.95 <= float(row["internal_outer_far_ratio_mesh_over_theory_v2"]) <= 1.05)
+    )
+    assert bool(row["meets_5pct_v2"]) is meets_row_expected
+    assert bool(report_v2["meets_5pct_v2"]) is meets_row_expected
+    assert bool(row["meets_5pct_v2"]) is bool(target_cfg["expected"]["meets_5pct_v2"])
+
+    runtime_ratio = float(v2_seconds / max(v1_seconds, 1e-12))
+    assert runtime_ratio <= float(target_cfg["runtime_gate"]["max_v2_over_v1"])
+    assert isinstance(bool(report_v1["meets_5pct_v2"]), bool)
+
+
+@pytest.mark.acceptance
+def test_flat_disk_kh_term_audit_staged_targets_match_fixture_expectations() -> None:
+    cfg_p10 = yaml.safe_load(
+        (
+            ROOT / "tests" / "fixtures" / "flat_disk_kh_term_audit_v2_p10_target.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    cfg_p5 = yaml.safe_load(
+        (
+            ROOT / "tests" / "fixtures" / "flat_disk_kh_term_audit_v2_p5_target.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    controls = dict(cfg_p10["meta"]["controls"])
+    controls.update(
+        {
+            "outer_mode": "disabled",
+            "smoothness_model": "splay_twist",
+            "tilt_mass_mode_in": "consistent",
+            "tilt_divergence_mode_in": "native",
+            "partition_mode": "fractional",
+            "theta_values": (float(cfg_p10["meta"]["theta_value"]),),
+            "ratio_version": "v2",
+            "theory_outer_mode": "finite_bvp",
+        }
+    )
+
+    report_p10 = run_flat_disk_kh_term_audit(
+        **controls,
+        parity_target="p10",
+        axial_symmetry_gate=str(cfg_p10["meta"]["axial_symmetry_gate"]),
+    )
+    report_p5 = run_flat_disk_kh_term_audit(
+        **controls,
+        parity_target="p5",
+        axial_symmetry_gate=str(cfg_p5["meta"]["axial_symmetry_gate"]),
+    )
+    assert bool(report_p10["meets_10pct_v2"]) is bool(
+        cfg_p10["expected"]["meets_10pct_v2"]
+    )
+    assert bool(report_p10["meets_parity_target_v2"]) is bool(
+        cfg_p10["expected"]["meets_parity_target_v2"]
+    )
+    assert bool(report_p5["meets_5pct_v2"]) is bool(cfg_p5["expected"]["meets_5pct_v2"])
+    assert bool(report_p5["meets_parity_target_v2"]) is bool(
+        cfg_p5["expected"]["meets_parity_target_v2"]
+    )
 
 
 @pytest.mark.regression
