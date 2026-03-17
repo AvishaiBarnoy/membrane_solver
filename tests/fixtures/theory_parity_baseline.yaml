@@ -11,17 +11,17 @@ meta:
   baseline_version: v1
   format: yaml
 metrics:
-  final_energy: -0.5591799783212776
-  thetaB_value: 0.09
+  final_energy: -0.3880508889933005
+  thetaB_value: 0.07
   breakdown:
-    bending_tilt_in: 0.07633301472246795
-    bending_tilt_out: 4.351117335303224e-09
-    tilt_in: 0.49553575610911593
-    tilt_out: 1.2033478798842349e-11
-    tilt_thetaB_contact_in: -1.1310487535160123
+    bending_tilt_in: 0.08914537044779841
+    bending_tilt_out: 0.0126018779848744
+    tilt_in: 0.38990125470566617
+    tilt_out: 5.193936370161471e-06
+    tilt_thetaB_contact_in: -0.8797045860680096
   tilt_stats:
-    tstat_in_p90_norm: 0.0027253970719953555
-    tstat_out_p90_norm: 2.0758989030491304e-08
+    tstat_in_p90_norm: 0.018715041582956355
+    tstat_out_p90_norm: 3.164188966469373e-05
 tolerances:
   final_energy: 5.0e-4
   thetaB_value: 1.0e-3

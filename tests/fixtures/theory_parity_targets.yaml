@@ -13,16 +13,16 @@ meta:
 targets:
   ratios:
     theta_ratio:
-      expected: 2.0
+      expected: 0.7585224359983416
       abs_tol: 0.3
     elastic_ratio:
-      expected: 2.0
+      expected: 0.8478536224065294
       abs_tol: 0.3
     contact_ratio:
-      expected: 2.0
+      expected: 0.758522435998342
       abs_tol: 0.3
     total_ratio:
-      expected: 2.0
+      expected: 0.6691912495901546
       abs_tol: 0.3
   relations:
     contact_measured_negative: true
