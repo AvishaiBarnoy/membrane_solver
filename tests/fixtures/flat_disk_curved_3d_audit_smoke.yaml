@@ -1,0 +1,22 @@
+meta:
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml
+  refine_level: 2
+  outer_mode: free
+  smoothness_model: splay_twist
+  theta_mode: optimize
+  theta_initial: 0.12
+  theta_optimize_steps: 8
+  theta_optimize_every: 1
+  theta_optimize_delta: 0.01
+  theta_optimize_inner_steps: 20
+  kappa_physical: 10.0
+  kappa_t_physical: 10.0
+  length_scale_nm: 15.0
+  radius_nm: 7.0
+  drive_physical: 2.857142857142857
+  z_gauge: mean_zero
+  curved_acceptance_profile: fast
+  include_sections: true
+expected:
+  theory_source: kh_physical_radial_integral
+  geometry_lane: free_z
