@@ -22,6 +22,41 @@ from modules.energy import (
 )
 
 
+def _build_planar_patch_mesh():
+    mesh = parse_geometry(
+        {
+            "vertices": {
+                0: [0.0, 0.0, 0.0, {"fixed": True}],
+                1: [1.0, 0.0, 0.0, {"fixed": True}],
+                2: [1.0, 1.0, 0.0, {"fixed": True}],
+                3: [0.0, 1.0, 0.0, {"fixed": True}],
+                4: [0.5, 0.5, 0.0, {"fixed": True}],
+            },
+            "edges": {
+                1: [0, 1],
+                2: [1, 2],
+                3: [2, 3],
+                4: [3, 0],
+                5: [0, 4],
+                6: [1, 4],
+                7: [2, 4],
+                8: [3, 4],
+            },
+            "faces": {
+                0: [1, 6, "r5"],
+                1: [2, 7, "r6"],
+                2: [3, 8, "r7"],
+                3: [4, 5, "r8"],
+            },
+            "energy_modules": [],
+            "global_parameters": {"surface_tension": 0.0},
+            "instructions": [],
+        }
+    )
+    mesh.build_facet_vertex_loops()
+    return mesh
+
+
 def _build_mesh():
     mesh = parse_geometry(cube_soft_volume_input("lagrange"))
     mesh.build_facet_vertex_loops()
@@ -166,6 +201,71 @@ def test_tilt_smoothness_energy_array_matches_gradient_path():
     index_map = mesh.vertex_index_to_row
 
     tilts = _rng_tilts(mesh.tilts_view().shape, 5)
+    grad_dummy = np.zeros_like(positions)
+    tilt_grad = np.zeros_like(positions)
+
+    e_grad = tilt_smoothness.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts=tilts,
+        tilt_grad_arr=tilt_grad,
+    )
+    e_only = tilt_smoothness.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts=tilts,
+    )
+    assert e_only == pytest.approx(e_grad, rel=1e-12, abs=1e-12)
+
+
+def test_tilt_smoothness_connection_v1_matches_ambient_on_planar_mesh():
+    mesh = _build_planar_patch_mesh()
+    mesh.global_parameters.set("tilt_smoothness_rigidity", 0.8)
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    tilts = _rng_tilts(mesh.tilts_view().shape, 9)
+
+    mesh.global_parameters.set("tilt_transport_model", "ambient_v1")
+    resolver = ParameterResolver(mesh.global_parameters)
+    ambient_energy = tilt_smoothness.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts=tilts,
+    )
+
+    mesh.global_parameters.set("tilt_transport_model", "connection_v1")
+    resolver = ParameterResolver(mesh.global_parameters)
+    connection_energy = tilt_smoothness.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts=tilts,
+    )
+
+    assert connection_energy == pytest.approx(ambient_energy, rel=1e-12, abs=1e-12)
+
+
+def test_tilt_smoothness_connection_v1_energy_array_matches_gradient_path():
+    mesh = _build_mesh()
+    mesh.global_parameters.set("tilt_smoothness_rigidity", 0.8)
+    mesh.global_parameters.set("tilt_transport_model", "connection_v1")
+    param_resolver = ParameterResolver(mesh.global_parameters)
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    tilts = _rng_tilts(mesh.tilts_view().shape, 10)
     grad_dummy = np.zeros_like(positions)
     tilt_grad = np.zeros_like(positions)
 
