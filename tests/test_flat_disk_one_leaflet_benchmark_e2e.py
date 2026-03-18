@@ -1766,6 +1766,28 @@ def test_flat_disk_reports_tilt_transport_model_meta() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_reports_tilt_mass_mode_out_meta() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="none",
+        theta_optimize_steps=12,
+        theta_optimize_every=1,
+        theta_optimize_delta=8.0e-4,
+        theta_optimize_inner_steps=8,
+        tilt_mass_mode_out="consistent",
+    )
+
+    assert report["meta"]["tilt_mass_mode_out"] == "consistent"
+    assert np.isfinite(float(report["parity"]["theta_factor"]))
+    assert np.isfinite(float(report["parity"]["energy_factor"]))
+
+
+@pytest.mark.regression
 def test_run_theta_relaxation_can_preserve_inner_state_between_repeats() -> None:
     params = physical_to_dimensionless_theory_params(
         kappa_physical=10.0,
@@ -1901,6 +1923,16 @@ def test_flat_disk_invalid_tilt_projection_and_post_relax_controls_raise() -> No
             refine_level=1,
             outer_mode="disabled",
             tilt_transport_model="bad_mode",
+        )
+    with pytest.raises(
+        ValueError,
+        match="tilt_mass_mode_out must be 'auto', 'lumped', or 'consistent'",
+    ):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            tilt_mass_mode_out="bad_mode",
         )
 
 
