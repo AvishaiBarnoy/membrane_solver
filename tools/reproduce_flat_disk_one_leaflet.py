@@ -858,6 +858,7 @@ def _configure_benchmark_mesh(
     smoothness_model: str,
     splay_modulus_scale_in: float,
     tilt_mass_mode_in: str,
+    tilt_mass_mode_out: str = "lumped",
     tilt_transport_model: str = "ambient_v1",
     tilt_divergence_mode_in: str = "native",
     tilt_projection_cadence: str = "per_step",
@@ -909,8 +910,12 @@ def _configure_benchmark_mesh(
     gp.set("bending_modulus_in", float(mapping["bending_modulus_in"]))
     gp.set("tilt_modulus_in", float(mapping["tilt_modulus_in"]))
     gp.set("tilt_mass_mode_in", str(tilt_mass_mode_in))
+    gp.set("tilt_mass_mode_out", str(tilt_mass_mode_out))
     gp.set("tilt_transport_model", str(tilt_transport_model))
     gp.set("tilt_divergence_mode_in", str(tilt_divergence_mode_in))
+    mass_mode_out_value = str(tilt_mass_mode_out).strip().lower()
+    if mass_mode_out_value not in {"lumped", "consistent"}:
+        raise ValueError("tilt_mass_mode_out must be 'lumped' or 'consistent'.")
     transport_model_value = str(tilt_transport_model).strip().lower()
     if transport_model_value not in {"ambient_v1", "connection_v1"}:
         raise ValueError(
@@ -949,6 +954,7 @@ def _configure_benchmark_mesh(
     gp.set("tilt_post_relax_step_size", post_relax_step_size)
     gp.set("tilt_post_relax_passes", post_relax_passes)
     gp.set("inner_coupled_update_mode", inner_coupled_update_mode_value)
+    gp.set("tilt_mass_mode_out", mass_mode_out_value)
     gp.set("tilt_transport_model", transport_model_value)
     gp.set("benchmark_disk_radius", float(theory_params.radius))
     gp.set("benchmark_lambda_value", float(lambda_value))
@@ -1376,6 +1382,7 @@ def run_flat_disk_one_leaflet_benchmark(
     drive_physical: float = (2.0 / 0.7),
     splay_modulus_scale_in: float = 1.0,
     tilt_mass_mode_in: str = "auto",
+    tilt_mass_mode_out: str = "auto",
     tilt_transport_model: str = "ambient_v1",
     tilt_divergence_mode_in: str = "native",
     rim_local_refine_steps: int = 0,
@@ -1714,6 +1721,15 @@ def run_flat_disk_one_leaflet_benchmark(
         mass_mode = mass_mode_raw
     else:
         raise ValueError("tilt_mass_mode_in must be 'auto', 'lumped', or 'consistent'.")
+    mass_mode_out_raw = str(tilt_mass_mode_out).strip().lower()
+    if mass_mode_out_raw == "auto":
+        mass_mode_out = "lumped"
+    elif mass_mode_out_raw in {"lumped", "consistent"}:
+        mass_mode_out = mass_mode_out_raw
+    else:
+        raise ValueError(
+            "tilt_mass_mode_out must be 'auto', 'lumped', or 'consistent'."
+        )
     transport_model_raw = str(tilt_transport_model).strip().lower()
     if transport_model_raw not in {"ambient_v1", "connection_v1"}:
         raise ValueError(
@@ -1920,6 +1936,7 @@ def run_flat_disk_one_leaflet_benchmark(
         smoothness_model=smoothness_model,
         splay_modulus_scale_in=float(splay_modulus_scale_in),
         tilt_mass_mode_in=mass_mode,
+        tilt_mass_mode_out=mass_mode_out,
         tilt_transport_model=transport_model_raw,
         tilt_divergence_mode_in=div_mode_raw,
         tilt_projection_cadence=projection_cadence,
@@ -2420,6 +2437,7 @@ def run_flat_disk_one_leaflet_benchmark(
                 curved_theta_calibration_contact_scale
             ),
             "tilt_mass_mode_in": str(mass_mode),
+            "tilt_mass_mode_out": str(mass_mode_out),
             "tilt_transport_model": str(transport_model_raw),
             "tilt_divergence_mode_in": str(div_mode_raw),
             "tilt_projection_cadence": str(projection_cadence),
