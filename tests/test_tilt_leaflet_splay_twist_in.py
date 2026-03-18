@@ -106,3 +106,77 @@ def test_tilt_splay_twist_in_gradient_matches_directional_derivative() -> None:
     analytic = float(np.sum(tilt_grad_arr * direction))
 
     assert analytic == pytest.approx(fd, rel=1e-5, abs=1e-8)
+
+
+def test_tilt_splay_twist_in_rejects_invalid_divergence_mode() -> None:
+    mesh = _build_two_triangle_square_mesh()
+    gp = GlobalParameters({"tilt_divergence_mode_in": "bad_mode"})
+    resolver = ParameterResolver(gp)
+    positions = mesh.positions_view()
+
+    with pytest.raises(ValueError, match="tilt_divergence_mode_in"):
+        tilt_splay_twist_in.compute_energy_array(
+            mesh,
+            gp,
+            resolver,
+            positions=positions,
+            index_map=mesh.vertex_index_to_row,
+        )
+
+
+def test_tilt_splay_twist_in_vertex_recovered_gradient_matches_directional_derivative() -> (
+    None
+):
+    mesh = _build_two_triangle_square_mesh()
+    gp = GlobalParameters(
+        {
+            "tilt_splay_modulus_in": 0.7,
+            "tilt_twist_modulus_in": 0.4,
+            "tilt_divergence_mode_in": "vertex_recovered",
+        }
+    )
+    resolver = ParameterResolver(gp)
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    rng = np.random.default_rng(456)
+    tilts = 1e-2 * rng.standard_normal(size=(len(mesh.vertex_ids), 3))
+    tilts[:, 2] = 0.0
+    direction = rng.standard_normal(size=tilts.shape)
+    direction[:, 2] = 0.0
+
+    grad_arr = np.zeros_like(positions)
+    tilt_grad_arr = np.zeros_like(positions)
+    energy = tilt_splay_twist_in.compute_energy_and_gradient_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_arr,
+        tilts_in=tilts,
+        tilt_in_grad_arr=tilt_grad_arr,
+    )
+    assert float(energy) >= 0.0
+
+    eps = 1e-7
+    e_plus = tilt_splay_twist_in.compute_energy_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=tilts + eps * direction,
+    )
+    e_minus = tilt_splay_twist_in.compute_energy_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=tilts - eps * direction,
+    )
+    fd = float(e_plus - e_minus) / (2.0 * eps)
+    analytic = float(np.sum(tilt_grad_arr * direction))
+
+    assert analytic == pytest.approx(fd, rel=1e-5, abs=1e-8)

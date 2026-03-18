@@ -37,6 +37,19 @@ def _resolve_twist_modulus(param_resolver) -> float:
     return k
 
 
+def _resolve_divergence_mode(param_resolver) -> str:
+    """Resolve inner-leaflet divergence operator mode."""
+    val = param_resolver.get(None, "tilt_divergence_mode_in")
+    if val is None:
+        val = param_resolver.get(None, "tilt_divergence_mode")
+    mode = str(val or "native").strip().lower()
+    if mode not in {"native", "vertex_recovered"}:
+        raise ValueError(
+            "tilt_divergence_mode_in must be 'native' or 'vertex_recovered'."
+        )
+    return mode
+
+
 def _transport_to_triangle_plane(
     mesh: Mesh,
     positions: np.ndarray,
@@ -114,6 +127,7 @@ def compute_energy_and_gradient_array(
     _ = global_params, index_map, grad_arr, tilts_out, tilt_out_grad_arr
     k_splay = _resolve_splay_modulus(param_resolver)
     k_twist = _resolve_twist_modulus(param_resolver)
+    div_mode = _resolve_divergence_mode(param_resolver)
     transport_model = _resolve_transport_model(
         param_resolver.get(None, "tilt_transport_model")
     )
@@ -148,6 +162,24 @@ def compute_energy_and_gradient_array(
         + np.einsum("ij,ij->i", t1, g1)
         + np.einsum("ij,ij->i", t2, g2)
     )
+    if div_mode == "native":
+        div_eval = div_tri
+    else:
+        n_vertices = len(mesh.vertex_ids)
+        v_area = np.zeros(n_vertices, dtype=float)
+        v_div_num = np.zeros(n_vertices, dtype=float)
+        np.add.at(v_area, tri_rows[:, 0], area)
+        np.add.at(v_area, tri_rows[:, 1], area)
+        np.add.at(v_area, tri_rows[:, 2], area)
+        np.add.at(v_div_num, tri_rows[:, 0], area * div_tri)
+        np.add.at(v_div_num, tri_rows[:, 1], area * div_tri)
+        np.add.at(v_div_num, tri_rows[:, 2], area * div_tri)
+        v_div = np.zeros(n_vertices, dtype=float)
+        good_v = v_area > 1e-20
+        v_div[good_v] = v_div_num[good_v] / v_area[good_v]
+        div_eval = (
+            v_div[tri_rows[:, 0]] + v_div[tri_rows[:, 1]] + v_div[tri_rows[:, 2]]
+        ) / 3.0
 
     n = mesh.triangle_normals(positions=positions)
     if n.shape[0] != tri_rows.shape[0]:
@@ -163,7 +195,7 @@ def compute_energy_and_gradient_array(
     curl_vec = _fast_cross(g0, t0) + _fast_cross(g1, t1) + _fast_cross(g2, t2)
     curl_n = np.einsum("ij,ij->i", curl_vec, n_hat)
 
-    energy_density = k_splay * div_tri * div_tri + k_twist * curl_n * curl_n
+    energy_density = k_splay * div_eval * div_eval + k_twist * curl_n * curl_n
     energy = float(0.5 * np.sum(area * energy_density))
 
     if tilt_in_grad_arr is not None:
@@ -171,7 +203,27 @@ def compute_energy_and_gradient_array(
         if tilt_in_grad_arr.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilt_in_grad_arr must have shape (N_vertices, 3)")
 
-        coeff_div = area * k_splay * div_tri
+        coeff_div_eval = area * k_splay * div_eval
+        if div_mode == "native":
+            coeff_div = coeff_div_eval
+        else:
+            n_vertices = len(mesh.vertex_ids)
+            v_area = np.zeros(n_vertices, dtype=float)
+            np.add.at(v_area, tri_rows[:, 0], area)
+            np.add.at(v_area, tri_rows[:, 1], area)
+            np.add.at(v_area, tri_rows[:, 2], area)
+            v_grad = np.zeros(n_vertices, dtype=float)
+            np.add.at(v_grad, tri_rows[:, 0], coeff_div_eval / 3.0)
+            np.add.at(v_grad, tri_rows[:, 1], coeff_div_eval / 3.0)
+            np.add.at(v_grad, tri_rows[:, 2], coeff_div_eval / 3.0)
+            inv_v_area = np.zeros_like(v_area)
+            good_v = v_area > 1e-20
+            inv_v_area[good_v] = 1.0 / v_area[good_v]
+            coeff_div = area * (
+                v_grad[tri_rows[:, 0]] * inv_v_area[tri_rows[:, 0]]
+                + v_grad[tri_rows[:, 1]] * inv_v_area[tri_rows[:, 1]]
+                + v_grad[tri_rows[:, 2]] * inv_v_area[tri_rows[:, 2]]
+            )
         coeff_curl = area * k_twist * curl_n
 
         d0_local = coeff_div[:, None] * g0 + coeff_curl[:, None] * _fast_cross(
