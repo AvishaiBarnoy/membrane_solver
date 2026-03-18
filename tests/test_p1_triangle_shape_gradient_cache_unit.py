@@ -84,6 +84,51 @@ def test_compute_p1_basis_and_divergence_from_basis_match_reference() -> None:
     assert np.allclose(div_basis, div_ref, atol=1e-12, rtol=1e-12)
 
 
+def test_connection_v1_divergence_matches_ambient_on_planar_mesh() -> None:
+    mesh = _build_two_triangle_mesh()
+    positions = mesh.positions_view()
+    tri_rows, _ = mesh.triangle_row_cache()
+    assert tri_rows is not None and tri_rows.size > 0
+
+    rng = np.random.default_rng(21)
+    tilts = rng.normal(size=(len(mesh.vertex_ids), 3))
+    tilts[:, 2] = 0.0
+
+    div_ambient, area_ambient, g0_ambient, g1_ambient, g2_ambient = (
+        p1_triangle_divergence(
+            positions=positions,
+            tilts=tilts,
+            tri_rows=tri_rows,
+            transport_model="ambient_v1",
+        )
+    )
+    div_connection, area_connection, g0_connection, g1_connection, g2_connection = (
+        p1_triangle_divergence(
+            positions=positions,
+            tilts=tilts,
+            tri_rows=tri_rows,
+            transport_model="connection_v1",
+        )
+    )
+    area, g0, g1, g2 = compute_p1_basis(positions=positions, tri_rows=tri_rows)
+    div_connection_cached = compute_divergence_from_basis(
+        tilts=tilts,
+        tri_rows=tri_rows,
+        g0=g0,
+        g1=g1,
+        g2=g2,
+        positions=positions,
+        transport_model="connection_v1",
+    )
+
+    assert np.allclose(area_connection, area_ambient, atol=1e-12, rtol=1e-12)
+    assert np.allclose(g0_connection, g0_ambient, atol=1e-12, rtol=1e-12)
+    assert np.allclose(g1_connection, g1_ambient, atol=1e-12, rtol=1e-12)
+    assert np.allclose(g2_connection, g2_ambient, atol=1e-12, rtol=1e-12)
+    assert np.allclose(div_connection, div_ambient, atol=1e-12, rtol=1e-12)
+    assert np.allclose(div_connection_cached, div_connection, atol=1e-12, rtol=1e-12)
+
+
 def test_bending_tilt_leaflet_uses_cached_shape_gradients_without_changing_results(
     monkeypatch,
 ) -> None:
@@ -103,6 +148,7 @@ def test_bending_tilt_leaflet_uses_cached_shape_gradients_without_changing_resul
         {
             "bending_modulus_in": 2.0,
             "spontaneous_curvature_in": 0.0,
+            "tilt_transport_model": "connection_v1",
         }
     )
 
