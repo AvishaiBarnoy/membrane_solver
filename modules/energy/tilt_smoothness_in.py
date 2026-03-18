@@ -96,47 +96,21 @@ def compute_energy_and_gradient_array(
         if tilts_in.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_in must have shape (N_vertices, 3)")
 
-    c0 = weights[:, 0]
-    c1 = weights[:, 1]
-    c2 = weights[:, 2]
-
-    t0 = tilts_in[tri_rows[:, 0]]
-    t1 = tilts_in[tri_rows[:, 1]]
-    t2 = tilts_in[tri_rows[:, 2]]
-
-    d12 = t1 - t2
-    d20 = t2 - t0
-    d01 = t0 - t1
-
-    n12 = np.einsum("ij,ij->i", d12, d12)
-    n20 = np.einsum("ij,ij->i", d20, d20)
-    n01 = np.einsum("ij,ij->i", d01, d01)
-
-    energy = float(0.25 * k_smooth * np.sum(c0 * n12 + c1 * n20 + c2 * n01))
-
     if tilt_in_grad_arr is not None:
         tilt_in_grad_arr = np.asarray(tilt_in_grad_arr, dtype=float)
         if tilt_in_grad_arr.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilt_in_grad_arr must have shape (N_vertices, 3)")
 
-        factor = 0.5 * k_smooth
-        np.add.at(
-            tilt_in_grad_arr,
-            tri_rows[:, 0],
-            factor * (c1[:, None] * (t0 - t2) + c2[:, None] * (t0 - t1)),
-        )
-        np.add.at(
-            tilt_in_grad_arr,
-            tri_rows[:, 1],
-            factor * (c2[:, None] * (t1 - t0) + c0[:, None] * (t1 - t2)),
-        )
-        np.add.at(
-            tilt_in_grad_arr,
-            tri_rows[:, 2],
-            factor * (c0[:, None] * (t2 - t1) + c1[:, None] * (t2 - t0)),
-        )
-
-    return energy
+    return _base._compute_smoothness_energy_and_gradient(
+        mesh,
+        k_smooth=k_smooth,
+        positions=positions,
+        tri_rows=tri_rows,
+        weights=weights,
+        tilts=tilts_in,
+        tilt_grad_arr=tilt_in_grad_arr,
+        transport_model=_base._resolve_transport_model(global_params),
+    )
 
 
 def compute_energy_array(
@@ -167,24 +141,16 @@ def compute_energy_array(
         tilts_in = np.asarray(tilts_in, dtype=float)
         if tilts_in.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_in must have shape (N_vertices, 3)")
-
-    c0 = weights[:, 0]
-    c1 = weights[:, 1]
-    c2 = weights[:, 2]
-
-    t0 = tilts_in[tri_rows[:, 0]]
-    t1 = tilts_in[tri_rows[:, 1]]
-    t2 = tilts_in[tri_rows[:, 2]]
-
-    d12 = t1 - t2
-    d20 = t2 - t0
-    d01 = t0 - t1
-
-    n12 = np.einsum("ij,ij->i", d12, d12)
-    n20 = np.einsum("ij,ij->i", d20, d20)
-    n01 = np.einsum("ij,ij->i", d01, d01)
-
-    return float(0.25 * k_smooth * np.sum(c0 * n12 + c1 * n20 + c2 * n01))
+    return _base._compute_smoothness_energy_and_gradient(
+        mesh,
+        k_smooth=k_smooth,
+        positions=positions,
+        tri_rows=tri_rows,
+        weights=weights,
+        tilts=tilts_in,
+        tilt_grad_arr=None,
+        transport_model=_base._resolve_transport_model(global_params),
+    )
 
 
 __all__ = [
