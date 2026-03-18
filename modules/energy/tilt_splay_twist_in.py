@@ -7,6 +7,8 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh, _fast_cross
+from geometry.tangent_transport import transport_vectors, triangle_plane_transport_data
+from geometry.tilt_operators import _resolve_transport_model
 
 USES_TILT_LEAFLETS = True
 
@@ -33,6 +35,29 @@ def _resolve_twist_modulus(param_resolver) -> float:
     if k < 0.0:
         raise ValueError("tilt_twist_modulus_in must be non-negative.")
     return k
+
+
+def _transport_to_triangle_plane(
+    mesh: Mesh,
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+    tilts_in: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Transport inner tilts from vertex tangent planes to triangle planes."""
+    data = triangle_plane_transport_data(
+        mesh, positions, tri_rows, cache_tag="tilt_splay_twist_in"
+    )
+    t0 = tilts_in[tri_rows[:, 0]]
+    t1 = tilts_in[tri_rows[:, 1]]
+    t2 = tilts_in[tri_rows[:, 2]]
+    return (
+        transport_vectors(t0, data["r0"]),
+        transport_vectors(t1, data["r1"]),
+        transport_vectors(t2, data["r2"]),
+        data["r0_t"],
+        data["r1_t"],
+        data["r2_t"],
+    )
 
 
 def compute_energy_and_gradient(
@@ -89,6 +114,9 @@ def compute_energy_and_gradient_array(
     _ = global_params, index_map, grad_arr, tilts_out, tilt_out_grad_arr
     k_splay = _resolve_splay_modulus(param_resolver)
     k_twist = _resolve_twist_modulus(param_resolver)
+    transport_model = _resolve_transport_model(
+        param_resolver.get(None, "tilt_transport_model")
+    )
     if k_splay == 0.0 and k_twist == 0.0:
         return 0.0
 
@@ -105,9 +133,15 @@ def compute_energy_and_gradient_array(
         if tilts_in.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_in must have shape (N_vertices, 3)")
 
-    t0 = tilts_in[tri_rows[:, 0]]
-    t1 = tilts_in[tri_rows[:, 1]]
-    t2 = tilts_in[tri_rows[:, 2]]
+    if transport_model == "ambient_v1":
+        t0 = tilts_in[tri_rows[:, 0]]
+        t1 = tilts_in[tri_rows[:, 1]]
+        t2 = tilts_in[tri_rows[:, 2]]
+        r0_t = r1_t = r2_t = None
+    else:
+        t0, t1, t2, r0_t, r1_t, r2_t = _transport_to_triangle_plane(
+            mesh, positions, tri_rows, tilts_in
+        )
 
     div_tri = (
         np.einsum("ij,ij->i", t0, g0)
@@ -140,9 +174,24 @@ def compute_energy_and_gradient_array(
         coeff_div = area * k_splay * div_tri
         coeff_curl = area * k_twist * curl_n
 
-        d0 = coeff_div[:, None] * g0 + coeff_curl[:, None] * _fast_cross(n_hat, g0)
-        d1 = coeff_div[:, None] * g1 + coeff_curl[:, None] * _fast_cross(n_hat, g1)
-        d2 = coeff_div[:, None] * g2 + coeff_curl[:, None] * _fast_cross(n_hat, g2)
+        d0_local = coeff_div[:, None] * g0 + coeff_curl[:, None] * _fast_cross(
+            n_hat, g0
+        )
+        d1_local = coeff_div[:, None] * g1 + coeff_curl[:, None] * _fast_cross(
+            n_hat, g1
+        )
+        d2_local = coeff_div[:, None] * g2 + coeff_curl[:, None] * _fast_cross(
+            n_hat, g2
+        )
+
+        if transport_model == "ambient_v1":
+            d0 = d0_local
+            d1 = d1_local
+            d2 = d2_local
+        else:
+            d0 = np.einsum("nij,nj->ni", r0_t, d0_local)
+            d1 = np.einsum("nij,nj->ni", r1_t, d1_local)
+            d2 = np.einsum("nij,nj->ni", r2_t, d2_local)
 
         np.add.at(tilt_in_grad_arr, tri_rows[:, 0], d0)
         np.add.at(tilt_in_grad_arr, tri_rows[:, 1], d1)
