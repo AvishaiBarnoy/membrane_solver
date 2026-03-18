@@ -286,6 +286,29 @@ def test_flat_disk_kh_term_audit_transport_and_outer_mass_emit_metadata() -> Non
 
 
 @pytest.mark.regression
+def test_flat_disk_kh_term_audit_inner_coupled_update_mode_emits_metadata_and_row_stats() -> (
+    None
+):
+    report = run_flat_disk_kh_term_audit(
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.138,),
+        inner_coupled_update_mode="rim_matched_radial_continuation_v1",
+    )
+    assert report["meta"]["inner_coupled_update_mode"] == (
+        "rim_matched_radial_continuation_v1"
+    )
+    row = report["rows"][0]
+    assert bool(row["inner_coupled_update_enabled"]) is True
+    assert row["inner_coupled_update_mode"] == "rim_matched_radial_continuation_v1"
+    assert int(row["inner_coupled_candidate_row_count"]) >= 0
+    assert int(row["inner_coupled_capped_row_count"]) >= 0
+    assert int(row["inner_coupled_rim_row_count"]) >= 0
+    assert float(row["inner_coupled_cap_magnitude"]) >= 0.0
+
+
+@pytest.mark.regression
 def test_flat_disk_kh_term_audit_theta_relax_controls_emit_metadata() -> None:
     report = run_flat_disk_kh_term_audit(
         refine_level=1,
@@ -391,6 +414,15 @@ def test_flat_disk_kh_term_audit_invalid_partition_mode_raises() -> None:
             refine_level=1,
             theta_values=(0.0,),
             tilt_mass_mode_out="bad_mode",
+        )
+    with pytest.raises(
+        ValueError,
+        match="inner_coupled_update_mode must be 'off' or 'rim_matched_radial_continuation_v1'",
+    ):
+        run_flat_disk_kh_term_audit(
+            refine_level=1,
+            theta_values=(0.0,),
+            inner_coupled_update_mode="bad_mode",
         )
 
 
@@ -518,6 +550,24 @@ def test_flat_disk_kh_term_audit_refine_sweep_transport_and_outer_mass_emit_meta
     for run in report["runs"]:
         assert run["meta"]["tilt_transport_model"] == "connection_v1"
         assert run["meta"]["tilt_mass_mode_out"] == "consistent"
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_refine_sweep_inner_coupled_update_mode_emits_metadata() -> (
+    None
+):
+    report = run_flat_disk_kh_term_audit_refine_sweep(
+        refine_levels=(1, 2),
+        theta_values=(0.0,),
+        inner_coupled_update_mode="rim_matched_radial_continuation_v1",
+    )
+    assert report["meta"]["inner_coupled_update_mode"] == (
+        "rim_matched_radial_continuation_v1"
+    )
+    for run in report["runs"]:
+        assert run["meta"]["inner_coupled_update_mode"] == (
+            "rim_matched_radial_continuation_v1"
+        )
 
 
 @pytest.mark.regression
