@@ -228,24 +228,44 @@ def test_tilt_smoothness_energy_array_matches_gradient_path():
 def test_tilt_smoothness_connection_v1_matches_ambient_on_planar_mesh():
     mesh = _build_planar_patch_mesh()
     mesh.global_parameters.set("tilt_smoothness_rigidity", 0.8)
+    mesh.global_parameters.set("bending_modulus_in", 0.6)
+    mesh.global_parameters.set("bending_modulus_out", 0.5)
     positions = mesh.positions_view()
     index_map = mesh.vertex_index_to_row
     tilts = _rng_tilts(mesh.tilts_view().shape, 9)
+    tilts_in = _rng_tilts(mesh.tilts_in_view().shape, 10)
+    tilts_out = _rng_tilts(mesh.tilts_out_view().shape, 11)
 
     mesh.global_parameters.set("tilt_transport_model", "ambient_v1")
     resolver = ParameterResolver(mesh.global_parameters)
-    ambient_energy = tilt_smoothness.compute_energy_array(
+    ambient_base = tilt_smoothness.compute_energy_array(
         mesh,
         mesh.global_parameters,
         resolver,
         positions=positions,
         index_map=index_map,
         tilts=tilts,
+    )
+    ambient_in = tilt_smoothness_in.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=tilts_in,
+    )
+    ambient_out = tilt_smoothness_out.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_out=tilts_out,
     )
 
     mesh.global_parameters.set("tilt_transport_model", "connection_v1")
     resolver = ParameterResolver(mesh.global_parameters)
-    connection_energy = tilt_smoothness.compute_energy_array(
+    connection_base = tilt_smoothness.compute_energy_array(
         mesh,
         mesh.global_parameters,
         resolver,
@@ -253,8 +273,26 @@ def test_tilt_smoothness_connection_v1_matches_ambient_on_planar_mesh():
         index_map=index_map,
         tilts=tilts,
     )
+    connection_in = tilt_smoothness_in.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_in=tilts_in,
+    )
+    connection_out = tilt_smoothness_out.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_out=tilts_out,
+    )
 
-    assert connection_energy == pytest.approx(ambient_energy, rel=1e-12, abs=1e-12)
+    assert connection_base == pytest.approx(ambient_base, rel=1e-12, abs=1e-12)
+    assert connection_in == pytest.approx(ambient_in, rel=1e-12, abs=1e-12)
+    assert connection_out == pytest.approx(ambient_out, rel=1e-12, abs=1e-12)
 
 
 def test_tilt_smoothness_connection_v1_energy_array_matches_gradient_path():
