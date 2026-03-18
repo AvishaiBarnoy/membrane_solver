@@ -38,6 +38,75 @@ from runtime.tilt_projection import (
 logger = logging.getLogger("membrane_solver")
 
 
+def _apply_inner_coupled_update_mode_to_delta(
+    *,
+    mesh: Mesh,
+    global_params: GlobalParameters,
+    positions: np.ndarray,
+    fixed_mask_in: np.ndarray,
+    delta_in: np.ndarray,
+) -> tuple[np.ndarray, dict[str, float | int | str | bool]]:
+    """Modify generated inner trial updates in benchmark-only continuation modes."""
+    mode = str(global_params.get("inner_coupled_update_mode") or "off").strip().lower()
+    if mode not in {"off", "rim_matched_radial_continuation_v1"}:
+        raise ValueError(
+            "inner_coupled_update_mode must be 'off' or "
+            "'rim_matched_radial_continuation_v1'."
+        )
+    radius = float(global_params.get("benchmark_disk_radius") or 0.0)
+    lambda_value = float(global_params.get("benchmark_lambda_value") or 0.0)
+    stats: dict[str, float | int | str | bool] = {
+        "enabled": bool(mode != "off"),
+        "mode": str(mode),
+        "candidate_row_count": 0,
+        "capped_row_count": 0,
+        "rim_row_count": 0,
+        "cap_magnitude": 0.0,
+    }
+    if mode == "off" or radius <= 0.0 or lambda_value <= 0.0:
+        return delta_in, stats
+
+    from modules.constraints.local_interface_shells import radial_unit_vectors
+    from modules.energy.bending_tilt_leaflet import _assume_J0_center_xy
+
+    center_xy = _assume_J0_center_xy(global_params)
+    shifted = np.array(positions, copy=True)
+    shifted[:, 0] = shifted[:, 0] - float(center_xy[0])
+    shifted[:, 1] = shifted[:, 1] - float(center_xy[1])
+    radii, r_hat = radial_unit_vectors(shifted)
+    rim_w = float(lambda_value)
+    near_w = float(4.0 * lambda_value)
+    free_mask = ~np.asarray(fixed_mask_in, dtype=bool)
+    rim_rows = np.flatnonzero((np.abs(radii - radius) <= rim_w) & free_mask)
+    target_rows = np.flatnonzero(
+        (radii > (radius + rim_w)) & (radii <= (radius + near_w)) & free_mask
+    )
+    stats["candidate_row_count"] = int(target_rows.size)
+    stats["rim_row_count"] = int(rim_rows.size)
+    if rim_rows.size == 0 or target_rows.size == 0:
+        return delta_in, stats
+
+    rim_delta_rad = np.einsum("ij,ij->i", delta_in[rim_rows], r_hat[rim_rows])
+    cap_mag = (
+        float(1.05 * np.median(np.abs(rim_delta_rad))) if rim_delta_rad.size else 0.0
+    )
+    stats["cap_magnitude"] = float(cap_mag)
+    if cap_mag <= 0.0:
+        return delta_in, stats
+
+    out = np.array(delta_in, copy=True)
+    target_delta_rad = np.einsum("ij,ij->i", out[target_rows], r_hat[target_rows])
+    capped = np.clip(target_delta_rad, -cap_mag, cap_mag)
+    adjust = capped - target_delta_rad
+    hit = np.abs(adjust) > 1.0e-14
+    if not np.any(hit):
+        return out, stats
+    rows_hit = target_rows[hit]
+    out[rows_hit] += adjust[hit][:, None] * r_hat[rows_hit]
+    stats["capped_row_count"] = int(np.sum(hit))
+    return out, stats
+
+
 class Minimizer:
     """Coordinate the optimization loop for a mesh."""
 
@@ -115,6 +184,16 @@ class Minimizer:
             "projection_interval": 1,
             "projection_apply_count": 0,
             "tilt_projection_norm_loss_outer_far": 0.0,
+        }
+        self._last_inner_coupled_update_mode_stats: dict[
+            str, float | int | str | bool
+        ] = {
+            "enabled": False,
+            "mode": "off",
+            "candidate_row_count": 0,
+            "capped_row_count": 0,
+            "rim_row_count": 0,
+            "cap_magnitude": 0.0,
         }
 
     def _validate_energy_modules_array(self) -> None:
@@ -1435,10 +1514,23 @@ class Minimizer:
                     step = step_size
                     accepted = False
                     for _bt in range(12):
+                        delta_in_trial = -step * tilt_in_grad
+                        delta_in_trial, update_mode_stats = (
+                            _apply_inner_coupled_update_mode_to_delta(
+                                mesh=self.mesh,
+                                global_params=self.global_params,
+                                positions=positions,
+                                fixed_mask_in=fixed_mask_in,
+                                delta_in=delta_in_trial,
+                            )
+                        )
+                        self._last_inner_coupled_update_mode_stats = dict(
+                            update_mode_stats
+                        )
                         trial_in, trial_out = build_leaflet_trial_tilts(
                             base_in=tilts_in,
                             base_out=tilts_out,
-                            delta_in=-step * tilt_in_grad,
+                            delta_in=delta_in_trial,
                             delta_out=-step * tilt_out_grad,
                             normals=normals,
                             fixed_mask_in=fixed_mask_in,
@@ -1515,10 +1607,23 @@ class Minimizer:
                     step = step_size
                     accepted = False
                     for _bt in range(12):
+                        delta_in_trial = step * dir_in
+                        delta_in_trial, update_mode_stats = (
+                            _apply_inner_coupled_update_mode_to_delta(
+                                mesh=self.mesh,
+                                global_params=self.global_params,
+                                positions=positions,
+                                fixed_mask_in=fixed_mask_in,
+                                delta_in=delta_in_trial,
+                            )
+                        )
+                        self._last_inner_coupled_update_mode_stats = dict(
+                            update_mode_stats
+                        )
                         trial_in, trial_out = build_leaflet_trial_tilts(
                             base_in=tilts_in,
                             base_out=tilts_out,
-                            delta_in=step * dir_in,
+                            delta_in=delta_in_trial,
                             delta_out=step * dir_out,
                             normals=normals,
                             fixed_mask_in=fixed_mask_in,
