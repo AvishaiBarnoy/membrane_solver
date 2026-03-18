@@ -272,6 +272,20 @@ def test_flat_disk_kh_term_audit_divergence_mode_emits_metadata() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_kh_term_audit_transport_and_outer_mass_emit_metadata() -> None:
+    report = run_flat_disk_kh_term_audit(
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.0,),
+        tilt_transport_model="connection_v1",
+        tilt_mass_mode_out="consistent",
+    )
+    assert report["meta"]["tilt_transport_model"] == "connection_v1"
+    assert report["meta"]["tilt_mass_mode_out"] == "consistent"
+
+
+@pytest.mark.regression
 def test_flat_disk_kh_term_audit_theta_relax_controls_emit_metadata() -> None:
     report = run_flat_disk_kh_term_audit(
         refine_level=1,
@@ -359,6 +373,24 @@ def test_flat_disk_kh_term_audit_invalid_partition_mode_raises() -> None:
             refine_level=1,
             theta_values=(0.0,),
             partition_mode="bad_mode",
+        )
+    with pytest.raises(
+        ValueError,
+        match="tilt_transport_model must be 'ambient_v1' or 'connection_v1'",
+    ):
+        run_flat_disk_kh_term_audit(
+            refine_level=1,
+            theta_values=(0.0,),
+            tilt_transport_model="bad_mode",
+        )
+    with pytest.raises(
+        ValueError,
+        match="tilt_mass_mode_out must be 'auto', 'lumped', or 'consistent'",
+    ):
+        run_flat_disk_kh_term_audit(
+            refine_level=1,
+            theta_values=(0.0,),
+            tilt_mass_mode_out="bad_mode",
         )
 
 
@@ -469,6 +501,23 @@ def test_flat_disk_kh_term_audit_refine_sweep_divergence_mode_emits_metadata() -
     assert report["meta"]["tilt_divergence_mode_in"] == "vertex_recovered"
     for run in report["runs"]:
         assert run["meta"]["tilt_divergence_mode_in"] == "vertex_recovered"
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_term_audit_refine_sweep_transport_and_outer_mass_emit_metadata() -> (
+    None
+):
+    report = run_flat_disk_kh_term_audit_refine_sweep(
+        refine_levels=(1, 2),
+        theta_values=(0.0,),
+        tilt_transport_model="connection_v1",
+        tilt_mass_mode_out="consistent",
+    )
+    assert report["meta"]["tilt_transport_model"] == "connection_v1"
+    assert report["meta"]["tilt_mass_mode_out"] == "consistent"
+    for run in report["runs"]:
+        assert run["meta"]["tilt_transport_model"] == "connection_v1"
+        assert run["meta"]["tilt_mass_mode_out"] == "consistent"
 
 
 @pytest.mark.regression
