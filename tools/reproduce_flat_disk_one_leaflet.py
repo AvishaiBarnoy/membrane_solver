@@ -864,6 +864,7 @@ def _configure_benchmark_mesh(
     tilt_post_relax_inner_steps: int = 0,
     tilt_post_relax_step_size: float = 0.0,
     tilt_post_relax_passes: int = 1,
+    inner_coupled_update_mode: str = "off",
 ) -> None:
     _ensure_repo_root_on_sys_path()
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -890,6 +891,7 @@ def _configure_benchmark_mesh(
     gp.set("tilt_post_relax_inner_steps", int(tilt_post_relax_inner_steps))
     gp.set("tilt_post_relax_step_size", float(tilt_post_relax_step_size))
     gp.set("tilt_post_relax_passes", int(tilt_post_relax_passes))
+    gp.set("inner_coupled_update_mode", str(inner_coupled_update_mode))
     gp.set("tilt_kkt_projection_during_relaxation", False)
     gp.set("tilt_thetaB_optimize", False)
     gp.set("tilt_thetaB_group_in", "disk")
@@ -922,6 +924,15 @@ def _configure_benchmark_mesh(
     post_relax_passes = int(tilt_post_relax_passes)
     if post_relax_passes <= 0:
         raise ValueError("tilt_post_relax_passes must be >= 1.")
+    inner_coupled_update_mode_value = str(inner_coupled_update_mode).strip().lower()
+    if inner_coupled_update_mode_value not in {
+        "off",
+        "rim_matched_radial_continuation_v1",
+    }:
+        raise ValueError(
+            "inner_coupled_update_mode must be 'off' or "
+            "'rim_matched_radial_continuation_v1'."
+        )
     gp.set("tilt_projection_cadence", projection_cadence)
     gp.set("tilt_projection_interval", projection_interval)
     gp.set("tilt_projection_loss_radius", float(theory_params.radius))
@@ -930,6 +941,7 @@ def _configure_benchmark_mesh(
     gp.set("tilt_post_relax_inner_steps", post_relax_inner_steps)
     gp.set("tilt_post_relax_step_size", post_relax_step_size)
     gp.set("tilt_post_relax_passes", post_relax_passes)
+    gp.set("inner_coupled_update_mode", inner_coupled_update_mode_value)
     gp.set("benchmark_disk_radius", float(theory_params.radius))
     gp.set("benchmark_lambda_value", float(lambda_value))
     gp.set("tilt_twist_modulus_in", 0.0)
@@ -1373,6 +1385,7 @@ def run_flat_disk_one_leaflet_benchmark(
     tilt_post_relax_inner_steps: int = 0,
     tilt_post_relax_step_size: float = 0.0,
     tilt_post_relax_passes: int = 1,
+    inner_coupled_update_mode: str = "off",
     curved_theta_calibration_mode: str = "off",
     curved_theta_calibration_inner_scale: float = 1.0,
     curved_theta_calibration_outer_scale: float = 1.0,
@@ -1712,6 +1725,15 @@ def run_flat_disk_one_leaflet_benchmark(
     post_relax_passes = int(tilt_post_relax_passes)
     if post_relax_passes < 1:
         raise ValueError("tilt_post_relax_passes must be >= 1.")
+    inner_coupled_update_mode_value = str(inner_coupled_update_mode).strip().lower()
+    if inner_coupled_update_mode_value not in {
+        "off",
+        "rim_matched_radial_continuation_v1",
+    }:
+        raise ValueError(
+            "inner_coupled_update_mode must be 'off' or "
+            "'rim_matched_radial_continuation_v1'."
+        )
 
     using_physical_scaling = theory_params is None and mode == "kh_physical"
     if theory_params is not None:
@@ -1890,6 +1912,7 @@ def run_flat_disk_one_leaflet_benchmark(
         tilt_post_relax_inner_steps=post_relax_inner_steps,
         tilt_post_relax_step_size=post_relax_step_size,
         tilt_post_relax_passes=post_relax_passes,
+        inner_coupled_update_mode=inner_coupled_update_mode_value,
     )
     _collect_disk_boundary_rows(mesh, group="disk")
 
@@ -2388,6 +2411,7 @@ def run_flat_disk_one_leaflet_benchmark(
             "tilt_post_relax_inner_steps": int(post_relax_inner_steps),
             "tilt_post_relax_step_size": float(post_relax_step_size),
             "tilt_post_relax_passes": int(post_relax_passes),
+            "inner_coupled_update_mode": str(inner_coupled_update_mode_value),
             "rim_local_refine_steps": int(effective_rim_local_refine_steps),
             "rim_local_refine_band_lambda": float(
                 effective_rim_local_refine_band_lambda
@@ -2474,6 +2498,48 @@ def run_flat_disk_one_leaflet_benchmark(
                     (getattr(minim, "_last_tilt_projection_stats", None) or {}).get(
                         "tilt_projection_norm_loss_outer_far", 0.0
                     )
+                    or 0.0
+                ),
+            },
+            "inner_coupled_update_mode": {
+                "enabled": bool(
+                    (
+                        getattr(minim, "_last_inner_coupled_update_mode_stats", None)
+                        or {}
+                    ).get("enabled", False)
+                ),
+                "mode": str(
+                    (
+                        getattr(minim, "_last_inner_coupled_update_mode_stats", None)
+                        or {}
+                    ).get("mode", "off")
+                ),
+                "candidate_row_count": int(
+                    (
+                        getattr(minim, "_last_inner_coupled_update_mode_stats", None)
+                        or {}
+                    ).get("candidate_row_count", 0)
+                    or 0
+                ),
+                "capped_row_count": int(
+                    (
+                        getattr(minim, "_last_inner_coupled_update_mode_stats", None)
+                        or {}
+                    ).get("capped_row_count", 0)
+                    or 0
+                ),
+                "rim_row_count": int(
+                    (
+                        getattr(minim, "_last_inner_coupled_update_mode_stats", None)
+                        or {}
+                    ).get("rim_row_count", 0)
+                    or 0
+                ),
+                "cap_magnitude": float(
+                    (
+                        getattr(minim, "_last_inner_coupled_update_mode_stats", None)
+                        or {}
+                    ).get("cap_magnitude", 0.0)
                     or 0.0
                 ),
             },

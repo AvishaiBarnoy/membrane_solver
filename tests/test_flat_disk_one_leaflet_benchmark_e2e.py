@@ -1714,6 +1714,36 @@ def test_flat_disk_post_relax_projection_emits_apply_count() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_reports_inner_coupled_update_mode_meta_and_stats() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_mode="optimize",
+        parameterization="kh_physical",
+        optimize_preset="none",
+        theta_optimize_steps=12,
+        theta_optimize_every=1,
+        theta_optimize_delta=8.0e-4,
+        theta_optimize_inner_steps=8,
+        inner_coupled_update_mode="rim_matched_radial_continuation_v1",
+    )
+
+    assert (
+        report["meta"]["inner_coupled_update_mode"]
+        == "rim_matched_radial_continuation_v1"
+    )
+    stats = report["diagnostics"]["inner_coupled_update_mode"]
+    assert bool(stats["enabled"]) is True
+    assert stats["mode"] == "rim_matched_radial_continuation_v1"
+    assert int(stats["candidate_row_count"]) >= 0
+    assert int(stats["capped_row_count"]) >= 0
+    assert int(stats["rim_row_count"]) >= 0
+    assert float(stats["cap_magnitude"]) >= 0.0
+
+
+@pytest.mark.regression
 def test_run_theta_relaxation_can_preserve_inner_state_between_repeats() -> None:
     params = physical_to_dimensionless_theory_params(
         kappa_physical=10.0,
@@ -1829,6 +1859,16 @@ def test_flat_disk_invalid_tilt_projection_and_post_relax_controls_raise() -> No
             refine_level=1,
             outer_mode="disabled",
             tilt_post_relax_passes=0,
+        )
+    with pytest.raises(
+        ValueError,
+        match="inner_coupled_update_mode must be 'off' or 'rim_matched_radial_continuation_v1'",
+    ):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="disabled",
+            inner_coupled_update_mode="bad_mode",
         )
 
 
