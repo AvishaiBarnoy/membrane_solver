@@ -867,6 +867,10 @@ def _configure_benchmark_mesh(
     tilt_post_relax_step_size: float = 0.0,
     tilt_post_relax_passes: int = 1,
     inner_coupled_update_mode: str = "off",
+    curved_theta_objective_ablation_mode: str = "off",
+    curved_theta_objective_ablation_inner_scale: float = 1.0,
+    curved_theta_objective_ablation_outer_scale: float = 1.0,
+    curved_theta_objective_ablation_contact_scale: float = 1.0,
 ) -> None:
     _ensure_repo_root_on_sys_path()
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
@@ -894,6 +898,22 @@ def _configure_benchmark_mesh(
     gp.set("tilt_post_relax_step_size", float(tilt_post_relax_step_size))
     gp.set("tilt_post_relax_passes", int(tilt_post_relax_passes))
     gp.set("inner_coupled_update_mode", str(inner_coupled_update_mode))
+    gp.set(
+        "curved_theta_objective_ablation_mode",
+        str(curved_theta_objective_ablation_mode),
+    )
+    gp.set(
+        "curved_theta_objective_ablation_inner_scale",
+        float(curved_theta_objective_ablation_inner_scale),
+    )
+    gp.set(
+        "curved_theta_objective_ablation_outer_scale",
+        float(curved_theta_objective_ablation_outer_scale),
+    )
+    gp.set(
+        "curved_theta_objective_ablation_contact_scale",
+        float(curved_theta_objective_ablation_contact_scale),
+    )
     gp.set("tilt_kkt_projection_during_relaxation", False)
     gp.set("tilt_thetaB_optimize", False)
     gp.set("tilt_thetaB_group_in", "disk")
@@ -945,6 +965,21 @@ def _configure_benchmark_mesh(
             "inner_coupled_update_mode must be 'off' or "
             "'rim_matched_radial_continuation_v1'."
         )
+    ablation_mode_value = str(curved_theta_objective_ablation_mode).strip().lower()
+    if ablation_mode_value not in {"off", "inner_outer_rescaled"}:
+        raise ValueError(
+            "curved_theta_objective_ablation_mode must be 'off' or "
+            "'inner_outer_rescaled'."
+        )
+    ablation_inner_scale = float(curved_theta_objective_ablation_inner_scale)
+    ablation_outer_scale = float(curved_theta_objective_ablation_outer_scale)
+    ablation_contact_scale = float(curved_theta_objective_ablation_contact_scale)
+    if (
+        ablation_inner_scale <= 0.0
+        or ablation_outer_scale <= 0.0
+        or ablation_contact_scale <= 0.0
+    ):
+        raise ValueError("curved theta objective ablation scales must be > 0.")
     gp.set("tilt_projection_cadence", projection_cadence)
     gp.set("tilt_projection_interval", projection_interval)
     gp.set("tilt_projection_loss_radius", float(theory_params.radius))
@@ -954,6 +989,10 @@ def _configure_benchmark_mesh(
     gp.set("tilt_post_relax_step_size", post_relax_step_size)
     gp.set("tilt_post_relax_passes", post_relax_passes)
     gp.set("inner_coupled_update_mode", inner_coupled_update_mode_value)
+    gp.set("curved_theta_objective_ablation_mode", ablation_mode_value)
+    gp.set("curved_theta_objective_ablation_inner_scale", ablation_inner_scale)
+    gp.set("curved_theta_objective_ablation_outer_scale", ablation_outer_scale)
+    gp.set("curved_theta_objective_ablation_contact_scale", ablation_contact_scale)
     gp.set("tilt_mass_mode_out", mass_mode_out_value)
     gp.set("tilt_transport_model", transport_model_value)
     gp.set("benchmark_disk_radius", float(theory_params.radius))
@@ -1406,6 +1445,10 @@ def run_flat_disk_one_leaflet_benchmark(
     curved_theta_calibration_inner_scale: float = 1.0,
     curved_theta_calibration_outer_scale: float = 1.0,
     curved_theta_calibration_contact_scale: float = 1.0,
+    curved_theta_objective_ablation_mode: str = "off",
+    curved_theta_objective_ablation_inner_scale: float = 1.0,
+    curved_theta_objective_ablation_outer_scale: float = 1.0,
+    curved_theta_objective_ablation_contact_scale: float = 1.0,
     theory_params: FlatDiskTheoryParams | None = None,
 ) -> dict[str, Any]:
     """Run the flat one-leaflet benchmark and return a report dict."""
@@ -1449,6 +1492,9 @@ def run_flat_disk_one_leaflet_benchmark(
     curved_theta_calibration_mode_requested = (
         str(curved_theta_calibration_mode).strip().lower()
     )
+    curved_theta_objective_ablation_mode_requested = (
+        str(curved_theta_objective_ablation_mode).strip().lower()
+    )
     geometry_lane_effective = "flat_pinned"
     z_gauge_effective = "none"
     geometry_lane_fallback_reason = (
@@ -1464,6 +1510,9 @@ def run_flat_disk_one_leaflet_benchmark(
     )
     curved_theta_calibration_requested = bool(
         curved_theta_calibration_mode_requested != "off"
+    )
+    curved_theta_objective_ablation_requested = bool(
+        curved_theta_objective_ablation_mode_requested != "off"
     )
     optimize_preset_raw = str(optimize_preset).lower()
     effective_refine_level = raw_refine_level
@@ -1764,6 +1813,23 @@ def run_flat_disk_one_leaflet_benchmark(
             "inner_coupled_update_mode must be 'off' or "
             "'rim_matched_radial_continuation_v1'."
         )
+    if curved_theta_objective_ablation_mode_requested not in {
+        "off",
+        "inner_outer_rescaled",
+    }:
+        raise ValueError(
+            "curved_theta_objective_ablation_mode must be 'off' or "
+            "'inner_outer_rescaled'."
+        )
+    ablation_inner_scale = float(curved_theta_objective_ablation_inner_scale)
+    ablation_outer_scale = float(curved_theta_objective_ablation_outer_scale)
+    ablation_contact_scale = float(curved_theta_objective_ablation_contact_scale)
+    if (
+        ablation_inner_scale <= 0.0
+        or ablation_outer_scale <= 0.0
+        or ablation_contact_scale <= 0.0
+    ):
+        raise ValueError("curved theta objective ablation scales must be > 0.")
 
     using_physical_scaling = theory_params is None and mode == "kh_physical"
     if theory_params is not None:
@@ -1945,6 +2011,12 @@ def run_flat_disk_one_leaflet_benchmark(
         tilt_post_relax_step_size=post_relax_step_size,
         tilt_post_relax_passes=post_relax_passes,
         inner_coupled_update_mode=inner_coupled_update_mode_value,
+        curved_theta_objective_ablation_mode=(
+            curved_theta_objective_ablation_mode_requested
+        ),
+        curved_theta_objective_ablation_inner_scale=ablation_inner_scale,
+        curved_theta_objective_ablation_outer_scale=ablation_outer_scale,
+        curved_theta_objective_ablation_contact_scale=ablation_contact_scale,
     )
     _collect_disk_boundary_rows(mesh, group="disk")
 
@@ -2372,6 +2444,19 @@ def run_flat_disk_one_leaflet_benchmark(
         "theta_factor_effective": float(theta_factor),
         "energy_factor_effective": float(energy_factor),
     }
+    curved_theta_objective_ablation = {
+        "requested": bool(curved_theta_objective_ablation_requested),
+        "applied": False,
+        "reason": (
+            "off"
+            if not curved_theta_objective_ablation_requested
+            else "runtime_ablation_not_enabled"
+        ),
+        "mode": str(curved_theta_objective_ablation_mode_requested),
+        "inner_scale": float(ablation_inner_scale),
+        "outer_scale": float(ablation_outer_scale),
+        "contact_scale": float(ablation_contact_scale),
+    }
     if theta_mode_str == "optimize_full":
         assert theta_factor_raw is not None
         assert energy_factor_raw is not None
@@ -2435,6 +2520,14 @@ def run_flat_disk_one_leaflet_benchmark(
             ),
             "curved_theta_calibration_contact_scale": float(
                 curved_theta_calibration_contact_scale
+            ),
+            "curved_theta_objective_ablation_mode": str(
+                curved_theta_objective_ablation_mode_requested
+            ),
+            "curved_theta_objective_ablation_inner_scale": float(ablation_inner_scale),
+            "curved_theta_objective_ablation_outer_scale": float(ablation_outer_scale),
+            "curved_theta_objective_ablation_contact_scale": float(
+                ablation_contact_scale
             ),
             "tilt_mass_mode_in": str(mass_mode),
             "tilt_mass_mode_out": str(mass_mode_out),
@@ -2510,6 +2603,7 @@ def run_flat_disk_one_leaflet_benchmark(
                 "tilt_transfer_ratio": float(tilt_transfer_ratio),
             },
             "curved_theta_calibration": curved_theta_calibration,
+            "curved_theta_objective_ablation": curved_theta_objective_ablation,
             "tilt_projection": {
                 "projection_cadence": str(
                     (getattr(minim, "_last_tilt_projection_stats", None) or {}).get(

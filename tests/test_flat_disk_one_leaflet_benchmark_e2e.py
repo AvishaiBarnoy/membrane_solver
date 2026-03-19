@@ -1788,6 +1788,47 @@ def test_flat_disk_reports_tilt_mass_mode_out_meta() -> None:
 
 
 @pytest.mark.regression
+def test_flat_disk_reports_curved_theta_objective_ablation_meta() -> None:
+    report = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="free",
+        smoothness_model="splay_twist",
+        parameterization="kh_physical",
+        theta_mode="optimize",
+        theta_initial=0.12,
+        theta_optimize_steps=2,
+        theta_optimize_inner_steps=2,
+        geometry_lane="free_z",
+        curved_theta_objective_ablation_mode="inner_outer_rescaled",
+        curved_theta_objective_ablation_inner_scale=0.5,
+        curved_theta_objective_ablation_outer_scale=2.0,
+        curved_theta_objective_ablation_contact_scale=1.0,
+    )
+
+    assert (
+        report["meta"]["curved_theta_objective_ablation_mode"] == "inner_outer_rescaled"
+    )
+    assert float(
+        report["meta"]["curved_theta_objective_ablation_inner_scale"]
+    ) == pytest.approx(0.5)
+    assert float(
+        report["meta"]["curved_theta_objective_ablation_outer_scale"]
+    ) == pytest.approx(2.0)
+    assert float(
+        report["meta"]["curved_theta_objective_ablation_contact_scale"]
+    ) == pytest.approx(1.0)
+    diagnostics = report["diagnostics"]["curved_theta_objective_ablation"]
+    assert bool(diagnostics["requested"]) is True
+    assert bool(diagnostics["applied"]) is False
+    assert diagnostics["reason"] == "runtime_ablation_not_enabled"
+    assert diagnostics["mode"] == "inner_outer_rescaled"
+    assert float(diagnostics["inner_scale"]) == pytest.approx(0.5)
+    assert float(diagnostics["outer_scale"]) == pytest.approx(2.0)
+    assert float(diagnostics["contact_scale"]) == pytest.approx(1.0)
+
+
+@pytest.mark.regression
 def test_run_theta_relaxation_can_preserve_inner_state_between_repeats() -> None:
     params = physical_to_dimensionless_theory_params(
         kappa_physical=10.0,
@@ -1933,6 +1974,32 @@ def test_flat_disk_invalid_tilt_projection_and_post_relax_controls_raise() -> No
             refine_level=1,
             outer_mode="disabled",
             tilt_mass_mode_out="bad_mode",
+        )
+    with pytest.raises(
+        ValueError,
+        match="curved_theta_objective_ablation_mode must be 'off' or 'inner_outer_rescaled'",
+    ):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="free",
+            geometry_lane="free_z",
+            parameterization="kh_physical",
+            theta_mode="optimize",
+            curved_theta_objective_ablation_mode="bad_mode",
+        )
+    with pytest.raises(
+        ValueError, match="curved theta objective ablation scales must be > 0"
+    ):
+        run_flat_disk_one_leaflet_benchmark(
+            fixture=DEFAULT_FIXTURE,
+            refine_level=1,
+            outer_mode="free",
+            geometry_lane="free_z",
+            parameterization="kh_physical",
+            theta_mode="optimize",
+            curved_theta_objective_ablation_mode="inner_outer_rescaled",
+            curved_theta_objective_ablation_inner_scale=0.0,
         )
 
 
