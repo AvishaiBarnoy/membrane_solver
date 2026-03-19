@@ -1108,6 +1108,7 @@ def _run_single_level(
     tilt_post_relax_inner_steps: int = 0,
     tilt_post_relax_step_size: float = 0.0,
     tilt_post_relax_passes: int = 1,
+    inner_coupled_update_mode: str = "off",
     radial_projection_diagnostic: bool,
     partition_mode: str,
     ratio_version: str = "v1",
@@ -1225,6 +1226,15 @@ def _run_single_level(
         raise ValueError(
             "tilt_transport_model must be 'ambient_v1' or 'connection_v1'."
         )
+    inner_coupled_update_mode_value = str(inner_coupled_update_mode).strip().lower()
+    if inner_coupled_update_mode_value not in {
+        "off",
+        "rim_matched_radial_continuation_v1",
+    }:
+        raise ValueError(
+            "inner_coupled_update_mode must be 'off' or "
+            "'rim_matched_radial_continuation_v1'."
+        )
     div_mode = str(tilt_divergence_mode_in).strip().lower()
     if div_mode not in {"native", "vertex_recovered"}:
         raise ValueError(
@@ -1312,6 +1322,7 @@ def _run_single_level(
         tilt_post_relax_inner_steps=int(tilt_post_relax_inner_steps),
         tilt_post_relax_step_size=float(tilt_post_relax_step_size),
         tilt_post_relax_passes=int(tilt_post_relax_passes),
+        inner_coupled_update_mode=str(inner_coupled_update_mode_value),
     )
     minim = _build_minimizer(mesh)
     minim.enforce_constraints_after_mesh_ops(mesh)
@@ -1332,6 +1343,12 @@ def _run_single_level(
         mesh_total = float("nan")
         projection_apply_count = 0
         projection_norm_loss_outer_far = float("nan")
+        inner_coupled_update_enabled = False
+        inner_coupled_mode = "off"
+        inner_coupled_candidate_row_count = 0
+        inner_coupled_capped_row_count = 0
+        inner_coupled_rim_row_count = 0
+        inner_coupled_cap_magnitude = 0.0
         for relax_rep in range(repeats_planned):
             reset_this_rep = int(relax_rep) == 0
             mesh_total = float(
@@ -1358,6 +1375,36 @@ def _run_single_level(
                 )
                 if np.isfinite(loss_val):
                     projection_norm_loss_outer_far = float(loss_val)
+            inner_coupled_stats = getattr(
+                minim, "_last_inner_coupled_update_mode_stats", None
+            )
+            if isinstance(inner_coupled_stats, dict):
+                inner_coupled_update_enabled = bool(
+                    inner_coupled_stats.get("enabled", inner_coupled_update_enabled)
+                )
+                inner_coupled_mode = str(
+                    inner_coupled_stats.get("mode", inner_coupled_mode)
+                )
+                inner_coupled_candidate_row_count = int(
+                    inner_coupled_stats.get(
+                        "candidate_row_count", inner_coupled_candidate_row_count
+                    )
+                )
+                inner_coupled_capped_row_count = int(
+                    inner_coupled_stats.get(
+                        "capped_row_count", inner_coupled_capped_row_count
+                    )
+                )
+                inner_coupled_rim_row_count = int(
+                    inner_coupled_stats.get(
+                        "rim_row_count", inner_coupled_rim_row_count
+                    )
+                )
+                inner_coupled_cap_magnitude = float(
+                    inner_coupled_stats.get(
+                        "cap_magnitude", inner_coupled_cap_magnitude
+                    )
+                )
             if theta_relax_mode_value == "adaptive":
                 if prev_energy is not None:
                     delta = abs(float(mesh_total) - float(prev_energy))
@@ -1770,6 +1817,14 @@ def _run_single_level(
                 "tilt_projection_norm_loss_outer_far": float(
                     projection_norm_loss_outer_far
                 ),
+                "inner_coupled_update_enabled": bool(inner_coupled_update_enabled),
+                "inner_coupled_update_mode": str(inner_coupled_mode),
+                "inner_coupled_candidate_row_count": int(
+                    inner_coupled_candidate_row_count
+                ),
+                "inner_coupled_capped_row_count": int(inner_coupled_capped_row_count),
+                "inner_coupled_rim_row_count": int(inner_coupled_rim_row_count),
+                "inner_coupled_cap_magnitude": float(inner_coupled_cap_magnitude),
                 "isotropy_pass": str(isotropy_pass_mode),
                 "isotropy_iterations_requested": int(
                     isotropy_stats["iterations_requested"]
@@ -1917,6 +1972,7 @@ def _run_single_level(
             "tilt_post_relax_inner_steps": int(tilt_post_relax_inner_steps),
             "tilt_post_relax_step_size": float(tilt_post_relax_step_size),
             "tilt_post_relax_passes": int(tilt_post_relax_passes),
+            "inner_coupled_update_mode": str(inner_coupled_update_mode_value),
             "isotropy_pass": str(isotropy_pass_mode),
             "isotropy_iters": int(isotropy_iters_value),
             "isotropy_operator_mode": str(isotropy_operator_mode),
@@ -1989,6 +2045,7 @@ def run_flat_disk_kh_term_audit(
     tilt_post_relax_inner_steps: int = 0,
     tilt_post_relax_step_size: float = 0.0,
     tilt_post_relax_passes: int = 1,
+    inner_coupled_update_mode: str = "off",
     radial_projection_diagnostic: bool = False,
     partition_mode: str = "centroid",
     ratio_version: str = "v1",
@@ -2048,6 +2105,7 @@ def run_flat_disk_kh_term_audit(
         tilt_post_relax_inner_steps=int(tilt_post_relax_inner_steps),
         tilt_post_relax_step_size=float(tilt_post_relax_step_size),
         tilt_post_relax_passes=int(tilt_post_relax_passes),
+        inner_coupled_update_mode=str(inner_coupled_update_mode),
         radial_projection_diagnostic=bool(radial_projection_diagnostic),
         partition_mode=str(partition_mode),
         ratio_version=str(ratio_version),
@@ -2097,6 +2155,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
     tilt_post_relax_inner_steps: int = 0,
     tilt_post_relax_step_size: float = 0.0,
     tilt_post_relax_passes: int = 1,
+    inner_coupled_update_mode: str = "off",
     radial_projection_diagnostic: bool = False,
     partition_mode: str = "centroid",
     theory_outer_mode: str = "infinite",
@@ -2154,6 +2213,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             tilt_post_relax_inner_steps=int(tilt_post_relax_inner_steps),
             tilt_post_relax_step_size=float(tilt_post_relax_step_size),
             tilt_post_relax_passes=int(tilt_post_relax_passes),
+            inner_coupled_update_mode=str(inner_coupled_update_mode),
             radial_projection_diagnostic=bool(radial_projection_diagnostic),
             partition_mode=str(partition_mode),
             theory_outer_mode=str(theory_outer_mode),
@@ -2197,6 +2257,7 @@ def run_flat_disk_kh_term_audit_refine_sweep(
             "tilt_post_relax_inner_steps": int(tilt_post_relax_inner_steps),
             "tilt_post_relax_step_size": float(tilt_post_relax_step_size),
             "tilt_post_relax_passes": int(tilt_post_relax_passes),
+            "inner_coupled_update_mode": str(inner_coupled_update_mode).strip().lower(),
             "radial_projection_diagnostic": bool(radial_projection_diagnostic),
             "partition_mode": str(partition_mode),
             "theory_outer_mode_requested": str(theory_outer_mode),
