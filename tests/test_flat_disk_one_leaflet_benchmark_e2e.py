@@ -1789,6 +1789,18 @@ def test_flat_disk_reports_tilt_mass_mode_out_meta() -> None:
 
 @pytest.mark.regression
 def test_flat_disk_reports_curved_theta_objective_ablation_meta() -> None:
+    baseline = run_flat_disk_one_leaflet_benchmark(
+        fixture=DEFAULT_FIXTURE,
+        refine_level=1,
+        outer_mode="free",
+        smoothness_model="splay_twist",
+        parameterization="kh_physical",
+        theta_mode="optimize",
+        theta_initial=0.12,
+        theta_optimize_steps=2,
+        theta_optimize_inner_steps=2,
+        geometry_lane="free_z",
+    )
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
         refine_level=1,
@@ -1820,12 +1832,15 @@ def test_flat_disk_reports_curved_theta_objective_ablation_meta() -> None:
     ) == pytest.approx(1.0)
     diagnostics = report["diagnostics"]["curved_theta_objective_ablation"]
     assert bool(diagnostics["requested"]) is True
-    assert bool(diagnostics["applied"]) is False
-    assert diagnostics["reason"] == "runtime_ablation_not_enabled"
+    assert bool(diagnostics["applied"]) is True
+    assert diagnostics["reason"] == "applied"
     assert diagnostics["mode"] == "inner_outer_rescaled"
     assert float(diagnostics["inner_scale"]) == pytest.approx(0.5)
     assert float(diagnostics["outer_scale"]) == pytest.approx(2.0)
     assert float(diagnostics["contact_scale"]) == pytest.approx(1.0)
+    assert float(report["mesh"]["total_energy"]) != pytest.approx(
+        float(baseline["mesh"]["total_energy"]), abs=1e-8
+    )
 
 
 @pytest.mark.regression

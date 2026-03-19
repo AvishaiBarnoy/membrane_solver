@@ -458,6 +458,73 @@ class Minimizer:
             for module in self.energy_modules
         )
 
+    def _experimental_energy_scale_for_module(self, module_name: str) -> float:
+        """Return module-specific experimental scale for curved-theta ablation."""
+        mode = (
+            str(
+                self.global_params.get("curved_theta_objective_ablation_mode", "off")
+                or "off"
+            )
+            .strip()
+            .lower()
+        )
+        if mode == "off":
+            return 1.0
+        if mode != "inner_outer_rescaled":
+            raise ValueError(
+                "curved_theta_objective_ablation_mode must be 'off' or "
+                "'inner_outer_rescaled'."
+            )
+        if (
+            str(self.global_params.get("benchmark_geometry_lane") or "flat_pinned")
+            .strip()
+            .lower()
+            != "free_z"
+        ):
+            return 1.0
+        if (
+            str(self.global_params.get("benchmark_parameterization") or "legacy")
+            .strip()
+            .lower()
+            != "kh_physical"
+        ):
+            return 1.0
+
+        inner_scale = float(
+            self.global_params.get("curved_theta_objective_ablation_inner_scale", 1.0)
+            or 1.0
+        )
+        outer_scale = float(
+            self.global_params.get("curved_theta_objective_ablation_outer_scale", 1.0)
+            or 1.0
+        )
+        contact_scale = float(
+            self.global_params.get("curved_theta_objective_ablation_contact_scale", 1.0)
+            or 1.0
+        )
+        if inner_scale <= 0.0 or outer_scale <= 0.0 or contact_scale <= 0.0:
+            raise ValueError("curved theta objective ablation scales must be > 0.")
+
+        name = str(module_name)
+        if name in {
+            "tilt_in",
+            "bending_tilt_in",
+            "tilt_splay_twist_in",
+            "tilt_smoothness_in",
+        }:
+            return float(inner_scale)
+        if name in {
+            "tilt_out",
+            "bending_tilt_out",
+            "tilt_smoothness_out",
+            "tilt_rim_source_out",
+            "tilt_disk_target_out",
+        }:
+            return float(outer_scale)
+        if name == "tilt_thetaB_contact_in":
+            return float(contact_scale)
+        return 1.0
+
     def _line_search_energy_fn(self) -> Callable[[], float]:
         """Return an energy callback for steppers (optionally reduced over tilts).
 
@@ -517,7 +584,15 @@ class Minimizer:
         grad_dummy = np.zeros_like(positions)
         total_energy = 0.0
 
-        for module in self.energy_modules:
+        module_names = self.energy_module_names
+        if len(module_names) != len(self.energy_modules):
+            module_names = [
+                getattr(module, "__name__", module.__class__.__name__)
+                for module in self.energy_modules
+            ]
+
+        for name, module in zip(module_names, self.energy_modules):
+            scale = self._experimental_energy_scale_for_module(str(name))
             if not getattr(module, "USES_TILT", False):
                 continue
             if hasattr(module, "compute_energy_array"):
@@ -538,7 +613,7 @@ class Minimizer:
                         positions=positions,
                         index_map=index_map,
                     )
-                total_energy += float(E_mod)
+                total_energy += float(scale) * float(E_mod)
                 continue
 
             if hasattr(module, "compute_energy_and_gradient_array"):
@@ -567,7 +642,7 @@ class Minimizer:
                             index_map=index_map,
                             grad_arr=grad_dummy,
                         )
-                total_energy += float(E_mod)
+                total_energy += float(scale) * float(E_mod)
                 continue
 
             # Legacy dict modules (typically tilt-independent): energy-only path.
@@ -582,7 +657,7 @@ class Minimizer:
                 E_mod, _ = module.compute_energy_and_gradient(
                     self.mesh, self.global_params, self.param_resolver
                 )
-            total_energy += float(E_mod)
+            total_energy += float(scale) * float(E_mod)
 
         return float(total_energy)
 
@@ -599,10 +674,21 @@ class Minimizer:
         tilt_grad_arr.fill(0.0)
         total_energy = 0.0
 
-        for module in self.energy_modules:
+        module_names = self.energy_module_names
+        if len(module_names) != len(self.energy_modules):
+            module_names = [
+                getattr(module, "__name__", module.__class__.__name__)
+                for module in self.energy_modules
+            ]
+
+        for name, module in zip(module_names, self.energy_modules):
+            scale = self._experimental_energy_scale_for_module(str(name))
             if not getattr(module, "USES_TILT", False):
                 continue
             if hasattr(module, "compute_energy_and_gradient_array"):
+                grad_before = None
+                if abs(float(scale) - 1.0) > 1.0e-15:
+                    grad_before = tilt_grad_arr.copy()
                 try:
                     E_mod = self._call_module_array(
                         module,
@@ -628,7 +714,10 @@ class Minimizer:
                             index_map=index_map,
                             grad_arr=grad_dummy,
                         )
-                total_energy += float(E_mod)
+                if grad_before is not None:
+                    grad_delta = tilt_grad_arr - grad_before
+                    tilt_grad_arr[:] = grad_before + (float(scale) * grad_delta)
+                total_energy += float(scale) * float(E_mod)
                 continue
 
             # Dict fallback: accept modules that optionally return a tilt gradient.
@@ -641,13 +730,13 @@ class Minimizer:
                     f"Unexpected return from energy module {module}: {res!r}"
                 )
 
-            total_energy += float(res[0])
+            total_energy += float(scale) * float(res[0])
             if len(res) >= 3 and res[2] is not None:
                 g_tilt = res[2]
                 for vidx, gvec in g_tilt.items():
                     row = index_map.get(int(vidx))
                     if row is not None:
-                        tilt_grad_arr[row] += gvec
+                        tilt_grad_arr[row] += float(scale) * gvec
 
         return float(total_energy)
 
@@ -667,7 +756,8 @@ class Minimizer:
             grad_dummy.fill(0.0)
         total_energy = 0.0
 
-        for module in self.energy_modules:
+        for name, module in zip(self.energy_module_names, self.energy_modules):
+            scale = self._experimental_energy_scale_for_module(str(name))
             if hasattr(module, "compute_energy_array"):
                 try:
                     E_mod = module.compute_energy_array(
@@ -687,7 +777,7 @@ class Minimizer:
                         positions=positions,
                         index_map=index_map,
                     )
-                total_energy += float(E_mod)
+                total_energy += float(scale) * float(E_mod)
                 continue
 
             if hasattr(module, "compute_energy_and_gradient_array"):
@@ -709,7 +799,7 @@ class Minimizer:
                         index_map=index_map,
                         grad_arr=grad_dummy,
                     )
-                total_energy += float(E_mod)
+                total_energy += float(scale) * float(E_mod)
                 continue
 
             try:
@@ -723,7 +813,7 @@ class Minimizer:
                 E_mod, _ = module.compute_energy_and_gradient(
                     self.mesh, self.global_params, self.param_resolver
                 )
-            total_energy += float(E_mod)
+            total_energy += float(scale) * float(E_mod)
 
         return float(total_energy)
 
@@ -751,6 +841,7 @@ class Minimizer:
         total_energy = 0.0
 
         for name, module in zip(self.energy_module_names, self.energy_modules):
+            scale = self._experimental_energy_scale_for_module(str(name))
             if not getattr(module, "USES_TILT_LEAFLETS", False):
                 continue
 
@@ -760,7 +851,7 @@ class Minimizer:
                 if k_tilt != 0.0:
                     sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
                     total_energy += float(
-                        0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_in)
+                        float(scale) * 0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_in)
                     )
                 continue
             if name == "tilt_out" and tilt_vertex_areas_out is not None:
@@ -768,7 +859,7 @@ class Minimizer:
                 if k_tilt != 0.0:
                     sq = np.einsum("ij,ij->i", tilts_out, tilts_out)
                     total_energy += float(
-                        0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_out)
+                        float(scale) * 0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_out)
                     )
                 continue
 
@@ -792,7 +883,7 @@ class Minimizer:
                         positions=positions,
                         index_map=index_map,
                     )
-                total_energy += float(E_mod)
+                total_energy += float(scale) * float(E_mod)
                 continue
 
             if hasattr(module, "compute_energy_and_gradient_array"):
@@ -815,7 +906,7 @@ class Minimizer:
                         index_map=index_map,
                         grad_arr=None,
                     )
-                total_energy += float(E_mod)
+                total_energy += float(scale) * float(E_mod)
                 continue
 
             # Legacy dict modules are rare here; fall back to full energy.
@@ -871,6 +962,7 @@ class Minimizer:
         total_energy = 0.0
 
         for name, module in zip(self.energy_module_names, self.energy_modules):
+            scale = self._experimental_energy_scale_for_module(str(name))
             # Fast path for the pure tilt magnitude penalties: when positions
             # are frozen (tilt relaxation inner loop), precomputed vertex areas
             # avoid repeated triangle cross-products.
@@ -883,10 +975,10 @@ class Minimizer:
                 if k_tilt != 0.0:
                     sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
                     total_energy += float(
-                        0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_in)
+                        float(scale) * 0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_in)
                     )
                     tilt_in_grad_arr += (
-                        k_tilt * tilts_in * tilt_vertex_areas_in[:, None]
+                        float(scale) * k_tilt * tilts_in * tilt_vertex_areas_in[:, None]
                     )
                 continue
 
@@ -899,10 +991,13 @@ class Minimizer:
                 if k_tilt != 0.0:
                     sq = np.einsum("ij,ij->i", tilts_out, tilts_out)
                     total_energy += float(
-                        0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_out)
+                        float(scale) * 0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_out)
                     )
                     tilt_out_grad_arr += (
-                        k_tilt * tilts_out * tilt_vertex_areas_out[:, None]
+                        float(scale)
+                        * k_tilt
+                        * tilts_out
+                        * tilt_vertex_areas_out[:, None]
                     )
                 continue
 
@@ -912,6 +1007,11 @@ class Minimizer:
                     if tilt_only and getattr(module, "USES_TILT_LEAFLETS", False)
                     else grad_dummy
                 )
+                in_before = None
+                out_before = None
+                if abs(float(scale) - 1.0) > 1.0e-15:
+                    in_before = tilt_in_grad_arr.copy()
+                    out_before = tilt_out_grad_arr.copy()
                 try:
                     E_mod = self._call_module_array(
                         module,
@@ -930,7 +1030,12 @@ class Minimizer:
                         index_map=index_map,
                         grad_arr=grad_arg,
                     )
-                total_energy += float(E_mod)
+                if in_before is not None and out_before is not None:
+                    in_delta = tilt_in_grad_arr - in_before
+                    out_delta = tilt_out_grad_arr - out_before
+                    tilt_in_grad_arr[:] = in_before + (float(scale) * in_delta)
+                    tilt_out_grad_arr[:] = out_before + (float(scale) * out_delta)
+                total_energy += float(scale) * float(E_mod)
                 continue
 
             res = module.compute_energy_and_gradient(
@@ -940,7 +1045,7 @@ class Minimizer:
                 raise ValueError(
                     f"Unexpected return from energy module {module}: {res!r}"
                 )
-            total_energy += float(res[0])
+            total_energy += float(scale) * float(res[0])
 
         return float(total_energy)
 
@@ -1873,7 +1978,8 @@ STEP SIZE:\t {self.step_size}
         positions, index_map, grad_dummy = self._soa_views()
 
         total_energy = 0.0
-        for module in self.energy_modules:
+        for name, module in zip(self.energy_module_names, self.energy_modules):
+            scale = self._experimental_energy_scale_for_module(str(name))
             if hasattr(module, "compute_energy_and_gradient_array"):
                 grad_dummy.fill(0.0)
                 E_mod = self._call_module_array(
@@ -1882,7 +1988,7 @@ STEP SIZE:\t {self.step_size}
                     index_map=index_map,
                     grad_arr=grad_dummy,
                 )
-                total_energy += float(E_mod)
+                total_energy += float(scale) * float(E_mod)
                 continue
 
             E_mod, _ = module.compute_energy_and_gradient(
@@ -1891,7 +1997,7 @@ STEP SIZE:\t {self.step_size}
                 self.param_resolver,
                 compute_gradient=False,
             )
-            total_energy += float(E_mod)
+            total_energy += float(scale) * float(E_mod)
         return float(total_energy)
 
     def compute_energy_breakdown(self) -> Dict[str, float]:
@@ -1905,6 +2011,7 @@ STEP SIZE:\t {self.step_size}
         breakdown: Dict[str, float] = {}
 
         for name, module in zip(self.energy_module_names, self.energy_modules):
+            scale = self._experimental_energy_scale_for_module(str(name))
             if hasattr(module, "compute_energy_and_gradient_array"):
                 grad_dummy.fill(0.0)
                 E_mod = self._call_module_array(
@@ -1920,7 +2027,7 @@ STEP SIZE:\t {self.step_size}
                     self.param_resolver,
                     compute_gradient=False,
                 )
-            breakdown[name] = float(E_mod)
+            breakdown[name] = float(scale) * float(E_mod)
         return breakdown
 
     def _grad_arr_to_dict(self, grad_arr: np.ndarray) -> Dict[int, np.ndarray]:

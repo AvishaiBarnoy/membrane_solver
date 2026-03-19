@@ -867,6 +867,7 @@ def _configure_benchmark_mesh(
     tilt_post_relax_step_size: float = 0.0,
     tilt_post_relax_passes: int = 1,
     inner_coupled_update_mode: str = "off",
+    benchmark_geometry_lane: str = "flat_pinned",
     curved_theta_objective_ablation_mode: str = "off",
     curved_theta_objective_ablation_inner_scale: float = 1.0,
     curved_theta_objective_ablation_outer_scale: float = 1.0,
@@ -898,6 +899,8 @@ def _configure_benchmark_mesh(
     gp.set("tilt_post_relax_step_size", float(tilt_post_relax_step_size))
     gp.set("tilt_post_relax_passes", int(tilt_post_relax_passes))
     gp.set("inner_coupled_update_mode", str(inner_coupled_update_mode))
+    gp.set("benchmark_geometry_lane", str(benchmark_geometry_lane))
+    gp.set("benchmark_parameterization", str(parameterization))
     gp.set(
         "curved_theta_objective_ablation_mode",
         str(curved_theta_objective_ablation_mode),
@@ -2011,6 +2014,7 @@ def run_flat_disk_one_leaflet_benchmark(
         tilt_post_relax_step_size=post_relax_step_size,
         tilt_post_relax_passes=post_relax_passes,
         inner_coupled_update_mode=inner_coupled_update_mode_value,
+        benchmark_geometry_lane=geometry_lane_requested,
         curved_theta_objective_ablation_mode=(
             curved_theta_objective_ablation_mode_requested
         ),
@@ -2446,11 +2450,19 @@ def run_flat_disk_one_leaflet_benchmark(
     }
     curved_theta_objective_ablation = {
         "requested": bool(curved_theta_objective_ablation_requested),
-        "applied": False,
+        "applied": bool(
+            curved_theta_objective_ablation_requested
+            and geometry_lane_requested == "free_z"
+            and mode == "kh_physical"
+        ),
         "reason": (
             "off"
             if not curved_theta_objective_ablation_requested
-            else "runtime_ablation_not_enabled"
+            else (
+                "applied"
+                if geometry_lane_requested == "free_z" and mode == "kh_physical"
+                else "benchmark_lane_not_supported"
+            )
         ),
         "mode": str(curved_theta_objective_ablation_mode_requested),
         "inner_scale": float(ablation_inner_scale),
