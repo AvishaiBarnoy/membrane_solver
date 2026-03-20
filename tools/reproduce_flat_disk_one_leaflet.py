@@ -1228,6 +1228,125 @@ def _run_theta_local_polish(
     return float(theta_star), report
 
 
+def _capture_mesh_state(mesh) -> dict[str, np.ndarray]:
+    """Capture dense position and leaflet tilt arrays for local diagnostics."""
+    return {
+        "positions": np.array(mesh.positions_view(), copy=True),
+        "tilts_in": np.array(mesh.tilts_in_view(), copy=True),
+        "tilts_out": np.array(mesh.tilts_out_view(), copy=True),
+    }
+
+
+def _restore_mesh_state(mesh, snapshot: dict[str, np.ndarray]) -> None:
+    """Restore dense position and leaflet tilt arrays from a snapshot."""
+    positions = np.asarray(snapshot["positions"], dtype=float)
+    for row, vid in enumerate(mesh.vertex_ids):
+        mesh.vertices[int(vid)].position[:] = positions[row]
+    mesh.increment_version()
+    mesh.set_tilts_in_from_array(snapshot["tilts_in"])
+    mesh.set_tilts_out_from_array(snapshot["tilts_out"])
+
+
+def _theta_objective_decomposition_from_breakdown(
+    breakdown: dict[str, float], *, theta_value: float
+) -> dict[str, Any]:
+    """Summarize selected-theta objective channels from an energy breakdown."""
+    inner_like = float(
+        breakdown.get("bending_tilt_in", 0.0) + breakdown.get("tilt_in", 0.0)
+    )
+    outer_like = float(
+        breakdown.get("bending_tilt_out", 0.0)
+        + breakdown.get("tilt_out", 0.0)
+        + breakdown.get("tilt_smoothness_out", 0.0)
+        + breakdown.get("tilt_rim_source_out", 0.0)
+        + breakdown.get("tilt_disk_target_out", 0.0)
+    )
+    contact_like = float(breakdown.get("tilt_thetaB_contact_in", 0.0))
+    collapse_eps = max(1.0e-8, 0.02 * max(abs(inner_like), 1.0e-12))
+    return {
+        "selected_theta": float(theta_value),
+        "inner_like": float(inner_like),
+        "outer_like": float(outer_like),
+        "contact_like": float(contact_like),
+        "outer_to_inner_abs_ratio": float(
+            abs(outer_like) / max(abs(inner_like), 1.0e-18)
+        ),
+        "outer_channel_collapse_eps": float(collapse_eps),
+        "outer_channel_collapsed": bool(abs(outer_like) <= collapse_eps),
+    }
+
+
+def _curved_theta_objective_ablation_from_probe(
+    *,
+    probe: dict[str, Any] | None,
+    theory,
+    mode: str,
+    inner_scale: float,
+    outer_scale: float,
+    contact_scale: float,
+) -> dict[str, Any]:
+    """Project ablation response from fitted theta-objective coefficients."""
+    mode_value = str(mode).strip().lower()
+    out: dict[str, Any] = {
+        "available": False,
+        "applied": False,
+        "mode": mode_value,
+        "inner_scale": float(inner_scale),
+        "outer_scale": float(outer_scale),
+        "contact_scale": float(contact_scale),
+        "theta_star_pred": float("nan"),
+        "total_energy_pred": float("nan"),
+        "theta_factor_pred": float("nan"),
+        "energy_factor_pred": float("nan"),
+        "reason": None,
+    }
+    if mode_value == "off":
+        out["reason"] = "disabled"
+        return out
+    if probe is None:
+        out["reason"] = "missing_theta_objective_probe"
+        return out
+
+    coeff_a_inner = float(probe.get("coeff_a_inner", float("nan")))
+    coeff_a_outer = float(probe.get("coeff_a_outer", float("nan")))
+    coeff_b_contact = float(probe.get("coeff_b_contact", float("nan")))
+    if not (
+        np.isfinite(coeff_a_inner)
+        and np.isfinite(coeff_a_outer)
+        and np.isfinite(coeff_b_contact)
+    ):
+        out["reason"] = "non_finite_probe_coefficients"
+        return out
+
+    coeff_a_eff = (
+        float(inner_scale) * coeff_a_inner + float(outer_scale) * coeff_a_outer
+    )
+    coeff_b_eff = float(contact_scale) * coeff_b_contact
+    out["available"] = True
+    out["coeff_a_inner_raw"] = float(coeff_a_inner)
+    out["coeff_a_outer_raw"] = float(coeff_a_outer)
+    out["coeff_b_contact_raw"] = float(coeff_b_contact)
+    out["coeff_a_effective"] = float(coeff_a_eff)
+    out["coeff_b_effective"] = float(coeff_b_eff)
+    if coeff_a_eff <= 1.0e-18:
+        out["reason"] = "degenerate_effective_quadratic"
+        return out
+
+    theta_pred = float(coeff_b_eff / (2.0 * coeff_a_eff))
+    total_pred = float(-(coeff_b_eff * coeff_b_eff) / (4.0 * coeff_a_eff))
+    out["theta_star_pred"] = float(theta_pred)
+    out["total_energy_pred"] = float(total_pred)
+    out["theta_factor_pred"] = float(
+        _factor_difference(theta_pred, float(theory.theta_star))
+    )
+    out["energy_factor_pred"] = float(
+        _factor_difference(float(abs(total_pred)), float(abs(theory.total)))
+    )
+    out["applied"] = True
+    out["reason"] = "ok"
+    return out
+
+
 def _profile_metrics(mesh, *, radius: float) -> dict[str, float]:
     positions = mesh.positions_view()
     r, r_hat = _radial_unit_vectors(positions)
@@ -2384,6 +2503,145 @@ def run_flat_disk_one_leaflet_benchmark(
             np.max(np.linalg.norm(mesh.tilts_out_view()[outer_free_rows], axis=1))
         )
 
+    theta_objective_probe: dict[str, Any] | None = None
+    theta_objective_diag: dict[str, Any] | None = None
+    if (
+        geometry_lane_requested == "free_z"
+        and mode == "kh_physical"
+        and theta_mode_str in {"optimize", "optimize_full"}
+    ):
+        probe_snapshot = _capture_mesh_state(mesh)
+        theta_probe_values = np.asarray(
+            [
+                float(theta_star) - float(optimize_cfg.optimize_delta),
+                float(theta_star),
+                float(theta_star) + float(optimize_cfg.optimize_delta),
+            ],
+            dtype=float,
+        )
+        try:
+            theta_probe_energies: list[float] = []
+            probe_breakdowns: list[dict[str, float]] = []
+            for theta_probe in theta_probe_values.tolist():
+                energy_probe = _run_theta_relaxation(
+                    minim,
+                    theta_value=float(theta_probe),
+                    reset_outer=True,
+                )
+                theta_probe_energies.append(float(energy_probe))
+                probe_breakdowns.append(
+                    {
+                        str(key): float(value)
+                        for key, value in minim.compute_energy_breakdown().items()
+                    }
+                )
+            inner_values = np.array(
+                [
+                    float(row.get("bending_tilt_in", 0.0) + row.get("tilt_in", 0.0))
+                    for row in probe_breakdowns
+                ],
+                dtype=float,
+            )
+            outer_values = np.array(
+                [
+                    float(
+                        row.get("bending_tilt_out", 0.0)
+                        + row.get("tilt_out", 0.0)
+                        + row.get("tilt_smoothness_out", 0.0)
+                        + row.get("tilt_rim_source_out", 0.0)
+                        + row.get("tilt_disk_target_out", 0.0)
+                    )
+                    for row in probe_breakdowns
+                ],
+                dtype=float,
+            )
+            contact_values = np.array(
+                [
+                    float(row.get("tilt_thetaB_contact_in", 0.0))
+                    for row in probe_breakdowns
+                ],
+                dtype=float,
+            )
+            coeff_a, coeff_b, coeff_c = np.polyfit(
+                theta_probe_values,
+                np.asarray(theta_probe_energies, dtype=float),
+                2,
+            )
+            coeff_a_inner, _, _ = np.polyfit(theta_probe_values, inner_values, 2)
+            coeff_a_outer, _, _ = np.polyfit(theta_probe_values, outer_values, 2)
+            coeff_b_contact = float(
+                np.linalg.lstsq(
+                    theta_probe_values[:, None],
+                    -contact_values,
+                    rcond=None,
+                )[0][0]
+            )
+            theory_inner_coeff = float(theory.elastic_inner) / max(
+                float(theory.theta_star) ** 2, 1.0e-18
+            )
+            theory_outer_coeff = float(theory.elastic_outer) / max(
+                float(theory.theta_star) ** 2, 1.0e-18
+            )
+            theta_fit = (
+                float(-coeff_b / (2.0 * coeff_a))
+                if abs(float(coeff_a)) > 1.0e-18
+                else float("nan")
+            )
+            theta_objective_probe = {
+                "available": True,
+                "reason": "ok",
+                "theta_values": [float(v) for v in theta_probe_values.tolist()],
+                "energy_values": [float(v) for v in theta_probe_energies],
+                "inner_values": [float(v) for v in inner_values.tolist()],
+                "outer_values": [float(v) for v in outer_values.tolist()],
+                "contact_values": [float(v) for v in contact_values.tolist()],
+                "coeff_a": float(coeff_a),
+                "coeff_b": float(coeff_b),
+                "coeff_c": float(coeff_c),
+                "coeff_a_inner": float(coeff_a_inner),
+                "coeff_a_outer": float(coeff_a_outer),
+                "coeff_b_contact": float(coeff_b_contact),
+                "theta_fit_local": float(theta_fit),
+                "coeff_a_over_theory_A": float(
+                    float(coeff_a) / max(float(theory.coeff_A), 1.0e-18)
+                ),
+                "coeff_b_over_theory_B": float(
+                    float(-coeff_b) / max(float(theory.coeff_B), 1.0e-18)
+                ),
+                "coeff_a_inner_over_theory_inner": float(
+                    float(coeff_a_inner) / max(theory_inner_coeff, 1.0e-18)
+                ),
+                "coeff_a_outer_over_theory_outer": float(
+                    float(coeff_a_outer) / max(theory_outer_coeff, 1.0e-18)
+                ),
+                "coeff_b_contact_over_theory_B": float(
+                    float(coeff_b_contact) / max(float(theory.coeff_B), 1.0e-18)
+                ),
+            }
+            if optimize_report is not None:
+                optimize_report["theta_objective_probe"] = dict(theta_objective_probe)
+        finally:
+            _restore_mesh_state(mesh, probe_snapshot)
+            mesh.project_tilts_to_tangent()
+
+        theta_objective_diag = _theta_objective_decomposition_from_breakdown(
+            breakdown={str(key): float(value) for key, value in breakdown.items()},
+            theta_value=float(theta_star),
+        )
+        if optimize_report is not None:
+            optimize_report["theta_objective_decomposition_selected"] = dict(
+                theta_objective_diag
+            )
+    else:
+        theta_objective_probe = {
+            "available": False,
+            "reason": "unsupported_lane",
+        }
+        theta_objective_diag = {
+            "available": False,
+            "reason": "unsupported_lane",
+        }
+
     theta_factor = _factor_difference(float(theta_star), float(theory.theta_star))
     energy_factor = _factor_difference(
         float(abs(total_energy)), float(abs(theory.total))
@@ -2469,6 +2727,18 @@ def run_flat_disk_one_leaflet_benchmark(
         "outer_scale": float(ablation_outer_scale),
         "contact_scale": float(ablation_contact_scale),
     }
+    curved_theta_objective_ablation.update(
+        _curved_theta_objective_ablation_from_probe(
+            probe=theta_objective_probe
+            if theta_objective_probe.get("available")
+            else None,
+            theory=theory,
+            mode=str(curved_theta_objective_ablation_mode_requested),
+            inner_scale=float(ablation_inner_scale),
+            outer_scale=float(ablation_outer_scale),
+            contact_scale=float(ablation_contact_scale),
+        )
+    )
     if theta_mode_str == "optimize_full":
         assert theta_factor_raw is not None
         assert energy_factor_raw is not None
@@ -2615,6 +2885,8 @@ def run_flat_disk_one_leaflet_benchmark(
                 "tilt_transfer_ratio": float(tilt_transfer_ratio),
             },
             "curved_theta_calibration": curved_theta_calibration,
+            "theta_objective_probe": theta_objective_probe,
+            "theta_objective": theta_objective_diag,
             "curved_theta_objective_ablation": curved_theta_objective_ablation,
             "tilt_projection": {
                 "projection_cadence": str(
