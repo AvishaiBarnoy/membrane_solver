@@ -1763,6 +1763,10 @@ def test_flat_disk_reports_tilt_transport_model_meta() -> None:
     assert report["meta"]["tilt_transport_model"] == "connection_v1"
     assert np.isfinite(float(report["parity"]["theta_factor"]))
     assert np.isfinite(float(report["parity"]["energy_factor"]))
+    assert bool(report["diagnostics"]["theta_objective_probe"]["available"]) is False
+    assert (
+        report["diagnostics"]["theta_objective_probe"]["reason"] == "unsupported_lane"
+    )
 
 
 @pytest.mark.regression
@@ -1833,17 +1837,27 @@ def test_flat_disk_reports_curved_theta_objective_ablation_meta() -> None:
     diagnostics = report["diagnostics"]["curved_theta_objective_ablation"]
     assert bool(diagnostics["requested"]) is True
     assert bool(diagnostics["applied"]) is True
-    assert diagnostics["reason"] == "applied"
+    assert diagnostics["reason"] == "ok"
     assert diagnostics["mode"] == "inner_outer_rescaled"
     assert float(diagnostics["inner_scale"]) == pytest.approx(0.5)
     assert float(diagnostics["outer_scale"]) == pytest.approx(2.0)
     assert float(diagnostics["contact_scale"]) == pytest.approx(1.0)
+    assert np.isfinite(float(diagnostics["theta_star_pred"]))
+    assert np.isfinite(float(diagnostics["total_energy_pred"]))
+    probe = report["diagnostics"]["theta_objective_probe"]
+    assert bool(probe["available"]) is True
+    assert probe["reason"] == "ok"
+    assert len(probe["theta_values"]) == 3
+    assert np.isfinite(float(probe["coeff_a"]))
+    assert np.isfinite(float(probe["coeff_b"]))
+    assert np.isfinite(float(probe["coeff_a_inner"]))
+    assert np.isfinite(float(probe["coeff_a_outer"]))
+    assert np.isfinite(float(probe["coeff_b_contact"]))
     assert float(report["mesh"]["total_energy"]) != pytest.approx(
         float(baseline["mesh"]["total_energy"]), abs=1e-8
     )
 
 
-@pytest.mark.regression
 def test_run_theta_relaxation_can_preserve_inner_state_between_repeats() -> None:
     params = physical_to_dimensionless_theory_params(
         kappa_physical=10.0,
