@@ -39,6 +39,18 @@ def test_flat_disk_curved_3d_audit_smoke_report_is_finite() -> None:
         drive_physical=float(meta["drive_physical"]),
         z_gauge=str(meta["z_gauge"]),
         curved_acceptance_profile=str(meta["curved_acceptance_profile"]),
+        curved_theta_objective_ablation_mode=str(
+            meta.get("curved_theta_objective_ablation_mode", "off")
+        ),
+        curved_theta_objective_ablation_inner_scale=float(
+            meta.get("curved_theta_objective_ablation_inner_scale", 1.0)
+        ),
+        curved_theta_objective_ablation_outer_scale=float(
+            meta.get("curved_theta_objective_ablation_outer_scale", 1.0)
+        ),
+        curved_theta_objective_ablation_contact_scale=float(
+            meta.get("curved_theta_objective_ablation_contact_scale", 1.0)
+        ),
         include_sections=bool(meta.get("include_sections", True)),
     )
 
@@ -60,6 +72,35 @@ def test_flat_disk_curved_3d_audit_smoke_report_is_finite() -> None:
 
     for field in ("h_mean", "h_p95", "h_max"):
         assert np.isfinite(float(report["curvature"][field]))
+
+    ablation = report["ablation"]
+    assert bool(ablation["available"]) is True
+    assert bool(ablation["applied"]) is True
+    assert ablation["reason"] == "ok"
+    assert ablation["mode"] == "inner_outer_rescaled"
+    assert float(ablation["inner_scale"]) == pytest.approx(
+        float(meta["curved_theta_objective_ablation_inner_scale"])
+    )
+    assert float(ablation["outer_scale"]) == pytest.approx(
+        float(meta["curved_theta_objective_ablation_outer_scale"])
+    )
+    assert float(ablation["contact_scale"]) == pytest.approx(
+        float(meta["curved_theta_objective_ablation_contact_scale"])
+    )
+
+    for field in (
+        "theta_star_pred",
+        "total_energy_pred",
+        "theta_factor_pred",
+        "energy_factor_pred",
+        "coeff_a_inner_raw",
+        "coeff_a_outer_raw",
+        "coeff_b_contact_raw",
+        "coeff_a_effective",
+        "coeff_b_effective",
+        "theta_fit_local",
+    ):
+        assert np.isfinite(float(ablation[field]))
 
     boundary = report["boundary_at_R"]
     assert boundary is not None

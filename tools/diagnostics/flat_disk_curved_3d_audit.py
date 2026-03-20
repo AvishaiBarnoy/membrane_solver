@@ -54,6 +54,35 @@ def _compact_boundary(boundary: dict[str, Any] | None) -> dict[str, Any] | None:
     }
 
 
+def _compact_ablation(
+    ablation: dict[str, Any] | None, probe: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Normalize curved-theta ablation diagnostics to a compact report shape."""
+
+    ablation = ablation or {}
+    probe = probe or {}
+    available = bool(ablation.get("available", False))
+    return {
+        "available": available,
+        "applied": bool(ablation.get("applied", False)),
+        "reason": str(ablation.get("reason", "unavailable")),
+        "mode": str(ablation.get("mode", "off")),
+        "inner_scale": float(ablation.get("inner_scale", 1.0)),
+        "outer_scale": float(ablation.get("outer_scale", 1.0)),
+        "contact_scale": float(ablation.get("contact_scale", 1.0)),
+        "theta_star_pred": float(ablation.get("theta_star_pred", float("nan"))),
+        "total_energy_pred": float(ablation.get("total_energy_pred", float("nan"))),
+        "theta_factor_pred": float(ablation.get("theta_factor_pred", float("nan"))),
+        "energy_factor_pred": float(ablation.get("energy_factor_pred", float("nan"))),
+        "coeff_a_inner_raw": float(ablation.get("coeff_a_inner_raw", float("nan"))),
+        "coeff_a_outer_raw": float(ablation.get("coeff_a_outer_raw", float("nan"))),
+        "coeff_b_contact_raw": float(ablation.get("coeff_b_contact_raw", float("nan"))),
+        "coeff_a_effective": float(ablation.get("coeff_a_effective", float("nan"))),
+        "coeff_b_effective": float(ablation.get("coeff_b_effective", float("nan"))),
+        "theta_fit_local": float(probe.get("theta_fit_local", float("nan"))),
+    }
+
+
 def run_flat_disk_curved_3d_audit(
     *,
     fixture: Path | str = DEFAULT_FIXTURE,
@@ -73,6 +102,10 @@ def run_flat_disk_curved_3d_audit(
     drive_physical: float = (2.0 / 0.7),
     z_gauge: str = "mean_zero",
     curved_acceptance_profile: str = "fast",
+    curved_theta_objective_ablation_mode: str = "off",
+    curved_theta_objective_ablation_inner_scale: float = 1.0,
+    curved_theta_objective_ablation_outer_scale: float = 1.0,
+    curved_theta_objective_ablation_contact_scale: float = 1.0,
     include_sections: bool = True,
 ) -> dict[str, Any]:
     """Run the supported curved benchmark lane and emit a compact audit report."""
@@ -101,6 +134,16 @@ def run_flat_disk_curved_3d_audit(
         radius_nm=float(radius_nm),
         drive_physical=float(drive_physical),
         curved_acceptance_profile=str(curved_acceptance_profile),
+        curved_theta_objective_ablation_mode=str(curved_theta_objective_ablation_mode),
+        curved_theta_objective_ablation_inner_scale=float(
+            curved_theta_objective_ablation_inner_scale
+        ),
+        curved_theta_objective_ablation_outer_scale=float(
+            curved_theta_objective_ablation_outer_scale
+        ),
+        curved_theta_objective_ablation_contact_scale=float(
+            curved_theta_objective_ablation_contact_scale
+        ),
     )
 
     return {
@@ -138,5 +181,9 @@ def run_flat_disk_curved_3d_audit(
             "h_p95": float(report["diagnostics"]["curvature"]["h_p95"]),
             "h_max": float(report["diagnostics"]["curvature"]["h_max"]),
         },
+        "ablation": _compact_ablation(
+            report["diagnostics"].get("curved_theta_objective_ablation"),
+            report["diagnostics"].get("theta_objective_probe"),
+        ),
         "boundary_at_R": _compact_boundary(report["parity"].get("boundary_at_R")),
     }
