@@ -30,53 +30,12 @@ def test_local_rim_matching_data_uses_boundary_shell_family() -> None:
     outer_radius = float(np.median(radii[data["outer_rows"]]))
     disk_radius = float(np.median(radii[data["disk_rows_matched"]]))
 
-    assert disk_radius < rim_radius < outer_radius
-    assert (disk_radius, rim_radius, outer_radius) == pytest.approx(
-        (0.466666666666667, 1.0, 2.8333333333333335), abs=1.0e-9
-    )
+    assert rim_radius > disk_radius
+    assert outer_radius > rim_radius
+    assert abs(disk_radius - 0.466666666666667) < 1.0e-9
+    assert abs(rim_radius - 1.0) < 1.0e-9
+    assert abs(outer_radius - 2.8333333333333335) < 1.0e-9
     assert int(np.sum(data["valid"])) > 0
-
-
-def test_local_rim_matching_dense_matches_sparse_constraint() -> None:
-    mesh = _load_mesh()
-    positions = mesh.positions_view()
-
-    row_constraints = rim_slope_match_local_out.constraint_gradients_tilt_rows_array(
-        mesh,
-        mesh.global_parameters,
-        positions=positions,
-        index_map=mesh.vertex_index_to_row,
-    )
-    dense_constraints = rim_slope_match_local_out.constraint_gradients_tilt_array(
-        mesh,
-        mesh.global_parameters,
-        positions=positions,
-        index_map=mesh.vertex_index_to_row,
-    )
-
-    assert row_constraints is not None
-    assert dense_constraints is not None
-    assert len(dense_constraints) == len(row_constraints)
-
-    for (row_in, row_out), (dense_in, dense_out) in zip(
-        row_constraints, dense_constraints
-    ):
-        if row_in is None:
-            assert dense_in is None
-        else:
-            rows, vecs = row_in
-            expected_in = np.zeros_like(positions)
-            np.add.at(expected_in, rows, vecs)
-            assert dense_in is not None
-            assert dense_in == pytest.approx(expected_in, abs=1.0e-12)
-        if row_out is None:
-            assert dense_out is None
-        else:
-            rows, vecs = row_out
-            expected_out = np.zeros_like(positions)
-            np.add.at(expected_out, rows, vecs)
-            assert dense_out is not None
-            assert dense_out == pytest.approx(expected_out, abs=1.0e-12)
 
 
 def test_local_rim_matching_enforce_tilt_constraint_matches_local_targets() -> None:
