@@ -16,6 +16,10 @@ meta:
   drive_physical: 2.857142857142857
   z_gauge: mean_zero
   curved_acceptance_profile: fast
+  curved_theta_objective_ablation_mode: inner_outer_rescaled
+  curved_theta_objective_ablation_inner_scale: 1.1
+  curved_theta_objective_ablation_outer_scale: 0.9
+  curved_theta_objective_ablation_contact_scale: 1.05
   include_sections: true
 expected:
   theory_source: kh_physical_radial_integral
