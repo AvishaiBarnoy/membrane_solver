@@ -42,12 +42,14 @@ def _resolve_projection_mode(global_params) -> str:
         else global_params.get("curved_local_interface_match_mode")
     )
     mode = str(raw or "vector_average").strip().lower()
+    if mode in {"vector_average", "average"}:
+        return "vector_average"
+    if mode in {"local_mixed_match_v1", "mixed"}:
+        return "local_mixed_match_v1"
     if mode in {"rim_to_disk", "rim2disk"}:
         return "rim_to_disk"
     if mode in {"disk_to_rim", "disk2rim"}:
         return "disk_to_rim"
-    if mode in {"local_mixed_match_v1", "mixed"}:
-        return "local_mixed_match_v1"
     return "vector_average"
 
 
