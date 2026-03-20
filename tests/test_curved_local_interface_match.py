@@ -9,7 +9,11 @@ sys.path.insert(0, str(ROOT))
 
 from geometry.geom_io import load_data, parse_geometry
 from modules.constraints import curved_local_interface_match
-from modules.constraints.local_interface_shells import build_local_interface_shell_data
+from modules.constraints.local_interface_shells import (
+    build_local_interface_shell_data,
+    local_interface_constraint_diagnostics,
+)
+from tools.reproduce_flat_disk_one_leaflet import _boundary_at_R_parity_metrics
 
 
 def _load_mesh():
@@ -38,6 +42,72 @@ def test_curved_local_interface_data_uses_shared_shell_builder() -> None:
     assert data["outer_radius"] == pytest.approx(shell_data.outer_radius, abs=1e-12)
     assert data["disk_rows"].shape == data["rim_rows"].shape
     assert data["rim_rows"].shape == data["outer_rows"].shape
+
+
+def test_shared_shell_builder_matches_boundary_at_r_shell_family() -> None:
+    mesh = _load_mesh()
+    positions = mesh.positions_view()
+    shell_data = build_local_interface_shell_data(mesh, positions=positions)
+    boundary = _boundary_at_R_parity_metrics(mesh, theory_theta_value=0.4)
+
+    assert int(boundary["disk_count"]) == int(shell_data.disk_rows.size)
+    assert int(boundary["rim_count"]) == int(shell_data.rim_rows.size)
+    assert int(boundary["outer_count"]) == int(shell_data.outer_rows.size)
+    assert float(boundary["disk_radius"]) == pytest.approx(
+        shell_data.disk_radius, abs=1.0e-12
+    )
+    assert float(boundary["rim_radius"]) == pytest.approx(
+        shell_data.rim_radius, abs=1.0e-12
+    )
+    assert float(boundary["outer_radius"]) == pytest.approx(
+        shell_data.outer_radius, abs=1.0e-12
+    )
+
+
+def test_local_interface_constraint_diagnostics_report_shared_shell_builder() -> None:
+    mesh = _load_mesh()
+    diagnostics = local_interface_constraint_diagnostics(
+        mesh,
+        positions=mesh.positions_view(),
+        mode="local_vector_match_v1",
+        active=False,
+    )
+
+    assert diagnostics["available"] is True
+    assert diagnostics["reason"] == "ok"
+    assert diagnostics["mode"] == "local_vector_match_v1"
+    assert diagnostics["active"] is False
+    assert diagnostics["uses_shared_shell_builder"] is True
+    assert diagnostics["matching_strategy"] == "nearest_azimuth"
+    assert diagnostics["shell_source"] == "disk_boundary_local_shells"
+    assert int(diagnostics["disk_count"]) > 0
+    assert int(diagnostics["rim_count"]) > 0
+    assert int(diagnostics["outer_count"]) > 0
+    assert float(diagnostics["rim_radius"]) > float(diagnostics["disk_radius"])
+    assert float(diagnostics["outer_radius"]) > float(diagnostics["rim_radius"])
+
+
+@pytest.mark.parametrize(
+    ("raw_mode", "expected_mode"),
+    [
+        ("average", "vector_average"),
+        ("vector_average", "vector_average"),
+        ("mixed", "local_mixed_match_v1"),
+        ("local_mixed_match_v1", "local_mixed_match_v1"),
+        ("rim2disk", "rim_to_disk"),
+        ("disk2rim", "disk_to_rim"),
+    ],
+)
+def test_curved_local_interface_mode_aliases_normalize(
+    raw_mode: str, expected_mode: str
+) -> None:
+    mesh = _load_mesh()
+    mesh.global_parameters.set("curved_local_interface_match_mode", raw_mode)
+
+    assert (
+        curved_local_interface_match._resolve_projection_mode(mesh.global_parameters)
+        == expected_mode
+    )
 
 
 def test_curved_local_interface_enforce_tilt_constraint_matches_in_plane_average() -> (
