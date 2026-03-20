@@ -1,4 +1,9 @@
-"""Local-shell rim matching constraint for curved free-z interfaces."""
+"""Local-shell rim matching constraint for curved free-z interfaces.
+
+This module enforces the same radial tilt conditions as `rim_slope_match_out`,
+but derives the matching rings from the local shell family immediately outside
+the disk boundary instead of relying on coarse tagged rim/outer groups.
+"""
 
 from __future__ import annotations
 
@@ -95,40 +100,6 @@ def constraint_gradients_tilt_rows_array(
     return constraints or None
 
 
-def constraint_gradients_tilt_array(
-    mesh: Mesh,
-    global_params,
-    *,
-    positions: np.ndarray,
-    index_map: dict[int, int],
-    tilts_in: np.ndarray | None = None,
-    tilts_out: np.ndarray | None = None,
-):
-    _ = index_map, tilts_in, tilts_out
-    row_constraints = constraint_gradients_tilt_rows_array(
-        mesh,
-        global_params,
-        positions=positions,
-        index_map={},
-    )
-    if not row_constraints:
-        return None
-    constraints = []
-    for in_part, out_part in row_constraints:
-        g_in = None
-        g_out = None
-        if in_part is not None:
-            in_rows, in_vecs = in_part
-            g_in = np.zeros_like(positions)
-            np.add.at(g_in, in_rows, in_vecs)
-        if out_part is not None:
-            out_rows, out_vecs = out_part
-            g_out = np.zeros_like(positions)
-            np.add.at(g_out, out_rows, out_vecs)
-        constraints.append((g_in, g_out))
-    return constraints or None
-
-
 def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
     positions = mesh.positions_view()
     data = _build_matching_data(mesh, global_params, positions)
@@ -177,6 +148,5 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
 __all__ = [
     "_build_matching_data",
     "constraint_gradients_tilt_rows_array",
-    "constraint_gradients_tilt_array",
     "enforce_tilt_constraint",
 ]
