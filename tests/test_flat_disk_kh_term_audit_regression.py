@@ -1,5 +1,7 @@
 import os
 import sys
+from copy import deepcopy
+from functools import lru_cache
 from pathlib import Path
 from time import perf_counter
 
@@ -20,6 +22,42 @@ from tools.diagnostics.flat_disk_kh_term_audit import (
     run_flat_disk_kh_term_audit,
     run_flat_disk_kh_term_audit_refine_sweep,
 )
+
+
+def _freeze_cache_value(value):
+    """Return an lru-cache-safe representation for audit helper kwargs."""
+    if isinstance(value, tuple):
+        return tuple(_freeze_cache_value(v) for v in value)
+    if isinstance(value, list):
+        return tuple(_freeze_cache_value(v) for v in value)
+    return value
+
+
+@lru_cache(maxsize=64)
+def _cached_term_audit_report(items):
+    """Cache repeated flat-disk audit reports within this test module."""
+    return run_flat_disk_kh_term_audit(**dict(items))
+
+
+def _term_audit_report(**kwargs):
+    """Return a defensive copy of a cached flat-disk term-audit report."""
+    items = tuple(
+        sorted((key, _freeze_cache_value(value)) for key, value in kwargs.items())
+    )
+    return deepcopy(_cached_term_audit_report(items))
+
+
+def _strict_mesh_report() -> dict:
+    """Return the shared strict-mesh audit report used by adjacent assertions."""
+    return _term_audit_report(
+        refine_level=1,
+        outer_mode="disabled",
+        smoothness_model="splay_twist",
+        theta_values=(0.135,),
+        tilt_mass_mode_in="consistent",
+        rim_local_refine_steps=2,
+        rim_local_refine_band_lambda=8.0,
+    )
 
 
 @pytest.mark.regression
@@ -615,15 +653,7 @@ def test_flat_disk_kh_term_audit_local_rim_refine_changes_resolution() -> None:
 def test_flat_disk_kh_term_audit_internal_region_ratios_near_unity_under_strict_mesh() -> (
     None
 ):
-    report = run_flat_disk_kh_term_audit(
-        refine_level=1,
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_values=(0.135,),
-        tilt_mass_mode_in="consistent",
-        rim_local_refine_steps=2,
-        rim_local_refine_band_lambda=8.0,
-    )
+    report = _strict_mesh_report()
     row = report["rows"][0]
     disk_ratio = float(row["internal_disk_ratio_mesh_over_theory"])
     outer_ratio = float(row["internal_outer_ratio_mesh_over_theory"])
@@ -637,15 +667,7 @@ def test_flat_disk_kh_term_audit_internal_region_ratios_near_unity_under_strict_
 def test_flat_disk_kh_term_audit_section_scores_deterministic_under_strict_mesh() -> (
     None
 ):
-    report = run_flat_disk_kh_term_audit(
-        refine_level=1,
-        outer_mode="disabled",
-        smoothness_model="splay_twist",
-        theta_values=(0.135,),
-        tilt_mass_mode_in="consistent",
-        rim_local_refine_steps=2,
-        rim_local_refine_band_lambda=8.0,
-    )
+    report = _strict_mesh_report()
     row = report["rows"][0]
     assert float(row["section_score_internal_split_l2_log"]) == pytest.approx(
         0.1429931326, rel=1e-6, abs=1e-10
@@ -1230,10 +1252,19 @@ def test_flat_disk_kh_discrete_tilt_matrix_runner_deterministic(
     assert report_a["selected"] == report_b["selected"]
 
 
+@lru_cache(maxsize=32)
+def _cached_policy_report(items):
+    """Cache repeated policy-audit report variants across regression tests."""
+    return run_flat_disk_kh_term_audit(**dict(items))
+
+
 def _run_policy_report(**overrides):
     base = {"refine_level": 1, "theta_values": (0.138,), "ratio_version": "v2"}
     base.update(overrides)
-    return run_flat_disk_kh_term_audit(**base)
+    items = tuple(
+        sorted((key, _freeze_cache_value(value)) for key, value in base.items())
+    )
+    return deepcopy(_cached_policy_report(items))
 
 
 @pytest.mark.acceptance
