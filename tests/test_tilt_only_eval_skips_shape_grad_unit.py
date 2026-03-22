@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from geometry.entities import Edge, Facet, Mesh, Vertex
 from modules.energy import bending_tilt_leaflet as bt_leaflet
 from modules.energy import tilt_in as tilt_in_mod
+from runtime.energy_context import EnergyContext
 
 
 def _build_two_triangle_mesh() -> Mesh:
@@ -132,6 +133,54 @@ def test_bending_tilt_leaflet_tilt_only_path_skips_shape_scatter(monkeypatch) ->
 
     assert np.isfinite(float(energy))
     assert np.any(np.abs(tilt_grad) > 0.0)
+
+
+def test_bending_tilt_leaflet_tilt_only_ctx_matches_plain_path() -> None:
+    mesh = _build_two_triangle_mesh()
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    n = len(mesh.vertex_ids)
+
+    rng = np.random.default_rng(11)
+    tilts = rng.normal(size=(n, 3))
+
+    gp = _GP({"bending_modulus_in": 2.0, "spontaneous_curvature_in": 0.0})
+    resolver = _Resolver({"bending_modulus_in": 2.0})
+    tilt_grad_plain = np.zeros_like(tilts)
+    tilt_grad_ctx = np.zeros_like(tilts)
+    ctx = EnergyContext()
+    ctx.ensure_for_mesh(mesh)
+
+    energy_plain = bt_leaflet.compute_energy_and_gradient_array_leaflet(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=None,
+        tilts=tilts,
+        tilt_grad_arr=tilt_grad_plain,
+        kappa_key="bending_modulus_in",
+        cache_tag="in",
+        div_sign=1.0,
+    )
+    energy_ctx = bt_leaflet.compute_energy_and_gradient_array_leaflet(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=None,
+        ctx=ctx,
+        tilts=tilts,
+        tilt_grad_arr=tilt_grad_ctx,
+        kappa_key="bending_modulus_in",
+        cache_tag="in",
+        div_sign=1.0,
+    )
+
+    assert float(energy_ctx) == pytest.approx(float(energy_plain), rel=1e-12, abs=1e-12)
+    assert np.allclose(tilt_grad_ctx, tilt_grad_plain, atol=1e-12, rtol=0.0)
 
 
 def test_tilt_in_tilt_grad_parity_when_shape_grad_skipped() -> None:

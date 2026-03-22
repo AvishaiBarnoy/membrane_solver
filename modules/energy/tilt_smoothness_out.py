@@ -134,6 +134,7 @@ def compute_energy_and_gradient_array(
     tilts_out: np.ndarray | None = None,
     tilt_in_grad_arr: np.ndarray | None = None,
     tilt_out_grad_arr: np.ndarray | None = None,
+    ctx=None,
 ) -> float:
     """Dense-array outer-leaflet smoothness energy accumulation."""
     _ = index_map, tilts_in, tilt_in_grad_arr, grad_arr
@@ -173,6 +174,8 @@ def compute_energy_and_gradient_array(
         tilts=tilts_out,
         tilt_grad_arr=tilt_out_grad_arr,
         transport_model=_base._resolve_transport_model(global_params),
+        ctx=ctx,
+        scratch_tag="tilt_smoothness_out",
     )
 
 
@@ -185,6 +188,7 @@ def compute_energy_array(
     index_map: Dict[int, int],
     tilts_in: np.ndarray | None = None,
     tilts_out: np.ndarray | None = None,
+    ctx=None,
 ) -> float:
     """Dense-array outer-leaflet smoothness energy (energy only)."""
     _ = index_map, tilts_in
@@ -219,6 +223,8 @@ def compute_energy_array(
         tilts=tilts_out,
         tilt_grad_arr=None,
         transport_model=_base._resolve_transport_model(global_params),
+        ctx=ctx,
+        scratch_tag="tilt_smoothness_out",
     )
 
 

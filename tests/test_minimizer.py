@@ -152,6 +152,59 @@ class TrialEnergyCapturingStepper:
         return
 
 
+class LeafletEnergyOnlyCtxModule:
+    USES_TILT_LEAFLETS = True
+
+    def __init__(self, energy=1.0):
+        self.energy = float(energy)
+        self.seen_ctx = None
+        self.calls = 0
+
+    def compute_energy_and_gradient_array(
+        self,
+        mesh,
+        global_params,
+        param_resolver,
+        *,
+        positions,
+        index_map,
+        grad_arr,
+        tilts_in=None,
+        tilts_out=None,
+        tilt_in_grad_arr=None,
+        tilt_out_grad_arr=None,
+        ctx=None,
+    ):
+        return self.compute_energy_array(
+            mesh,
+            global_params,
+            param_resolver,
+            positions=positions,
+            index_map=index_map,
+            tilts_in=tilts_in,
+            tilts_out=tilts_out,
+            ctx=ctx,
+        )
+
+    def compute_energy_array(
+        self,
+        mesh,
+        global_params,
+        param_resolver,
+        *,
+        positions,
+        index_map,
+        tilts_in=None,
+        tilts_out=None,
+        ctx=None,
+    ):
+        self.calls += 1
+        self.seen_ctx = ctx
+        assert tilts_in is not None
+        assert tilts_out is not None
+        return self.energy
+
+
 def build_min_mesh(with_body=False):
     mesh = Mesh()
     mesh.vertices[0] = Vertex(0, np.array([0.0, 0.0, 0.0]))
@@ -319,6 +372,37 @@ def test_minimizer_passes_trial_energy_fn_for_unconstrained_reduced_array_steps(
 
     assert stepper.calls == 1
     assert stepper.trial_energy_fn is not None
+
+
+def test_leaflet_tilt_dependent_energy_passes_ctx_to_energy_array_modules() -> None:
+    mesh = build_min_mesh()
+    mesh.tilts_in_view()
+    mesh.tilts_out_view()
+    module = LeafletEnergyOnlyCtxModule(energy=3.25)
+    gp = GlobalParameters()
+    em = MagicMock()
+    em.get_module.return_value = module
+    cm = ConstraintModuleManager([])
+
+    minim = Minimizer(
+        mesh,
+        gp,
+        MagicMock(),
+        em,
+        cm,
+        energy_modules=["leaflet_energy_only"],
+        quiet=True,
+    )
+
+    energy = minim._compute_tilt_dependent_energy_with_leaflet_tilts(
+        positions=mesh.positions_view(),
+        tilts_in=mesh.tilts_in_view().copy(order="F"),
+        tilts_out=mesh.tilts_out_view().copy(order="F"),
+    )
+
+    assert energy == 3.25
+    assert module.calls == 1
+    assert module.seen_ctx is minim.energy_context()
 
 
 def test_minimize_n_steps_le_zero_enforces_constraints():

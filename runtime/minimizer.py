@@ -1185,10 +1185,8 @@ class Minimizer:
 
             if hasattr(module, "compute_energy_array"):
                 try:
-                    E_mod = module.compute_energy_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
+                    E_mod = self._call_module_energy_array(
+                        module,
                         positions=positions,
                         index_map=index_map,
                         tilts_in=tilts_in,
@@ -1196,10 +1194,8 @@ class Minimizer:
                     )
                 except TypeError:
                     # Some tilt modules ignore passed tilts and read from mesh.
-                    E_mod = module.compute_energy_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
+                    E_mod = self._call_module_energy_array(
+                        module,
                         positions=positions,
                         index_map=index_map,
                     )
