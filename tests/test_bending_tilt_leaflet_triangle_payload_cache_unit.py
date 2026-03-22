@@ -88,18 +88,30 @@ def test_leaflet_static_tilt_payload_cache_reuses_and_invalidates_on_c0_change()
     sentinel = object()
     cache["value"] = sentinel
 
-    cached = bt_leaflet._leaflet_static_tilt_payload(
-        mesh,
-        gp,
-        positions=positions,
-        index_map=index_map,
-        k_vecs=tri_payload["k_vecs"],
-        vertex_areas_vor=tri_payload["vertex_areas_vor"],
-        tri_rows=tri_payload["tri_rows"],
-        kappa_key="bending_modulus_out",
-        cache_tag="out",
-    )
-    assert cached is sentinel
+    original = bt_leaflet._per_vertex_params_leaflet
+
+    def _unexpected_params(*args, **kwargs):
+        raise AssertionError(
+            "hot static payload cache hit should bypass param assembly"
+        )
+
+    bt_leaflet._per_vertex_params_leaflet = _unexpected_params
+
+    try:
+        cached = bt_leaflet._leaflet_static_tilt_payload(
+            mesh,
+            gp,
+            positions=positions,
+            index_map=index_map,
+            k_vecs=tri_payload["k_vecs"],
+            vertex_areas_vor=tri_payload["vertex_areas_vor"],
+            tri_rows=tri_payload["tri_rows"],
+            kappa_key="bending_modulus_out",
+            cache_tag="out",
+        )
+        assert cached is sentinel
+    finally:
+        bt_leaflet._per_vertex_params_leaflet = original
 
     gp.set("spontaneous_curvature_out", 1.0)
     refreshed = bt_leaflet._leaflet_static_tilt_payload(

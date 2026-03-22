@@ -657,9 +657,14 @@ def _leaflet_static_tilt_payload(
     model = _energy_model(global_params)
     if model != "helfrich":
         model = "helfrich"
-    kappa_arr, c0_arr = _per_vertex_params_leaflet(
-        mesh, global_params, model=model, kappa_key=kappa_key, cache_tag=cache_tag
-    )
+    kappa_default = _resolve_bending_modulus(global_params, kappa_key)
+    c0_key = f"spontaneous_curvature_{cache_tag}"
+    c0_default = global_params.get(c0_key)
+    if c0_default is None:
+        c0_default = (
+            _spontaneous_curvature(global_params) if model == "helfrich" else 0.0
+        )
+    c0_default = float(c0_default or 0.0)
 
     presets = _assume_J0_presets(global_params, cache_tag=cache_tag)
     radius_max = _assume_J0_radius_max(global_params, cache_tag=cache_tag)
@@ -680,8 +685,9 @@ def _leaflet_static_tilt_payload(
         id(k_vecs),
         id(vertex_areas_vor),
         id(tri_rows),
-        id(kappa_arr),
-        id(c0_arr),
+        str(model),
+        float(kappa_default),
+        float(c0_default),
         None if boundary_group is None else str(boundary_group),
         presets,
         None if radius_max is None else float(radius_max),
@@ -694,6 +700,9 @@ def _leaflet_static_tilt_payload(
         if cached is not None and cached.get("key") == cache_key:
             return cached["value"]
 
+    kappa_arr, c0_arr = _per_vertex_params_leaflet(
+        mesh, global_params, model=model, kappa_key=kappa_key, cache_tag=cache_tag
+    )
     safe_areas_vor = np.maximum(vertex_areas_vor, 1e-12)
     k_mag = np.linalg.norm(k_vecs, axis=1)
     h_vor = k_mag / (2.0 * safe_areas_vor)
