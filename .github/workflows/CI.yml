@@ -114,8 +114,8 @@ jobs:
         run: |
           pytest -q -m "regression and not benchmark"
 
-  e2e-free-disk-convergence:
-    name: E2E free-disk convergence (py3.12)
+  e2e-free-disk-convergence-core:
+    name: E2E free-disk convergence core (py3.12)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -132,9 +132,50 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e .
 
-      - name: Run free-disk convergence E2E tests
+      - name: Run free-disk convergence core E2E tests
         run: |
-          pytest -q -m "e2e" tests/test_kozlov_free_disk_thetaB_convergence_e2e.py
+          # Keep fixture-heavy optimizer and main energy-sweep checks together so
+          # the shard split lowers wall-clock time without duplicating the most
+          # expensive module-scoped setup across jobs.
+          pytest -q -o addopts='' \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_curved_theta_sweep_scales_linearly_with_imposed_drive \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_curved_theta_optimizer_beats_flat_stage_seed \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_curved_theta_gap_is_elastic_not_contact_limited \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_curved_theta_gap_is_dominated_by_tilt_in_growth \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_outer_band_tilt_in_half_weight_is_cleaner_than_exclusion \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_outer_shell_consistent_quadrature_lifts_curved_theta_b
+
+  e2e-free-disk-convergence-regional:
+    name: E2E free-disk convergence regional (py3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e .
+
+      - name: Run free-disk convergence regional E2E tests
+        run: |
+          pytest -q -o addopts='' \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_tilt_in_overgrowth_is_near_rim_dominated \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_tilt_in_overgrowth_is_disk_rim_dominated \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_post_theta018_tilt_in_growth_is_outer_membrane_dominated \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_post_theta018_tilt_in_growth_is_outer_support_band_dominated \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_one_step_refinement_shrinks_support_band_but_not_total_outer_tilt_in \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_one_step_refinement_does_not_lift_curved_theta_b \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_shared_rim_tilt_in_exclusion_reduces_rim_overgrowth \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_outer_excess_is_outer_membrane_tilt_out_dominated \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_outer_row_tilt_out_exclusion_lifts_curved_thetaB \
+            tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_outer_band_tilt_in_exclusion_is_not_a_clean_fix
 
   e2e-flat-benchmark:
     name: E2E flat benchmark smoke (py3.12)
