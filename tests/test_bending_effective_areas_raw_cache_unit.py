@@ -121,3 +121,52 @@ def test_effective_areas_ignore_mismatched_raw_cache_shape() -> None:
     assert np.allclose(va0_eff, va0_ref)
     assert np.allclose(va1_eff, va1_ref)
     assert np.allclose(va2_eff, va2_ref)
+
+
+def test_effective_areas_triangle_only_mode_matches_full_outputs() -> None:
+    mesh = _closed_tetra_mesh()
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    _k, _a, weights, tri_rows = compute_curvature_data(mesh, positions, index_map)
+    token = "triangle_only_mode"
+
+    vertex_full, va0_full, va1_full, va2_full = _compute_effective_areas(
+        mesh,
+        positions,
+        tri_rows,
+        weights,
+        index_map,
+        cache_token=token,
+    )
+    mesh._curvature_cache.pop(f"vertex_areas_eff::{token}", None)
+
+    vertex_none, va0_tri, va1_tri, va2_tri = _compute_effective_areas(
+        mesh,
+        positions,
+        tri_rows,
+        weights,
+        index_map,
+        cache_token=token,
+        compute_vertex_areas=False,
+    )
+
+    assert vertex_none is None
+    assert np.allclose(va0_tri, va0_full)
+    assert np.allclose(va1_tri, va1_full)
+    assert np.allclose(va2_tri, va2_full)
+    assert f"vertex_areas_eff::{token}" not in mesh._curvature_cache
+
+    vertex_after, va0_after, va1_after, va2_after = _compute_effective_areas(
+        mesh,
+        positions,
+        tri_rows,
+        weights,
+        index_map,
+        cache_token=token,
+    )
+
+    assert np.allclose(vertex_after, vertex_full)
+    assert np.allclose(va0_after, va0_full)
+    assert np.allclose(va1_after, va1_full)
+    assert np.allclose(va2_after, va2_full)

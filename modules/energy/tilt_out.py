@@ -344,6 +344,12 @@ def compute_energy_array(
         if tilts_out.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
 
+    active_row_weights = _shared_rim_active_row_weights(mesh, param_resolver)
+    if active_row_weights is not None:
+        tilts_eff = tilts_out * active_row_weights[:, None]
+    else:
+        tilts_eff = tilts_out
+
     tri_rows_eff = tri_rows[tri_keep] if tri_keep.size else tri_rows
     _v0, _v1, _v2, n, n_norm, mask = _triangle_geometry(positions, tri_rows_eff)
     if not np.any(mask):
@@ -351,9 +357,9 @@ def compute_energy_array(
 
     areas = 0.5 * n_norm[mask]
     tri_rows_m = tri_rows_eff[mask]
-    t0 = tilts_out[tri_rows_m[:, 0]]
-    t1 = tilts_out[tri_rows_m[:, 1]]
-    t2 = tilts_out[tri_rows_m[:, 2]]
+    t0 = tilts_eff[tri_rows_m[:, 0]]
+    t1 = tilts_eff[tri_rows_m[:, 1]]
+    t2 = tilts_eff[tri_rows_m[:, 2]]
     if mode == "lumped":
         tri_tilt_sq_sum = (
             np.einsum("ij,ij->i", t0, t0)
