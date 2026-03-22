@@ -137,7 +137,7 @@ jobs:
           pytest -q -m "e2e" tests/test_kozlov_free_disk_thetaB_convergence_e2e.py
 
   e2e-flat-benchmark:
-    name: E2E flat benchmark (py3.12)
+    name: E2E flat benchmark smoke (py3.12)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -154,9 +154,13 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e .
 
-      - name: Run flat benchmark E2E tests
+      - name: Run flat benchmark E2E smoke test
         run: |
-          pytest -q -m "e2e" tests/test_flat_disk_one_leaflet_benchmark_e2e.py
+          # Keep one representative flat-disk optimize/parity smoke on PRs.
+          # Broader flat-disk benchmark coverage already runs in the regression
+          # lane and in scheduled parity/benchmark workflows.
+          pytest -q -o addopts='' \
+            tests/test_flat_disk_one_leaflet_benchmark_e2e.py::test_flat_disk_kh_optimize_profile_and_continuity_e2e
 
   e2e-other:
     name: E2E other (py3.12)
