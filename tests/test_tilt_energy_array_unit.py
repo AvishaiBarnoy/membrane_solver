@@ -20,6 +20,7 @@ from modules.energy import (
     tilt_smoothness_out,  # noqa: E402
     tilt_splay_twist_in,  # noqa: E402
 )
+from runtime.energy_context import EnergyContext  # noqa: E402
 
 
 def _build_planar_patch_mesh():
@@ -420,6 +421,73 @@ def test_tilt_smoothness_leaflet_energy_array_matches_gradient_path():
         tilts_out=tilts_out,
     )
     assert e_out_only == pytest.approx(e_out_grad, rel=1e-12, abs=1e-12)
+
+
+def test_tilt_smoothness_leaflet_ctx_matches_plain_path():
+    mesh = _build_mesh()
+    mesh.global_parameters.set("bending_modulus_in", 0.7)
+    mesh.global_parameters.set("bending_modulus_out", 0.9)
+    param_resolver = ParameterResolver(mesh.global_parameters)
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    ctx = EnergyContext()
+    ctx.ensure_for_mesh(mesh)
+
+    tilts_in = _rng_tilts(mesh.tilts_in_view().shape, 10)
+    tilts_out = _rng_tilts(mesh.tilts_out_view().shape, 11)
+    grad_dummy = np.zeros_like(positions)
+    tilt_grad_in_plain = np.zeros_like(positions)
+    tilt_grad_out_plain = np.zeros_like(positions)
+    tilt_grad_in_ctx = np.zeros_like(positions)
+    tilt_grad_out_ctx = np.zeros_like(positions)
+
+    e_in_plain = tilt_smoothness_in.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_in=tilts_in,
+        tilt_in_grad_arr=tilt_grad_in_plain,
+    )
+    e_in_ctx = tilt_smoothness_in.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_in=tilts_in,
+        tilt_in_grad_arr=tilt_grad_in_ctx,
+        ctx=ctx,
+    )
+    assert e_in_ctx == pytest.approx(e_in_plain, rel=1e-12, abs=1e-12)
+    assert np.allclose(tilt_grad_in_ctx, tilt_grad_in_plain, rtol=0.0, atol=1e-12)
+
+    e_out_plain = tilt_smoothness_out.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_out=tilts_out,
+        tilt_out_grad_arr=tilt_grad_out_plain,
+    )
+    e_out_ctx = tilt_smoothness_out.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_out=tilts_out,
+        tilt_out_grad_arr=tilt_grad_out_ctx,
+        ctx=ctx,
+    )
+    assert e_out_ctx == pytest.approx(e_out_plain, rel=1e-12, abs=1e-12)
+    assert np.allclose(tilt_grad_out_ctx, tilt_grad_out_plain, rtol=0.0, atol=1e-12)
 
 
 def test_tilt_splay_twist_in_energy_array_matches_gradient_path():

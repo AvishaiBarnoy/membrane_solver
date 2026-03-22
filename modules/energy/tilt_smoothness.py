@@ -88,6 +88,8 @@ def _compute_smoothness_energy_and_gradient(
     tilts: np.ndarray,
     tilt_grad_arr: np.ndarray | None,
     transport_model: str,
+    ctx=None,
+    scratch_tag: str = "tilt_smoothness",
 ) -> float:
     """Assemble smoothness energy and tilt gradient for a chosen transport model."""
     if k_smooth == 0.0 or tri_rows.size == 0:
@@ -101,11 +103,31 @@ def _compute_smoothness_energy_and_gradient(
     t1_raw = tilts[tri_rows[:, 1]]
     t2_raw = tilts[tri_rows[:, 2]]
 
+    d12 = None
+    d20 = None
+    d01 = None
     if transport_model == "ambient_v1":
         t0 = t0_raw
         t1 = t1_raw
         t2 = t2_raw
         r0_t = r1_t = r2_t = None
+        if ctx is not None:
+            d12 = ctx.scratch_array(
+                f"{scratch_tag}_d12", shape=t0.shape, dtype=t0.dtype
+            )
+            d20 = ctx.scratch_array(
+                f"{scratch_tag}_d20", shape=t0.shape, dtype=t0.dtype
+            )
+            d01 = ctx.scratch_array(
+                f"{scratch_tag}_d01", shape=t0.shape, dtype=t0.dtype
+            )
+            np.subtract(t1, t2, out=d12)
+            np.subtract(t2, t0, out=d20)
+            np.subtract(t0, t1, out=d01)
+        else:
+            d12 = t1 - t2
+            d20 = t2 - t0
+            d01 = t0 - t1
     else:
         normals = np.asarray(mesh.vertex_normals(positions), dtype=float)
         v0 = positions[tri_rows[:, 0]]
@@ -127,14 +149,21 @@ def _compute_smoothness_energy_and_gradient(
         r0_t = np.swapaxes(r0, 1, 2)
         r1_t = np.swapaxes(r1, 1, 2)
         r2_t = np.swapaxes(r2, 1, 2)
+        d12 = t1 - t2
+        d20 = t2 - t0
+        d01 = t0 - t1
 
-    d12 = t1 - t2
-    d20 = t2 - t0
-    d01 = t0 - t1
-
-    n12 = np.einsum("ij,ij->i", d12, d12)
-    n20 = np.einsum("ij,ij->i", d20, d20)
-    n01 = np.einsum("ij,ij->i", d01, d01)
+    if ctx is not None:
+        n12 = ctx.scratch_array(f"{scratch_tag}_n12", shape=(d12.shape[0],))
+        n20 = ctx.scratch_array(f"{scratch_tag}_n20", shape=(d20.shape[0],))
+        n01 = ctx.scratch_array(f"{scratch_tag}_n01", shape=(d01.shape[0],))
+        np.einsum("ij,ij->i", d12, d12, out=n12)
+        np.einsum("ij,ij->i", d20, d20, out=n20)
+        np.einsum("ij,ij->i", d01, d01, out=n01)
+    else:
+        n12 = np.einsum("ij,ij->i", d12, d12)
+        n20 = np.einsum("ij,ij->i", d20, d20)
+        n01 = np.einsum("ij,ij->i", d01, d01)
 
     energy = float(0.25 * k_smooth * np.sum(c0 * n12 + c1 * n20 + c2 * n01))
 
@@ -205,6 +234,7 @@ def compute_energy_and_gradient_array(
     grad_arr: np.ndarray,
     tilts: np.ndarray | None = None,
     tilt_grad_arr: np.ndarray | None = None,
+    ctx=None,
 ) -> float:
     """Dense-array smoothness energy accumulation (tilt gradient; no shape gradient)."""
     k_smooth = float(param_resolver.get(None, "tilt_smoothness_rigidity") or 0.0)
@@ -237,6 +267,8 @@ def compute_energy_and_gradient_array(
         tilts=tilts,
         tilt_grad_arr=tilt_grad_arr,
         transport_model=_resolve_transport_model(global_params),
+        ctx=ctx,
+        scratch_tag="tilt_smoothness",
     )
 
 
@@ -248,6 +280,7 @@ def compute_energy_array(
     positions: np.ndarray,
     index_map: Dict[int, int],
     tilts: np.ndarray | None = None,
+    ctx=None,
 ) -> float:
     """Dense-array smoothness energy (energy only)."""
     _ = global_params
@@ -276,6 +309,8 @@ def compute_energy_array(
         tilts=tilts,
         tilt_grad_arr=None,
         transport_model=_resolve_transport_model(global_params),
+        ctx=ctx,
+        scratch_tag="tilt_smoothness",
     )
 
 
