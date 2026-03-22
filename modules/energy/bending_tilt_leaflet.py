@@ -192,6 +192,33 @@ def _inner_bending_tilt_dE_ddiv(
     ), stats
 
 
+def _accumulate_leaflet_tilt_gradient(
+    tilt_grad_arr: np.ndarray,
+    tri_rows: np.ndarray,
+    factor: np.ndarray,
+    g0: np.ndarray,
+    g1: np.ndarray,
+    g2: np.ndarray,
+    *,
+    ctx=None,
+    scratch_tag: str,
+) -> None:
+    """Accumulate tilt gradients while reusing scratch buffers when available."""
+    if ctx is None:
+        np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
+        np.add.at(tilt_grad_arr, tri_rows[:, 1], factor * g1)
+        np.add.at(tilt_grad_arr, tri_rows[:, 2], factor * g2)
+        return
+
+    scaled = ctx.scratch_array(scratch_tag, shape=g0.shape, dtype=g0.dtype)
+    np.multiply(factor, g0, out=scaled)
+    np.add.at(tilt_grad_arr, tri_rows[:, 0], scaled)
+    np.multiply(factor, g1, out=scaled)
+    np.add.at(tilt_grad_arr, tri_rows[:, 1], scaled)
+    np.multiply(factor, g2, out=scaled)
+    np.add.at(tilt_grad_arr, tri_rows[:, 2], scaled)
+
+
 def _apply_inner_divergence_update_mode(
     mesh: Mesh,
     global_params,
@@ -981,7 +1008,16 @@ def compute_energy_and_gradient_array_leaflet(
         )
         base_tri = np.asarray(static_payload["base_tri"], dtype=float)
         kappa_tri = np.asarray(static_payload["kappa_tri"], dtype=float)
-        term_tri = base_tri + div_term[:, None]
+        if ctx is not None:
+            term_tri = ctx.scratch_array(
+                f"btl_{cache_tag}_tilt_only_term_tri",
+                shape=base_tri.shape,
+                dtype=base_tri.dtype,
+            )
+            np.copyto(term_tri, base_tri)
+            term_tri += div_term[:, None]
+        else:
+            term_tri = base_tri + div_term[:, None]
         total_energy = float(
             0.5
             * np.sum(
@@ -1011,10 +1047,16 @@ def compute_energy_and_gradient_array_leaflet(
                 setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
             dE_ddiv = float(div_sign) * dE_ddiv_base
             factor = dE_ddiv[:, None]
-
-            np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
-            np.add.at(tilt_grad_arr, tri_rows[:, 1], factor * g1)
-            np.add.at(tilt_grad_arr, tri_rows[:, 2], factor * g2)
+            _accumulate_leaflet_tilt_gradient(
+                tilt_grad_arr,
+                tri_rows,
+                factor,
+                g0,
+                g1,
+                g2,
+                ctx=ctx,
+                scratch_tag=f"btl_{cache_tag}_tilt_only_scaled",
+            )
         return float(total_energy)
 
     safe_areas_vor = np.maximum(vertex_areas_vor, 1e-12)
