@@ -22,6 +22,7 @@ class BaseStepper(ABC):
         step_size: float,
         energy_fn: Callable[[], float],
         constraint_enforcer: Callable[[Mesh], None] | None = None,
+        trial_energy_fn: Callable[[np.ndarray], float] | None = None,
     ) -> tuple[bool, float, float]:
         """Advance ``mesh`` along ``grad`` with a given ``step_size``.
 
@@ -38,6 +39,9 @@ class BaseStepper(ABC):
             Function returning the current energy of ``mesh``.
         constraint_enforcer : Callable[[Mesh], None] | None
             Optional callable to enforce hard constraints on a trial step.
+        trial_energy_fn : Callable[[np.ndarray], float] | None
+            Optional dense-array trial-energy callback accepting candidate
+            ``(N,3)`` positions in ``mesh.vertex_ids`` row order.
 
         Returns
         -------

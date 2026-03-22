@@ -39,6 +39,58 @@ class DummyEnergyModule:
         return self._energy, grad
 
 
+class EnergyOnlyResolverModule:
+    def __init__(self, energy=1.0):
+        self.energy = float(energy)
+        self.energy_calls = 0
+        self.grad_calls = 0
+
+    def compute_energy_array(
+        self, mesh, global_params, param_resolver, *, positions, index_map
+    ):
+        self.energy_calls += 1
+        assert positions.shape[0] == len(index_map)
+        assert param_resolver is not None
+        return self.energy
+
+    def compute_energy_and_gradient_array(
+        self, mesh, global_params, resolver, positions, index_map, grad_arr
+    ):
+        self.grad_calls += 1
+        raise AssertionError("compute_energy should prefer compute_energy_array")
+
+
+class EnergyOnlyBendingStyleModule:
+    def __init__(self, energy=1.0):
+        self.energy = np.array(energy, dtype=float)
+        self.energy_calls = 0
+        self.grad_calls = 0
+
+    def compute_energy_array(self, mesh, global_params, positions, index_map):
+        self.energy_calls += 1
+        assert positions.shape[0] == len(index_map)
+        return self.energy
+
+    def compute_energy_and_gradient_array(
+        self, mesh, global_params, resolver, positions, index_map, grad_arr
+    ):
+        self.grad_calls += 1
+        raise AssertionError("compute_energy should prefer compute_energy_array")
+
+
+class GradientFallbackModule:
+    def __init__(self, energy=1.0):
+        self.energy = float(energy)
+        self.grad_calls = 0
+
+    def compute_energy_and_gradient_array(
+        self, mesh, global_params, resolver, positions, index_map, grad_arr
+    ):
+        self.grad_calls += 1
+        grad_arr[:, 0] += 1.0
+        return self.energy
+
+
 class DummyEnergyManager:
     def __init__(self, mod):
         self.mod = mod
@@ -72,6 +124,32 @@ class DummyStepper:
 
     def reset(self):
         self.reset_calls += 1
+
+
+class TrialEnergyCapturingStepper:
+    def __init__(self):
+        self.calls = 0
+        self.trial_energy_fn = None
+
+    def step(
+        self,
+        mesh,
+        grad,
+        step_size,
+        energy_fn,
+        constraint_enforcer=None,
+        trial_energy_fn=None,
+    ):
+        self.calls += 1
+        self.trial_energy_fn = trial_energy_fn
+        assert constraint_enforcer is None
+        assert isinstance(grad, np.ndarray)
+        assert trial_energy_fn is not None
+        trial_energy = float(trial_energy_fn(mesh.positions_view().copy()))
+        return False, step_size * 0.5, trial_energy
+
+    def reset(self):
+        return
 
 
 def build_min_mesh(with_body=False):
@@ -139,6 +217,108 @@ def test_minimizer_falls_back_to_dict_path():
         assert "compute_energy_and_gradient_array" in str(exc)
     else:
         raise AssertionError("Expected TypeError for dict-only energy module")
+
+
+def test_compute_energy_prefers_energy_only_module_api() -> None:
+    mesh = build_min_mesh()
+    resolver_mod = EnergyOnlyResolverModule(energy=2.5)
+    bending_mod = EnergyOnlyBendingStyleModule(energy=[1.0, 1.5, 1.0])
+    gp = GlobalParameters()
+    em = MagicMock()
+    em.get_module.side_effect = [resolver_mod, bending_mod]
+    cm = ConstraintModuleManager([])
+
+    minim = Minimizer(
+        mesh,
+        gp,
+        MagicMock(),
+        em,
+        cm,
+        energy_modules=["resolver_mod", "bending_mod"],
+    )
+
+    energy = minim.compute_energy()
+
+    assert energy == 6.0
+    assert resolver_mod.energy_calls == 1
+    assert resolver_mod.grad_calls == 0
+    assert bending_mod.energy_calls == 1
+    assert bending_mod.grad_calls == 0
+
+
+def test_compute_energy_falls_back_to_gradient_array_when_needed() -> None:
+    mesh = build_min_mesh()
+    fallback_mod = GradientFallbackModule(energy=4.25)
+    gp = GlobalParameters()
+    em = MagicMock()
+    em.get_module.return_value = fallback_mod
+    cm = ConstraintModuleManager([])
+
+    minim = Minimizer(
+        mesh,
+        gp,
+        MagicMock(),
+        em,
+        cm,
+        energy_modules=["fallback_mod"],
+    )
+
+    energy = minim.compute_energy()
+
+    assert energy == 4.25
+    assert fallback_mod.grad_calls == 1
+
+
+def test_minimizer_passes_trial_energy_fn_for_unconstrained_array_steps() -> None:
+    mesh = build_min_mesh()
+    mesh.constraint_modules = []
+    gp = GlobalParameters({"max_zero_steps": 1})
+    energy = DummyEnergyModule(energy=2.0, grad_value=1.0)
+    stepper = TrialEnergyCapturingStepper()
+    minim = Minimizer(
+        mesh,
+        gp,
+        stepper,
+        DummyEnergyManager(energy),
+        ConstraintModuleManager([]),
+        constraint_modules=[],
+        quiet=True,
+    )
+
+    minim.minimize(n_steps=1)
+
+    assert stepper.calls == 1
+    assert stepper.trial_energy_fn is not None
+
+
+def test_minimizer_passes_trial_energy_fn_for_unconstrained_reduced_array_steps() -> (
+    None
+):
+    mesh = build_min_mesh()
+    mesh.constraint_modules = []
+    gp = GlobalParameters(
+        {
+            "max_zero_steps": 1,
+            "line_search_reduced_energy": True,
+            "line_search_reduced_tilt_inner_steps": 2,
+        }
+    )
+    energy = DummyEnergyModule(energy=2.0, grad_value=1.0)
+    stepper = TrialEnergyCapturingStepper()
+    minim = Minimizer(
+        mesh,
+        gp,
+        stepper,
+        DummyEnergyManager(energy),
+        ConstraintModuleManager([]),
+        constraint_modules=[],
+        quiet=True,
+    )
+
+    minim.minimize(n_steps=1)
+
+    assert stepper.calls == 1
+    assert stepper.trial_energy_fn is not None
 
 
 def test_minimize_n_steps_le_zero_enforces_constraints():

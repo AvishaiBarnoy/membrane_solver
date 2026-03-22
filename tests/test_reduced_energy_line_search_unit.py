@@ -124,3 +124,54 @@ def test_line_search_energy_fn_projects_leaflet_tilts_to_tangent() -> None:
     assert E_projected <= E_unprojected + 1e-12
     assert np.allclose(mesh.tilts_in_view()[:, 2], 0.0, atol=1e-12)
     assert np.allclose(mesh.tilts_out_view()[:, 2], 0.0, atol=1e-12)
+
+
+def test_reduced_trial_energy_fn_keeps_geometry_cache_active() -> None:
+    mesh = _build_single_triangle_leaflet_mesh()
+
+    gp = GlobalParameters(
+        {
+            "tilt_modulus_in": 1.0,
+            "tilt_modulus_out": 1.0,
+            "tilt_solve_mode": "coupled",
+            "tilt_step_size": 0.25,
+            "tilt_inner_steps": 10,
+            "tilt_tol": 0.0,
+            "line_search_reduced_energy": True,
+            "line_search_reduced_tilt_inner_steps": 5,
+        }
+    )
+    minim = _build_minimizer(mesh, gp)
+
+    cache_active = {"relax": False, "energy": False}
+
+    def fake_relax_leaflet_tilts(*, positions: np.ndarray, mode: str) -> None:
+        _ = mode
+        cache_active["relax"] = bool(mesh._geometry_cache_active(positions))
+
+    def fake_compute_energy_array_with_leaflet_tilts(
+        *,
+        positions: np.ndarray,
+        tilts_in: np.ndarray,
+        tilts_out: np.ndarray,
+        grad_dummy=None,
+    ) -> float:
+        _ = tilts_in, tilts_out, grad_dummy
+        cache_active["energy"] = bool(mesh._geometry_cache_active(positions))
+        return 0.0
+
+    minim._relax_leaflet_tilts = fake_relax_leaflet_tilts
+    minim._compute_energy_array_with_leaflet_tilts = (
+        fake_compute_energy_array_with_leaflet_tilts
+    )
+
+    trial_energy_fn = minim._line_search_trial_energy_fn()
+    assert trial_energy_fn is not None
+
+    trial_positions = mesh.positions_view().copy(order="F")
+    trial_positions[1, 2] = 0.1
+    trial_energy = float(trial_energy_fn(trial_positions))
+
+    assert trial_energy == 0.0
+    assert cache_active["relax"] is True
+    assert cache_active["energy"] is True

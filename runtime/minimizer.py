@@ -23,6 +23,7 @@ from runtime.interface_validation import validate_disk_interface_topology
 from runtime.leaflet_validation import validate_leaflet_absence_topology
 from runtime.minimizer_helpers import (
     build_reduced_line_search_energy_fn,
+    build_reduced_line_search_trial_energy_fn,
     capture_diagnostic_state,
     get_cached_tilt_fixed_mask,
     restore_diagnostic_state,
@@ -179,6 +180,10 @@ class Minimizer:
         self._last_mesh_op_tilt_constraints_enforced: bool | None = None
         self._energy_context: EnergyContext | None = None
         self._module_accepts_ctx: dict[int, bool] = {}
+        self._module_energy_array_spec: dict[
+            int, tuple[bool, bool, frozenset[str] | None]
+        ] = {}
+        self._stepper_accepts_trial_energy_fn: bool | None = None
         self._last_tilt_projection_stats: dict[str, float | int | str] = {
             "projection_cadence": "per_step",
             "projection_interval": 1,
@@ -212,6 +217,20 @@ class Minimizer:
             self._energy_context = EnergyContext()
         self._energy_context.ensure_for_mesh(self.mesh)
         return self._energy_context
+
+    def _stepper_supports_trial_energy_fn(self) -> bool:
+        """Return whether the active stepper accepts ``trial_energy_fn``."""
+        if self._stepper_accepts_trial_energy_fn is None:
+            accepts = False
+            step_fn = getattr(self.stepper, "step", None)
+            if step_fn is not None:
+                try:
+                    sig = inspect.signature(step_fn)
+                    accepts = "trial_energy_fn" in sig.parameters
+                except (TypeError, ValueError):
+                    accepts = False
+            self._stepper_accepts_trial_energy_fn = accepts
+        return bool(self._stepper_accepts_trial_energy_fn)
 
     def _call_module_array(self, module, **kwargs):
         """Call module array API with explicit ctx and graceful fallback."""
@@ -248,6 +267,62 @@ class Minimizer:
             self.param_resolver,
             **kwargs,
         )
+
+    def _call_module_energy_array(self, module, **kwargs):
+        """Call energy-only array API while honoring per-module signatures."""
+        fn = getattr(module, "compute_energy_array")
+        key = id(module)
+        spec = self._module_energy_array_spec.get(key)
+        if spec is None:
+            accepts_resolver = False
+            accepts_ctx = False
+            accepted_kwargs: frozenset[str] | None = frozenset()
+            try:
+                sig = inspect.signature(fn)
+                params = sig.parameters
+                accepts_resolver = "param_resolver" in params
+                accepts_var_kwargs = any(
+                    p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
+                )
+                accepts_ctx = "ctx" in params or accepts_var_kwargs
+                if accepts_var_kwargs:
+                    accepted_kwargs = None
+                else:
+                    accepted_kwargs = frozenset(
+                        name
+                        for name, param in params.items()
+                        if param.kind
+                        in (
+                            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                            inspect.Parameter.KEYWORD_ONLY,
+                        )
+                    )
+            except (TypeError, ValueError):
+                accepted_kwargs = None
+            spec = (accepts_resolver, accepts_ctx, accepted_kwargs)
+            self._module_energy_array_spec[key] = spec
+
+        accepts_resolver, accepts_ctx, accepted_kwargs = spec
+        call_kwargs = kwargs
+        if accepted_kwargs is not None:
+            call_kwargs = {
+                name: value for name, value in kwargs.items() if name in accepted_kwargs
+            }
+        if accepts_ctx:
+            call_kwargs = dict(call_kwargs)
+            call_kwargs["ctx"] = self.energy_context()
+
+        if accepts_resolver:
+            return fn(self.mesh, self.global_params, self.param_resolver, **call_kwargs)
+        return fn(self.mesh, self.global_params, **call_kwargs)
+
+    @staticmethod
+    def _coerce_energy_value(energy_value) -> float:
+        """Normalize scalar- or array-valued module energies to a float total."""
+        energy_arr = np.asarray(energy_value, dtype=float)
+        if energy_arr.ndim == 0:
+            return float(energy_arr)
+        return float(np.sum(energy_arr))
 
     def _soa_views(self) -> tuple[np.ndarray, Dict[int, int], np.ndarray]:
         """Return cached SoA views for positions, index map, and a scratch buffer."""
@@ -458,6 +533,12 @@ class Minimizer:
             for module in self.energy_modules
         )
 
+    def _uses_vertex_tilts(self) -> bool:
+        """Return True when any loaded module depends on the single tilt field."""
+        return any(
+            getattr(module, "USES_TILT", False) for module in self.energy_modules
+        )
+
     def _experimental_energy_scale_for_module(self, module_name: str) -> float:
         """Return module-specific experimental scale for curved-theta ablation."""
         mode = (
@@ -568,6 +649,245 @@ class Minimizer:
             set_leaflet_tilts_fast_fn=self._set_leaflet_tilts_from_arrays_fast,
             logger_obj=logger,
         )
+
+    def _line_search_trial_energy_fn(
+        self,
+    ) -> Callable[[np.ndarray], float] | None:
+        """Return a pure-array trial-energy callback for eligible line searches."""
+        if self._has_enforceable_constraints:
+            return None
+
+        uses_leaflet_tilts = self._uses_leaflet_tilts()
+        uses_vertex_tilts = self._uses_vertex_tilts()
+        if uses_leaflet_tilts and uses_vertex_tilts:
+            return None
+
+        reduced_steps = int(
+            self.global_params.get("line_search_reduced_tilt_inner_steps", 0) or 0
+        )
+        reduced_energy = bool(
+            self.global_params.get("line_search_reduced_energy", False)
+        )
+        if reduced_energy and reduced_steps > 0:
+
+            def _projected_energy() -> float:
+                self.mesh.project_tilts_to_tangent()
+                return float(self.compute_energy())
+
+            def _trial_raw_energy(positions: np.ndarray) -> float:
+                if uses_leaflet_tilts:
+                    return float(
+                        self._compute_energy_array_with_leaflet_tilts(
+                            positions=positions,
+                            tilts_in=self.mesh.tilts_in_view(),
+                            tilts_out=self.mesh.tilts_out_view(),
+                        )
+                    )
+                if uses_vertex_tilts:
+                    return float(
+                        self._compute_total_energy_array_with_tilts(
+                            positions=positions,
+                            tilts=self.mesh.tilts_view(),
+                        )
+                    )
+                return float(self._compute_energy_array_total(positions=positions))
+
+            def _trial_projected_energy(positions: np.ndarray) -> float:
+                if uses_leaflet_tilts:
+                    normals = self.mesh.vertex_normals(positions)
+                    tilts_in = self._project_tilts_to_tangent_array(
+                        self.mesh.tilts_in_view(), normals
+                    )
+                    tilts_out = self._project_tilts_to_tangent_array(
+                        self.mesh.tilts_out_view(), normals
+                    )
+                    self._set_leaflet_tilts_from_arrays_fast(tilts_in, tilts_out)
+                    return float(
+                        self._compute_energy_array_with_leaflet_tilts(
+                            positions=positions,
+                            tilts_in=tilts_in,
+                            tilts_out=tilts_out,
+                        )
+                    )
+
+                if uses_vertex_tilts:
+                    normals = self.mesh.vertex_normals(positions)
+                    tilts = self._project_tilts_to_tangent_array(
+                        self.mesh.tilts_view(), normals
+                    )
+                    self.mesh.set_tilts_from_array(tilts)
+                    return float(
+                        self._compute_total_energy_array_with_tilts(
+                            positions=positions, tilts=tilts
+                        )
+                    )
+
+                return float(self._compute_energy_array_total(positions=positions))
+
+            return build_reduced_line_search_trial_energy_fn(
+                mesh=self.mesh,
+                global_params=self.global_params,
+                reduced_steps=reduced_steps,
+                uses_leaflet_tilts=uses_leaflet_tilts,
+                projected_energy_fn=_projected_energy,
+                compute_energy_fn=self.compute_energy,
+                projected_energy_at_positions_fn=_trial_projected_energy,
+                compute_energy_at_positions_fn=_trial_raw_energy,
+                relax_tilts_fn=self._relax_tilts,
+                relax_leaflet_tilts_fn=self._relax_leaflet_tilts,
+                set_leaflet_tilts_fast_fn=self._set_leaflet_tilts_from_arrays_fast,
+                logger_obj=logger,
+            )
+
+        if uses_leaflet_tilts:
+
+            def _trial_projected_leaflet_energy(positions: np.ndarray) -> float:
+                normals = self.mesh.vertex_normals(positions)
+                tilts_in = self._project_tilts_to_tangent_array(
+                    self.mesh.tilts_in_view(), normals
+                )
+                tilts_out = self._project_tilts_to_tangent_array(
+                    self.mesh.tilts_out_view(), normals
+                )
+                return float(
+                    self._compute_energy_array_with_leaflet_tilts(
+                        positions=positions,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                    )
+                )
+
+            return _trial_projected_leaflet_energy
+
+        if uses_vertex_tilts:
+
+            def _trial_projected_tilt_energy(positions: np.ndarray) -> float:
+                normals = self.mesh.vertex_normals(positions)
+                tilts = self._project_tilts_to_tangent_array(
+                    self.mesh.tilts_view(), normals
+                )
+                return float(
+                    self._compute_total_energy_array_with_tilts(
+                        positions=positions, tilts=tilts
+                    )
+                )
+
+            return _trial_projected_tilt_energy
+
+        return lambda positions: float(
+            self._compute_energy_array_total(positions=positions)
+        )
+
+    def _compute_energy_array_total(self, *, positions: np.ndarray) -> float:
+        """Compute total energy for fixed positions and the current mesh tilt state."""
+        index_map = self.mesh.vertex_index_to_row
+        grad_dummy = self.energy_context().scratch_array(
+            "energy_only_grad_dummy", shape=positions.shape, dtype=positions.dtype
+        )
+        total_energy = 0.0
+
+        for name, module in zip(self.energy_module_names, self.energy_modules):
+            scale = self._experimental_energy_scale_for_module(str(name))
+            if hasattr(module, "compute_energy_array"):
+                E_mod = self._call_module_energy_array(
+                    module,
+                    positions=positions,
+                    index_map=index_map,
+                )
+                total_energy += float(scale) * self._coerce_energy_value(E_mod)
+                continue
+
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                grad_dummy.fill(0.0)
+                E_mod = self._call_module_array(
+                    module,
+                    positions=positions,
+                    index_map=index_map,
+                    grad_arr=grad_dummy,
+                )
+                total_energy += float(scale) * self._coerce_energy_value(E_mod)
+                continue
+
+            E_mod, _ = module.compute_energy_and_gradient(
+                self.mesh,
+                self.global_params,
+                self.param_resolver,
+                compute_gradient=False,
+            )
+            total_energy += float(scale) * self._coerce_energy_value(E_mod)
+
+        return float(total_energy)
+
+    def _compute_total_energy_array_with_tilts(
+        self,
+        *,
+        positions: np.ndarray,
+        tilts: np.ndarray,
+    ) -> float:
+        """Compute total energy for fixed positions and a projected tilt field."""
+        index_map = self.mesh.vertex_index_to_row
+        grad_dummy = self.energy_context().scratch_array(
+            "energy_only_tilt_grad_dummy", shape=positions.shape, dtype=positions.dtype
+        )
+        total_energy = 0.0
+
+        for name, module in zip(self.energy_module_names, self.energy_modules):
+            scale = self._experimental_energy_scale_for_module(str(name))
+            if hasattr(module, "compute_energy_array"):
+                kwargs = {"positions": positions, "index_map": index_map}
+                if getattr(module, "USES_TILT", False):
+                    kwargs["tilts"] = tilts
+                E_mod = self._call_module_energy_array(module, **kwargs)
+                total_energy += float(scale) * self._coerce_energy_value(E_mod)
+                continue
+
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                grad_dummy.fill(0.0)
+                if getattr(module, "USES_TILT", False):
+                    try:
+                        E_mod = self._call_module_array(
+                            module,
+                            positions=positions,
+                            index_map=index_map,
+                            grad_arr=grad_dummy,
+                            tilts=tilts,
+                            tilt_grad_arr=None,
+                        )
+                    except TypeError:
+                        try:
+                            E_mod = self._call_module_array(
+                                module,
+                                positions=positions,
+                                index_map=index_map,
+                                grad_arr=grad_dummy,
+                                tilts=tilts,
+                            )
+                        except TypeError:
+                            E_mod = self._call_module_array(
+                                module,
+                                positions=positions,
+                                index_map=index_map,
+                                grad_arr=grad_dummy,
+                            )
+                else:
+                    E_mod = self._call_module_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                    )
+                total_energy += float(scale) * self._coerce_energy_value(E_mod)
+                continue
+
+            E_mod, _ = module.compute_energy_and_gradient(
+                self.mesh,
+                self.global_params,
+                self.param_resolver,
+                compute_gradient=False,
+            )
+            total_energy += float(scale) * self._coerce_energy_value(E_mod)
+
+        return float(total_energy)
 
     def _compute_energy_array_with_tilts(
         self,
@@ -1441,22 +1761,55 @@ class Minimizer:
                     self.mesh, global_params=self.global_params
                 )
 
-            tilts_in = self.mesh.tilts_in_view().copy(order="F")
-            tilts_out = self.mesh.tilts_out_view().copy(order="F")
-            normals = self.mesh.vertex_normals(positions)
-            tilts_in = self._project_tilts_to_tangent_array(tilts_in, normals)
-            tilts_out = self._project_tilts_to_tangent_array(tilts_out, normals)
-
-            tilts_in, tilts_out = project_leaflet_tilts_with_optional_axisymmetry(
-                global_params=self.global_params,
-                positions=positions,
-                normals=normals,
-                tilts_in=tilts_in,
-                tilts_out=tilts_out,
-                fixed_mask_in=fixed_mask_in,
-                fixed_mask_out=fixed_mask_out,
+            ctx = self.energy_context()
+            mesh_tilts_in = self.mesh.tilts_in_view()
+            mesh_tilts_out = self.mesh.tilts_out_view()
+            tilts_in = ctx.scratch_array(
+                "leaflet_current_tilts_in",
+                shape=mesh_tilts_in.shape,
+                dtype=mesh_tilts_in.dtype,
             )
-            grad_dummy = np.zeros_like(positions)
+            tilts_out = ctx.scratch_array(
+                "leaflet_current_tilts_out",
+                shape=mesh_tilts_out.shape,
+                dtype=mesh_tilts_out.dtype,
+            )
+            normals = self.mesh.vertex_normals(positions)
+
+            def _project_leaflet_tilts_in_place(
+                tilts_in_arr: np.ndarray, tilts_out_arr: np.ndarray
+            ) -> None:
+                dot_in = np.einsum("ij,ij->i", tilts_in_arr, normals)
+                tilts_in_arr -= dot_in[:, None] * normals
+                dot_out = np.einsum("ij,ij->i", tilts_out_arr, normals)
+                tilts_out_arr -= dot_out[:, None] * normals
+                proj_in, proj_out = project_leaflet_tilts_with_optional_axisymmetry(
+                    global_params=self.global_params,
+                    positions=positions,
+                    normals=normals,
+                    tilts_in=tilts_in_arr,
+                    tilts_out=tilts_out_arr,
+                    fixed_mask_in=fixed_mask_in,
+                    fixed_mask_out=fixed_mask_out,
+                )
+                if proj_in is not tilts_in_arr:
+                    tilts_in_arr[:] = proj_in
+                if proj_out is not tilts_out_arr:
+                    tilts_out_arr[:] = proj_out
+
+            def _load_leaflet_tilts_from_mesh(
+                tilts_in_arr: np.ndarray, tilts_out_arr: np.ndarray
+            ) -> None:
+                np.copyto(tilts_in_arr, self.mesh.tilts_in_view())
+                np.copyto(tilts_out_arr, self.mesh.tilts_out_view())
+                _project_leaflet_tilts_in_place(tilts_in_arr, tilts_out_arr)
+
+            _load_leaflet_tilts_from_mesh(tilts_in, tilts_out)
+            grad_dummy = ctx.scratch_array(
+                "leaflet_relax_grad_dummy",
+                shape=positions.shape,
+                dtype=positions.dtype,
+            )
 
             tri_rows, _ = self._triangle_rows()
             if tri_rows is None or len(tri_rows) == 0:
@@ -1485,8 +1838,6 @@ class Minimizer:
                     positions=positions,
                 )
             )
-            grad_dummy = np.zeros_like(positions)
-
             tilt_fixed_vals_in = (
                 tilts_in[fixed_mask_in].copy() if np.any(fixed_mask_in) else None
             )
@@ -1494,8 +1845,26 @@ class Minimizer:
                 tilts_out[fixed_mask_out].copy() if np.any(fixed_mask_out) else None
             )
 
-            tilt_in_grad = np.zeros_like(tilts_in)
-            tilt_out_grad = np.zeros_like(tilts_out)
+            tilt_in_grad = ctx.scratch_array(
+                "leaflet_tilt_in_grad",
+                shape=tilts_in.shape,
+                dtype=tilts_in.dtype,
+            )
+            tilt_out_grad = ctx.scratch_array(
+                "leaflet_tilt_out_grad",
+                shape=tilts_out.shape,
+                dtype=tilts_out.dtype,
+            )
+            trial_in_buf = ctx.scratch_array(
+                "leaflet_trial_in_buf",
+                shape=tilts_in.shape,
+                dtype=tilts_in.dtype,
+            )
+            trial_out_buf = ctx.scratch_array(
+                "leaflet_trial_out_buf",
+                shape=tilts_out.shape,
+                dtype=tilts_out.dtype,
+            )
             accepted_steps = 0
             projection_apply_count = 0
             projection_norm_loss_outer_far = 0.0
@@ -1537,19 +1906,7 @@ class Minimizer:
                     self.constraint_manager.enforce_tilt_constraints(
                         self.mesh, global_params=self.global_params
                     )
-                tilts_in = self.mesh.tilts_in_view().copy(order="F")
-                tilts_out = self.mesh.tilts_out_view().copy(order="F")
-                tilts_in = self._project_tilts_to_tangent_array(tilts_in, normals)
-                tilts_out = self._project_tilts_to_tangent_array(tilts_out, normals)
-                tilts_in, tilts_out = project_leaflet_tilts_with_optional_axisymmetry(
-                    global_params=self.global_params,
-                    positions=positions,
-                    normals=normals,
-                    tilts_in=tilts_in,
-                    tilts_out=tilts_out,
-                    fixed_mask_in=fixed_mask_in,
-                    fixed_mask_out=fixed_mask_out,
-                )
+                _load_leaflet_tilts_from_mesh(tilts_in, tilts_out)
                 projection_apply_count += 1
                 if before_norm is not None:
                     after_norm = np.linalg.norm(tilts_in[outer_far_rows], axis=1)
@@ -1642,6 +1999,8 @@ class Minimizer:
                             fixed_mask_out=fixed_mask_out,
                             fixed_vals_in=tilt_fixed_vals_in,
                             fixed_vals_out=tilt_fixed_vals_out,
+                            out_in=trial_in_buf,
+                            out_out=trial_out_buf,
                         )
                         E1 = self._compute_tilt_dependent_energy_with_leaflet_tilts(
                             positions=positions,
@@ -1652,8 +2011,8 @@ class Minimizer:
                             tilt_vertex_areas_out=tilt_vertex_areas_out,
                         )
                         if E1 <= E0:
-                            tilts_in = trial_in
-                            tilts_out = trial_out
+                            tilts_in, trial_in_buf = trial_in, tilts_in
+                            tilts_out, trial_out_buf = trial_out, tilts_out
                             accepted = True
                             break
                         step *= 0.5
@@ -1975,30 +2334,8 @@ STEP SIZE:\t {self.step_size}
 
     def compute_energy(self):
         """Compute the total energy using the loaded modules."""
-        positions, index_map, grad_dummy = self._soa_views()
-
-        total_energy = 0.0
-        for name, module in zip(self.energy_module_names, self.energy_modules):
-            scale = self._experimental_energy_scale_for_module(str(name))
-            if hasattr(module, "compute_energy_and_gradient_array"):
-                grad_dummy.fill(0.0)
-                E_mod = self._call_module_array(
-                    module,
-                    positions=positions,
-                    index_map=index_map,
-                    grad_arr=grad_dummy,
-                )
-                total_energy += float(scale) * float(E_mod)
-                continue
-
-            E_mod, _ = module.compute_energy_and_gradient(
-                self.mesh,
-                self.global_params,
-                self.param_resolver,
-                compute_gradient=False,
-            )
-            total_energy += float(scale) * float(E_mod)
-        return float(total_energy)
+        positions, _, _ = self._soa_views()
+        return float(self._compute_energy_array_total(positions=positions))
 
     def compute_energy_breakdown(self) -> Dict[str, float]:
         """Return per-module energy contributions for the current mesh."""
@@ -2540,6 +2877,7 @@ STEP SIZE:\t {self.step_size}
             )
             step_size_in = fixed_step if step_mode == "fixed" else self.step_size
             energy_fn = self._line_search_energy_fn()
+            trial_energy_fn = self._line_search_trial_energy_fn()
             reduced_flag = (
                 bool(self.global_params.get("line_search_reduced_energy", False))
                 and int(
@@ -2561,6 +2899,9 @@ STEP SIZE:\t {self.step_size}
                 setattr(self.mesh, "_line_search_reduced_accept_rule", accept_rule)
 
             try:
+                step_kwargs = {}
+                if self._stepper_supports_trial_energy_fn():
+                    step_kwargs["trial_energy_fn"] = trial_energy_fn
                 step_success, self.step_size, accepted_energy = self.stepper.step(
                     self.mesh,
                     grad_arr,
@@ -2569,6 +2910,7 @@ STEP SIZE:\t {self.step_size}
                     constraint_enforcer=self._enforce_constraints
                     if self._has_enforceable_constraints
                     else None,
+                    **step_kwargs,
                 )
             finally:
                 if hasattr(self.mesh, "_line_search_reduced_energy"):
