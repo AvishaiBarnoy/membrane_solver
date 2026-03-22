@@ -90,6 +90,64 @@ def _set_radial_tilts(mesh) -> None:
     mesh.set_tilts_out_from_array(2.0 * radial)
 
 
+def test_tilt_rim_source_out_selection_cache_reuses_and_invalidates():
+    mesh = parse_geometry(_annulus_source_mesh())
+
+    payload = tilt_rim_source_out._rim_selection_payload(
+        mesh, group="inner", mode="boundary"
+    )
+    assert payload is not None
+    original_edge_count = int(payload["edge_ids"].size)
+    assert original_edge_count > 0
+
+    cache = getattr(mesh, "_tilt_rim_source_out_selection_cache")
+    sentinel = object()
+    cache["value"] = sentinel
+
+    cached = tilt_rim_source_out._rim_selection_payload(
+        mesh, group="inner", mode="boundary"
+    )
+    assert cached is sentinel
+
+    mesh.vertices[0].options["pin_to_circle_group"] = "other"
+    mesh._vertex_ids_version += 1
+
+    refreshed = tilt_rim_source_out._rim_selection_payload(
+        mesh, group="inner", mode="boundary"
+    )
+    assert refreshed is not sentinel
+    assert int(refreshed["edge_ids"].size) < original_edge_count
+
+
+def test_tilt_rim_source_bilayer_selection_cache_reuses_and_invalidates():
+    mesh = parse_geometry(_annulus_source_mesh())
+
+    payload = tilt_rim_source_bilayer._rim_selection_payload(
+        mesh, group="inner", mode="boundary"
+    )
+    assert payload is not None
+    original_edge_count = int(payload["edge_ids"].size)
+    assert original_edge_count > 0
+
+    cache = getattr(mesh, "_tilt_rim_source_bilayer_selection_cache")
+    sentinel = object()
+    cache["value"] = sentinel
+
+    cached = tilt_rim_source_bilayer._rim_selection_payload(
+        mesh, group="inner", mode="boundary"
+    )
+    assert cached is sentinel
+
+    mesh.vertices[0].options["pin_to_circle_group"] = "other"
+    mesh._vertex_ids_version += 1
+
+    refreshed = tilt_rim_source_bilayer._rim_selection_payload(
+        mesh, group="inner", mode="boundary"
+    )
+    assert refreshed is not sentinel
+    assert int(refreshed["edge_ids"].size) < original_edge_count
+
+
 def test_tilt_rim_source_bilayer_matches_in_plus_out():
     mesh = parse_geometry(_annulus_source_mesh())
     _set_radial_tilts(mesh)
