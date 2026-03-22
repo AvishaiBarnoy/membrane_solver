@@ -38,6 +38,12 @@ def pytest_collection_modifyitems(
     for item in items:
         path = pathlib.Path(str(item.fspath))
         name = path.name.lower()
+        explicit = {mark.name for mark in item.iter_markers()}
+
+        # Respect explicit test-level markers in mixed files so CI lanes stay
+        # disjoint even when filenames still carry legacy suffixes like `_e2e`.
+        if {"unit", "regression", "e2e", "benchmark"} & explicit:
+            continue
 
         if "benchmark" in name:
             item.add_marker(pytest.mark.benchmark)
