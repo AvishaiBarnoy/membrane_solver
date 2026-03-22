@@ -92,8 +92,8 @@ jobs:
         run: |
           pytest -q -m "unit" --cov=. --cov-report=xml
 
-  regression:
-    name: Regression tests (py3.12)
+  regression-flat-disk:
+    name: Regression flat-disk (py3.12)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -110,9 +110,53 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e .
 
-      - name: Run regression tests
+      - name: Run flat-disk regression tests
         run: |
-          pytest -q -m "regression and not benchmark"
+          pytest -q -o addopts='' -m "regression and not benchmark" \
+            tests/test_flat_disk_kh_error_source_audit_regression.py \
+            tests/test_flat_disk_kh_outer_vertex_audit_regression.py \
+            tests/test_flat_disk_kh_outerfield_v2_regression.py \
+            tests/test_flat_disk_kh_partition_ablation_regression.py \
+            tests/test_flat_disk_kh_region_parity_regression.py \
+            tests/test_flat_disk_kh_rim_fidelity_regression.py \
+            tests/test_flat_disk_kh_term_audit_core.py \
+            tests/test_flat_disk_kh_term_audit_regression.py \
+            tests/test_flat_disk_one_leaflet_benchmark_e2e.py \
+            tests/test_flat_disk_one_leaflet_performance_telemetry.py \
+            tests/test_flat_disk_parity_scoreboard_regression.py
+
+  regression-other:
+    name: Regression other (py3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e .
+
+      - name: Run non-flat-disk regression tests
+        run: |
+          pytest -q -o addopts='' -m "regression and not benchmark" \
+            --ignore=tests/test_flat_disk_kh_error_source_audit_regression.py \
+            --ignore=tests/test_flat_disk_kh_outer_vertex_audit_regression.py \
+            --ignore=tests/test_flat_disk_kh_outerfield_v2_regression.py \
+            --ignore=tests/test_flat_disk_kh_partition_ablation_regression.py \
+            --ignore=tests/test_flat_disk_kh_region_parity_regression.py \
+            --ignore=tests/test_flat_disk_kh_rim_fidelity_regression.py \
+            --ignore=tests/test_flat_disk_kh_term_audit_core.py \
+            --ignore=tests/test_flat_disk_kh_term_audit_regression.py \
+            --ignore=tests/test_flat_disk_one_leaflet_benchmark_e2e.py \
+            --ignore=tests/test_flat_disk_one_leaflet_performance_telemetry.py \
+            --ignore=tests/test_flat_disk_parity_scoreboard_regression.py
 
   e2e-free-disk-convergence-core:
     name: E2E free-disk convergence core (py3.12)
