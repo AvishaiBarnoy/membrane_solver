@@ -173,22 +173,91 @@ def _pin_to_circle_normal(mesh: Mesh, options: dict | None) -> np.ndarray | None
     return _normalize(np.asarray(raw, dtype=float).reshape(3))
 
 
+def _rim_selection_payload(mesh: Mesh, *, group: str, mode: str):
+    """Return cached rim edge/row data for a `(group, mode)` selection."""
+    mesh.build_position_cache()
+    cache_key = (
+        int(getattr(mesh, "_facet_loops_version", 0)),
+        int(getattr(mesh, "_vertex_ids_version", 0)),
+        str(group),
+        str(mode),
+    )
+    cache_attr = "_tilt_rim_source_bilayer_selection_cache"
+    cached = getattr(mesh, cache_attr, None)
+    if cached is not None and cached.get("key") == cache_key:
+        return cached.get("value")
+
+    selected = _selected_rim_edges(mesh, group, mode=mode)
+    if not selected:
+        setattr(mesh, cache_attr, {"key": cache_key, "value": None})
+        return None
+
+    edge_ids: list[int] = []
+    tail_rows: list[int] = []
+    head_rows: list[int] = []
+    for eid in selected:
+        edge = mesh.edges[int(eid)]
+        t_row = mesh.vertex_index_to_row.get(int(edge.tail_index))
+        h_row = mesh.vertex_index_to_row.get(int(edge.head_index))
+        if t_row is None or h_row is None:
+            continue
+        edge_ids.append(int(eid))
+        tail_rows.append(int(t_row))
+        head_rows.append(int(h_row))
+
+    if not tail_rows:
+        setattr(mesh, cache_attr, {"key": cache_key, "value": None})
+        return None
+
+    tails = np.asarray(tail_rows, dtype=int)
+    heads = np.asarray(head_rows, dtype=int)
+    rim_rows = np.unique(np.concatenate([tails, heads]))
+
+    follow = False
+    normal_row: int | None = None
+    for row in rim_rows:
+        vid = int(mesh.vertex_ids[int(row)])
+        vertex = mesh.vertices.get(vid)
+        if vertex is None:
+            continue
+        options = getattr(vertex, "options", None)
+        if _pin_to_circle_mode(mesh, options) == "fit":
+            follow = True
+        if normal_row is None and _pin_to_circle_normal(mesh, options) is not None:
+            normal_row = int(row)
+        if follow and normal_row is not None:
+            break
+
+    value = {
+        "edge_ids": np.asarray(edge_ids, dtype=int),
+        "tails": tails,
+        "heads": heads,
+        "rim_rows": rim_rows,
+        "follow": bool(follow),
+        "normal_row": normal_row,
+    }
+    setattr(mesh, cache_attr, {"key": cache_key, "value": value})
+    return value
+
+
 def _resolve_followed_circle_frame(
-    mesh: Mesh, *, group: str, rows: np.ndarray
+    mesh: Mesh, *, rows: np.ndarray, normal_row: int | None = None
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return (center, normal) for the circle associated with a rim group."""
     pts = mesh.positions_view()[rows]
     center = np.mean(pts, axis=0)
 
     normal = None
-    for row in rows:
-        vid = int(mesh.vertex_ids[int(row)])
-        v = mesh.vertices.get(vid)
-        if v is None:
-            continue
-        normal = _pin_to_circle_normal(mesh, getattr(v, "options", None))
-        if normal is not None:
-            break
+    if normal_row is not None:
+        vid = int(mesh.vertex_ids[int(normal_row)])
+        vertex = mesh.vertices.get(vid)
+        if vertex is not None:
+            normal = _pin_to_circle_normal(mesh, getattr(vertex, "options", None))
+    elif rows.size > 0:
+        vid = int(mesh.vertex_ids[int(rows[0])])
+        vertex = mesh.vertices.get(vid)
+        if vertex is not None:
+            normal = _pin_to_circle_normal(mesh, getattr(vertex, "options", None))
     if normal is None:
         normal = _fit_plane_normal(pts)
     if normal is None:
@@ -256,8 +325,8 @@ def compute_energy_and_gradient_array(
         return 0.0
 
     mode = _resolve_edge_mode(param_resolver)
-    selected = _selected_rim_edges(mesh, group, mode=mode)
-    if not selected:
+    payload = _rim_selection_payload(mesh, group=group, mode=mode)
+    if payload is None:
         return 0.0
 
     if tilts_in is None:
@@ -274,50 +343,29 @@ def compute_energy_and_gradient_array(
         if tilts_out.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
 
-    center = _resolve_center(param_resolver)
-
-    tail_rows: list[int] = []
-    head_rows: list[int] = []
-    strengths: list[float] = []
-    for eid in selected:
-        edge = mesh.edges[int(eid)]
-        t_row = mesh.vertex_index_to_row.get(int(edge.tail_index))
-        h_row = mesh.vertex_index_to_row.get(int(edge.head_index))
-        if t_row is None or h_row is None:
-            continue
-        tail_rows.append(int(t_row))
-        head_rows.append(int(h_row))
-        strengths.append(_resolve_strength(param_resolver, edge))
-
-    if not tail_rows:
-        return 0.0
-
-    tails = np.asarray(tail_rows, dtype=int)
-    heads = np.asarray(head_rows, dtype=int)
-    gamma = np.asarray(strengths, dtype=float)
+    gamma = np.asarray(
+        [
+            _resolve_strength(param_resolver, mesh.edges[int(eid)])
+            for eid in payload["edge_ids"]
+        ],
+        dtype=float,
+    )
     if not np.any(gamma):
         return 0.0
+
+    tails = payload["tails"]
+    heads = payload["heads"]
 
     p0 = positions[tails]
     p1 = positions[heads]
     mid = 0.5 * (p0 + p1)
 
-    follow = False
-    for row in np.unique(np.concatenate([tails, heads])):
-        vid = int(mesh.vertex_ids[int(row)])
-        v = mesh.vertices.get(vid)
-        if v is None:
-            continue
-        if _pin_to_circle_group(getattr(v, "options", None)) != group:
-            continue
-        if _pin_to_circle_mode(mesh, getattr(v, "options", None)) == "fit":
-            follow = True
-            break
-
-    if follow:
-        rim_rows = np.unique(np.concatenate([tails, heads]))
+    center = _resolve_center(param_resolver)
+    if payload["follow"]:
         center, normal = _resolve_followed_circle_frame(
-            mesh, group=group, rows=rim_rows
+            mesh,
+            rows=payload["rim_rows"],
+            normal_row=payload["normal_row"],
         )
     else:
         normal = np.array([0.0, 0.0, 1.0], dtype=float)
@@ -376,8 +424,8 @@ def compute_energy_array(
         return 0.0
 
     mode = _resolve_edge_mode(param_resolver)
-    selected = _selected_rim_edges(mesh, group, mode=mode)
-    if not selected:
+    payload = _rim_selection_payload(mesh, group=group, mode=mode)
+    if payload is None:
         return 0.0
 
     if tilts_in is None:
@@ -394,50 +442,29 @@ def compute_energy_array(
         if tilts_out.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
 
-    center = _resolve_center(param_resolver)
-
-    tail_rows: list[int] = []
-    head_rows: list[int] = []
-    strengths: list[float] = []
-    for eid in selected:
-        edge = mesh.edges[int(eid)]
-        t_row = mesh.vertex_index_to_row.get(int(edge.tail_index))
-        h_row = mesh.vertex_index_to_row.get(int(edge.head_index))
-        if t_row is None or h_row is None:
-            continue
-        tail_rows.append(int(t_row))
-        head_rows.append(int(h_row))
-        strengths.append(_resolve_strength(param_resolver, edge))
-
-    if not tail_rows:
-        return 0.0
-
-    tails = np.asarray(tail_rows, dtype=int)
-    heads = np.asarray(head_rows, dtype=int)
-    gamma = np.asarray(strengths, dtype=float)
+    gamma = np.asarray(
+        [
+            _resolve_strength(param_resolver, mesh.edges[int(eid)])
+            for eid in payload["edge_ids"]
+        ],
+        dtype=float,
+    )
     if not np.any(gamma):
         return 0.0
+
+    tails = payload["tails"]
+    heads = payload["heads"]
 
     p0 = positions[tails]
     p1 = positions[heads]
     mid = 0.5 * (p0 + p1)
 
-    follow = False
-    for row in np.unique(np.concatenate([tails, heads])):
-        vid = int(mesh.vertex_ids[int(row)])
-        v = mesh.vertices.get(vid)
-        if v is None:
-            continue
-        if _pin_to_circle_group(getattr(v, "options", None)) != group:
-            continue
-        if _pin_to_circle_mode(mesh, getattr(v, "options", None)) == "fit":
-            follow = True
-            break
-
-    if follow:
-        rim_rows = np.unique(np.concatenate([tails, heads]))
+    center = _resolve_center(param_resolver)
+    if payload["follow"]:
         center, normal = _resolve_followed_circle_frame(
-            mesh, group=group, rows=rim_rows
+            mesh,
+            rows=payload["rim_rows"],
+            normal_row=payload["normal_row"],
         )
     else:
         normal = np.array([0.0, 0.0, 1.0], dtype=float)

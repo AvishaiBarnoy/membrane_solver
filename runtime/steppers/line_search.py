@@ -4,7 +4,11 @@ from typing import Callable, Dict
 import numpy as np
 
 from geometry.entities import Mesh
-from runtime.topology import check_max_normal_change, get_min_edge_length
+from runtime.topology import (
+    check_max_normal_change,
+    check_max_normal_change_positions,
+    get_min_edge_length,
+)
 
 logger = logging.getLogger("membrane_solver")
 
@@ -261,6 +265,7 @@ def backtracking_line_search_array(
     step_size: float,
     energy_fn: Callable[[], float],
     vertex_ids,
+    trial_energy_fn: Callable[[np.ndarray], float] | None = None,
     max_iter: int = 10,
     beta: float = 0.7,
     c: float = 1e-4,
@@ -276,9 +281,10 @@ def backtracking_line_search_array(
     movable_rows = np.flatnonzero(~fixed_mask)
     movable_vids = mesh.vertex_ids[movable_rows]
     movable_vertices = [mesh.vertices[vidx] for vidx in movable_vids]
-    original_positions = {}
-    for vidx in vertex_ids:
-        original_positions[vidx] = mesh.vertices[vidx].position.copy()
+    baseline_positions = mesh.positions_view().copy(order="F")
+    original_positions = {
+        int(vidx): baseline_positions[row].copy() for row, vidx in enumerate(vertex_ids)
+    }
     energy0 = energy_fn()
     reduced_tilts = bool(getattr(mesh, "_line_search_reduced_energy", False))
     accept_rule = (
@@ -318,6 +324,9 @@ def backtracking_line_search_array(
     alpha = step_size
     alpha_max = alpha_max_factor * step_size
     backtracks = 0
+    use_trial_energy_fast_path = bool(
+        trial_energy_fn is not None and constraint_enforcer is None
+    )
 
     # Snapshot scalar params (e.g. thetaB) to ensure full rollback on failure.
     scalar_params = getattr(mesh, "global_parameters", None)
@@ -333,6 +342,76 @@ def backtracking_line_search_array(
             if key not in scalar_snapshot:
                 scalar_params.unset(key)
         scalar_params.update(scalar_snapshot)
+
+    if use_trial_energy_fast_path:
+        trial_positions = np.array(baseline_positions, copy=True, order="F")
+        for _ in range(max_iter):
+            max_disp = alpha * max_dir_norm
+            is_safe_small_step = max_disp < safe_step_limit
+
+            trial_positions[:] = baseline_positions
+            if movable_rows.size:
+                trial_positions[movable_rows] = (
+                    baseline_positions[movable_rows] + alpha * direction[movable_rows]
+                )
+
+            if not is_safe_small_step:
+                if not check_max_normal_change_positions(
+                    mesh,
+                    original_positions=baseline_positions,
+                    new_positions=trial_positions,
+                ):
+                    alpha *= beta
+                    backtracks += 1
+                    if alpha < 1e-8:
+                        break
+                    continue
+
+            trial_energy = float(trial_energy_fn(trial_positions))
+            if reduced_tilts and accept_rule == "decrease_only":
+                accept = trial_energy <= energy0
+            else:
+                accept = trial_energy <= energy0 + c * alpha * g_dot_d
+
+            if accept:
+                logger.debug(
+                    "Line search success: alpha=%.3e, backtracks=%d, "
+                    "E0=%.6f, Etrial=%.6f, armijo=%s",
+                    alpha,
+                    backtracks,
+                    energy0,
+                    trial_energy,
+                    accept,
+                )
+                for row, vidx, vertex in zip(
+                    movable_rows, movable_vids, movable_vertices
+                ):
+                    vertex.position[:] = trial_positions[row]
+                mesh.increment_version()
+                new_step = min(alpha * gamma, alpha_max)
+                return True, new_step, float(trial_energy)
+
+            if needs_tilt_restore:
+                mesh.set_tilts_from_array(original_tilts)
+                mesh.set_tilts_in_from_array(original_tilts_in)
+                mesh.set_tilts_out_from_array(original_tilts_out)
+            _restore_scalar_params()
+            alpha *= beta
+            backtracks += 1
+            if alpha < 1e-8:
+                break
+
+        if needs_tilt_restore:
+            mesh.set_tilts_from_array(original_tilts)
+            mesh.set_tilts_in_from_array(original_tilts_in)
+            mesh.set_tilts_out_from_array(original_tilts_out)
+        _restore_scalar_params()
+        logger.debug(
+            "Line search failed after %d backtracks; trial-position fast path kept mesh state unchanged.",
+            backtracks,
+        )
+        reduced_step = max(alpha * beta, 0.0)
+        return False, max(reduced_step, step_size * beta), float(energy0)
 
     for _ in range(max_iter):
         max_disp = alpha * max_dir_norm

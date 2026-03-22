@@ -167,7 +167,8 @@ def _compute_effective_areas(
     index_map: Dict[int, int],
     *,
     cache_token: str = "default",
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    compute_vertex_areas: bool = True,
+) -> tuple[np.ndarray | None, np.ndarray, np.ndarray, np.ndarray]:
     """Compute effective vertex areas by redistributing boundary vertex contributions.
 
     Returns (vertex_areas_eff, va0, va1, va2).
@@ -178,27 +179,27 @@ def _compute_effective_areas(
     key_va0 = f"va0_eff::{cache_token}"
     key_va1 = f"va1_eff::{cache_token}"
     key_va2 = f"va2_eff::{cache_token}"
-    if (
-        is_cached_pos
-        and mesh._curvature_version == mesh._version
-        and key_vertex in mesh._curvature_cache
-    ):
+    if is_cached_pos and mesh._curvature_version == mesh._version:
         c = mesh._curvature_cache
         # The cache is keyed to the full triangle set. Leaflet masking can
         # request effective areas on a triangle subset, so only reuse the cache
         # when the triangle count matches.
         if len(c.get(key_va0, ())) == int(tri_rows.shape[0]):
-            return (
-                c[key_vertex],
-                c[key_va0],
-                c[key_va1],
-                c[key_va2],
-            )
+            vertex_cached = c.get(key_vertex)
+            if vertex_cached is not None:
+                return (
+                    vertex_cached if compute_vertex_areas else None,
+                    c[key_va0],
+                    c[key_va1],
+                    c[key_va2],
+                )
+            if not compute_vertex_areas:
+                return None, c[key_va0], c[key_va1], c[key_va2]
 
     n_verts = len(mesh.vertex_ids)
     if tri_rows.size == 0:
         return (
-            np.zeros(n_verts),
+            np.zeros(n_verts) if compute_vertex_areas else None,
             np.zeros(0),
             np.zeros(0),
             np.zeros(0),
@@ -299,6 +300,13 @@ def _compute_effective_areas(
             + interior_mask[to_redistribute] * extra_per_int[to_redistribute, None]
         )
 
+    if is_cached_pos and mesh._curvature_version == mesh._version:
+        mesh._curvature_cache[key_va0] = va_eff[:, 0]
+        mesh._curvature_cache[key_va1] = va_eff[:, 1]
+        mesh._curvature_cache[key_va2] = va_eff[:, 2]
+    if not compute_vertex_areas:
+        return None, va_eff[:, 0], va_eff[:, 1], va_eff[:, 2]
+
     vertex_areas_eff = np.zeros(n_verts, dtype=float)
     np.add.at(vertex_areas_eff, tri_rows[:, 0], va_eff[:, 0])
     np.add.at(vertex_areas_eff, tri_rows[:, 1], va_eff[:, 1])
@@ -306,9 +314,6 @@ def _compute_effective_areas(
 
     if is_cached_pos and mesh._curvature_version == mesh._version:
         mesh._curvature_cache[key_vertex] = vertex_areas_eff
-        mesh._curvature_cache[key_va0] = va_eff[:, 0]
-        mesh._curvature_cache[key_va1] = va_eff[:, 1]
-        mesh._curvature_cache[key_va2] = va_eff[:, 2]
 
     return vertex_areas_eff, va_eff[:, 0], va_eff[:, 1], va_eff[:, 2]
 

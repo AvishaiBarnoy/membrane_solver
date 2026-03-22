@@ -127,3 +127,38 @@ def test_build_leaflet_trial_tilts_projects_and_restores_fixed_values():
     assert np.allclose(trial_out[0], fixed_vals_out[0])
     assert abs(float(np.dot(trial_in[0], normals[0]))) < 1e-12
     assert abs(float(np.dot(trial_out[1], normals[1]))) < 1e-12
+
+
+def test_build_leaflet_trial_tilts_reuses_output_buffers() -> None:
+    base_in = np.array([[1.0, 2.0, 3.0], [2.0, 0.0, -1.0]], dtype=float, order="F")
+    base_out = np.array([[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]], dtype=float, order="F")
+    delta_in = np.array([[0.5, -0.5, 0.0], [1.0, -1.0, 2.0]], dtype=float, order="F")
+    delta_out = np.array([[-1.0, 0.0, 1.0], [0.5, 0.5, -2.0]], dtype=float, order="F")
+    normals = np.array([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0]], dtype=float, order="F")
+    fixed_mask_in = np.array([False, True], dtype=bool)
+    fixed_mask_out = np.array([True, False], dtype=bool)
+    fixed_vals_in = np.array([[9.0, 9.0, 9.0]], dtype=float)
+    fixed_vals_out = np.array([[-7.0, -7.0, -7.0]], dtype=float)
+    out_in = np.full_like(base_in, fill_value=-123.0, order="F")
+    out_out = np.full_like(base_out, fill_value=456.0, order="F")
+
+    trial_in, trial_out = build_leaflet_trial_tilts(
+        base_in=base_in,
+        base_out=base_out,
+        delta_in=delta_in,
+        delta_out=delta_out,
+        normals=normals,
+        fixed_mask_in=fixed_mask_in,
+        fixed_mask_out=fixed_mask_out,
+        fixed_vals_in=fixed_vals_in,
+        fixed_vals_out=fixed_vals_out,
+        out_in=out_in,
+        out_out=out_out,
+    )
+
+    assert trial_in is out_in
+    assert trial_out is out_out
+    assert np.allclose(trial_in[1], fixed_vals_in[0])
+    assert np.allclose(trial_out[0], fixed_vals_out[0])
+    assert abs(float(np.dot(trial_in[0], normals[0]))) < 1e-12
+    assert abs(float(np.dot(trial_out[1], normals[1]))) < 1e-12

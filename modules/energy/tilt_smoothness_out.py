@@ -31,6 +31,60 @@ def _resolve_bending_modulus(param_resolver) -> float:
     return float(k or 0.0)
 
 
+def _masked_weights_and_tris(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """Return cached outer-leaflet masked smoothness payload."""
+    weights, tri_rows = _base._get_weights_and_tris(
+        mesh, positions=positions, index_map=index_map
+    )
+    if tri_rows is None:
+        return None, None
+
+    absent_mask = leaflet_absent_vertex_mask(mesh, global_params, leaflet="out")
+    absent_token = id(absent_mask)
+    use_cache = mesh._geometry_cache_active(positions)
+    cache_key = (
+        int(mesh._version),
+        int(mesh._facet_loops_version),
+        int(mesh._vertex_ids_version),
+        id(positions),
+        id(weights),
+        id(tri_rows),
+        absent_token,
+    )
+    cache_attr = "_tilt_smoothness_out_mask_cache"
+    if use_cache:
+        cached = getattr(mesh, cache_attr, None)
+        if cached is not None and cached.get("key") == cache_key:
+            return cached["weights"], cached["tri_rows"]
+
+    tri_keep = leaflet_present_triangle_mask(
+        mesh, tri_rows, absent_vertex_mask=absent_mask
+    )
+    if tri_keep.size and not np.any(tri_keep):
+        weights_use = np.zeros((0, 3), dtype=float)
+        tri_rows_use = np.zeros((0, 3), dtype=np.int32)
+    elif tri_keep.size:
+        weights_use = weights[tri_keep]
+        tri_rows_use = tri_rows[tri_keep]
+    else:
+        weights_use = weights
+        tri_rows_use = tri_rows
+
+    if use_cache:
+        setattr(
+            mesh,
+            cache_attr,
+            {"key": cache_key, "weights": weights_use, "tri_rows": tri_rows_use},
+        )
+    return weights_use, tri_rows_use
+
+
 def compute_energy_and_gradient(
     mesh: Mesh, global_params, param_resolver, *, compute_gradient: bool = True
 ) -> (
@@ -87,17 +141,15 @@ def compute_energy_and_gradient_array(
     if k_smooth == 0.0:
         return 0.0
 
-    weights, tri_rows = _base._get_weights_and_tris(
-        mesh, positions=positions, index_map=index_map
+    weights, tri_rows = _masked_weights_and_tris(
+        mesh,
+        global_params,
+        positions=positions,
+        index_map=index_map,
     )
     if tri_rows is None:
         return 0.0
-
-    absent_mask = leaflet_absent_vertex_mask(mesh, global_params, leaflet="out")
-    tri_keep = leaflet_present_triangle_mask(
-        mesh, tri_rows, absent_vertex_mask=absent_mask
-    )
-    if tri_keep.size and not np.any(tri_keep):
+    if tri_rows.size == 0:
         return 0.0
 
     if tilts_out is None:
@@ -106,10 +158,6 @@ def compute_energy_and_gradient_array(
         tilts_out = np.asarray(tilts_out, dtype=float)
         if tilts_out.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
-
-    if tri_keep.size:
-        weights = weights[tri_keep]
-        tri_rows = tri_rows[tri_keep]
 
     if tilt_out_grad_arr is not None:
         tilt_out_grad_arr = np.asarray(tilt_out_grad_arr, dtype=float)
@@ -144,17 +192,15 @@ def compute_energy_array(
     if k_smooth == 0.0:
         return 0.0
 
-    weights, tri_rows = _base._get_weights_and_tris(
-        mesh, positions=positions, index_map=index_map
+    weights, tri_rows = _masked_weights_and_tris(
+        mesh,
+        global_params,
+        positions=positions,
+        index_map=index_map,
     )
     if tri_rows is None:
         return 0.0
-
-    absent_mask = leaflet_absent_vertex_mask(mesh, global_params, leaflet="out")
-    tri_keep = leaflet_present_triangle_mask(
-        mesh, tri_rows, absent_vertex_mask=absent_mask
-    )
-    if tri_keep.size and not np.any(tri_keep):
+    if tri_rows.size == 0:
         return 0.0
 
     if tilts_out is None:
@@ -164,9 +210,6 @@ def compute_energy_array(
         if tilts_out.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
 
-    if tri_keep.size:
-        weights = weights[tri_keep]
-        tri_rows = tri_rows[tri_keep]
     return _base._compute_smoothness_energy_and_gradient(
         mesh,
         k_smooth=k_smooth,

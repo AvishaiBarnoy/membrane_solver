@@ -155,6 +155,45 @@ def test_tilt_leaflet_energy_array_matches_gradient_path():
     assert e_out_only == pytest.approx(e_out_grad, rel=1e-12, abs=1e-12)
 
 
+def test_tilt_out_energy_array_matches_gradient_path_with_shared_rim_outer_exclusion():
+    mesh = _build_planar_patch_mesh()
+    for vid in (0, 1, 2, 3):
+        mesh.vertices[vid].options["rim_slope_match_group"] = "outer"
+
+    mesh.global_parameters.set("tilt_modulus_out", 0.9)
+    mesh.global_parameters.set("rim_slope_match_mode", "shared_rim_staggered_v1")
+    mesh.global_parameters.set("tilt_out_exclude_shared_rim_outer_rows", True)
+    param_resolver = ParameterResolver(mesh.global_parameters)
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    tilts_out = np.zeros_like(mesh.tilts_out_view())
+    tilts_out[:4, 0] = 1.0e-2
+    grad_dummy = np.zeros_like(positions)
+    tilt_grad_out = np.zeros_like(positions)
+
+    e_out_grad = tilt_out.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=grad_dummy,
+        tilts_out=tilts_out,
+        tilt_out_grad_arr=tilt_grad_out,
+    )
+    e_out_only = tilt_out.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        positions=positions,
+        index_map=index_map,
+        tilts_out=tilts_out,
+    )
+
+    assert e_out_only == pytest.approx(e_out_grad, rel=1e-12, abs=1e-12)
+
+
 def test_tilt_coupling_energy_array_matches_gradient_path():
     mesh = _build_mesh()
     mesh.global_parameters.set("tilt_coupling_modulus", 0.4)

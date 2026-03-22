@@ -7,6 +7,7 @@ These helpers keep behavior-preserving logic centralized while letting
 from __future__ import annotations
 
 import logging
+from contextlib import nullcontext
 from typing import Any, Callable
 
 import numpy as np
@@ -82,12 +83,80 @@ def build_reduced_line_search_energy_fn(
     uses_leaflet_tilts: bool,
     projected_energy_fn: Callable[[], float],
     compute_energy_fn: Callable[[], float],
+    projected_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
+    compute_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
     relax_tilts_fn: Callable[..., None],
     relax_leaflet_tilts_fn: Callable[..., None],
     set_leaflet_tilts_fast_fn: Callable[[np.ndarray, np.ndarray], None],
     logger_obj: logging.Logger,
 ) -> Callable[[], float]:
     """Build reduced-energy line-search callback with temporary tilt overrides."""
+    energy_fn, _ = _build_reduced_line_search_callbacks(
+        mesh=mesh,
+        global_params=global_params,
+        reduced_steps=reduced_steps,
+        uses_leaflet_tilts=uses_leaflet_tilts,
+        projected_energy_fn=projected_energy_fn,
+        compute_energy_fn=compute_energy_fn,
+        projected_energy_at_positions_fn=projected_energy_at_positions_fn,
+        compute_energy_at_positions_fn=compute_energy_at_positions_fn,
+        relax_tilts_fn=relax_tilts_fn,
+        relax_leaflet_tilts_fn=relax_leaflet_tilts_fn,
+        set_leaflet_tilts_fast_fn=set_leaflet_tilts_fast_fn,
+        logger_obj=logger_obj,
+    )
+    return energy_fn
+
+
+def build_reduced_line_search_trial_energy_fn(
+    *,
+    mesh,
+    global_params,
+    reduced_steps: int,
+    uses_leaflet_tilts: bool,
+    projected_energy_fn: Callable[[], float],
+    compute_energy_fn: Callable[[], float],
+    projected_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
+    compute_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
+    relax_tilts_fn: Callable[..., None],
+    relax_leaflet_tilts_fn: Callable[..., None],
+    set_leaflet_tilts_fast_fn: Callable[[np.ndarray, np.ndarray], None],
+    logger_obj: logging.Logger,
+) -> Callable[[np.ndarray], float] | None:
+    """Build reduced-energy trial callback for explicit trial positions."""
+    _, trial_energy_fn = _build_reduced_line_search_callbacks(
+        mesh=mesh,
+        global_params=global_params,
+        reduced_steps=reduced_steps,
+        uses_leaflet_tilts=uses_leaflet_tilts,
+        projected_energy_fn=projected_energy_fn,
+        compute_energy_fn=compute_energy_fn,
+        projected_energy_at_positions_fn=projected_energy_at_positions_fn,
+        compute_energy_at_positions_fn=compute_energy_at_positions_fn,
+        relax_tilts_fn=relax_tilts_fn,
+        relax_leaflet_tilts_fn=relax_leaflet_tilts_fn,
+        set_leaflet_tilts_fast_fn=set_leaflet_tilts_fast_fn,
+        logger_obj=logger_obj,
+    )
+    return trial_energy_fn
+
+
+def _build_reduced_line_search_callbacks(
+    *,
+    mesh,
+    global_params,
+    reduced_steps: int,
+    uses_leaflet_tilts: bool,
+    projected_energy_fn: Callable[[], float],
+    compute_energy_fn: Callable[[], float],
+    projected_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
+    compute_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
+    relax_tilts_fn: Callable[..., None],
+    relax_leaflet_tilts_fn: Callable[..., None],
+    set_leaflet_tilts_fast_fn: Callable[[np.ndarray, np.ndarray], None],
+    logger_obj: logging.Logger,
+) -> tuple[Callable[[], float], Callable[[np.ndarray], float] | None]:
+    """Build reduced-energy callbacks for current-state and trial positions."""
     gp = global_params
     override_keys = ("tilt_inner_steps", "tilt_coupled_steps", "tilt_cg_max_iters")
     override_present = {key: (key in gp) for key in override_keys}
@@ -103,46 +172,101 @@ def build_reduced_line_search_energy_fn(
             else:
                 gp.unset(key)
 
-    def energy_fn() -> float:
+    def _capture_tilt_state() -> dict[str, np.ndarray]:
+        if uses_leaflet_tilts:
+            return {
+                "tilts_in": mesh.tilts_in_view().copy(order="F"),
+                "tilts_out": mesh.tilts_out_view().copy(order="F"),
+            }
+        return {"tilts": mesh.tilts_view().copy(order="F")}
+
+    def _restore_tilt_state(snapshot: dict[str, np.ndarray]) -> None:
+        if "tilts_in" in snapshot and "tilts_out" in snapshot:
+            set_leaflet_tilts_fast_fn(snapshot["tilts_in"], snapshot["tilts_out"])
+            return
+        if "tilts" in snapshot:
+            mesh.set_tilts_from_array(snapshot["tilts"])
+
+    def _evaluate(positions: np.ndarray | None) -> float:
         tilt_mode = str(gp.get("tilt_solve_mode", "fixed") or "fixed")
         mode_norm = tilt_mode.strip().lower()
-        if mode_norm in ("", "none", "off", "false", "fixed"):
-            return float(projected_energy_fn())
+        if positions is None:
+            positions_arg = mesh.positions_view()
+            projected_eval = projected_energy_fn
+            raw_eval = compute_energy_fn
+            cache_scope = nullcontext()
+        else:
+            if (
+                projected_energy_at_positions_fn is None
+                or compute_energy_at_positions_fn is None
+            ):
+                raise ValueError(
+                    "Reduced trial-energy callback requires explicit-position evaluators."
+                )
+            positions_arg = np.asarray(positions, dtype=float)
 
-        positions = mesh.positions_view()
-        try:
-            gp.set("tilt_inner_steps", reduced_steps)
-            gp.set("tilt_coupled_steps", reduced_steps)
-            gp.set("tilt_cg_max_iters", reduced_steps)
+            def projected_eval() -> float:
+                return float(projected_energy_at_positions_fn(positions_arg))
 
-            if guard_factor > 0.0:
-                pre_tin = mesh.tilts_in_view().copy(order="F")
-                pre_tout = mesh.tilts_out_view().copy(order="F")
-                pre_e = float(compute_energy_fn())
+            def raw_eval() -> float:
+                return float(compute_energy_at_positions_fn(positions_arg))
 
-            if uses_leaflet_tilts:
-                relax_leaflet_tilts_fn(positions=positions, mode=tilt_mode)
-            else:
-                relax_tilts_fn(positions=positions, mode=tilt_mode)
+            cache_scope = mesh.geometry_freeze(positions_arg)
 
-            e = float(projected_energy_fn())
+        with cache_scope:
+            if mode_norm in ("", "none", "off", "false", "fixed"):
+                return float(projected_eval())
 
-            if guard_factor > 0.0:
-                threshold = max(guard_min, abs(pre_e) * guard_factor)
-                if e > threshold:
-                    set_leaflet_tilts_fast_fn(pre_tin, pre_tout)
-                    if logger_obj.isEnabledFor(logging.DEBUG):
-                        logger_obj.debug(
-                            "Line-search tilt guard: E %.6g -> %.6g "
-                            "(threshold %.6g); rolling back tilts.",
-                            pre_e,
-                            e,
-                            threshold,
-                        )
-                    return float(pre_e)
+            try:
+                gp.set("tilt_inner_steps", reduced_steps)
+                gp.set("tilt_coupled_steps", reduced_steps)
+                gp.set("tilt_cg_max_iters", reduced_steps)
 
-            return e
-        finally:
-            _restore_overrides()
+                tilt_snapshot = None
+                pre_e = None
+                if guard_factor > 0.0:
+                    tilt_snapshot = _capture_tilt_state()
+                    pre_e = float(raw_eval())
 
-    return energy_fn
+                if uses_leaflet_tilts:
+                    relax_leaflet_tilts_fn(positions=positions_arg, mode=tilt_mode)
+                else:
+                    relax_tilts_fn(positions=positions_arg, mode=tilt_mode)
+
+                e = float(projected_eval())
+
+                if guard_factor > 0.0:
+                    assert pre_e is not None
+                    threshold = max(guard_min, abs(pre_e) * guard_factor)
+                    if e > threshold:
+                        assert tilt_snapshot is not None
+                        _restore_tilt_state(tilt_snapshot)
+                        if logger_obj.isEnabledFor(logging.DEBUG):
+                            logger_obj.debug(
+                                "Line-search tilt guard: E %.6g -> %.6g "
+                                "(threshold %.6g); rolling back tilts.",
+                                pre_e,
+                                e,
+                                threshold,
+                            )
+                        return float(pre_e)
+
+                return e
+            finally:
+                _restore_overrides()
+
+    def energy_fn() -> float:
+        return _evaluate(None)
+
+    trial_energy_fn = None
+    if (
+        projected_energy_at_positions_fn is not None
+        and compute_energy_at_positions_fn is not None
+    ):
+
+        def _trial_energy_fn(positions: np.ndarray) -> float:
+            return _evaluate(positions)
+
+        trial_energy_fn = _trial_energy_fn
+
+    return energy_fn, trial_energy_fn

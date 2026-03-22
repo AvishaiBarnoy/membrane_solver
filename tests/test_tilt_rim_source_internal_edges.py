@@ -139,6 +139,80 @@ def _set_radial_tilts(mesh) -> None:
     mesh.set_tilts_out_from_array(2.0 * radial)
 
 
+def test_tilt_rim_source_in_selection_cache_reuses_and_invalidates() -> None:
+    mesh = parse_geometry(_disk_plus_annulus_internal_rim_mesh())
+
+    payload = tilt_rim_source_in._rim_selection_payload(mesh, group="rim", mode="all")
+    assert payload is not None
+    original_edge_count = int(payload["edge_ids"].size)
+    assert original_edge_count > 0
+
+    cache = getattr(mesh, "_tilt_rim_source_in_selection_cache")
+    sentinel = object()
+    cache["value"] = sentinel
+
+    cached = tilt_rim_source_in._rim_selection_payload(mesh, group="rim", mode="all")
+    assert cached is sentinel
+
+    mesh.vertices[1].options["pin_to_circle_group"] = "other"
+    mesh._vertex_ids_version += 1
+
+    refreshed = tilt_rim_source_in._rim_selection_payload(mesh, group="rim", mode="all")
+    assert refreshed is not sentinel
+    assert int(refreshed["edge_ids"].size) < original_edge_count
+
+
+def test_tilt_rim_source_in_gamma_cache_reuses_and_invalidates_on_strength_change() -> (
+    None
+):
+    mesh = parse_geometry(_disk_plus_annulus_internal_rim_mesh())
+    resolver = ParameterResolver(mesh.global_parameters)
+    payload = tilt_rim_source_in._rim_selection_payload(mesh, group="rim", mode="all")
+    assert payload is not None
+
+    gamma_a = tilt_rim_source_in._resolved_gamma(
+        mesh, resolver, edge_ids=payload["edge_ids"]
+    )
+    gamma_b = tilt_rim_source_in._resolved_gamma(
+        mesh, resolver, edge_ids=payload["edge_ids"]
+    )
+    assert gamma_b is gamma_a
+
+    mesh.global_parameters.set("tilt_rim_source_strength_in", 2.0)
+    gamma_c = tilt_rim_source_in._resolved_gamma(
+        mesh, resolver, edge_ids=payload["edge_ids"]
+    )
+    assert gamma_c is not gamma_a
+    assert np.allclose(gamma_c, 2.0)
+
+
+def test_tilt_rim_source_in_fixed_frame_cache_reuses_and_invalidates_on_center_change() -> (
+    None
+):
+    mesh = parse_geometry(_disk_plus_annulus_internal_rim_mesh())
+    resolver = ParameterResolver(mesh.global_parameters)
+    payload = tilt_rim_source_in._rim_selection_payload(mesh, group="rim", mode="all")
+    assert payload is not None
+    assert not payload["follow"]
+
+    center_a, normal_a = tilt_rim_source_in._fixed_circle_frame(
+        mesh, resolver, normal_row=payload["normal_row"]
+    )
+    center_b, normal_b = tilt_rim_source_in._fixed_circle_frame(
+        mesh, resolver, normal_row=payload["normal_row"]
+    )
+    assert center_b is center_a
+    assert normal_b is normal_a
+
+    mesh.global_parameters.set("tilt_rim_source_center", [1.0, 0.0, 0.0])
+    center_c, normal_c = tilt_rim_source_in._fixed_circle_frame(
+        mesh, resolver, normal_row=payload["normal_row"]
+    )
+    assert center_c is not center_a
+    assert normal_c is not normal_a
+    assert np.allclose(center_c, [1.0, 0.0, 0.0])
+
+
 def test_tilt_rim_source_internal_rim_matches_in_plus_out() -> None:
     """Bilayer internal-rim mode should equal in+out energies and gradients."""
     mesh = parse_geometry(_disk_plus_annulus_internal_rim_mesh())

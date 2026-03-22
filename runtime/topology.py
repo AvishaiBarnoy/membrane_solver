@@ -10,6 +10,44 @@ from geometry.entities import Mesh, _fast_cross
 logger = logging.getLogger("membrane_solver")
 
 
+def check_max_normal_change_positions(
+    mesh: Mesh,
+    original_positions: np.ndarray,
+    new_positions: np.ndarray,
+    limit_radians: float = 0.5,
+) -> bool:
+    """Check triangle normal rotation between two dense position arrays."""
+    tri_rows, _ = mesh.triangle_row_cache()
+    if tri_rows is None or tri_rows.size == 0:
+        return True
+
+    v0_old = original_positions[tri_rows[:, 0]]
+    v1_old = original_positions[tri_rows[:, 1]]
+    v2_old = original_positions[tri_rows[:, 2]]
+    n_old = _fast_cross(v1_old - v0_old, v2_old - v0_old)
+
+    norms_old = np.linalg.norm(n_old, axis=1)
+    good_old = norms_old > 1e-12
+    if not np.any(good_old):
+        return True
+    n_old = n_old[good_old] / norms_old[good_old][:, None]
+
+    tri_good = tri_rows[good_old]
+    v0_new = new_positions[tri_good[:, 0]]
+    v1_new = new_positions[tri_good[:, 1]]
+    v2_new = new_positions[tri_good[:, 2]]
+    n_new = _fast_cross(v1_new - v0_new, v2_new - v0_new)
+
+    norms_new = np.linalg.norm(n_new, axis=1)
+    if np.any(norms_new < 1e-12):
+        return False
+    n_new = n_new / norms_new[:, None]
+
+    dots = np.sum(n_old * n_new, axis=1)
+    dots = np.clip(dots, -1.0, 1.0)
+    return bool(np.all(np.arccos(dots) <= limit_radians))
+
+
 def check_max_normal_change(
     mesh: Mesh, original_positions: Dict[int, np.ndarray], limit_radians: float = 0.5
 ) -> bool:
@@ -35,75 +73,12 @@ def check_max_normal_change(
         if vidx in idx_map:
             old_pos_view[idx_map[vidx]] = pos
 
-    # 3. Compute normals for all facets in both states
-    facets = list(mesh.facets.values())
-    if not facets:
-        return True
-
-    # Pre-allocate indices
-    n_facets = len(facets)
-    tri_idx = np.empty((n_facets, 3), dtype=int)
-    valid_mask = np.zeros(n_facets, dtype=bool)
-
-    # Cache facet loops if not available (should be built by minimizer usually)
-    if not getattr(mesh, "facet_vertex_loops", None):
-        mesh.build_facet_vertex_loops()
-
-    for i, f in enumerate(facets):
-        # Only check triangles
-        if len(f.edge_indices) == 3:
-            loop = mesh.facet_vertex_loops.get(f.index)
-            if loop is not None:
-                tri_idx[i, 0] = idx_map[int(loop[0])]
-                tri_idx[i, 1] = idx_map[int(loop[1])]
-                tri_idx[i, 2] = idx_map[int(loop[2])]
-                valid_mask[i] = True
-
-    if not np.any(valid_mask):
-        return True
-
-    # Compute old normals
-    v0_old = old_pos_view[tri_idx[valid_mask, 0]]
-    v1_old = old_pos_view[tri_idx[valid_mask, 1]]
-    v2_old = old_pos_view[tri_idx[valid_mask, 2]]
-    n_old = _fast_cross(v1_old - v0_old, v2_old - v0_old)
-
-    # Normalize old
-    norms_old = np.linalg.norm(n_old, axis=1)
-    # Skip degenerate old facets (can't track rotation if they had no normal)
-    good_old = norms_old > 1e-12
-    n_old = n_old[good_old] / norms_old[good_old][:, None]
-
-    # Compute new normals
-    # We only need new normals for the subset that was valid in old
-    v0_new = new_pos_view[tri_idx[valid_mask, 0]][good_old]
-    v1_new = new_pos_view[tri_idx[valid_mask, 1]][good_old]
-    v2_new = new_pos_view[tri_idx[valid_mask, 2]][good_old]
-    n_new = _fast_cross(v1_new - v0_new, v2_new - v0_new)
-
-    # Normalize new
-    norms_new = np.linalg.norm(n_new, axis=1)
-
-    # If a facet becomes degenerate (norm ~ 0), that's a huge change -> Reject
-    if np.any(norms_new < 1e-12):
-        # logging at debug level to avoid spamming console during search
-        # logger.debug("Step rejected: Facet collapsed to zero area.")
-        return False
-
-    n_new = n_new / norms_new[:, None]
-
-    # Dot product
-    dots = np.sum(n_old * n_new, axis=1)
-    # Clamp for safety (floating point errors can give 1.0000000000000002)
-    dots = np.clip(dots, -1.0, 1.0)
-    angles = np.arccos(dots)
-
-    max_angle = np.max(angles)
-    if max_angle > limit_radians:
-        # logger.debug(f"Step rejected: Max normal change {max_angle:.4f} > limit {limit_radians}")
-        return False
-
-    return True
+    return check_max_normal_change_positions(
+        mesh,
+        original_positions=old_pos_view,
+        new_positions=new_pos_view,
+        limit_radians=limit_radians,
+    )
 
 
 def detect_vertex_edge_collisions(

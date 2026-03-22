@@ -107,10 +107,29 @@ def build_leaflet_trial_tilts(
     fixed_mask_out: np.ndarray | None = None,
     fixed_vals_in: np.ndarray | None = None,
     fixed_vals_out: np.ndarray | None = None,
+    out_in: np.ndarray | None = None,
+    out_out: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build tangent-projected leaflet trial tilts with fixed-value overrides."""
-    trial_in = project_tilts_to_tangent_array(base_in + delta_in, normals)
-    trial_out = project_tilts_to_tangent_array(base_out + delta_out, normals)
+    if out_in is None:
+        trial_in = project_tilts_to_tangent_array(base_in + delta_in, normals)
+    else:
+        trial_in = np.asarray(out_in, dtype=float)
+        if trial_in.shape != base_in.shape:
+            raise ValueError("out_in must match base_in shape")
+        np.add(base_in, delta_in, out=trial_in)
+        dot_in = np.einsum("ij,ij->i", trial_in, normals)
+        trial_in -= dot_in[:, None] * normals
+
+    if out_out is None:
+        trial_out = project_tilts_to_tangent_array(base_out + delta_out, normals)
+    else:
+        trial_out = np.asarray(out_out, dtype=float)
+        if trial_out.shape != base_out.shape:
+            raise ValueError("out_out must match base_out shape")
+        np.add(base_out, delta_out, out=trial_out)
+        dot_out = np.einsum("ij,ij->i", trial_out, normals)
+        trial_out -= dot_out[:, None] * normals
 
     if fixed_vals_in is not None and fixed_mask_in is not None:
         trial_in[fixed_mask_in] = fixed_vals_in
