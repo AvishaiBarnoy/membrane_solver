@@ -96,6 +96,44 @@ def test_bending_tilt_leaflet_tilt_grad_parity_when_shape_grad_skipped() -> None
     assert np.allclose(tgrad_skip, tgrad_full, atol=1e-10, rtol=1e-10)
 
 
+def test_bending_tilt_leaflet_tilt_only_path_skips_shape_scatter(monkeypatch) -> None:
+    mesh = _build_two_triangle_mesh()
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    n = len(mesh.vertex_ids)
+
+    rng = np.random.default_rng(7)
+    tilts = rng.normal(size=(n, 3))
+
+    gp = _GP({"bending_modulus_in": 2.0, "spontaneous_curvature_in": 0.0})
+    resolver = _Resolver({"bending_modulus_in": 2.0})
+    tilt_grad = np.zeros_like(tilts)
+
+    def _unexpected_scatter(*args, **kwargs):
+        raise AssertionError("shape-side scatter should not run in tilt-only mode")
+
+    monkeypatch.setattr(
+        bt_leaflet, "scatter_triangle_scalar_to_vertices", _unexpected_scatter
+    )
+
+    energy = bt_leaflet.compute_energy_and_gradient_array_leaflet(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=None,
+        tilts=tilts,
+        tilt_grad_arr=tilt_grad,
+        kappa_key="bending_modulus_in",
+        cache_tag="in",
+        div_sign=1.0,
+    )
+
+    assert np.isfinite(float(energy))
+    assert np.any(np.abs(tilt_grad) > 0.0)
+
+
 def test_tilt_in_tilt_grad_parity_when_shape_grad_skipped() -> None:
     mesh = _build_two_triangle_mesh()
     positions = mesh.positions_view()

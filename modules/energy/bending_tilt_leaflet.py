@@ -541,52 +541,119 @@ def _per_vertex_params_leaflet(
     return kappa, c0
 
 
-def _total_energy_leaflet(
+def _leaflet_triangle_payload(
     mesh: Mesh,
     global_params,
     *,
     positions: np.ndarray,
     index_map: Dict[int, int],
-    tilts: np.ndarray,
-    kappa_key: str,
     cache_tag: str,
-    div_sign: float,
-) -> float:
-    """Energy-only helper for finite-difference debugging."""
+    ctx=None,
+) -> dict[str, np.ndarray | None]:
+    """Return cached leaflet-masked triangle geometry for fixed positions."""
     mesh.build_position_cache()
-    k_vecs, vertex_areas_vor, weights, tri_rows = compute_curvature_data(
+    absent_mask = None
+    absent_key = None
+    if cache_tag in {"in", "out"}:
+        absent_mask = leaflet_absent_vertex_mask(mesh, global_params, leaflet=cache_tag)
+        absent_key = id(absent_mask)
+
+    use_cache = mesh._geometry_cache_active(positions)
+    cache_attr = f"_bending_tilt_leaflet_triangle_payload_cache_{cache_tag}"
+    cache_key = (
+        int(mesh._version),
+        int(mesh._facet_loops_version),
+        int(mesh._vertex_ids_version),
+        id(positions),
+        absent_key,
+    )
+    if use_cache:
+        cached = getattr(mesh, cache_attr, None)
+        if cached is not None and cached.get("key") == cache_key:
+            return cached["value"]
+
+    k_vecs, vertex_areas_vor, weights_full, tri_rows_full = compute_curvature_data(
         mesh, positions, index_map
     )
-    if tri_rows.size == 0:
-        return 0.0
+    if tri_rows_full.size == 0:
+        payload = {
+            "k_vecs": k_vecs,
+            "vertex_areas_vor": vertex_areas_vor,
+            "weights_full": weights_full,
+            "tri_rows_full": tri_rows_full,
+            "weights": weights_full,
+            "tri_rows": tri_rows_full,
+            "tri_keep": np.zeros(0, dtype=bool),
+            "g0": None,
+            "g1": None,
+            "g2": None,
+        }
+        if use_cache:
+            setattr(mesh, cache_attr, {"key": cache_key, "value": payload})
+        return payload
 
-    transport_model = _resolve_transport_model(
-        global_params.get("tilt_transport_model", "ambient_v1")
-        if global_params is not None
-        else "ambient_v1"
-    )
-    div_tri, _, _, _, _ = p1_triangle_divergence(
-        mesh=mesh,
-        positions=positions,
-        tilts=tilts,
-        tri_rows=tri_rows,
-        transport_model=transport_model,
-    )
-    div_term = float(div_sign) * div_tri
-    div_term = _apply_inner_divergence_update_mode(
-        mesh,
-        global_params,
-        positions=positions,
-        tri_rows=tri_rows,
-        cache_tag=cache_tag,
-        div_term=div_term,
-    )
+    tri_keep = np.zeros(0, dtype=bool)
+    weights = weights_full
+    tri_rows = tri_rows_full
+    if absent_mask is not None:
+        tri_keep = leaflet_present_triangle_mask(
+            mesh, tri_rows_full, absent_vertex_mask=absent_mask
+        )
+        if tri_keep.size:
+            tri_rows = tri_rows_full[tri_keep]
+            weights = weights_full[tri_keep]
 
-    _, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
-        mesh, positions, tri_rows, weights, index_map
-    )
-    safe_areas_vor = np.maximum(vertex_areas_vor, 1e-12)
+    g0_use = None
+    g1_use = None
+    g2_use = None
+    if ctx is not None:
+        _area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
+            ctx.geometry.p1_triangle_shape_gradients(mesh, positions)
+        )
+    else:
+        _area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
+            mesh.p1_triangle_shape_gradient_cache(positions)
+        )
+    if tri_rows_cache.size and tri_rows_cache.shape[0] == tri_rows_full.shape[0]:
+        if tri_keep.size:
+            g0_use = g0_cache[tri_keep]
+            g1_use = g1_cache[tri_keep]
+            g2_use = g2_cache[tri_keep]
+        else:
+            g0_use = g0_cache
+            g1_use = g1_cache
+            g2_use = g2_cache
 
+    payload = {
+        "k_vecs": k_vecs,
+        "vertex_areas_vor": vertex_areas_vor,
+        "weights_full": weights_full,
+        "tri_rows_full": tri_rows_full,
+        "weights": weights,
+        "tri_rows": tri_rows,
+        "tri_keep": tri_keep,
+        "g0": g0_use,
+        "g1": g1_use,
+        "g2": g2_use,
+    }
+    if use_cache:
+        setattr(mesh, cache_attr, {"key": cache_key, "value": payload})
+    return payload
+
+
+def _leaflet_static_tilt_payload(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    k_vecs: np.ndarray,
+    vertex_areas_vor: np.ndarray,
+    tri_rows: np.ndarray,
+    kappa_key: str,
+    cache_tag: str,
+) -> dict[str, np.ndarray]:
+    """Return cached fixed-geometry arrays used by tilt-only leaflet coupling."""
     model = _energy_model(global_params)
     if model != "helfrich":
         model = "helfrich"
@@ -594,19 +661,49 @@ def _total_energy_leaflet(
         mesh, global_params, model=model, kappa_key=kappa_key, cache_tag=cache_tag
     )
 
-    k_mag = np.linalg.norm(k_vecs, axis=1)
-    H_vor = k_mag / (2.0 * safe_areas_vor)
+    presets = _assume_J0_presets(global_params, cache_tag=cache_tag)
+    radius_max = _assume_J0_radius_max(global_params, cache_tag=cache_tag)
+    center_xy = _assume_J0_center_xy(global_params)
+    center_key = (float(center_xy[0]), float(center_xy[1]))
+    region_mode = _base_term_region_mode(global_params)
+    region_radius = _base_term_region_radius(global_params)
+    boundary_group = _base_term_boundary_group(global_params, cache_tag=cache_tag)
 
+    use_cache = mesh._geometry_cache_active(positions)
+    cache_attr = f"_bending_tilt_leaflet_static_cache_{cache_tag}"
+    cache_key = (
+        int(mesh._version),
+        int(mesh._facet_loops_version),
+        int(mesh._vertex_ids_version),
+        int(mesh._topology_version),
+        id(positions),
+        id(k_vecs),
+        id(vertex_areas_vor),
+        id(tri_rows),
+        id(kappa_arr),
+        id(c0_arr),
+        None if boundary_group is None else str(boundary_group),
+        presets,
+        None if radius_max is None else float(radius_max),
+        center_key,
+        str(region_mode),
+        None if region_radius is None else float(region_radius),
+    )
+    if use_cache:
+        cached = getattr(mesh, cache_attr, None)
+        if cached is not None and cached.get("key") == cache_key:
+            return cached["value"]
+
+    safe_areas_vor = np.maximum(vertex_areas_vor, 1e-12)
+    k_mag = np.linalg.norm(k_vecs, axis=1)
+    h_vor = k_mag / (2.0 * safe_areas_vor)
     is_interior = _interior_mask_leaflet(
         mesh, global_params, cache_tag=cache_tag, index_map=index_map
     )
 
-    base_term = (2.0 * H_vor) - c0_arr
+    base_term = (2.0 * h_vor) - c0_arr
     base_term[~is_interior] = 0.0
-    presets = _assume_J0_presets(global_params, cache_tag=cache_tag)
     if presets:
-        radius_max = _assume_J0_radius_max(global_params, cache_tag=cache_tag)
-        center_xy = _assume_J0_center_xy(global_params)
         rows = _collect_preset_rows(
             mesh,
             presets=presets,
@@ -626,10 +723,101 @@ def _total_energy_leaflet(
     if region_rows.size:
         base_term[region_rows] = 0.0
 
-    base_tri = base_term[tri_rows]
+    value = {
+        "base_tri": base_term[tri_rows],
+        "kappa_tri": kappa_arr[tri_rows],
+    }
+    if use_cache:
+        setattr(mesh, cache_attr, {"key": cache_key, "value": value})
+    return value
+
+
+def _total_energy_leaflet(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+    tilts: np.ndarray,
+    kappa_key: str,
+    cache_tag: str,
+    div_sign: float,
+) -> float:
+    """Energy-only helper for finite-difference debugging."""
+    payload = _leaflet_triangle_payload(
+        mesh,
+        global_params,
+        positions=positions,
+        index_map=index_map,
+        cache_tag=cache_tag,
+    )
+    k_vecs = np.asarray(payload["k_vecs"], dtype=float)
+    vertex_areas_vor = np.asarray(payload["vertex_areas_vor"], dtype=float)
+    weights = np.asarray(payload["weights"], dtype=float)
+    tri_rows = np.asarray(payload["tri_rows"], dtype=np.int32)
+    if tri_rows.size == 0:
+        return 0.0
+
+    transport_model = _resolve_transport_model(
+        global_params.get("tilt_transport_model", "ambient_v1")
+        if global_params is not None
+        else "ambient_v1"
+    )
+    g0 = payload["g0"]
+    g1 = payload["g1"]
+    g2 = payload["g2"]
+    if g0 is not None and g1 is not None and g2 is not None:
+        div_tri = compute_divergence_from_basis(
+            mesh=mesh,
+            tilts=tilts,
+            tri_rows=tri_rows,
+            g0=np.asarray(g0, dtype=float),
+            g1=np.asarray(g1, dtype=float),
+            g2=np.asarray(g2, dtype=float),
+            positions=positions,
+            transport_model=transport_model,
+        )
+    else:
+        div_tri, _, _, _, _ = p1_triangle_divergence(
+            mesh=mesh,
+            positions=positions,
+            tilts=tilts,
+            tri_rows=tri_rows,
+            transport_model=transport_model,
+        )
+    div_term = float(div_sign) * div_tri
+    div_term = _apply_inner_divergence_update_mode(
+        mesh,
+        global_params,
+        positions=positions,
+        tri_rows=tri_rows,
+        cache_tag=cache_tag,
+        div_term=div_term,
+    )
+
+    _, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
+        mesh,
+        positions,
+        tri_rows,
+        weights,
+        index_map,
+        compute_vertex_areas=False,
+    )
+    static_payload = _leaflet_static_tilt_payload(
+        mesh,
+        global_params,
+        positions=positions,
+        index_map=index_map,
+        k_vecs=k_vecs,
+        vertex_areas_vor=vertex_areas_vor,
+        tri_rows=tri_rows,
+        kappa_key=kappa_key,
+        cache_tag=cache_tag,
+    )
+    base_tri = np.asarray(static_payload["base_tri"], dtype=float)
     term_tri = base_tri + div_term[:, None]
     va_eff = np.stack([va0_eff, va1_eff, va2_eff], axis=1)
-    kappa_tri = kappa_arr[tri_rows]
+    kappa_tri = np.asarray(static_payload["kappa_tri"], dtype=float)
 
     return float(0.5 * np.sum(kappa_tri * term_tri**2 * va_eff))
 
@@ -698,27 +886,23 @@ def compute_energy_and_gradient_array_leaflet(
 ) -> float:
     """Compute coupled bending+tilt energy and accumulate gradients."""
     _ = param_resolver
-    mesh.build_position_cache()
-    k_vecs, vertex_areas_vor, weights, tri_rows = compute_curvature_data(
-        mesh, positions, index_map
+    payload = _leaflet_triangle_payload(
+        mesh,
+        global_params,
+        positions=positions,
+        index_map=index_map,
+        cache_tag=cache_tag,
+        ctx=ctx,
     )
+    k_vecs = np.asarray(payload["k_vecs"], dtype=float)
+    vertex_areas_vor = np.asarray(payload["vertex_areas_vor"], dtype=float)
+    tri_rows_full = np.asarray(payload["tri_rows_full"], dtype=np.int32)
+    weights = np.asarray(payload["weights"], dtype=float)
+    tri_rows = np.asarray(payload["tri_rows"], dtype=np.int32)
+    tri_keep = np.asarray(payload["tri_keep"], dtype=bool)
 
-    if tri_rows.size == 0:
+    if tri_rows_full.size == 0 or tri_rows.size == 0:
         return 0.0
-
-    tri_rows_full = tri_rows
-    weights_full = weights
-    tri_keep = np.array([], dtype=bool)
-    if cache_tag in {"in", "out"}:
-        absent_mask = leaflet_absent_vertex_mask(mesh, global_params, leaflet=cache_tag)
-        tri_keep = leaflet_present_triangle_mask(
-            mesh, tri_rows_full, absent_vertex_mask=absent_mask
-        )
-        if tri_keep.size:
-            tri_rows = tri_rows_full[tri_keep]
-            weights = weights_full[tri_keep]
-            if tri_rows.size == 0:
-                return 0.0
 
     tilts = np.asarray(tilts, dtype=float)
     if tilts.shape != (len(mesh.vertex_ids), 3):
@@ -730,44 +914,23 @@ def compute_energy_and_gradient_array_leaflet(
         else "ambient_v1"
     )
 
-    # Use cached triangle P1 basis gradients when geometry is frozen/cached.
-    if transport_model == "ambient_v1":
-        if ctx is not None:
-            area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
-                ctx.geometry.p1_triangle_shape_gradients(mesh, positions)
-            )
-        else:
-            area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
-                mesh.p1_triangle_shape_gradient_cache(positions)
-            )
-    else:
-        area_cache = np.zeros(0, dtype=float)
-        g0_cache = np.zeros((0, 3), dtype=float)
-        g1_cache = np.zeros((0, 3), dtype=float)
-        g2_cache = np.zeros((0, 3), dtype=float)
-        tri_rows_cache = np.zeros((0, 3), dtype=np.int32)
-    if tri_rows_cache.size and tri_rows_cache.shape[0] == tri_rows_full.shape[0]:
-        g0_use = g0_cache
-        g1_use = g1_cache
-        g2_use = g2_cache
-        if tri_keep.size:
-            g0_use = g0_use[tri_keep]
-            g1_use = g1_use[tri_keep]
-            g2_use = g2_use[tri_keep]
+    g0_use = payload["g0"]
+    g1_use = payload["g1"]
+    g2_use = payload["g2"]
+    if g0_use is not None and g1_use is not None and g2_use is not None:
         div_tri = compute_divergence_from_basis(
             mesh=mesh,
             tilts=tilts,
             tri_rows=tri_rows,
-            g0=g0_use,
-            g1=g1_use,
-            g2=g2_use,
+            g0=np.asarray(g0_use, dtype=float),
+            g1=np.asarray(g1_use, dtype=float),
+            g2=np.asarray(g2_use, dtype=float),
             positions=positions,
             transport_model=transport_model,
         )
-        # Keep using the standard divergence routine for gradients (g0,g1,g2)
-        # which we already have in cached form.
-        g0, g1, g2 = g0_use, g1_use, g2_use
-        _ = area_cache
+        g0 = np.asarray(g0_use, dtype=float)
+        g1 = np.asarray(g1_use, dtype=float)
+        g2 = np.asarray(g2_use, dtype=float)
     else:
         div_tri, _, g0, g1, g2 = p1_triangle_divergence(
             mesh=mesh,
@@ -793,7 +956,58 @@ def compute_energy_and_gradient_array_leaflet(
         weights,
         index_map,
         cache_token=f"bending_tilt_leaflet_{cache_tag}",
+        compute_vertex_areas=grad_arr is not None,
     )
+    if grad_arr is None:
+        static_payload = _leaflet_static_tilt_payload(
+            mesh,
+            global_params,
+            positions=positions,
+            index_map=index_map,
+            k_vecs=k_vecs,
+            vertex_areas_vor=vertex_areas_vor,
+            tri_rows=tri_rows,
+            kappa_key=kappa_key,
+            cache_tag=cache_tag,
+        )
+        base_tri = np.asarray(static_payload["base_tri"], dtype=float)
+        kappa_tri = np.asarray(static_payload["kappa_tri"], dtype=float)
+        term_tri = base_tri + div_term[:, None]
+        total_energy = float(
+            0.5
+            * np.sum(
+                (kappa_tri[:, 0] * term_tri[:, 0] ** 2 * va0_eff)
+                + (kappa_tri[:, 1] * term_tri[:, 1] ** 2 * va1_eff)
+                + (kappa_tri[:, 2] * term_tri[:, 2] ** 2 * va2_eff)
+            )
+        )
+
+        if tilt_grad_arr is not None:
+            tilt_grad_arr = np.asarray(tilt_grad_arr, dtype=float)
+            if tilt_grad_arr.shape != (len(mesh.vertex_ids), 3):
+                raise ValueError("tilt_grad_arr must have shape (N_vertices, 3)")
+
+            dE_ddiv_base, mode_stats = _inner_bending_tilt_dE_ddiv(
+                mesh=mesh,
+                global_params=global_params,
+                cache_tag=cache_tag,
+                kappa_tri=kappa_tri,
+                base_tri=base_tri,
+                div_term=div_term,
+                va0_eff=va0_eff,
+                va1_eff=va1_eff,
+                va2_eff=va2_eff,
+            )
+            if str(cache_tag) == "in":
+                setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
+            dE_ddiv = float(div_sign) * dE_ddiv_base
+            factor = dE_ddiv[:, None]
+
+            np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
+            np.add.at(tilt_grad_arr, tri_rows[:, 1], factor * g1)
+            np.add.at(tilt_grad_arr, tri_rows[:, 2], factor * g2)
+        return float(total_energy)
+
     safe_areas_vor = np.maximum(vertex_areas_vor, 1e-12)
 
     model = _energy_model(global_params)
@@ -809,17 +1023,6 @@ def compute_energy_and_gradient_array_leaflet(
     is_interior = _interior_mask_leaflet(
         mesh, global_params, cache_tag=cache_tag, index_map=index_map
     )
-
-    if ctx is not None:
-        ratio = ctx.scratch_array(
-            f"btl_{cache_tag}_ratio",
-            shape=vertex_areas_eff.shape,
-            dtype=vertex_areas_eff.dtype,
-        )
-    else:
-        ratio = np.zeros_like(vertex_areas_eff)
-    mask_vor = safe_areas_vor > 1e-15
-    ratio[mask_vor] = vertex_areas_eff[mask_vor] / safe_areas_vor[mask_vor]
 
     base_term = (2.0 * H_vor) - c0_arr
     base_term[~is_interior] = 0.0
@@ -859,6 +1062,17 @@ def compute_energy_and_gradient_array_leaflet(
     )
 
     if ctx is not None:
+        ratio = ctx.scratch_array(
+            f"btl_{cache_tag}_ratio",
+            shape=vertex_areas_eff.shape,
+            dtype=vertex_areas_eff.dtype,
+        )
+    else:
+        ratio = np.zeros_like(vertex_areas_eff)
+    mask_vor = safe_areas_vor > 1e-15
+    ratio[mask_vor] = vertex_areas_eff[mask_vor] / safe_areas_vor[mask_vor]
+
+    if ctx is not None:
         div_eff_num = ctx.scratch_array(
             f"btl_{cache_tag}_div_eff_num",
             shape=base_term.shape,
@@ -887,33 +1101,6 @@ def compute_energy_and_gradient_array_leaflet(
 
     term = base_term + div_eff
     term[~is_interior] = 0.0
-
-    if grad_arr is None:
-        if tilt_grad_arr is not None:
-            tilt_grad_arr = np.asarray(tilt_grad_arr, dtype=float)
-            if tilt_grad_arr.shape != (len(mesh.vertex_ids), 3):
-                raise ValueError("tilt_grad_arr must have shape (N_vertices, 3)")
-
-            dE_ddiv_base, mode_stats = _inner_bending_tilt_dE_ddiv(
-                mesh=mesh,
-                global_params=global_params,
-                cache_tag=cache_tag,
-                kappa_tri=kappa_tri,
-                base_tri=base_tri,
-                div_term=div_term,
-                va0_eff=va0_eff,
-                va1_eff=va1_eff,
-                va2_eff=va2_eff,
-            )
-            if str(cache_tag) == "in":
-                setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
-            dE_ddiv = float(div_sign) * dE_ddiv_base
-            factor = dE_ddiv[:, None]
-
-            np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
-            np.add.at(tilt_grad_arr, tri_rows[:, 1], factor * g1)
-            np.add.at(tilt_grad_arr, tri_rows[:, 2], factor * g2)
-        return float(total_energy)
 
     mode = _gradient_mode(global_params)
     normals = _vertex_normals(mesh, positions, tri_rows)
