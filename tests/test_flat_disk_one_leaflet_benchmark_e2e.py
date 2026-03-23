@@ -1,6 +1,7 @@
 import os
 import subprocess
 import sys
+from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
 
@@ -106,6 +107,80 @@ def _kh_opt_report(
         optimize_preset=preset,
         tilt_mass_mode_in=str(tilt_mass_mode_in),
     )
+
+
+def _freeze_cache_value(value):
+    """Return an lru-cache-safe representation for benchmark helper kwargs."""
+    if isinstance(value, tuple):
+        return tuple(_freeze_cache_value(v) for v in value)
+    if isinstance(value, list):
+        return tuple(_freeze_cache_value(v) for v in value)
+    return value
+
+
+@lru_cache(maxsize=64)
+def _cached_kh_audit_report(items):
+    """Cache repeated KH term audit reports used across benchmark assertions."""
+    return run_flat_disk_kh_term_audit(**dict(items))
+
+
+def _kh_audit_report(**kwargs) -> dict:
+    """Return a defensive copy of a cached KH term audit report."""
+    items = tuple(
+        sorted((key, _freeze_cache_value(value)) for key, value in kwargs.items())
+    )
+    return deepcopy(_cached_kh_audit_report(items))
+
+
+def _audit_row_for_report(
+    report: dict,
+    *,
+    theta_value: float | None = None,
+    **overrides,
+) -> dict:
+    """Return the single-row KH audit derived from a benchmark report."""
+    meta = report["meta"]
+    kwargs = {
+        "fixture": DEFAULT_FIXTURE,
+        "refine_level": int(meta["refine_level"]),
+        "outer_mode": "disabled",
+        "smoothness_model": "splay_twist",
+        "kappa_physical": 10.0,
+        "kappa_t_physical": 10.0,
+        "radius_nm": 7.0,
+        "length_scale_nm": 15.0,
+        "drive_physical": (2.0 / 0.7),
+        "theta_values": (
+            float(report["mesh"]["theta_star"] if theta_value is None else theta_value),
+        ),
+        "tilt_mass_mode_in": str(meta.get("tilt_mass_mode_in", "consistent")),
+    }
+    for key in (
+        "rim_local_refine_steps",
+        "rim_local_refine_band_lambda",
+        "outer_local_refine_steps",
+        "outer_local_refine_rmin_lambda",
+        "outer_local_refine_rmax_lambda",
+        "local_edge_flip_steps",
+        "local_edge_flip_rmin_lambda",
+        "local_edge_flip_rmax_lambda",
+        "outer_local_vertex_average_steps",
+        "outer_local_vertex_average_rmin_lambda",
+        "outer_local_vertex_average_rmax_lambda",
+    ):
+        if key in meta:
+            value = meta[key]
+            kwargs[key] = int(value) if key.endswith("_steps") else float(value)
+    kwargs.update(overrides)
+    return _kh_audit_report(**kwargs)["rows"][0]
+
+
+def _audit_outer_tail_score(report: dict, *, theta_value: float) -> float:
+    """Return the outer-band log-mismatch score for a derived KH audit row."""
+    row = _audit_row_for_report(report, theta_value=theta_value)
+    near = float(row["internal_outer_near_ratio_mesh_over_theory"])
+    far = float(row["internal_outer_far_ratio_mesh_over_theory"])
+    return float(np.hypot(np.log(max(near, 1e-18)), np.log(max(far, 1e-18))))
 
 
 @pytest.mark.acceptance
@@ -491,29 +566,9 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
         outerband_tight["meta"]["rim_local_refine_band_lambda"]
     ) == pytest.approx(3.0)
 
-    def _audit_row(report: dict, *, theta_value: float) -> dict:
-        audit = run_flat_disk_kh_term_audit(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=int(report["meta"]["refine_level"]),
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            kappa_physical=10.0,
-            kappa_t_physical=10.0,
-            radius_nm=7.0,
-            length_scale_nm=15.0,
-            drive_physical=(2.0 / 0.7),
-            theta_values=(float(theta_value),),
-            tilt_mass_mode_in="consistent",
-            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
-            rim_local_refine_band_lambda=float(
-                report["meta"]["rim_local_refine_band_lambda"]
-            ),
-        )
-        return audit["rows"][0]
-
     # Compare section decomposition at a fixed theta to isolate mesh/partition effects.
-    section_row = _audit_row(section_tight, theta_value=0.138)
-    outer_row = _audit_row(outerband_tight, theta_value=0.138)
+    section_row = _audit_row_for_report(section_tight, theta_value=0.138)
+    outer_row = _audit_row_for_report(outerband_tight, theta_value=0.138)
     near_err_section = abs(
         float(section_row["internal_outer_near_ratio_mesh_over_theory"]) - 1.0
     )
@@ -713,51 +768,8 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_averaged_improves_finite
         optimize_preset="kh_strict_outerfield_averaged",
     )
 
-    def _audit_row(report: dict, *, theta_value: float) -> dict:
-        audit = run_flat_disk_kh_term_audit(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=int(report["meta"]["refine_level"]),
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            kappa_physical=10.0,
-            kappa_t_physical=10.0,
-            radius_nm=7.0,
-            length_scale_nm=15.0,
-            drive_physical=(2.0 / 0.7),
-            theta_values=(float(theta_value),),
-            tilt_mass_mode_in="consistent",
-            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
-            rim_local_refine_band_lambda=float(
-                report["meta"]["rim_local_refine_band_lambda"]
-            ),
-            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
-            outer_local_refine_rmin_lambda=float(
-                report["meta"]["outer_local_refine_rmin_lambda"]
-            ),
-            outer_local_refine_rmax_lambda=float(
-                report["meta"]["outer_local_refine_rmax_lambda"]
-            ),
-            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
-            local_edge_flip_rmin_lambda=float(
-                report["meta"]["local_edge_flip_rmin_lambda"]
-            ),
-            local_edge_flip_rmax_lambda=float(
-                report["meta"]["local_edge_flip_rmax_lambda"]
-            ),
-            outer_local_vertex_average_steps=int(
-                report["meta"]["outer_local_vertex_average_steps"]
-            ),
-            outer_local_vertex_average_rmin_lambda=float(
-                report["meta"]["outer_local_vertex_average_rmin_lambda"]
-            ),
-            outer_local_vertex_average_rmax_lambda=float(
-                report["meta"]["outer_local_vertex_average_rmax_lambda"]
-            ),
-        )
-        return audit["rows"][0]
-
-    outerfield_row = _audit_row(outerfield, theta_value=0.138)
-    averaged_row = _audit_row(averaged, theta_value=0.138)
+    outerfield_row = _audit_row_for_report(outerfield, theta_value=0.138)
+    averaged_row = _audit_row_for_report(averaged, theta_value=0.138)
     score_outerfield = float(
         outerfield_row["section_score_internal_bands_finite_outer_l2_log"]
     )
@@ -793,51 +805,8 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_best_non_worsening_vs_ou
     assert int(best["meta"]["outer_local_refine_steps"]) == 1
     assert int(best["meta"]["outer_local_vertex_average_steps"]) == 2
 
-    def _audit_row(report: dict, *, theta_value: float) -> dict:
-        audit = run_flat_disk_kh_term_audit(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=int(report["meta"]["refine_level"]),
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            kappa_physical=10.0,
-            kappa_t_physical=10.0,
-            radius_nm=7.0,
-            length_scale_nm=15.0,
-            drive_physical=(2.0 / 0.7),
-            theta_values=(float(theta_value),),
-            tilt_mass_mode_in="consistent",
-            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
-            rim_local_refine_band_lambda=float(
-                report["meta"]["rim_local_refine_band_lambda"]
-            ),
-            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
-            outer_local_refine_rmin_lambda=float(
-                report["meta"]["outer_local_refine_rmin_lambda"]
-            ),
-            outer_local_refine_rmax_lambda=float(
-                report["meta"]["outer_local_refine_rmax_lambda"]
-            ),
-            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
-            local_edge_flip_rmin_lambda=float(
-                report["meta"]["local_edge_flip_rmin_lambda"]
-            ),
-            local_edge_flip_rmax_lambda=float(
-                report["meta"]["local_edge_flip_rmax_lambda"]
-            ),
-            outer_local_vertex_average_steps=int(
-                report["meta"]["outer_local_vertex_average_steps"]
-            ),
-            outer_local_vertex_average_rmin_lambda=float(
-                report["meta"]["outer_local_vertex_average_rmin_lambda"]
-            ),
-            outer_local_vertex_average_rmax_lambda=float(
-                report["meta"]["outer_local_vertex_average_rmax_lambda"]
-            ),
-        )
-        return audit["rows"][0]
-
-    outerfield_row = _audit_row(outerfield, theta_value=0.138)
-    best_row = _audit_row(best, theta_value=0.138)
+    outerfield_row = _audit_row_for_report(outerfield, theta_value=0.138)
+    best_row = _audit_row_for_report(best, theta_value=0.138)
     score_outerfield = float(
         outerfield_row["section_score_internal_bands_finite_outer_l2_log"]
     )
@@ -887,51 +856,8 @@ def test_flat_disk_optimize_section_polish_non_worsening_outer_section_score() -
     for val in section_candidates:
         assert np.isfinite(float(val))
 
-    def _audit_row(report: dict) -> dict:
-        audit = run_flat_disk_kh_term_audit(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=int(report["meta"]["refine_level"]),
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            kappa_physical=10.0,
-            kappa_t_physical=10.0,
-            radius_nm=7.0,
-            length_scale_nm=15.0,
-            drive_physical=(2.0 / 0.7),
-            theta_values=(float(report["mesh"]["theta_star"]),),
-            tilt_mass_mode_in="consistent",
-            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
-            rim_local_refine_band_lambda=float(
-                report["meta"]["rim_local_refine_band_lambda"]
-            ),
-            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
-            outer_local_refine_rmin_lambda=float(
-                report["meta"]["outer_local_refine_rmin_lambda"]
-            ),
-            outer_local_refine_rmax_lambda=float(
-                report["meta"]["outer_local_refine_rmax_lambda"]
-            ),
-            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
-            local_edge_flip_rmin_lambda=float(
-                report["meta"]["local_edge_flip_rmin_lambda"]
-            ),
-            local_edge_flip_rmax_lambda=float(
-                report["meta"]["local_edge_flip_rmax_lambda"]
-            ),
-            outer_local_vertex_average_steps=int(
-                report["meta"]["outer_local_vertex_average_steps"]
-            ),
-            outer_local_vertex_average_rmin_lambda=float(
-                report["meta"]["outer_local_vertex_average_rmin_lambda"]
-            ),
-            outer_local_vertex_average_rmax_lambda=float(
-                report["meta"]["outer_local_vertex_average_rmax_lambda"]
-            ),
-        )
-        return audit["rows"][0]
-
-    base_row = _audit_row(base)
-    polished_row = _audit_row(polished)
+    base_row = _audit_row_for_report(base)
+    polished_row = _audit_row_for_report(polished)
     base_score = float(base_row["section_score_internal_bands_finite_outer_l2_log"])
     polished_score = float(
         polished_row["section_score_internal_bands_finite_outer_l2_log"]
@@ -1043,36 +969,6 @@ def test_flat_disk_optimize_preset_kh_strict_outertail_balanced_non_worsening_ou
         optimize_preset="kh_strict_outertail_balanced",
     )
 
-    def _audit_outer_tail_score(report: dict, *, theta_value: float) -> float:
-        audit = run_flat_disk_kh_term_audit(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=int(report["meta"]["refine_level"]),
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            kappa_physical=10.0,
-            kappa_t_physical=10.0,
-            radius_nm=7.0,
-            length_scale_nm=15.0,
-            drive_physical=(2.0 / 0.7),
-            theta_values=(float(theta_value),),
-            tilt_mass_mode_in="consistent",
-            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
-            rim_local_refine_band_lambda=float(
-                report["meta"]["rim_local_refine_band_lambda"]
-            ),
-            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
-            outer_local_refine_rmin_lambda=float(
-                report["meta"]["outer_local_refine_rmin_lambda"]
-            ),
-            outer_local_refine_rmax_lambda=float(
-                report["meta"]["outer_local_refine_rmax_lambda"]
-            ),
-        )
-        row = audit["rows"][0]
-        near = float(row["internal_outer_near_ratio_mesh_over_theory"])
-        far = float(row["internal_outer_far_ratio_mesh_over_theory"])
-        return float(np.hypot(np.log(max(near, 1e-18)), np.log(max(far, 1e-18))))
-
     score_outerfield = _audit_outer_tail_score(outerfield, theta_value=0.138)
     score_outertail = _audit_outer_tail_score(outertail, theta_value=0.138)
     assert score_outertail <= (score_outerfield + 2.0e-4)
@@ -1090,43 +986,6 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_quality_non_worsening_ou
         refine_level=1,
         optimize_preset="kh_strict_outerfield_quality",
     )
-
-    def _audit_outer_tail_score(report: dict, *, theta_value: float) -> float:
-        audit = run_flat_disk_kh_term_audit(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=int(report["meta"]["refine_level"]),
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            kappa_physical=10.0,
-            kappa_t_physical=10.0,
-            radius_nm=7.0,
-            length_scale_nm=15.0,
-            drive_physical=(2.0 / 0.7),
-            theta_values=(float(theta_value),),
-            tilt_mass_mode_in="consistent",
-            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
-            rim_local_refine_band_lambda=float(
-                report["meta"]["rim_local_refine_band_lambda"]
-            ),
-            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
-            outer_local_refine_rmin_lambda=float(
-                report["meta"]["outer_local_refine_rmin_lambda"]
-            ),
-            outer_local_refine_rmax_lambda=float(
-                report["meta"]["outer_local_refine_rmax_lambda"]
-            ),
-            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
-            local_edge_flip_rmin_lambda=float(
-                report["meta"]["local_edge_flip_rmin_lambda"]
-            ),
-            local_edge_flip_rmax_lambda=float(
-                report["meta"]["local_edge_flip_rmax_lambda"]
-            ),
-        )
-        row = audit["rows"][0]
-        near = float(row["internal_outer_near_ratio_mesh_over_theory"])
-        far = float(row["internal_outer_far_ratio_mesh_over_theory"])
-        return float(np.hypot(np.log(max(near, 1e-18)), np.log(max(far, 1e-18))))
 
     score_outerfield = _audit_outer_tail_score(outerfield, theta_value=0.138)
     score_quality = _audit_outer_tail_score(quality, theta_value=0.138)
@@ -1146,42 +1005,8 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_tailmatch_non_worsening_
         optimize_preset="kh_strict_outerfield_tailmatch",
     )
 
-    def _audit_row(report: dict, *, theta_value: float) -> dict:
-        audit = run_flat_disk_kh_term_audit(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=int(report["meta"]["refine_level"]),
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            kappa_physical=10.0,
-            kappa_t_physical=10.0,
-            radius_nm=7.0,
-            length_scale_nm=15.0,
-            drive_physical=(2.0 / 0.7),
-            theta_values=(float(theta_value),),
-            tilt_mass_mode_in="consistent",
-            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
-            rim_local_refine_band_lambda=float(
-                report["meta"]["rim_local_refine_band_lambda"]
-            ),
-            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
-            outer_local_refine_rmin_lambda=float(
-                report["meta"]["outer_local_refine_rmin_lambda"]
-            ),
-            outer_local_refine_rmax_lambda=float(
-                report["meta"]["outer_local_refine_rmax_lambda"]
-            ),
-            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
-            local_edge_flip_rmin_lambda=float(
-                report["meta"]["local_edge_flip_rmin_lambda"]
-            ),
-            local_edge_flip_rmax_lambda=float(
-                report["meta"]["local_edge_flip_rmax_lambda"]
-            ),
-        )
-        return audit["rows"][0]
-
-    quality_row = _audit_row(quality, theta_value=0.138)
-    tailmatch_row = _audit_row(tailmatch, theta_value=0.138)
+    quality_row = _audit_row_for_report(quality, theta_value=0.138)
+    tailmatch_row = _audit_row_for_report(tailmatch, theta_value=0.138)
     q_near = float(quality_row["internal_outer_near_ratio_mesh_over_theory"])
     q_far = float(quality_row["internal_outer_far_ratio_mesh_over_theory"])
     t_near = float(tailmatch_row["internal_outer_near_ratio_mesh_over_theory"])
@@ -1210,35 +1035,8 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_improves_outer_sec
         optimize_preset="kh_strict_outerfield_tight",
     )
 
-    def _audit_row(report: dict, *, theta_value: float) -> dict:
-        audit = run_flat_disk_kh_term_audit(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=int(report["meta"]["refine_level"]),
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            kappa_physical=10.0,
-            kappa_t_physical=10.0,
-            radius_nm=7.0,
-            length_scale_nm=15.0,
-            drive_physical=(2.0 / 0.7),
-            theta_values=(float(theta_value),),
-            tilt_mass_mode_in="consistent",
-            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
-            rim_local_refine_band_lambda=float(
-                report["meta"]["rim_local_refine_band_lambda"]
-            ),
-            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
-            outer_local_refine_rmin_lambda=float(
-                report["meta"]["outer_local_refine_rmin_lambda"]
-            ),
-            outer_local_refine_rmax_lambda=float(
-                report["meta"]["outer_local_refine_rmax_lambda"]
-            ),
-        )
-        return audit["rows"][0]
-
-    outerband_row = _audit_row(outerband, theta_value=0.138)
-    outerfield_row = _audit_row(outerfield, theta_value=0.138)
+    outerband_row = _audit_row_for_report(outerband, theta_value=0.138)
+    outerfield_row = _audit_row_for_report(outerfield, theta_value=0.138)
 
     near_err_outerband = abs(
         float(outerband_row["internal_outer_near_ratio_mesh_over_theory"]) - 1.0
@@ -1319,29 +1117,8 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_composite_score_non
         optimize_preset="kh_strict_outerband_tight",
     )
 
-    def _audit_row(report: dict) -> dict:
-        theta = float(report["mesh"]["theta_star"])
-        audit = run_flat_disk_kh_term_audit(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=int(report["meta"]["refine_level"]),
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            kappa_physical=10.0,
-            kappa_t_physical=10.0,
-            radius_nm=7.0,
-            length_scale_nm=15.0,
-            drive_physical=(2.0 / 0.7),
-            theta_values=(theta,),
-            tilt_mass_mode_in="consistent",
-            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
-            rim_local_refine_band_lambda=float(
-                report["meta"]["rim_local_refine_band_lambda"]
-            ),
-        )
-        return audit["rows"][0]
-
-    sec_row = _audit_row(section_tight)
-    out_row = _audit_row(outerband_tight)
+    sec_row = _audit_row_for_report(section_tight)
+    out_row = _audit_row_for_report(outerband_tight)
 
     def _composite_score(report: dict, row: dict) -> float:
         ratios = np.asarray(
@@ -1378,25 +1155,7 @@ def test_flat_disk_kh_strict_section_tight_non_worsening_vs_energy_tight() -> No
     )
 
     def _section_scores(report: dict) -> tuple[float, float]:
-        theta = float(report["mesh"]["theta_star"])
-        audit = run_flat_disk_kh_term_audit(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=int(report["meta"]["refine_level"]),
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            kappa_physical=10.0,
-            kappa_t_physical=10.0,
-            radius_nm=7.0,
-            length_scale_nm=15.0,
-            drive_physical=(2.0 / 0.7),
-            theta_values=(theta,),
-            tilt_mass_mode_in="consistent",
-            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
-            rim_local_refine_band_lambda=float(
-                report["meta"]["rim_local_refine_band_lambda"]
-            ),
-        )
-        row = audit["rows"][0]
+        row = _audit_row_for_report(report)
         return (
             float(row["section_score_internal_split_l2_log"]),
             float(row["section_score_all_terms_l2_log"]),
@@ -1566,43 +1325,7 @@ def test_flat_disk_unpinned_section_parity_non_worsening_refine2_to_refine3() ->
             theta_optimize_steps=2,
             theta_optimize_inner_steps=2,
         )
-        theta = float(report["mesh"]["theta_star"])
-        row = run_flat_disk_kh_term_audit(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=int(report["meta"]["refine_level"]),
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            theta_values=(theta,),
-            tilt_mass_mode_in="consistent",
-            rim_local_refine_steps=int(report["meta"]["rim_local_refine_steps"]),
-            rim_local_refine_band_lambda=float(
-                report["meta"]["rim_local_refine_band_lambda"]
-            ),
-            outer_local_refine_steps=int(report["meta"]["outer_local_refine_steps"]),
-            outer_local_refine_rmin_lambda=float(
-                report["meta"]["outer_local_refine_rmin_lambda"]
-            ),
-            outer_local_refine_rmax_lambda=float(
-                report["meta"]["outer_local_refine_rmax_lambda"]
-            ),
-            local_edge_flip_steps=int(report["meta"]["local_edge_flip_steps"]),
-            local_edge_flip_rmin_lambda=float(
-                report["meta"]["local_edge_flip_rmin_lambda"]
-            ),
-            local_edge_flip_rmax_lambda=float(
-                report["meta"]["local_edge_flip_rmax_lambda"]
-            ),
-            outer_local_vertex_average_steps=int(
-                report["meta"]["outer_local_vertex_average_steps"]
-            ),
-            outer_local_vertex_average_rmin_lambda=float(
-                report["meta"]["outer_local_vertex_average_rmin_lambda"]
-            ),
-            outer_local_vertex_average_rmax_lambda=float(
-                report["meta"]["outer_local_vertex_average_rmax_lambda"]
-            ),
-            partition_mode="fractional",
-        )["rows"][0]
+        row = _audit_row_for_report(report, partition_mode="fractional")
 
         def _abs_log_ratio(value: float) -> float:
             return float(abs(np.log(max(float(value), 1e-18))))
