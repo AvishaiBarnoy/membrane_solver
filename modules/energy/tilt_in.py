@@ -15,6 +15,7 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh, _fast_cross
+from modules.constraints.local_interface_shells import build_local_interface_shell_data
 from modules.energy.leaflet_presence import (
     leaflet_absent_vertex_mask,
     leaflet_present_triangle_mask,
@@ -57,6 +58,40 @@ def _resolve_shared_rim_outer_row_energy_weight(param_resolver) -> float | None:
     return weight
 
 
+def _shared_rim_outer_shell_rows(mesh: Mesh) -> np.ndarray:
+    """Return rows in the first outer shell used by shared-rim relief controls."""
+    cache = getattr(mesh, "_tilt_in_shared_rim_outer_shell_rows_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(mesh, "_tilt_in_shared_rim_outer_shell_rows_cache", cache)
+
+    cache_key = (int(mesh._version), int(mesh._vertex_ids_version))
+    rows = cache.get(cache_key)
+    if rows is not None:
+        return rows
+
+    tagged_rows: list[int] = []
+    for row, vid in enumerate(mesh.vertex_ids):
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if str(opts.get("rim_slope_match_group") or "") == "outer":
+            tagged_rows.append(int(row))
+    if tagged_rows:
+        rows = np.asarray(tagged_rows, dtype=int)
+    else:
+        mesh.build_position_cache()
+        try:
+            shell_data = build_local_interface_shell_data(
+                mesh, positions=mesh.positions_view()
+            )
+            rows = np.asarray(shell_data.outer_rows, dtype=int)
+        except AssertionError:
+            rows = np.zeros(0, dtype=int)
+
+    cache.clear()
+    cache[cache_key] = rows
+    return rows
+
+
 def _shared_rim_active_row_weights(mesh: Mesh, param_resolver) -> np.ndarray | None:
     """Return per-row tilt weights for the shared-rim inner-leaflet surrogate.
 
@@ -71,13 +106,12 @@ def _shared_rim_active_row_weights(mesh: Mesh, param_resolver) -> np.ndarray | N
         param_resolver
     )
     mode = str(param_resolver.get(None, "rim_slope_match_mode") or "").strip().lower()
-    if mode != "shared_rim_staggered_v1":
+    has_explicit_override = (
+        exclude_rim_rows or exclude_outer_rows or outer_row_energy_weight is not None
+    )
+    if mode != "shared_rim_staggered_v1" and not has_explicit_override:
         return None
-    if (
-        not exclude_rim_rows
-        and not exclude_outer_rows
-        and outer_row_energy_weight is None
-    ):
+    if not has_explicit_override:
         return None
 
     cache = getattr(mesh, "_tilt_in_shared_rim_active_row_weights_cache", None)
@@ -98,6 +132,10 @@ def _shared_rim_active_row_weights(mesh: Mesh, param_resolver) -> np.ndarray | N
         return weights
 
     weights = np.ones(len(mesh.vertex_ids), dtype=float)
+    outer_shell_rows = _shared_rim_outer_shell_rows(mesh)
+    outer_shell_row_mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    if outer_shell_rows.size:
+        outer_shell_row_mask[outer_shell_rows] = True
     outer_row_scale = None
     if outer_row_energy_weight is not None:
         outer_row_scale = float(np.sqrt(outer_row_energy_weight))
@@ -107,7 +145,7 @@ def _shared_rim_active_row_weights(mesh: Mesh, param_resolver) -> np.ndarray | N
         if exclude_rim_rows and group == "rim":
             weights[row] = 0.0
             continue
-        if group == "outer":
+        if group == "outer" or outer_shell_row_mask[row]:
             if exclude_outer_rows:
                 weights[row] = 0.0
             elif outer_row_scale is not None:
@@ -166,10 +204,11 @@ def _shared_rim_outer_support_triangle_mask(
     outer_row_mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
     rim_row_mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
     disk_row_mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    outer_shell_rows = _shared_rim_outer_shell_rows(mesh)
+    if outer_shell_rows.size:
+        outer_row_mask[outer_shell_rows] = True
     for row, vid in enumerate(mesh.vertex_ids):
         opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-        if str(opts.get("rim_slope_match_group") or "") == "outer":
-            outer_row_mask[row] = True
         if str(opts.get("rim_slope_match_group") or "") == "rim":
             rim_row_mask[row] = True
         if opts.get("preset") == "disk":

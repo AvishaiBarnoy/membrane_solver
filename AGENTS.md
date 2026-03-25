@@ -36,11 +36,7 @@ To keep reviewable diffs and maintain control:
 - Target: <= 300 lines changed per PR (excluding generated files).
 - Target: <= 10 files changed per PR.
 - One conceptual change per PR. No drive-by refactors.
-- These are review-budget targets, not automatic rejection criteria.
-- If you exceed the budget, either:
-  - justify why the work is tightly coupled and more reviewable as one PR, or
-  - propose a PR split before proceeding.
-- Prefer the smallest diff that preserves coherent review. Do not split changes so aggressively that reviewers lose the full behavior in one place.
+- If you exceed the budget, STOP and propose a PR split.
 
 **Refactors:**
 - Refactors must be separate PRs unless strictly required for the feature.
@@ -105,9 +101,7 @@ For new features or behavioral changes:
 - Make the smallest code change to pass the tests; avoid unrelated refactors.
 - Refactor only after tests are green, keeping changes behavior-preserving.
 - Prefer targeted test runs while iterating (e.g., `pytest -q tests/test_foo.py -k case_name`), then run the full suite before finalizing.
-- Make checkpoint commits when they improve handoff, review, or rollback safety.
-- Do not require a separate meaningful commit for every tiny TDD step during local iteration.
-- Before requesting review or handing work to another agent/person, ensure the branch is in a reviewable committed state.
+- End each work chunk on a branch with a commit so it is ready for code review.
 
 ---
 
@@ -119,8 +113,6 @@ Every PR MUST include the following sections in the PR body:
 **Hard rule:** PR must be reviewable: small diff, focused scope, and reproducible test steps.
 
 **Hard rule:** Performance-related PRs without benchmarks are incomplete and must not be merged.
-
-**Soft guidance:** Docs-only, test-only, or other low-risk housekeeping PRs may use lighter ceremony, but they must still stay focused and include clear validation steps.
 
 ---
 
