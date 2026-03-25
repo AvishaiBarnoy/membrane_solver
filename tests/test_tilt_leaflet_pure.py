@@ -1,6 +1,7 @@
 import importlib
 import os
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -10,6 +11,15 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
 from geometry.entities import Edge, Facet, Mesh, Vertex
+from runtime.refinement import refine_triangle_mesh
+from tools.diagnostics.flat_disk_one_leaflet_theory import (
+    physical_to_dimensionless_theory_params,
+)
+from tools.reproduce_flat_disk_one_leaflet import (
+    DEFAULT_FIXTURE,
+    _configure_benchmark_mesh,
+    _load_mesh_from_fixture,
+)
 
 LEAFLET_CASES = {
     "in": {
@@ -49,6 +59,29 @@ def _set_mesh_positions(mesh: Mesh, positions: np.ndarray) -> None:
     for row, vid in enumerate(mesh.vertex_ids):
         mesh.vertices[int(vid)].position[:] = positions[row]
     mesh.increment_version()
+
+
+def _build_refined_kh_mesh_without_tagged_outer_rows() -> Mesh:
+    """Build a refined benchmark mesh where first-shell outer rows are untagged."""
+    params = physical_to_dimensionless_theory_params(
+        kappa_physical=10.0,
+        kappa_t_physical=10.0,
+        radius_physical=7.0,
+        drive_physical=(2.0 / 0.7),
+        length_scale=15.0,
+    )
+    mesh = _load_mesh_from_fixture(Path(DEFAULT_FIXTURE))
+    mesh = refine_triangle_mesh(mesh)
+    _configure_benchmark_mesh(
+        mesh,
+        theory_params=params,
+        parameterization="kh_physical",
+        outer_mode="disabled",
+        smoothness_model="dirichlet",
+        splay_modulus_scale_in=1.0,
+        tilt_mass_mode_in="consistent",
+    )
+    return mesh
 
 
 @pytest.mark.parametrize("leaflet", ["in", "out"])
@@ -575,6 +608,37 @@ def test_tilt_in_shared_rim_outer_shell_consistent_array_matches_dict() -> None:
     for vid, gvec in tilt_grad.items():
         row = idx_map[vid]
         assert tilt_grad_arr[row] == pytest.approx(gvec, rel=1.0e-12, abs=1.0e-12)
+
+
+def test_tilt_in_shared_rim_outer_row_weight_infers_first_outer_shell_after_refinement() -> (
+    None
+):
+    module = importlib.import_module("modules.energy.tilt_in")
+    mesh = _build_refined_kh_mesh_without_tagged_outer_rows()
+
+    tagged_outer_rows = []
+    for row, vid in enumerate(mesh.vertex_ids):
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if str(opts.get("rim_slope_match_group") or "") == "outer":
+            tagged_outer_rows.append(row)
+    assert tagged_outer_rows == []
+
+    outer_shell_rows = module._shared_rim_outer_shell_rows(mesh)
+    assert outer_shell_rows.size == 12
+
+    gp = mesh.global_parameters
+    gp.set("tilt_in_shared_rim_outer_row_energy_weight", 0.5)
+    weights = module._shared_rim_active_row_weights(mesh, ParameterResolver(gp))
+
+    assert weights is not None
+    assert np.unique(np.round(weights[outer_shell_rows], 6)) == pytest.approx(
+        np.array([np.sqrt(0.5)]), abs=1.0e-6
+    )
+    non_outer_mask = np.ones(len(mesh.vertex_ids), dtype=bool)
+    non_outer_mask[outer_shell_rows] = False
+    assert weights[non_outer_mask] == pytest.approx(
+        np.ones(np.count_nonzero(non_outer_mask)), abs=1.0e-12
+    )
 
 
 def test_tilt_out_mass_mode_guard_rejects_invalid_mode() -> None:
