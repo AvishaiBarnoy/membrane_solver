@@ -2232,8 +2232,26 @@ STEP SIZE:\t {self.step_size}
             )
             total_energy += E_mod
 
-        # Apply constraint modifications to the gradient (e.g., Lagrange multipliers)
-        if hasattr(self.constraint_manager, "apply_gradient_modifications_array"):
+        # Apply constraint modifications to the shape gradient. When leaflet
+        # tilts are active, joint shape+tilt constraints should project the
+        # shape block against the full coupled manifold while leaving the
+        # tilt block at zero in this outer shape step.
+        if self._uses_leaflet_tilts() and hasattr(
+            self.constraint_manager, "apply_joint_gradient_modifications_array"
+        ):
+            zero_tilt_in = np.zeros_like(grad_arr)
+            zero_tilt_out = np.zeros_like(grad_arr)
+            self.constraint_manager.apply_joint_gradient_modifications_array(
+                grad_arr,
+                zero_tilt_in,
+                zero_tilt_out,
+                self.mesh,
+                self.global_params,
+                positions=positions,
+                tilts_in=self.mesh.tilts_in_view(),
+                tilts_out=self.mesh.tilts_out_view(),
+            )
+        elif hasattr(self.constraint_manager, "apply_gradient_modifications_array"):
             self.constraint_manager.apply_gradient_modifications_array(
                 grad_arr, self.mesh, self.global_params
             )

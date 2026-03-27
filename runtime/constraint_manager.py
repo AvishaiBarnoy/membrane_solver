@@ -41,9 +41,14 @@ def _accumulate_sparse_row_into_dense_flat(
 def _coalesce_sparse_row_payload(
     rows: np.ndarray, vecs: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Combine duplicate row ids in a sparse row-gradient payload."""
-    if rows.size <= 1:
+    """Return a deterministic sparse payload with sorted, coalesced rows."""
+    if rows.size == 0:
         return rows, vecs
+    if rows.size == 1:
+        return rows.reshape(-1), vecs.reshape(1, 3)
+    order = np.argsort(rows, kind="stable")
+    rows = rows[order]
+    vecs = vecs[order]
     uniq_rows, inv = np.unique(rows, return_inverse=True)
     if uniq_rows.size == rows.size:
         return rows, vecs
@@ -57,6 +62,7 @@ class ConstraintModuleManager:
         self.modules = {}
         self._warned_no_grad = set()
         self._leaflet_sparse_projection_cache: dict[str, object] | None = None
+        self._joint_sparse_projection_cache: dict[str, object] | None = None
         for name in module_names:
             try:
                 self.modules[name] = importlib.import_module(
@@ -236,6 +242,7 @@ class ConstraintModuleManager:
                 if g_list_rows:
                     for payload in g_list_rows:
                         rows, vecs = _as_row_gradient_payload(payload)
+                        rows, vecs = _coalesce_sparse_row_payload(rows, vecs)
                         if rows.size:
                             sparse_row_constraints.append((rows, vecs))
                     continue
@@ -630,6 +637,579 @@ class ConstraintModuleManager:
             tilt_in_grad_arr[active_in_rows, active_in_comp] -= delta[active_in_pos]
         if active_out_rows.shape[0]:
             tilt_out_grad_arr[active_out_rows, active_out_comp] -= delta[active_out_pos]
+
+    @staticmethod
+    def _joint_row_constraints_payload_token(
+        row_constraints: list[
+            tuple[
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+            ]
+        ],
+    ) -> int:
+        """Return a content hash token for sparse joint row constraints."""
+        h = hashlib.blake2b(digest_size=16)
+        for shape_part, in_part, out_part in row_constraints:
+            for tag, part in (
+                (b"s", shape_part),
+                (b"i", in_part),
+                (b"o", out_part),
+            ):
+                h.update(tag)
+                if part is None:
+                    h.update(b"\x00")
+                    continue
+                rows, vecs = part
+                h.update(b"\x01")
+                rows64 = np.ascontiguousarray(rows, dtype=np.int64)
+                vecs64 = np.ascontiguousarray(vecs, dtype=np.float64)
+                h.update(rows64.tobytes())
+                h.update(vecs64.tobytes())
+        return int.from_bytes(h.digest(), "little")
+
+    @staticmethod
+    def _build_joint_sparse_projection_operator(
+        *,
+        row_constraints: list[
+            tuple[
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+            ]
+        ],
+        n_single: int,
+    ) -> dict[str, np.ndarray] | None:
+        """Build a reduced-column operator for sparse joint constraints."""
+        k = len(row_constraints)
+        if k <= 1:
+            return None
+
+        n_total = 3 * n_single
+        axes = np.asarray([0, 1, 2], dtype=int)
+        cols_chunks: list[np.ndarray] = []
+        for shape_part, in_part, out_part in row_constraints:
+            if shape_part is not None:
+                shape_rows, _ = shape_part
+                cols_chunks.append(
+                    (3 * shape_rows[:, None] + axes[None, :]).reshape(-1)
+                )
+            if in_part is not None:
+                in_rows, _ = in_part
+                cols_chunks.append(
+                    (n_single + 3 * in_rows[:, None] + axes[None, :]).reshape(-1)
+                )
+            if out_part is not None:
+                out_rows, _ = out_part
+                cols_chunks.append(
+                    (2 * n_single + 3 * out_rows[:, None] + axes[None, :]).reshape(-1)
+                )
+        if not cols_chunks:
+            return None
+
+        active_cols = np.unique(np.concatenate(cols_chunks))
+        col_to_comp = np.full(n_total, -1, dtype=int)
+        col_to_comp[active_cols] = np.arange(active_cols.size, dtype=int)
+
+        shape_mask = active_cols < n_single
+        in_mask = (active_cols >= n_single) & (active_cols < 2 * n_single)
+        out_mask = active_cols >= 2 * n_single
+
+        shape_pos = np.nonzero(shape_mask)[0]
+        in_pos = np.nonzero(in_mask)[0]
+        out_pos = np.nonzero(out_mask)[0]
+
+        active_shape_cols = active_cols[shape_pos]
+        active_in_cols = active_cols[in_pos] - n_single
+        active_out_cols = active_cols[out_pos] - 2 * n_single
+
+        C = np.zeros((k, active_cols.size), dtype=float)
+        for i, (shape_part, in_part, out_part) in enumerate(row_constraints):
+            if shape_part is not None:
+                shape_rows, shape_vecs = shape_part
+                shape_cols = (3 * shape_rows[:, None] + axes[None, :]).reshape(-1)
+                C[i, col_to_comp[shape_cols]] = shape_vecs.reshape(-1)
+            if in_part is not None:
+                in_rows, in_vecs = in_part
+                in_cols = (n_single + 3 * in_rows[:, None] + axes[None, :]).reshape(-1)
+                C[i, col_to_comp[in_cols]] = in_vecs.reshape(-1)
+            if out_part is not None:
+                out_rows, out_vecs = out_part
+                out_cols = (
+                    2 * n_single + 3 * out_rows[:, None] + axes[None, :]
+                ).reshape(-1)
+                C[i, col_to_comp[out_cols]] = out_vecs.reshape(-1)
+
+        A = C @ C.T
+        A[np.diag_indices_from(A)] += 1e-18
+        chol_L = None
+        solve_mat = None
+        try:
+            chol_L = np.linalg.cholesky(A)
+            ident = np.eye(A.shape[0], dtype=float)
+            y = np.linalg.solve(chol_L, ident)
+            solve_mat = np.linalg.solve(chol_L.T, y)
+        except np.linalg.LinAlgError:
+            pass
+        if solve_mat is None:
+            try:
+                solve_mat = np.linalg.inv(A)
+            except np.linalg.LinAlgError:
+                solve_mat = None
+
+        return {
+            "active_cols": active_cols,
+            "shape_pos": shape_pos,
+            "shape_rows": active_shape_cols // 3,
+            "shape_comp": active_shape_cols % 3,
+            "in_pos": in_pos,
+            "in_rows": active_in_cols // 3,
+            "in_comp": active_in_cols % 3,
+            "out_pos": out_pos,
+            "out_rows": active_out_cols // 3,
+            "out_comp": active_out_cols % 3,
+            "C": C,
+            "A": A,
+            "chol_L": chol_L,
+            "solve_mat": solve_mat,
+            "proj_active": (
+                None
+                if solve_mat is None
+                else np.asarray(C.T @ solve_mat @ C, dtype=float)
+            ),
+        }
+
+    @staticmethod
+    def _project_joint_sparse_rows_against_constraints(
+        grad_arr: np.ndarray,
+        tilt_in_grad_arr: np.ndarray,
+        tilt_out_grad_arr: np.ndarray,
+        row_constraints: list[
+            tuple[
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+            ]
+        ],
+        *,
+        operator_cache: dict[str, np.ndarray] | None = None,
+    ) -> None:
+        """Project shape and tilt gradients using sparse joint constraints only."""
+        k = len(row_constraints)
+        if k == 0:
+            return
+
+        if k == 1:
+            shape_part, in_part, out_part = row_constraints[0]
+            norm_sq = 0.0
+            dot = 0.0
+            if shape_part is not None:
+                shape_rows, shape_vecs = shape_part
+                norm_sq += float(np.sum(shape_vecs * shape_vecs))
+                dot += float(np.sum(grad_arr[shape_rows] * shape_vecs))
+            if in_part is not None:
+                in_rows, in_vecs = in_part
+                norm_sq += float(np.sum(in_vecs * in_vecs))
+                dot += float(np.sum(tilt_in_grad_arr[in_rows] * in_vecs))
+            if out_part is not None:
+                out_rows, out_vecs = out_part
+                norm_sq += float(np.sum(out_vecs * out_vecs))
+                dot += float(np.sum(tilt_out_grad_arr[out_rows] * out_vecs))
+            if norm_sq <= 1e-18:
+                return
+            scale = -(dot / norm_sq)
+            if shape_part is not None:
+                shape_rows, shape_vecs = shape_part
+                np.add.at(grad_arr, shape_rows, scale * shape_vecs)
+            if in_part is not None:
+                in_rows, in_vecs = in_part
+                np.add.at(tilt_in_grad_arr, in_rows, scale * in_vecs)
+            if out_part is not None:
+                out_rows, out_vecs = out_part
+                np.add.at(tilt_out_grad_arr, out_rows, scale * out_vecs)
+            return
+
+        n_single = int(grad_arr.size)
+        if operator_cache is None:
+            operator_cache = (
+                ConstraintModuleManager._build_joint_sparse_projection_operator(
+                    row_constraints=row_constraints,
+                    n_single=n_single,
+                )
+            )
+        if operator_cache is None:
+            return
+
+        active_cols = operator_cache["active_cols"]
+        shape_pos = operator_cache["shape_pos"]
+        shape_rows = operator_cache["shape_rows"]
+        shape_comp = operator_cache["shape_comp"]
+        in_pos = operator_cache["in_pos"]
+        in_rows = operator_cache["in_rows"]
+        in_comp = operator_cache["in_comp"]
+        out_pos = operator_cache["out_pos"]
+        out_rows = operator_cache["out_rows"]
+        out_comp = operator_cache["out_comp"]
+        C = operator_cache["C"]
+        proj_active = operator_cache.get("proj_active")
+
+        grad_active = np.empty(active_cols.shape[0], dtype=float)
+        if shape_pos.shape[0]:
+            grad_active[shape_pos] = grad_arr[shape_rows, shape_comp]
+        if in_pos.shape[0]:
+            grad_active[in_pos] = tilt_in_grad_arr[in_rows, in_comp]
+        if out_pos.shape[0]:
+            grad_active[out_pos] = tilt_out_grad_arr[out_rows, out_comp]
+
+        if proj_active is not None:
+            delta = proj_active @ grad_active
+        else:
+            b = C @ grad_active
+            lam = ConstraintModuleManager._solve_leaflet_sparse_kkt(operator_cache, b)
+            if lam is None:
+                return
+            delta = C.T @ lam
+
+        if shape_pos.shape[0]:
+            grad_arr[shape_rows, shape_comp] -= delta[shape_pos]
+        if in_pos.shape[0]:
+            tilt_in_grad_arr[in_rows, in_comp] -= delta[in_pos]
+        if out_pos.shape[0]:
+            tilt_out_grad_arr[out_rows, out_comp] -= delta[out_pos]
+
+    def apply_joint_gradient_modifications_array(
+        self,
+        grad_arr: np.ndarray,
+        tilt_in_grad_arr: np.ndarray,
+        tilt_out_grad_arr: np.ndarray,
+        mesh,
+        global_params,
+        *,
+        positions: np.ndarray | None = None,
+        tilts_in: np.ndarray | None = None,
+        tilts_out: np.ndarray | None = None,
+    ) -> None:
+        """Project shape and leaflet gradients against a joint constraint manifold."""
+        if (
+            grad_arr.shape != tilt_in_grad_arr.shape
+            or grad_arr.shape != tilt_out_grad_arr.shape
+        ):
+            raise ValueError("joint gradient arrays must have matching shapes")
+
+        if positions is None:
+            mesh.build_position_cache()
+            positions = mesh.positions_view()
+        if tilts_in is None:
+            tilts_in = mesh.tilts_in_view()
+        if tilts_out is None:
+            tilts_out = mesh.tilts_out_view()
+
+        index_map = mesh.vertex_index_to_row
+        dense_constraints: list[
+            tuple[np.ndarray | None, np.ndarray | None, np.ndarray | None]
+        ] = []
+        row_constraints: list[
+            tuple[
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+                tuple[np.ndarray, np.ndarray] | None,
+            ]
+        ] = []
+
+        for name, module in self.modules.items():
+            if hasattr(module, "constraint_gradients_joint_array"):
+                try:
+                    g_list_joint = module.constraint_gradients_joint_array(
+                        mesh,
+                        global_params,
+                        positions=positions,
+                        index_map=index_map,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                    )
+                except TypeError:
+                    g_list_joint = module.constraint_gradients_joint_array(
+                        mesh, global_params
+                    )
+                if g_list_joint:
+                    for payload in g_list_joint:
+                        if not isinstance(payload, tuple) or len(payload) != 3:
+                            raise ValueError(
+                                "joint row payload must be a (shape, tilt_in, tilt_out) tuple"
+                            )
+                        shape_norm = None
+                        in_norm = None
+                        out_norm = None
+                        if payload[0] is not None:
+                            shape_rows, shape_vecs = _as_row_gradient_payload(
+                                payload[0]
+                            )
+                            shape_rows, shape_vecs = _coalesce_sparse_row_payload(
+                                shape_rows, shape_vecs
+                            )
+                            if shape_rows.size:
+                                shape_norm = (shape_rows, shape_vecs)
+                        if payload[1] is not None:
+                            in_rows, in_vecs = _as_row_gradient_payload(payload[1])
+                            in_rows, in_vecs = _coalesce_sparse_row_payload(
+                                in_rows, in_vecs
+                            )
+                            if in_rows.size:
+                                in_norm = (in_rows, in_vecs)
+                        if payload[2] is not None:
+                            out_rows, out_vecs = _as_row_gradient_payload(payload[2])
+                            out_rows, out_vecs = _coalesce_sparse_row_payload(
+                                out_rows, out_vecs
+                            )
+                            if out_rows.size:
+                                out_norm = (out_rows, out_vecs)
+                        if (
+                            shape_norm is not None
+                            or in_norm is not None
+                            or out_norm is not None
+                        ):
+                            row_constraints.append((shape_norm, in_norm, out_norm))
+                    continue
+
+            shape_added = False
+            if hasattr(module, "constraint_gradients_rows_array"):
+                try:
+                    g_list_rows = module.constraint_gradients_rows_array(
+                        mesh,
+                        global_params,
+                        positions=positions,
+                        index_map=index_map,
+                    )
+                except TypeError:
+                    g_list_rows = module.constraint_gradients_rows_array(
+                        mesh, global_params
+                    )
+                if g_list_rows:
+                    shape_added = True
+                    for payload in g_list_rows:
+                        shape_rows, shape_vecs = _as_row_gradient_payload(payload)
+                        shape_rows, shape_vecs = _coalesce_sparse_row_payload(
+                            shape_rows, shape_vecs
+                        )
+                        if shape_rows.size:
+                            row_constraints.append(
+                                ((shape_rows, shape_vecs), None, None)
+                            )
+            elif hasattr(module, "constraint_gradients_array"):
+                try:
+                    g_list_arr = module.constraint_gradients_array(
+                        mesh,
+                        global_params,
+                        positions=positions,
+                        index_map=index_map,
+                    )
+                except TypeError:
+                    g_list_arr = module.constraint_gradients_array(mesh, global_params)
+                if g_list_arr:
+                    shape_added = True
+                    for g_shape in g_list_arr:
+                        dense_constraints.append(
+                            (np.asarray(g_shape, dtype=float), None, None)
+                        )
+            elif hasattr(module, "constraint_gradients"):
+                try:
+                    g_list = module.constraint_gradients(mesh, global_params)
+                except TypeError:
+                    g_list = module.constraint_gradients(mesh)
+                if g_list:
+                    shape_added = True
+                    for gC in g_list:
+                        g_shape = np.zeros_like(grad_arr)
+                        for vidx, gvec in gC.items():
+                            row = index_map.get(vidx)
+                            if row is None:
+                                continue
+                            g_shape[row] += gvec
+                        dense_constraints.append((g_shape, None, None))
+            elif hasattr(module, "constraint_gradient"):
+                try:
+                    gC = module.constraint_gradient(mesh, global_params)
+                except TypeError:
+                    gC = module.constraint_gradient(mesh)
+                if gC:
+                    shape_added = True
+                    g_shape = np.zeros_like(grad_arr)
+                    for vidx, gvec in gC.items():
+                        row = index_map.get(vidx)
+                        if row is None:
+                            continue
+                        g_shape[row] += gvec
+                    dense_constraints.append((g_shape, None, None))
+
+            tilt_added = False
+            if hasattr(module, "constraint_gradients_tilt_rows_array"):
+                try:
+                    g_list_rows = module.constraint_gradients_tilt_rows_array(
+                        mesh,
+                        global_params,
+                        positions=positions,
+                        index_map=index_map,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                    )
+                except TypeError:
+                    g_list_rows = module.constraint_gradients_tilt_rows_array(
+                        mesh, global_params
+                    )
+                if g_list_rows:
+                    tilt_added = True
+                    for payload in g_list_rows:
+                        if not isinstance(payload, tuple) or len(payload) != 2:
+                            raise ValueError(
+                                "tilt row payload must be a ((rows, vecs)|None, (rows, vecs)|None) tuple"
+                            )
+                        in_norm = None
+                        out_norm = None
+                        if payload[0] is not None:
+                            in_rows, in_vecs = _as_row_gradient_payload(payload[0])
+                            in_rows, in_vecs = _coalesce_sparse_row_payload(
+                                in_rows, in_vecs
+                            )
+                            if in_rows.size:
+                                in_norm = (in_rows, in_vecs)
+                        if payload[1] is not None:
+                            out_rows, out_vecs = _as_row_gradient_payload(payload[1])
+                            out_rows, out_vecs = _coalesce_sparse_row_payload(
+                                out_rows, out_vecs
+                            )
+                            if out_rows.size:
+                                out_norm = (out_rows, out_vecs)
+                        if in_norm is not None or out_norm is not None:
+                            row_constraints.append((None, in_norm, out_norm))
+            elif hasattr(module, "constraint_gradients_tilt_array"):
+                try:
+                    g_list = module.constraint_gradients_tilt_array(
+                        mesh,
+                        global_params,
+                        positions=positions,
+                        index_map=index_map,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                    )
+                except TypeError:
+                    g_list = module.constraint_gradients_tilt_array(mesh, global_params)
+                if g_list:
+                    tilt_added = True
+                    for g_in, g_out in g_list:
+                        dense_constraints.append(
+                            (
+                                None,
+                                None if g_in is None else np.asarray(g_in, dtype=float),
+                                None
+                                if g_out is None
+                                else np.asarray(g_out, dtype=float),
+                            )
+                        )
+
+            if (
+                not shape_added
+                and not tilt_added
+                and name not in self._warned_no_grad
+                and not hasattr(module, "constraint_gradients_joint_array")
+            ):
+                logger.warning(
+                    "Constraint module '%s' lacks joint-compatible gradients; "
+                    "it will not participate in joint KKT projection.",
+                    name,
+                )
+                self._warned_no_grad.add(name)
+
+        if not dense_constraints and not row_constraints:
+            return
+
+        if not dense_constraints:
+            operator_cache = None
+            if mesh._geometry_cache_active(positions):
+                cache_key = (
+                    int(mesh._version),
+                    int(mesh._vertex_ids_version),
+                    int(getattr(mesh, "_facet_loops_version", -1)),
+                    int(getattr(mesh, "_tilt_fixed_flags_version", -1)),
+                    id(positions),
+                    grad_arr.size,
+                    self._joint_row_constraints_payload_token(row_constraints),
+                )
+                cached = self._joint_sparse_projection_cache
+                if cached is not None and cached.get("key") == cache_key:
+                    operator_cache = cached.get("operator")
+                else:
+                    operator_cache = self._build_joint_sparse_projection_operator(
+                        row_constraints=row_constraints,
+                        n_single=int(grad_arr.size),
+                    )
+                    self._joint_sparse_projection_cache = {
+                        "key": cache_key,
+                        "operator": operator_cache,
+                    }
+            self._project_joint_sparse_rows_against_constraints(
+                grad_arr,
+                tilt_in_grad_arr,
+                tilt_out_grad_arr,
+                row_constraints,
+                operator_cache=operator_cache,
+            )
+            return
+
+        n_single = int(grad_arr.size)
+        n_total = 3 * n_single
+        stacked_grad = np.concatenate(
+            [
+                grad_arr.reshape(-1),
+                tilt_in_grad_arr.reshape(-1),
+                tilt_out_grad_arr.reshape(-1),
+            ]
+        )
+        k_total = len(dense_constraints) + len(row_constraints)
+        C = np.zeros((k_total, n_total), dtype=float)
+        row_idx = 0
+        for g_shape, g_in, g_out in dense_constraints:
+            if g_shape is not None:
+                C[row_idx, :n_single] = np.asarray(g_shape, dtype=float).reshape(-1)
+            if g_in is not None:
+                C[row_idx, n_single : 2 * n_single] = np.asarray(
+                    g_in, dtype=float
+                ).reshape(-1)
+            if g_out is not None:
+                C[row_idx, 2 * n_single :] = np.asarray(g_out, dtype=float).reshape(-1)
+            row_idx += 1
+        for shape_part, in_part, out_part in row_constraints:
+            if shape_part is not None:
+                shape_rows, shape_vecs = shape_part
+                _accumulate_sparse_row_into_dense_flat(
+                    C[row_idx, :n_single], shape_rows, shape_vecs
+                )
+            if in_part is not None:
+                in_rows, in_vecs = in_part
+                _accumulate_sparse_row_into_dense_flat(
+                    C[row_idx, n_single : 2 * n_single], in_rows, in_vecs
+                )
+            if out_part is not None:
+                out_rows, out_vecs = out_part
+                _accumulate_sparse_row_into_dense_flat(
+                    C[row_idx, 2 * n_single :], out_rows, out_vecs
+                )
+            row_idx += 1
+
+        b = C @ stacked_grad
+        A = C @ C.T
+        A[np.diag_indices_from(A)] += 1e-18
+        lam = ConstraintModuleManager._solve_kkt_system(A, b)
+        if lam is None:
+            return
+        stacked_grad -= C.T @ lam
+
+        grad_arr[:] = stacked_grad[:n_single].reshape(grad_arr.shape)
+        tilt_in_grad_arr[:] = stacked_grad[n_single : 2 * n_single].reshape(
+            tilt_in_grad_arr.shape
+        )
+        tilt_out_grad_arr[:] = stacked_grad[2 * n_single :].reshape(
+            tilt_out_grad_arr.shape
+        )
 
     def apply_tilt_gradient_modifications_array(
         self,

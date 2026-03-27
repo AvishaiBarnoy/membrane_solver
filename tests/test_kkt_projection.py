@@ -9,6 +9,7 @@ from runtime.constraint_manager import (
     ConstraintModuleManager,
     _accumulate_sparse_row_into_dense_flat,
 )
+from runtime.minimizer import Minimizer
 
 
 class DummyConstraint:
@@ -62,6 +63,15 @@ class DummyTiltRowConstraint:
         return self._row_constraints
 
 
+class DummyJointRowConstraint:
+    def __init__(self, row_constraints):
+        self._row_constraints = row_constraints
+
+    def constraint_gradients_joint_array(self, mesh, global_params, **kwargs):
+        _ = mesh, global_params, kwargs
+        return self._row_constraints
+
+
 class DummyMesh:
     def __init__(self, n_rows: int):
         self._positions = np.zeros((n_rows, 3), dtype=float)
@@ -70,6 +80,7 @@ class DummyMesh:
         self._vertex_ids_version = 0
         self._facet_loops_version = 0
         self._tilt_fixed_flags_version = 0
+        self.fixed_mask = np.zeros(n_rows, dtype=bool)
 
     def build_position_cache(self):
         return None
@@ -515,3 +526,147 @@ def test_leaflet_sparse_kkt_solver_cholesky_and_fallback_match() -> None:
     assert np.allclose(lam_inv, ref, atol=1e-12, rtol=0.0)
     assert np.allclose(lam_chol, ref, atol=1e-12, rtol=0.0)
     assert np.allclose(lam_fallback, ref, atol=1e-12, rtol=0.0)
+
+
+def test_joint_sparse_rows_with_unsorted_duplicates_match_dense_reference() -> None:
+    cm = ConstraintModuleManager([])
+
+    shape0_rows = np.asarray([2, 0, 2], dtype=int)
+    shape0_vecs = np.asarray(
+        [[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.5, 0.0, -0.5]], dtype=float
+    )
+    in0_rows = np.asarray([1, 1], dtype=int)
+    in0_vecs = np.asarray([[0.0, 0.5, 0.0], [0.0, 0.5, 1.0]], dtype=float)
+    out0_rows = np.asarray([0], dtype=int)
+    out0_vecs = np.asarray([[0.0, 0.0, 2.0]], dtype=float)
+
+    shape1_rows = np.asarray([1, 0], dtype=int)
+    shape1_vecs = np.asarray([[0.0, -1.0, 0.0], [0.5, 0.5, 0.0]], dtype=float)
+    in1_rows = np.asarray([2], dtype=int)
+    in1_vecs = np.asarray([[1.0, 0.0, 0.0]], dtype=float)
+    out1_rows = np.asarray([2, 0, 2], dtype=int)
+    out1_vecs = np.asarray(
+        [[0.0, 1.0, 0.0], [0.25, 0.0, 0.0], [0.0, -0.5, 0.5]], dtype=float
+    )
+
+    cm.modules = {
+        "joint": DummyJointRowConstraint(
+            [
+                (
+                    (shape0_rows, shape0_vecs),
+                    (in0_rows, in0_vecs),
+                    (out0_rows, out0_vecs),
+                ),
+                (
+                    (shape1_rows, shape1_vecs),
+                    (in1_rows, in1_vecs),
+                    (out1_rows, out1_vecs),
+                ),
+            ]
+        )
+    }
+
+    grad = np.asarray(
+        [[2.0, -1.0, 0.5], [0.1, 0.2, 0.3], [1.0, 0.0, -0.5]], dtype=float
+    )
+    tilt_in = np.asarray(
+        [[0.0, 0.0, 0.0], [1.0, -2.0, 0.5], [0.25, 0.75, -1.0]], dtype=float
+    )
+    tilt_out = np.asarray(
+        [[-1.0, 0.5, 0.0], [0.2, -0.1, 0.4], [0.0, 1.5, -0.5]], dtype=float
+    )
+    mesh = DummyMesh(3)
+
+    got_grad = grad.copy()
+    got_in = tilt_in.copy()
+    got_out = tilt_out.copy()
+    cm.apply_joint_gradient_modifications_array(
+        got_grad, got_in, got_out, mesh=mesh, global_params=None
+    )
+
+    n_single = grad.size
+    n_total = 3 * n_single
+    C = np.zeros((2, n_total), dtype=float)
+    for row, vec in zip(shape0_rows, shape0_vecs):
+        base = 3 * int(row)
+        C[0, base : base + 3] += vec
+    for row, vec in zip(in0_rows, in0_vecs):
+        base = n_single + 3 * int(row)
+        C[0, base : base + 3] += vec
+    for row, vec in zip(out0_rows, out0_vecs):
+        base = 2 * n_single + 3 * int(row)
+        C[0, base : base + 3] += vec
+    for row, vec in zip(shape1_rows, shape1_vecs):
+        base = 3 * int(row)
+        C[1, base : base + 3] += vec
+    for row, vec in zip(in1_rows, in1_vecs):
+        base = n_single + 3 * int(row)
+        C[1, base : base + 3] += vec
+    for row, vec in zip(out1_rows, out1_vecs):
+        base = 2 * n_single + 3 * int(row)
+        C[1, base : base + 3] += vec
+
+    stacked = np.concatenate(
+        [grad.reshape(-1), tilt_in.reshape(-1), tilt_out.reshape(-1)]
+    )
+    b = C @ stacked
+    A = C @ C.T
+    A[np.diag_indices_from(A)] += 1e-18
+    lam = np.linalg.solve(A, b)
+    stacked -= C.T @ lam
+
+    ref_grad = stacked[:n_single].reshape(grad.shape)
+    ref_in = stacked[n_single : 2 * n_single].reshape(tilt_in.shape)
+    ref_out = stacked[2 * n_single :].reshape(tilt_out.shape)
+
+    assert np.allclose(got_grad, ref_grad, atol=1e-12, rtol=0.0)
+    assert np.allclose(got_in, ref_in, atol=1e-12, rtol=0.0)
+    assert np.allclose(got_out, ref_out, atol=1e-12, rtol=0.0)
+
+
+def test_compute_energy_and_gradient_array_uses_joint_projection_for_leaflets() -> None:
+    class RecordingConstraintManager:
+        def __init__(self):
+            self.calls = 0
+
+        def apply_joint_gradient_modifications_array(
+            self,
+            grad_arr,
+            tilt_in_grad_arr,
+            tilt_out_grad_arr,
+            mesh,
+            global_params,
+            **kwargs,
+        ):
+            _ = mesh, global_params, kwargs
+            self.calls += 1
+            assert np.allclose(tilt_in_grad_arr, 0.0, atol=0.0, rtol=0.0)
+            assert np.allclose(tilt_out_grad_arr, 0.0, atol=0.0, rtol=0.0)
+            grad_arr[:] = 0.0
+
+    mesh = DummyMesh(2)
+    cm = RecordingConstraintManager()
+    minim = object.__new__(Minimizer)
+    minim.mesh = mesh
+    minim.global_params = {}
+    minim.energy_modules = ["dummy"]
+    minim._uses_leaflet_tilts = lambda: True
+    minim._soa_views = lambda: (
+        mesh.positions_view(),
+        mesh.vertex_index_to_row,
+        np.zeros_like(mesh.positions_view()),
+    )
+
+    def _call_module_array(module, **kwargs):
+        _ = module
+        kwargs["grad_arr"][:] = np.asarray([[1.0, 2.0, 0.0], [0.0, -1.0, 1.0]])
+        return 3.25
+
+    minim._call_module_array = _call_module_array
+    minim.constraint_manager = cm
+
+    energy, grad_arr = Minimizer.compute_energy_and_gradient_array(minim)
+
+    assert energy == 3.25
+    assert cm.calls == 1
+    assert np.allclose(grad_arr, 0.0, atol=0.0, rtol=0.0)
