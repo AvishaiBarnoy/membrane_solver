@@ -114,6 +114,18 @@ def _summarize_row(
         "tex_ratios": {
             k: float(v) for k, v in metrics["tex_benchmark"]["ratios"].items()
         },
+        "outer_split": {
+            k: float(v)
+            for k, v in metrics["diagnostics"]["outer_split"].items()
+            if k
+            in {
+                "phi_mean",
+                "t_in_mean",
+                "t_out_mean",
+                "theta_disk_mean",
+                "phi_over_half_theta",
+            }
+        },
         "outer_shell_geometry": {
             "rim_radius": rim_radius,
             "outer_radius": outer_radius,
@@ -147,7 +159,16 @@ def main() -> int:
     mesh_path = Path(args.mesh)
     base_doc = yaml.safe_load(mesh_path.read_text(encoding="utf-8")) or {}
     protocol = tuple(str(cmd) for cmd in args.protocol)
-    profiles = list(args.profile) if args.profile else ["coarse", "i50", "near_edge_v1"]
+    profiles = (
+        list(args.profile)
+        if args.profile
+        else [
+            "coarse",
+            "physical_edge_family_lo",
+            "physical_edge_primary_v1",
+            "physical_edge_family_hi",
+        ]
+    )
 
     rows: list[dict[str, Any]] = []
     for profile in profiles:

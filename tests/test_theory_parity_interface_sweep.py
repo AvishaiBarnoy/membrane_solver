@@ -75,6 +75,29 @@ def test_build_profiled_fixture_applies_general_near_edge_profile() -> None:
     assert profiled["global_parameters"]["theory_parity_lane"] == "general_near_edge_v1"
 
 
+def test_build_profiled_fixture_supports_generic_physical_edge_primary_profile() -> (
+    None
+):
+    base_doc = yaml.safe_load(
+        (
+            ROOT / "tests" / "fixtures" / "kozlov_1disk_3d_free_disk_theory_parity.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    profiled = build_profiled_fixture(
+        base_doc=base_doc,
+        profile="physical_edge_primary_v1",
+        lane="physical_edge_primary_v1",
+    )
+    radii = _ring_radii(profiled)
+    inner_radius, outer_radius = INTERFACE_PROFILES["physical_edge_primary_v1"]
+    assert inner_radius in radii
+    assert outer_radius in radii
+    assert (
+        profiled["global_parameters"]["theory_parity_lane"]
+        == "physical_edge_primary_v1"
+    )
+
+
 def test_rank_rows_prefers_score_then_runtime_then_label() -> None:
     rows = [
         {"label": "b", "score": 0.2, "runtime_s": 3.0},

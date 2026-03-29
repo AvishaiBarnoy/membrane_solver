@@ -33,6 +33,12 @@ NEAR_EDGE_FIXTURE = (
     / "fixtures"
     / "kozlov_1disk_3d_free_disk_theory_parity_near_edge_v1.yaml"
 )
+PRIMARY_FIXTURE = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_primary.yaml"
+)
 
 
 def _get_path(dct: dict[str, Any], path: str) -> Any:
@@ -142,7 +148,9 @@ def test_coarse_lane_reports_finite_outer_shell_geometry_for_parity(tmp_path) ->
     geom = report["metrics"]["diagnostics"]["outer_shell_geometry"]
 
     assert bool(geom["available"])
-    assert float(geom["outer_radius"]) < 12.0
+    assert geom["construction_mode"] == "parity_disk_local_shell_measurement"
+    assert float(geom["rim_radius"]) == pytest.approx(7.0 / 15.0, abs=5.0e-3)
+    assert float(geom["outer_radius"]) < 1.0
 
 
 @pytest.mark.acceptance
@@ -188,6 +196,50 @@ def test_physical_edge_profiled_lane_improves_thetaB_over_coarse_lane(tmp_path) 
     assert geom["construction_mode"] == "physical_edge_local_shell"
     assert float(geom["rim_radius"]) == pytest.approx(7.0 / 15.0, abs=5.0e-3)
     assert float(geom["outer_radius"]) < 1.0
+
+
+@pytest.mark.acceptance
+def test_physical_edge_primary_fixture_is_the_default_development_lane(
+    tmp_path,
+) -> None:
+    coarse_out = tmp_path / "coarse_report.yaml"
+    primary_out = tmp_path / "primary_report.yaml"
+    subprocess.run(
+        [sys.executable, str(SCRIPT), "--out", str(coarse_out)],
+        check=True,
+        cwd=str(ROOT),
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mesh",
+            str(PRIMARY_FIXTURE),
+            "--out",
+            str(primary_out),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    coarse = yaml.safe_load(coarse_out.read_text(encoding="utf-8"))
+    primary = yaml.safe_load(primary_out.read_text(encoding="utf-8"))
+    geom = primary["metrics"]["diagnostics"]["outer_shell_geometry"]
+    split = primary["metrics"]["diagnostics"]["outer_split"]
+
+    assert primary["meta"]["lane"] == "physical_edge_primary_v1"
+    assert float(primary["metrics"]["thetaB_value"]) > float(
+        coarse["metrics"]["thetaB_value"]
+    )
+    assert float(primary["metrics"]["tex_benchmark"]["ratios"]["total_ratio"]) > float(
+        coarse["metrics"]["tex_benchmark"]["ratios"]["total_ratio"]
+    )
+    assert bool(geom["available"])
+    assert geom["construction_mode"] == "physical_edge_local_shell"
+    assert float(geom["rim_radius"]) == pytest.approx(7.0 / 15.0, abs=5.0e-3)
+    assert float(geom["outer_radius"]) < 1.0
+    assert float(split["phi_mean"]) > 0.0
+    assert float(split["phi_over_half_theta"]) > 0.0
 
 
 @pytest.mark.acceptance
@@ -274,3 +326,64 @@ def test_tracked_i60_and_near_edge_fixtures_use_local_shell_physical_edge_mode(
     assert float(near_edge_geom["rim_radius"]) == pytest.approx(7.0 / 15.0, abs=5.0e-3)
     assert float(i60_geom["outer_radius"]) < 1.0
     assert float(near_edge_geom["outer_radius"]) < 1.0
+
+
+@pytest.mark.acceptance
+def test_generated_physical_edge_family_varies_smoothly_around_primary(
+    tmp_path,
+) -> None:
+    labels = [
+        "physical_edge_family_lo",
+        "physical_edge_primary_v1",
+        "physical_edge_family_hi",
+    ]
+    reports = {}
+    for label in labels:
+        fixture_path = _write_temp_fixture(
+            _build_physical_edge_profile_fixture(label, label),
+            label=label,
+        )
+        out_yaml = tmp_path / f"{label}.yaml"
+        try:
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--mesh",
+                    str(fixture_path),
+                    "--out",
+                    str(out_yaml),
+                ],
+                check=True,
+                cwd=str(ROOT),
+            )
+        finally:
+            if fixture_path.exists():
+                fixture_path.unlink()
+        reports[label] = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+
+    lo = reports["physical_edge_family_lo"]
+    primary = reports["physical_edge_primary_v1"]
+    hi = reports["physical_edge_family_hi"]
+
+    lo_outer = float(
+        lo["metrics"]["diagnostics"]["outer_shell_geometry"]["outer_radius"]
+    )
+    primary_outer = float(
+        primary["metrics"]["diagnostics"]["outer_shell_geometry"]["outer_radius"]
+    )
+    hi_outer = float(
+        hi["metrics"]["diagnostics"]["outer_shell_geometry"]["outer_radius"]
+    )
+    assert lo_outer > primary_outer > hi_outer
+
+    lo_theta = float(lo["metrics"]["thetaB_value"])
+    primary_theta = float(primary["metrics"]["thetaB_value"])
+    hi_theta = float(hi["metrics"]["thetaB_value"])
+    assert lo_theta <= primary_theta <= hi_theta
+
+    lo_ratio = float(lo["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+    primary_ratio = float(primary["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+    hi_ratio = float(hi["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+    assert lo_ratio < primary_ratio
+    assert hi_ratio > primary_ratio

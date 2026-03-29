@@ -41,9 +41,9 @@ DEFAULT_OUT = (
 )
 DEFAULT_CANDIDATES = (
     "coarse:base",
-    "i50:profile",
-    "i60:profile",
-    "near_edge_v1:profile",
+    "physical_edge_family_lo:profile",
+    "physical_edge_primary_v1:profile",
+    "physical_edge_family_hi:profile",
 )
 
 
@@ -140,6 +140,18 @@ def run_candidate(
         },
         "tex_ratios": {
             key: float(val) for key, val in metrics["tex_benchmark"]["ratios"].items()
+        },
+        "outer_split": {
+            key: float(val)
+            for key, val in metrics["diagnostics"]["outer_split"].items()
+            if key
+            in {
+                "phi_mean",
+                "t_in_mean",
+                "t_out_mean",
+                "theta_disk_mean",
+                "phi_over_half_theta",
+            }
         },
         "outer_shell_geometry": {
             "rim_radius": rim_radius,

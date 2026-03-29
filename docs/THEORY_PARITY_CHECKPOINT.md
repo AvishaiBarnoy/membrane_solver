@@ -1,94 +1,61 @@
 # Theory Parity Checkpoint
 
 ## Current State
-- The active fixed-lane parity fixture is [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml).
-- The current reproducer is [tools/reproduce_theory_parity.py](/Users/User/github/membrane_solver/tools/reproduce_theory_parity.py).
-- The coarse legacy lane still uses the physical disk ring at `R = 7/15` for `tilt_thetaB_group_in: disk`, but computes the outer slope channel through tagged `rim` and `outer` groups, with the `rim` shell sitting at radius `1.0`.
-- The reconciled runtime now also supports `rim_slope_match_mode: physical_edge_staggered_v1`, which builds the outer slope channel from local shells just outside the physical disk edge.
-- Current report values on this branch are approximately:
-  - `thetaB_value = 0.09`
-  - `elastic_measured = 0.56177`
-  - `contact_measured = -1.13105`
-  - `final_energy = -0.56928`
+- The active reproducer is [tools/reproduce_theory_parity.py](/Users/User/github/membrane_solver/tools/reproduce_theory_parity.py).
+- The coarse fixture [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml) is now treated as `legacy_coarse` only.
+- The active parity-development fixture is [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_primary.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_primary.yaml).
+- Coarse reports now measure interface geometry from the first local shell outside the physical disk edge `R = 7/15`, while preserving the legacy solver shell radii as secondary diagnostics.
 
-## Reconcile Source
-- The later parity work lives in the separate worktree `/private/tmp/membrane_solver_tiltin_parity`.
-- That worktree contains the validated intermediate and near-edge lanes, but they are not yet reconciled into this repo checkout.
-- The first reusable artifact ported from that worktree is [tools/theory_parity_interface_profiles.py](/Users/User/github/membrane_solver/tools/theory_parity_interface_profiles.py), which captures the named near-edge shell profiles:
-  - `i50 = (0.8, 2.8)`
-  - `i60 = (0.76, 2.6)`
-  - `near_edge_v1 = (0.76, 2.6)`
+## Legacy Coarse Lane
+- Current coarse report:
+  - `thetaB = 0.09`
+  - `final_energy = -0.56989`
+  - `tex total_ratio = 0.49139`
+  - measured local-shell geometry:
+    - `rim_radius ≈ 0.46667`
+    - `outer_radius ≈ 0.72784`
+  - legacy solver radii still reported for reference:
+    - `legacy_solver_rim_radius ≈ 0.98296`
+    - `legacy_solver_outer_radius ≈ 1.965`
+- Conclusion: fixing the coarse report geometry did not materially improve the coarse solver lane; it remains a regression anchor only.
 
-## Validated Lanes In The Parity Worktree
-- `i50`
-  - `thetaB = 0.17`
-  - `final_energy = -1.13080`
-  - `total_ratio = 0.97503`
-  - `outer_radius ≈ 0.67382`
-- `i60`
+## Physical-Edge Primary Lane
+- The new tracked primary lane is [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_primary.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_primary.yaml).
+- Current primary report:
   - `thetaB = 0.19`
-  - `final_energy = -1.23705`
-  - `total_ratio = 1.06664`
-  - `outer_radius ≈ 0.64790`
-- `near_edge_v1`
-  - `thetaB = 0.18`
-  - `final_energy = -1.15545`
-  - `total_ratio = 0.99628`
-  - `outer_radius ≈ 0.65588`
+  - `final_energy = -1.18843`
+  - `tex total_ratio = 1.02472`
+  - `tex elastic_ratio = 1.03413`
+  - `rim_radius ≈ 0.46667`
+  - `outer_radius ≈ 0.65143`
+  - `phi_mean ≈ 0.00450`
+  - `phi_over_half_theta ≈ 0.04737`
+- This lane is derived from the same physical-edge construction as the earlier `near_edge_v1` reference, but is now tracked as the generic development base rather than as a one-off named fix.
 
-These results came from the parity worktree reproducer, not from the current repo state. They remain useful parity-history checkpoints, but not current acceptance targets here.
-
-## Reconciled Tracked Lanes In This Repo
-- The runtime slice required to run named physical-edge lanes is now in this repo.
-- Tracked fixtures now exist for:
-  - [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_i50_interface.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_i50_interface.yaml)
-  - [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_i60_interface.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_i60_interface.yaml)
-  - [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_near_edge_v1.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_near_edge_v1.yaml)
-- Current local baselines for those tracked fixtures are:
-  - `i50_interface_v1`
-    - `thetaB = 0.17`
-    - `final_energy = -1.12596`
-    - `tex total_ratio = 0.97086`
-    - `outer_radius ≈ 0.67365`
-  - `i60_interface_v1`
-    - `thetaB = 0.19`
-    - `final_energy = -1.23225`
-    - `tex total_ratio = 1.06250`
-    - `outer_radius ≈ 0.64749`
-  - `near_edge_v1`
-    - `thetaB = 0.18`
-    - `final_energy = -1.15545`
-    - `tex total_ratio = 0.99628`
-    - `outer_radius ≈ 0.65588`
-- After reconciling the scalar-disk inner enforcement path in [rim_slope_match_out.py](/Users/User/github/membrane_solver/modules/constraints/rim_slope_match_out.py), the local tracked lanes are now much closer to the old parity worktree and are useful acceptance targets again.
-
-## Reconciled Diagnostics In This Repo
-- Added reusable diagnostics:
-  - [theory_parity_interface_sweep.py](/Users/User/github/membrane_solver/tools/theory_parity_interface_sweep.py)
-  - [theory_parity_fixed_theta_compare.py](/Users/User/github/membrane_solver/tools/theory_parity_fixed_theta_compare.py)
-- Current local interface sweep result:
-  - best label: `i60`
-  - `i60`: `thetaB = 0.18`, TeX `total_ratio = 0.99628`, `outer_radius ≈ 0.65588`
-  - `near_edge_v1`: `thetaB = 0.18`, TeX `total_ratio = 0.99628`, `outer_radius ≈ 0.65588`
-  - `i50`: `thetaB = 0.17`, TeX `total_ratio = 0.92539`, `outer_radius ≈ 0.67647`
-  - `coarse`: `thetaB = 0.09`, TeX `total_ratio = 0.49086`, `outer_radius ≈ 1.96540`
+## Physical-Edge Family
+- The profile helper in [tools/theory_parity_interface_profiles.py](/Users/User/github/membrane_solver/tools/theory_parity_interface_profiles.py) now defines the generic family:
+  - `physical_edge_family_lo = (0.78, 2.7)`
+  - `physical_edge_primary_v1 = (0.76, 2.6)`
+  - `physical_edge_family_hi = (0.758, 2.6)`
+- Current optimized sweep on this branch:
+  - `physical_edge_family_lo`: `thetaB = 0.18`, `tex total_ratio = 0.98657`, `outer_radius ≈ 0.66166`
+  - `physical_edge_primary_v1`: `thetaB = 0.19`, `tex total_ratio = 1.02472`, `outer_radius ≈ 0.65143`
+  - `physical_edge_family_hi`: `thetaB = 0.19`, `tex total_ratio = 1.02947`, `outer_radius ≈ 0.65041`
+  - `coarse`: `thetaB = 0.09`, `tex total_ratio = 0.49139`, `outer_radius ≈ 0.72784`
 - Current fixed-`thetaB = 0.185` comparison:
-  - `coarse`: `elastic = 2.14084`, `contact = -2.32493`, `total = -0.18409`, `outer_radius ≈ 1.96582`
-  - `i50`: `elastic = 1.26263`, `contact = -2.32493`, `total = -1.06230`, `outer_radius ≈ 0.67647`
-  - `near_edge_v1`: `elastic = 1.00471`, `contact = -2.32493`, `total = -1.32022`, `outer_radius ≈ 0.62866`
-- Practical conclusion from the current repo state:
-  - the parity-protocol helpers in [reproduce_theory_parity.py](/Users/User/github/membrane_solver/tools/reproduce_theory_parity.py) materially change the measured parity state
-  - the scalar-`thetaB` disk-side enforcement path in [rim_slope_match_out.py](/Users/User/github/membrane_solver/modules/constraints/rim_slope_match_out.py) was a real missing runtime slice; after reconciling it, the tracked physical-edge lanes moved back near the old parity-worktree behavior
-  - coarse legacy runs now expose a finite outer shell instead of `NaN`, and the coarse lane is back to a non-collapsed `thetaB ≈ 0.09`
-  - contact remains stable across the profiled fixed-`thetaB` lanes
-  - the recovered inner-divergence operator, parity-protocol helpers, and scalar-disk enforcement slice all materially change parity behavior
-  - follow-up diff inspection against `/private/tmp/membrane_solver_tiltin_parity/tools/reproduce_theory_parity.py` shows the remaining unported changes there are now mostly diagnostics, audits, and report-schema expansion rather than more protocol-loop behavior
-  - the repo is now close enough to the old parity worktree that the next step should be principled generalization from `near_edge_v1` / `i60`, not more blind reconcile patches
+  - `coarse`: `elastic = 2.13375`, `contact = -2.32493`, `total = -0.19119`, `phi_over_half_theta ≈ 0.00643`
+  - `physical_edge_family_lo`: `elastic = 0.98336`, `contact = -2.32493`, `total = -1.34157`, `phi_over_half_theta ≈ 0.13575`
+  - `physical_edge_primary_v1`: `elastic = 0.96742`, `contact = -2.32493`, `total = -1.35751`, `phi_over_half_theta ≈ 0.21415`
+  - `physical_edge_family_hi`: `elastic = 0.96153`, `contact = -2.32493`, `total = -1.36341`, `phi_over_half_theta ≈ 0.21802`
+- Practical conclusion:
+  - contact remains effectively fixed across the physical-edge family
+  - elastic decreases smoothly as the near-edge shell is tightened
+  - the family is now in a non-pathological regime and can be used as the active parity-development base
 
 ## Performance
-- Exact reproducer-path benchmark, 3 runs each:
-  - coarse lane: `10.347 s` average
-  - `i50` lane: `24.467 s` average
+- Exact reproducer-path benchmark, current branch:
+  - `legacy_coarse`: `11.865 s`
+  - `physical_edge_primary_v1`: `19.439 s`
 
 ## Benchmark Split
 - `legacy_anchor` means the historical internal benchmark based on summed leaflet moduli:
@@ -102,13 +69,7 @@ These results came from the parity worktree reproducer, not from the current rep
   - `hΔε/a = 4.286`
   - this produces `thetaB_star ≈ 0.185`
 
-## What This PR Slice Does
-- Keeps the existing legacy lane intact for regression tracking.
-- Makes the report explicit by writing both `metrics.tex_benchmark` and `metrics.legacy_anchor`.
-- Leaves `metrics.theory` as a compatibility alias for the legacy anchor in this slice so existing tools keep working.
-- Moves TeX acceptance to the explicit benchmark fields instead of the legacy alias.
-
-## Next Implementation Slices
-- Reconcile the remaining runtime/operator pieces needed to recover the old parity-worktree behavior on top of the now-tracked lane assets.
-- Use the fixed-`thetaB` compare to identify which operator/runtime changes restore the old worktree ordering without changing contact.
-- Re-evaluate the inner-disk operator changes only after the physical-edge runtime path has been reconciled.
+## Active Direction
+- Keep `legacy_coarse` only as a regression/history anchor.
+- Use `physical_edge_primary_v1` plus the `lo / primary / hi` family as the active parity-development path.
+- Evaluate future operator changes only against the physical-edge family and treat improvements to the coarse lane as incidental, not primary.

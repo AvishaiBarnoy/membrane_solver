@@ -21,7 +21,10 @@ from commands.executor import execute_command_line
 from geometry.geom_io import load_data, parse_geometry
 from geometry.tilt_operators import p1_vertex_divergence
 from modules.constraints.local_interface_shells import build_local_interface_shell_data
-from modules.constraints.rim_slope_match_out import matching_ring_diagnostics
+from modules.constraints.rim_slope_match_out import (
+    matching_residual_diagnostics,
+    matching_ring_diagnostics,
+)
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
@@ -163,6 +166,22 @@ def _activate_local_outer_shell_for_parity(mesh) -> dict[str, float]:
             ),
             "n_outer_rows": float(diag.get("outer_count") or 0.0),
         }
+    local_diag: dict[str, float | str] | None = None
+    try:
+        shell_data = build_local_interface_shell_data(
+            mesh, positions=mesh.positions_view(), group="disk"
+        )
+    except AssertionError:
+        shell_data = None
+    if shell_data is not None:
+        local_diag = {
+            "available": 1.0,
+            "construction_mode": "parity_disk_local_shell_measurement",
+            "rim_radius": float(shell_data.disk_radius),
+            "outer_radius": float(shell_data.rim_radius),
+            "delta_r": float(shell_data.rim_radius - shell_data.disk_radius),
+            "n_outer_rows": float(shell_data.rim_rows.size),
+        }
     positions = mesh.positions_view()
     r = np.linalg.norm(positions[:, :2], axis=1)
     rim_rows: list[int] = []
@@ -208,7 +227,7 @@ def _activate_local_outer_shell_for_parity(mesh) -> dict[str, float]:
         changed = True
     if changed:
         mesh.increment_version()
-    return {
+    legacy_diag = {
         "available": 1.0,
         "construction_mode": "legacy_retagged_outer_shell",
         "rim_radius": float(rim_radius),
@@ -216,6 +235,11 @@ def _activate_local_outer_shell_for_parity(mesh) -> dict[str, float]:
         "delta_r": float(outer_radius - rim_radius),
         "n_outer_rows": float(len(outer_rows)),
     }
+    if local_diag is not None:
+        local_diag["legacy_solver_outer_radius"] = float(outer_radius)
+        local_diag["legacy_solver_rim_radius"] = float(rim_radius)
+        return local_diag
+    return legacy_diag
 
 
 def _tilt_stats_quantiles(mesh) -> dict[str, float]:
@@ -343,6 +367,23 @@ def _collect_report_from_context(
         kappa_t_value=float(DEFAULT_TEX_TILT_MODULUS),
         radius_value=float(r_theory),
     )
+    split_diag = matching_residual_diagnostics(
+        ctx.mesh, ctx.mesh.global_parameters, ctx.mesh.positions_view()
+    )
+    phi_mean = float(split_diag.get("phi_mean") or 0.0)
+    t_out_mean = float(
+        phi_mean + float(split_diag.get("outer_residual", {}).get("mean") or 0.0)
+    )
+    theta_disk_mean = float(split_diag.get("theta_disk_mean") or 0.0)
+    inner_residual_mean = float(split_diag.get("inner_residual", {}).get("mean") or 0.0)
+    inner_available = bool(split_diag.get("inner_residual_available", False))
+    if inner_available:
+        t_in_mean = float(theta_disk_mean - phi_mean + inner_residual_mean)
+    else:
+        t_in_mean = 0.0
+    phi_over_half_theta = 0.0
+    if abs(theta_meas) > 1.0e-16:
+        phi_over_half_theta = float(phi_mean / (0.5 * theta_meas))
 
     report = {
         "meta": {
@@ -370,9 +411,20 @@ def _collect_report_from_context(
                 "total_measured": total_meas,
             },
             "diagnostics": {
-                "outer_shell_geometry": matching_ring_diagnostics(
-                    ctx.mesh, ctx.mesh.global_parameters, ctx.mesh.positions_view()
-                )
+                "outer_split": {
+                    "available": bool(split_diag.get("available", False)),
+                    "phi_mean": phi_mean,
+                    "t_in_mean": t_in_mean,
+                    "t_out_mean": t_out_mean,
+                    "theta_disk_mean": theta_disk_mean,
+                    "phi_over_half_theta": phi_over_half_theta,
+                },
+                "outer_shell_geometry": dict(
+                    getattr(ctx.mesh, "_parity_outer_shell_geometry", None)
+                    or matching_ring_diagnostics(
+                        ctx.mesh, ctx.mesh.global_parameters, ctx.mesh.positions_view()
+                    )
+                ),
             },
             "theory": legacy_anchor,
             "legacy_anchor": legacy_anchor,
@@ -387,15 +439,21 @@ def _collect_report(
 ) -> dict[str, Any]:
     ctx = _build_context(mesh_path)
     _stabilize_rim_radius_for_parity(ctx.mesh)
-    _activate_local_outer_shell_for_parity(ctx.mesh)
+    ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
+        ctx.mesh
+    )
     for cmd in protocol:
         execute_command_line(ctx, cmd)
         _stabilize_rim_radius_for_parity(ctx.mesh)
-        _activate_local_outer_shell_for_parity(ctx.mesh)
+        ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
+            ctx.mesh
+        )
     for _ in range(int(fixed_polish_steps)):
         execute_command_line(ctx, "g1")
         _stabilize_rim_radius_for_parity(ctx.mesh)
-        _activate_local_outer_shell_for_parity(ctx.mesh)
+        ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
+            ctx.mesh
+        )
     report = _collect_report_from_context(
         ctx=ctx, mesh_path=mesh_path, protocol=protocol
     )
