@@ -1,36 +1,37 @@
 meta:
   fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml
+  lane: kozlov_1disk_3d_free_disk_theory_parity
   protocol:
-    - g10
-    - r
-    - V2
-    - t5e-3
-    - g8
-    - t2e-3
-    - g12
-  baseline_version: v1
+  - g10
+  - r
+  - V2
+  - t5e-3
+  - g8
+  - t2e-3
+  - g12
   format: yaml
+  fixed_polish_steps: 0
 metrics:
-  final_energy: -0.569276897960947
+  final_energy: -0.569893237541043
   thetaB_value: 0.09
   breakdown:
-    bending_tilt_in: 0.022059342907614177
-    bending_tilt_out: 7.236451799133928e-05
-    tilt_in: 0.5392634366156428
-    tilt_out: 0.0003767115138169255
+    bending_tilt_in: 0.021848190692808953
+    bending_tilt_out: 2.1684318195669033e-05
+    tilt_in: 0.5392521816747895
+    tilt_out: 3.3459289175143635e-05
     tilt_thetaB_contact_in: -1.1310487535160123
   tilt_stats:
-    tstat_in_p90_norm: 0.0053457519911540114
-    tstat_out_p90_norm: 0.00010829773303777716
+    tstat_in_p90_norm: 0.005341351215602568
+    tstat_out_p90_norm: 1.996061610478178e-05
 tolerances:
-  final_energy: 5.0e-4
-  thetaB_value: 1.0e-3
+  final_energy: 0.0005
+  thetaB_value: 0.001
   breakdown:
-    bending_tilt_in: 1.0e-3
-    bending_tilt_out: 1.0e-6
-    tilt_in: 1.0e-3
-    tilt_out: 1.0e-6
-    tilt_thetaB_contact_in: 1.0e-3
+    bending_tilt_in: 0.001
+    bending_tilt_out: 1.0e-06
+    tilt_in: 0.001
+    tilt_out: 1.0e-06
+    tilt_thetaB_contact_in: 0.001
   tilt_stats:
-    tstat_in_p90_norm: 5.0e-4
-    tstat_out_p90_norm: 1.0e-6
+    tstat_in_p90_norm: 0.0005
+    tstat_out_p90_norm: 1.0e-06

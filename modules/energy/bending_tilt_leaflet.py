@@ -951,9 +951,6 @@ def _total_energy_leaflet(
             tri_rows=tri_rows,
             transport_model=transport_model,
         )
-    if tri_area is None:
-        tri_area = mesh.p1_triangle_shape_gradient_cache(positions)[0]
-    tri_area = np.asarray(tri_area, dtype=float)
     div_term = float(div_sign) * div_tri
     div_term = _apply_inner_divergence_update_mode(
         mesh,
@@ -963,15 +960,24 @@ def _total_energy_leaflet(
         cache_tag=cache_tag,
         div_term=div_term,
     )
-    div_eval_tri, _, _ = _inner_recovered_divergence(
-        global_params=global_params,
-        cache_tag=cache_tag,
-        tri_rows=tri_rows,
-        tri_area=tri_area,
-        div_tri=div_term,
-        n_vertices=len(mesh.vertex_ids),
-        scratch_tag=f"btl_{cache_tag}",
+    use_recovered_div = _use_inner_recovered_divergence(
+        global_params, cache_tag=cache_tag
     )
+    if use_recovered_div:
+        if tri_area is None:
+            tri_area = mesh.p1_triangle_shape_gradient_cache(positions)[0]
+        tri_area = np.asarray(tri_area, dtype=float)
+        div_eval_tri, _, _ = _inner_recovered_divergence(
+            global_params=global_params,
+            cache_tag=cache_tag,
+            tri_rows=tri_rows,
+            tri_area=tri_area,
+            div_tri=div_term,
+            n_vertices=len(mesh.vertex_ids),
+            scratch_tag=f"btl_{cache_tag}",
+        )
+    else:
+        div_eval_tri = div_term
 
     _, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
         mesh,
@@ -1118,9 +1124,6 @@ def compute_energy_and_gradient_array_leaflet(
             tri_rows=tri_rows,
             transport_model=transport_model,
         )
-    if tri_area is None:
-        tri_area = mesh.p1_triangle_shape_gradient_cache(positions)[0]
-    tri_area = np.asarray(tri_area, dtype=float)
     div_term = float(div_sign) * div_tri
     div_term = _apply_inner_divergence_update_mode(
         mesh,
@@ -1130,16 +1133,26 @@ def compute_energy_and_gradient_array_leaflet(
         cache_tag=cache_tag,
         div_term=div_term,
     )
-    div_eval_tri, _, div_eval_vertex_area = _inner_recovered_divergence(
-        global_params=global_params,
-        cache_tag=cache_tag,
-        tri_rows=tri_rows,
-        tri_area=tri_area,
-        div_tri=div_term,
-        n_vertices=len(mesh.vertex_ids),
-        ctx=ctx,
-        scratch_tag=f"btl_{cache_tag}",
+    use_recovered_div = _use_inner_recovered_divergence(
+        global_params, cache_tag=cache_tag
     )
+    if use_recovered_div:
+        if tri_area is None:
+            tri_area = mesh.p1_triangle_shape_gradient_cache(positions)[0]
+        tri_area = np.asarray(tri_area, dtype=float)
+        div_eval_tri, _, div_eval_vertex_area = _inner_recovered_divergence(
+            global_params=global_params,
+            cache_tag=cache_tag,
+            tri_rows=tri_rows,
+            tri_area=tri_area,
+            div_tri=div_term,
+            n_vertices=len(mesh.vertex_ids),
+            ctx=ctx,
+            scratch_tag=f"btl_{cache_tag}",
+        )
+    else:
+        div_eval_tri = div_term
+        div_eval_vertex_area = None
 
     vertex_areas_eff, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
         mesh,
@@ -1201,16 +1214,19 @@ def compute_energy_and_gradient_array_leaflet(
             )
             if str(cache_tag) == "in":
                 setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
-            dE_ddiv = _inner_recovered_divergence_pullback(
-                global_params=global_params,
-                cache_tag=cache_tag,
-                tri_rows=tri_rows,
-                tri_area=tri_area,
-                coeff_div_eval=float(div_sign) * dE_ddiv_base,
-                v_area=div_eval_vertex_area,
-                ctx=ctx,
-                scratch_tag=f"btl_{cache_tag}",
-            )
+            if use_recovered_div:
+                dE_ddiv = _inner_recovered_divergence_pullback(
+                    global_params=global_params,
+                    cache_tag=cache_tag,
+                    tri_rows=tri_rows,
+                    tri_area=tri_area,
+                    coeff_div_eval=float(div_sign) * dE_ddiv_base,
+                    v_area=div_eval_vertex_area,
+                    ctx=ctx,
+                    scratch_tag=f"btl_{cache_tag}",
+                )
+            else:
+                dE_ddiv = float(div_sign) * dE_ddiv_base
             factor = dE_ddiv[:, None]
             _accumulate_leaflet_tilt_gradient(
                 tilt_grad_arr,
@@ -1296,11 +1312,12 @@ def compute_energy_and_gradient_array_leaflet(
         )
     else:
         div_eff_num = np.zeros_like(base_term)
+    div_eff_source = div_eval_tri if use_recovered_div else div_term
     div_eff_num = scatter_triangle_scalar_to_vertices(
         tri_rows=tri_rows,
-        w0=va0_eff * div_term,
-        w1=va1_eff * div_term,
-        w2=va2_eff * div_term,
+        w0=va0_eff * div_eff_source,
+        w1=va1_eff * div_eff_source,
+        w2=va2_eff * div_eff_source,
         n_vertices=base_term.shape[0],
         out=div_eff_num,
     )
@@ -1563,16 +1580,19 @@ def compute_energy_and_gradient_array_leaflet(
         )
         if str(cache_tag) == "in":
             setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
-        dE_ddiv = _inner_recovered_divergence_pullback(
-            global_params=global_params,
-            cache_tag=cache_tag,
-            tri_rows=tri_rows,
-            tri_area=tri_area,
-            coeff_div_eval=float(div_sign) * dE_ddiv_base,
-            v_area=div_eval_vertex_area,
-            ctx=ctx,
-            scratch_tag=f"btl_{cache_tag}",
-        )
+        if use_recovered_div:
+            dE_ddiv = _inner_recovered_divergence_pullback(
+                global_params=global_params,
+                cache_tag=cache_tag,
+                tri_rows=tri_rows,
+                tri_area=tri_area,
+                coeff_div_eval=float(div_sign) * dE_ddiv_base,
+                v_area=div_eval_vertex_area,
+                ctx=ctx,
+                scratch_tag=f"btl_{cache_tag}",
+            )
+        else:
+            dE_ddiv = float(div_sign) * dE_ddiv_base
         factor = dE_ddiv[:, None]
 
         np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
