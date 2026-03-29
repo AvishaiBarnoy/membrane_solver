@@ -86,16 +86,21 @@
   - the family remains in a non-pathological regime and can be used as the active parity-development base
 
 ## Symmetry Breaking
-- The current physical-edge parity reproducer still uses a small explicit symmetry-breaking kick.
+- The physical-edge parity reproducer still needs an explicit symmetry-breaking kick to leave the flat symmetric branch, but it no longer needs that kick for the full run.
 - In [tools/reproduce_theory_parity.py](/Users/User/github/membrane_solver/tools/reproduce_theory_parity.py), `_activate_local_outer_shell_for_parity(...)` applies a small `z` bump (`parity_physical_edge_z_bump`, defaulting to `DEFAULT_PHYSICAL_EDGE_Z_BUMP`) to the first local outer shell when its height is too close to zero.
-- Important implementation detail:
-  - setting `parity_physical_edge_z_bump = 0.0` does **not** disable the kick right now, because the reproducer uses `configured_bump or DEFAULT_PHYSICAL_EDGE_Z_BUMP`
-  - a true “almost no kick” run must therefore use a tiny nonzero value such as `1e-12`
+- Current reproducer behavior:
+  - `parity_physical_edge_z_bump = 0.0` now really means no kick
+  - the default physical-edge path uses the configured bump only to leave the symmetric branch, then releases it to `0.0` immediately after the first protocol step
+  - releasing the bump after the first step preserves the current good branch exactly on the default lane
 - Diagnostic result from the current default family:
   - with the current kick (`1e-3`):
     - `default`: `thetaB = 0.18`, `tex total_ratio = 0.99921`, `outer_t_out_trace_at_R+ ≈ 0.04131`, `trace_gap ≈ 0.04898`
   - with a tiny kick (`1e-12`):
     - `default`: `thetaB = 0.18`, `tex total_ratio = 0.96974`, `outer_t_out_trace_at_R+ ≈ 0.01008`, `trace_gap ≈ 0.07461`
+  - with zero kick (`0.0`) for the full run:
+    - `default`: `thetaB = 0.17`, `tex total_ratio = 0.93973`, `phi_trace(R+) ≈ 0.0`, `outer_t_out_trace(R+) ≈ 0.0`
+  - with transient release (`1e-3` until `g10`, then `0.0`):
+    - `default`: `thetaB = 0.18`, `tex total_ratio = 0.99921`, `phi_trace(R+) ≈ 0.09029`, `outer_t_out_trace(R+) ≈ 0.04131`
 - Shell-level interpretation on `default`:
   - current kick:
     - first-shell geometric secant `≈ 0.00376`
@@ -107,8 +112,8 @@
     - extrapolated trace `t_out(R+) ≈ 0.01008`
 - Conclusion:
   - the current near-TeX physical-edge parity result is still branch-selection dependent
-  - reducing the kick does not change `thetaB`, but it noticeably degrades total parity and collapses the outer-side trace
-  - removing or reducing dependence on this kick remains open work
+  - a persistent kick is not required once the branch is selected; a transient kick after initialization is enough on the current default lane
+  - fully kick-free recovery of the good branch remains open work
 
 ## Rejected Next-Step Candidate
 - A follow-up runtime pass tested whether the remaining gap could be reduced by changing only how the physical-edge outer `tilt_out` field is represented/read near `R+`, while keeping the geometric `phi` law unchanged.

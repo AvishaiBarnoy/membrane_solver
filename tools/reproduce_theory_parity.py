@@ -247,6 +247,54 @@ def _activate_local_outer_shell_for_parity(mesh) -> dict[str, float]:
     return legacy_diag
 
 
+def _parity_physical_edge_bump_value(mesh) -> float | None:
+    """Return the configured physical-edge z bump for parity runs."""
+    mode = str(mesh.global_parameters.get("rim_slope_match_mode") or "").strip().lower()
+    if mode != "physical_edge_staggered_v1":
+        return None
+    bump_raw = mesh.global_parameters.get("parity_physical_edge_z_bump")
+    if bump_raw is None:
+        return float(DEFAULT_PHYSICAL_EDGE_Z_BUMP)
+    return float(bump_raw)
+
+
+def _release_parity_physical_edge_bump(mesh) -> bool:
+    """Drop the physical-edge parity bump after branch selection."""
+    bump = _parity_physical_edge_bump_value(mesh)
+    if bump is None or abs(float(bump)) <= 0.0:
+        return False
+    mesh.global_parameters.set("parity_physical_edge_z_bump", 0.0)
+    return True
+
+
+def _run_protocol_with_parity_activation(
+    ctx: CommandContext,
+    *,
+    protocol: tuple[str, ...],
+    fixed_polish_steps: int = 0,
+) -> None:
+    """Run the parity protocol while keeping outer-shell diagnostics in sync."""
+    _stabilize_rim_radius_for_parity(ctx.mesh)
+    ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
+        ctx.mesh
+    )
+    bump_released = False
+    for cmd_index, cmd in enumerate(protocol):
+        execute_command_line(ctx, cmd)
+        if cmd_index == 0 and not bump_released:
+            bump_released = _release_parity_physical_edge_bump(ctx.mesh)
+        _stabilize_rim_radius_for_parity(ctx.mesh)
+        ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
+            ctx.mesh
+        )
+    for _ in range(int(fixed_polish_steps)):
+        execute_command_line(ctx, "g1")
+        _stabilize_rim_radius_for_parity(ctx.mesh)
+        ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
+            ctx.mesh
+        )
+
+
 def _tilt_stats_quantiles(mesh) -> dict[str, float]:
     mesh.build_position_cache()
     positions = mesh.positions_view()
@@ -682,22 +730,9 @@ def _collect_report(
     mesh_path: Path, protocol: tuple[str, ...], fixed_polish_steps: int = 0
 ) -> dict[str, Any]:
     ctx = _build_context(mesh_path)
-    _stabilize_rim_radius_for_parity(ctx.mesh)
-    ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
-        ctx.mesh
+    _run_protocol_with_parity_activation(
+        ctx, protocol=protocol, fixed_polish_steps=fixed_polish_steps
     )
-    for cmd in protocol:
-        execute_command_line(ctx, cmd)
-        _stabilize_rim_radius_for_parity(ctx.mesh)
-        ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
-            ctx.mesh
-        )
-    for _ in range(int(fixed_polish_steps)):
-        execute_command_line(ctx, "g1")
-        _stabilize_rim_radius_for_parity(ctx.mesh)
-        ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
-            ctx.mesh
-        )
     report = _collect_report_from_context(
         ctx=ctx, mesh_path=mesh_path, protocol=protocol
     )

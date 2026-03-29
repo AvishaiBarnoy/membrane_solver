@@ -7,6 +7,12 @@ from typing import Any
 import pytest
 import yaml
 
+from tools.reproduce_theory_parity import (
+    DEFAULT_PROTOCOL,
+    _build_context,
+    _collect_report_from_context,
+    _run_protocol_with_parity_activation,
+)
 from tools.theory_parity_interface_profiles import build_profiled_fixture
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -294,6 +300,23 @@ def test_physical_edge_default_fixture_is_the_default_development_lane(
     assert float(profile["sample_count"]) >= 10.0
     assert float(profile["phi_profile_rel_rmse"]) > 0.0
     assert float(profile["z_profile_rel_rmse"]) > 0.0
+
+
+@pytest.mark.acceptance
+def test_physical_edge_default_releases_kick_after_branch_selection() -> None:
+    ctx = _build_context(DEFAULT_FIXTURE)
+    ctx.mesh.global_parameters.set("parity_physical_edge_z_bump", 1.0e-3)
+
+    _run_protocol_with_parity_activation(ctx, protocol=tuple(DEFAULT_PROTOCOL))
+    report = _collect_report_from_context(
+        ctx=ctx, mesh_path=DEFAULT_FIXTURE, protocol=tuple(DEFAULT_PROTOCOL)
+    )
+
+    assert float(ctx.mesh.global_parameters.get("parity_physical_edge_z_bump")) == 0.0
+    assert float(report["metrics"]["thetaB_value"]) == pytest.approx(0.18, abs=1.0e-9)
+    assert float(report["metrics"]["tex_benchmark"]["ratios"]["total_ratio"]) == (
+        pytest.approx(0.999210661611669, abs=1.0e-6)
+    )
 
 
 @pytest.mark.acceptance
