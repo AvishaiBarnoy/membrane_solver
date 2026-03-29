@@ -232,6 +232,8 @@ def test_physical_edge_default_fixture_is_the_default_development_lane(
     default = yaml.safe_load(default_out.read_text(encoding="utf-8"))
     geom = default["metrics"]["diagnostics"]["outer_shell_geometry"]
     split = default["metrics"]["diagnostics"]["outer_split"]
+    traces = default["metrics"]["diagnostics"]["interface_traces_at_R"]
+    profile = default["metrics"]["diagnostics"]["outer_profile_parity"]
 
     default_theta = float(default["metrics"]["thetaB_value"])
     coarse_theta = float(coarse["metrics"]["thetaB_value"])
@@ -262,6 +264,12 @@ def test_physical_edge_default_fixture_is_the_default_development_lane(
     assert float(geom["outer_radius"]) < 1.0
     assert float(split["phi_mean"]) > 0.0
     assert float(split["phi_over_half_theta"]) > 0.0
+    assert abs(float(traces["disk_minus_phi_trace"])) < 0.01
+    assert bool(traces["available"])
+    assert bool(profile["available"])
+    assert float(profile["sample_count"]) >= 10.0
+    assert float(profile["phi_profile_rel_rmse"]) > 0.0
+    assert float(profile["z_profile_rel_rmse"]) > 0.0
 
 
 @pytest.mark.acceptance
@@ -413,6 +421,12 @@ def test_generated_physical_edge_family_varies_smoothly_around_primary(
     lo_split = lo["metrics"]["diagnostics"]["outer_split"]
     primary_split = primary["metrics"]["diagnostics"]["outer_split"]
     hi_split = hi["metrics"]["diagnostics"]["outer_split"]
+    lo_traces = lo["metrics"]["diagnostics"]["interface_traces_at_R"]
+    primary_traces = primary["metrics"]["diagnostics"]["interface_traces_at_R"]
+    hi_traces = hi["metrics"]["diagnostics"]["interface_traces_at_R"]
+    lo_profile = lo["metrics"]["diagnostics"]["outer_profile_parity"]
+    primary_profile = primary["metrics"]["diagnostics"]["outer_profile_parity"]
+    hi_profile = hi["metrics"]["diagnostics"]["outer_profile_parity"]
 
     lo_delta = float(lo["metrics"]["diagnostics"]["outer_shell_geometry"]["delta_r"])
     primary_delta = float(
@@ -442,3 +456,30 @@ def test_generated_physical_edge_family_varies_smoothly_around_primary(
     primary_tin = float(primary_split["t_in_mean"])
     hi_tin = float(hi_split["t_in_mean"])
     assert max(lo_tin, primary_tin, hi_tin) - min(lo_tin, primary_tin, hi_tin) < 0.01
+
+    trace_gap = [
+        float(lo_traces["disk_minus_outer_trace"]),
+        float(primary_traces["disk_minus_outer_trace"]),
+        float(hi_traces["disk_minus_outer_trace"]),
+    ]
+    assert max(trace_gap) - min(trace_gap) < 0.02
+
+    phi_trace = [
+        float(lo_traces["phi_trace_at_R_plus"]),
+        float(primary_traces["phi_trace_at_R_plus"]),
+        float(hi_traces["phi_trace_at_R_plus"]),
+    ]
+    assert max(phi_trace) - min(phi_trace) < 0.02
+
+    phi_rmse = [
+        float(lo_profile["phi_profile_rel_rmse"]),
+        float(primary_profile["phi_profile_rel_rmse"]),
+        float(hi_profile["phi_profile_rel_rmse"]),
+    ]
+    z_rmse = [
+        float(lo_profile["z_profile_rel_rmse"]),
+        float(primary_profile["z_profile_rel_rmse"]),
+        float(hi_profile["z_profile_rel_rmse"]),
+    ]
+    assert max(phi_rmse) - min(phi_rmse) < 0.1
+    assert max(z_rmse) - min(z_rmse) < 0.05

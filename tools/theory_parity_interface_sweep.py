@@ -153,6 +153,24 @@ def run_candidate(
                 "phi_over_half_theta",
             }
         },
+        "interface_traces_at_R": {
+            key: float(val)
+            for key, val in metrics["diagnostics"]["interface_traces_at_R"].items()
+            if key
+            in {
+                "disk_theta_at_R",
+                "disk_t_in_at_R",
+                "outer_t_out_trace_at_R_plus",
+                "phi_trace_at_R_plus",
+                "disk_minus_outer_trace",
+                "disk_minus_phi_trace",
+            }
+        },
+        "outer_profile_parity": {
+            key: float(val)
+            for key, val in metrics["diagnostics"]["outer_profile_parity"].items()
+            if key in {"phi_profile_rel_rmse", "z_profile_rel_rmse", "sample_count"}
+        },
         "outer_shell_geometry": {
             "rim_radius": rim_radius,
             "outer_radius": outer_radius,

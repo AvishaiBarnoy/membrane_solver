@@ -20,8 +20,15 @@ from commands.context import CommandContext
 from commands.executor import execute_command_line
 from geometry.geom_io import load_data, parse_geometry
 from geometry.tilt_operators import p1_vertex_divergence
-from modules.constraints.local_interface_shells import build_local_interface_shell_data
+from modules.constraints.local_interface_shells import (
+    build_local_interface_shell_data,
+    extrapolate_trace_to_radius,
+    radial_unit_vectors,
+)
 from modules.constraints.rim_slope_match_out import (
+    _fit_plane_normal,
+    _resolve_center,
+    _resolve_normal,
     matching_residual_diagnostics,
     matching_ring_diagnostics,
 )
@@ -277,6 +284,231 @@ def _tilt_stats_quantiles(mesh) -> dict[str, float]:
     }
 
 
+def _relative_rmse(values: np.ndarray, reference: np.ndarray) -> float:
+    """Return RMSE normalized by the reference RMS magnitude."""
+    values = np.asarray(values, dtype=float)
+    reference = np.asarray(reference, dtype=float)
+    if values.size == 0 or reference.size == 0:
+        return 0.0
+    rmse = float(np.sqrt(np.mean((values - reference) ** 2)))
+    ref_scale = float(np.sqrt(np.mean(reference**2)))
+    if ref_scale <= 1.0e-12:
+        return 0.0 if rmse <= 1.0e-12 else float("inf")
+    return float(rmse / ref_scale)
+
+
+def _quadratic_boundary_slope(
+    *,
+    target_radius: float,
+    boundary_height: np.ndarray,
+    first_radius: float,
+    first_height: np.ndarray,
+    second_radius: float | None = None,
+    second_height: np.ndarray | None = None,
+) -> np.ndarray:
+    """Estimate the outer-side height slope at `target_radius`."""
+    z0 = np.asarray(boundary_height, dtype=float)
+    z1 = np.asarray(first_height, dtype=float)
+    x1 = float(first_radius) - float(target_radius)
+    if second_radius is None or second_height is None or abs(x1) <= 1.0e-12:
+        return (z1 - z0) / x1 if abs(x1) > 1.0e-12 else np.zeros_like(z1)
+
+    z2 = np.asarray(second_height, dtype=float)
+    x2 = float(second_radius) - float(target_radius)
+    if abs(x2) <= 1.0e-12 or abs(x2 - x1) <= 1.0e-12:
+        return (z1 - z0) / x1
+
+    y1 = z1 - z0
+    y2 = z2 - z0
+    numer = y1 * (x2**2) - y2 * (x1**2)
+    denom = x1 * x2 * (x2 - x1)
+    return numer / denom
+
+
+def _ring_mean_heights(
+    *,
+    positions: np.ndarray,
+    center: np.ndarray,
+    normal: np.ndarray,
+    min_radius: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return outer-ring radii and mean heights beyond `min_radius`."""
+    rel = positions - center[None, :]
+    rel_plane = rel - np.einsum("ij,j->i", rel, normal)[:, None] * normal[None, :]
+    radii = np.linalg.norm(rel_plane[:, :], axis=1)
+    heights = np.einsum("ij,j->i", rel, normal)
+    tol = max(1.0e-6, 1.0e-5 * max(1.0, float(min_radius)))
+    rounded = np.round(radii, 9)
+    unique = np.unique(rounded[rounded > (float(min_radius) + tol)])
+    if unique.size == 0:
+        return np.zeros(0, dtype=float), np.zeros(0, dtype=float)
+
+    ring_radii: list[float] = []
+    ring_heights: list[float] = []
+    for radius_token in unique:
+        rows = np.flatnonzero(np.isclose(rounded, radius_token, atol=1.0e-9))
+        if rows.size == 0:
+            continue
+        ring_radii.append(float(np.mean(radii[rows])))
+        ring_heights.append(float(np.mean(heights[rows])))
+    return np.asarray(ring_radii, dtype=float), np.asarray(ring_heights, dtype=float)
+
+
+def _interface_trace_diagnostics(
+    mesh, positions: np.ndarray, theta_meas: float
+) -> dict[str, float | bool]:
+    """Return one-sided trace diagnostics at the physical disk edge."""
+    mode = str(mesh.global_parameters.get("rim_slope_match_mode") or "").strip().lower()
+    out: dict[str, float | bool] = {
+        "available": False,
+        "disk_theta_at_R": 0.0,
+        "disk_t_in_at_R": 0.0,
+        "outer_t_out_first_shell": 0.0,
+        "outer_t_out_trace_at_R_plus": 0.0,
+        "phi_trace_at_R_plus": 0.0,
+        "disk_minus_outer_trace": 0.0,
+        "disk_minus_phi_trace": 0.0,
+        "outer_first_shell_minus_outer_trace": 0.0,
+    }
+    if mode != "physical_edge_staggered_v1":
+        return out
+
+    try:
+        shell_data = build_local_interface_shell_data(
+            mesh, positions=positions, group="disk"
+        )
+    except AssertionError:
+        return out
+
+    center = _resolve_center(mesh.global_parameters)
+    normal = _resolve_normal(mesh.global_parameters)
+    if normal is None:
+        normal = _fit_plane_normal(positions[shell_data.disk_rows])
+    if normal is None:
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
+    disk_rows = np.asarray(shell_data.disk_rows, dtype=int)
+    first_rows = np.asarray(shell_data.rim_rows_for_disk, dtype=int)
+    second_rows = np.asarray(shell_data.outer_rows_for_disk, dtype=int)
+
+    _, disk_r_hat = radial_unit_vectors(positions[disk_rows])
+    _, first_r_hat = radial_unit_vectors(positions[first_rows])
+    _, second_r_hat = radial_unit_vectors(positions[second_rows])
+
+    tilts_in = np.asarray(mesh.tilts_in_view(), dtype=float)
+    tilts_out = np.asarray(mesh.tilts_out_view(), dtype=float)
+    disk_t_in = np.einsum("ij,ij->i", tilts_in[disk_rows], disk_r_hat)
+    first_t_out = np.einsum("ij,ij->i", tilts_out[first_rows], first_r_hat)
+    second_t_out = np.einsum("ij,ij->i", tilts_out[second_rows], second_r_hat)
+    trace_t_out = extrapolate_trace_to_radius(
+        target_radius=float(shell_data.disk_radius),
+        first_radius=float(shell_data.rim_radius),
+        first_values=first_t_out,
+        second_radius=float(shell_data.outer_radius),
+        second_values=second_t_out,
+    )
+
+    rel = positions - center[None, :]
+    heights = np.einsum("ij,j->i", rel, normal)
+    disk_height = heights[disk_rows]
+    first_height = heights[first_rows]
+    second_height = heights[second_rows]
+    phi_trace = _quadratic_boundary_slope(
+        target_radius=float(shell_data.disk_radius),
+        boundary_height=disk_height,
+        first_radius=float(shell_data.rim_radius),
+        first_height=first_height,
+        second_radius=float(shell_data.outer_radius),
+        second_height=second_height,
+    )
+
+    disk_theta = np.full(disk_t_in.shape, float(theta_meas), dtype=float)
+    phi_trace_mean = float(np.mean(phi_trace))
+    out.update(
+        {
+            "available": True,
+            "disk_theta_at_R": float(np.mean(disk_theta)),
+            "disk_t_in_at_R": float(np.mean(disk_t_in)),
+            "outer_t_out_first_shell": float(np.mean(first_t_out)),
+            "outer_t_out_trace_at_R_plus": float(np.mean(trace_t_out)),
+            "phi_trace_at_R_plus": phi_trace_mean,
+            "disk_minus_outer_trace": float(np.mean(disk_t_in - trace_t_out)),
+            "disk_minus_phi_trace": float(np.mean(disk_theta) - 2.0 * phi_trace_mean),
+            "outer_first_shell_minus_outer_trace": float(
+                np.mean(first_t_out - trace_t_out)
+            ),
+        }
+    )
+    return out
+
+
+def _outer_profile_parity(
+    mesh, positions: np.ndarray, theta_meas: float
+) -> dict[str, float | bool]:
+    """Return outer-profile parity diagnostics against the TeX solution."""
+    mode = str(mesh.global_parameters.get("rim_slope_match_mode") or "").strip().lower()
+    out: dict[str, float | bool] = {
+        "available": False,
+        "phi_profile_rel_rmse": 0.0,
+        "z_profile_rel_rmse": 0.0,
+        "sample_count": 0.0,
+    }
+    if mode != "physical_edge_staggered_v1":
+        return out
+
+    try:
+        shell_data = build_local_interface_shell_data(
+            mesh, positions=positions, group="disk"
+        )
+    except AssertionError:
+        return out
+
+    center = _resolve_center(mesh.global_parameters)
+    normal = _resolve_normal(mesh.global_parameters)
+    if normal is None:
+        normal = _fit_plane_normal(positions[shell_data.disk_rows])
+    if normal is None:
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
+    ring_r, ring_z = _ring_mean_heights(
+        positions=positions,
+        center=center,
+        normal=normal,
+        min_radius=float(shell_data.disk_radius),
+    )
+    if ring_r.size:
+        order = np.argsort(ring_r)
+        ring_r = ring_r[order]
+        ring_z = ring_z[order]
+        rounded = np.round(ring_r, 9)
+        _, unique_idx = np.unique(rounded, return_index=True)
+        unique_idx = np.sort(unique_idx)
+        ring_r = ring_r[unique_idx]
+        ring_z = ring_z[unique_idx]
+    if ring_r.size < 2:
+        return out
+
+    rel = positions[np.asarray(shell_data.disk_rows, dtype=int)] - center[None, :]
+    zR = float(np.mean(np.einsum("ij,j->i", rel, normal)))
+    z_rel = ring_z - zR
+    phi_num = np.gradient(z_rel, ring_r, edge_order=1)
+
+    phi_star = 0.5 * float(theta_meas)
+    r_theory = float(shell_data.disk_radius)
+    phi_ref = phi_star * r_theory / ring_r
+    z_ref = phi_star * r_theory * np.log(ring_r / r_theory)
+
+    out.update(
+        {
+            "available": True,
+            "phi_profile_rel_rmse": _relative_rmse(phi_num, phi_ref),
+            "z_profile_rel_rmse": _relative_rmse(z_rel, z_ref),
+            "sample_count": float(ring_r.size),
+        }
+    )
+    return out
+
+
 def _collect_report_from_context(
     *,
     ctx: CommandContext,
@@ -384,6 +616,12 @@ def _collect_report_from_context(
     phi_over_half_theta = 0.0
     if abs(theta_meas) > 1.0e-16:
         phi_over_half_theta = float(phi_mean / (0.5 * theta_meas))
+    interface_traces = _interface_trace_diagnostics(
+        ctx.mesh, ctx.mesh.positions_view(), theta_meas
+    )
+    outer_profile = _outer_profile_parity(
+        ctx.mesh, ctx.mesh.positions_view(), theta_meas
+    )
 
     report = {
         "meta": {
@@ -425,6 +663,8 @@ def _collect_report_from_context(
                         ctx.mesh, ctx.mesh.global_parameters, ctx.mesh.positions_view()
                     )
                 ),
+                "interface_traces_at_R": interface_traces,
+                "outer_profile_parity": outer_profile,
             },
             "theory": legacy_anchor,
             "legacy_anchor": legacy_anchor,

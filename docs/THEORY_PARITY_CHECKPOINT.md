@@ -30,6 +30,16 @@
   - `outer_radius ≈ 0.65755`
   - `phi_mean ≈ 0.00376`
   - `phi_over_half_theta ≈ 0.04174`
+- New TeX-facing one-sided trace diagnostics:
+  - `disk_theta_at_R ≈ 0.18000`
+  - `disk_t_in_at_R ≈ 0.17624`
+  - `outer_t_out_trace_at_R+ ≈ 0.04131`
+  - `phi_trace_at_R+ ≈ 0.09029`
+  - `disk_theta_at_R - 2 phi_trace_at_R+ ≈ -5.8e-4`
+  - `disk_t_in_at_R - outer_t_out_trace_at_R+ ≈ 0.13493`
+- New outer-profile parity diagnostics:
+  - `phi_profile_rel_rmse ≈ 1.913`
+  - `z_profile_rel_rmse ≈ 0.999`
 - This lane is derived from the same physical-edge construction as the earlier `near_edge_v1` reference, but is now tracked as the generic bottom-up default rather than as a one-off named fix.
 - Current kept interface-side improvement:
   - the physical-edge law now pairs the first outer shell to disk-boundary rows by explicit nearest azimuth (`rim_rows_for_disk`) instead of relying on independently ordered rings
@@ -55,12 +65,14 @@
   - contact remains effectively fixed across the physical-edge family
   - optimized parity remains smooth across `lo / primary / hi` and is slightly tighter around the TeX target than the previous baseline set
   - fixed-`thetaB` elastic terms still vary smoothly with near-edge geometry
+  - the new one-sided trace diagnostics show that the geometric outer slope trace at `R+` is close to the TeX relation `phi_* = theta_B / 2`
+  - but the outer-leaflet trace and outer height profile are still not near the TeX continuation law
   - the family remains in a non-pathological regime and can be used as the active parity-development base
 
 ## Performance
 - Exact reproducer-path benchmark, current branch:
-  - `legacy_coarse`: `11.831 s`
-  - `physical_edge_default`: `17.565 s`
+  - `legacy_coarse`: `13.380 s`
+  - `physical_edge_default`: `19.956 s`
 
 ## Benchmark Split
 - `legacy_anchor` means the historical internal benchmark based on summed leaflet moduli:
@@ -78,3 +90,4 @@
 - Keep `legacy_coarse` only as a regression/history anchor.
 - Use `physical_edge_default` plus the `default_lo / default / default_hi` family as the active parity-development path.
 - Evaluate future operator changes only against the physical-edge family and treat improvements to the coarse lane as incidental, not primary.
+- The next real gap is no longer total energy parity; it is the missing TeX match in the outer-leaflet trace and outer height profile.

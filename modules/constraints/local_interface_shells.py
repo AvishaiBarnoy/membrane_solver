@@ -94,6 +94,32 @@ def _match_rows_by_azimuth(
     return np.asarray(target_rows[np.argmin(dphi, axis=1)], dtype=int)
 
 
+def extrapolate_trace_to_radius(
+    *,
+    target_radius: float,
+    first_radius: float,
+    first_values: np.ndarray,
+    second_radius: float | None = None,
+    second_values: np.ndarray | None = None,
+) -> np.ndarray:
+    """Extrapolate aligned shell values back to ``target_radius``.
+
+    Uses a two-shell linear extrapolation when the second shell is available.
+    Falls back to the first-shell values when only one usable outer shell exists.
+    """
+    out = np.asarray(first_values, dtype=float)
+    if second_radius is None or second_values is None:
+        return np.array(out, copy=True)
+
+    dr = float(second_radius) - float(first_radius)
+    if abs(dr) <= 1.0e-12:
+        return np.array(out, copy=True)
+
+    second = np.asarray(second_values, dtype=float)
+    slope = (second - out) / dr
+    return out + (float(target_radius) - float(first_radius)) * slope
+
+
 def build_local_interface_shell_data(
     mesh: Mesh,
     *,
@@ -204,6 +230,7 @@ __all__ = [
     "LocalInterfaceShellData",
     "build_local_interface_shell_data",
     "collect_disk_boundary_rows",
+    "extrapolate_trace_to_radius",
     "local_interface_constraint_diagnostics",
     "order_rows_by_angle",
     "radial_unit_vectors",
