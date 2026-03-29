@@ -1,0 +1,486 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,bm}
+
+\begin{document}
+\section{Analytical model: disk embedded in infinte membrane}
+\subsection{Tensionless membrane: analytical solution}
+
+We consider the axisymmetric membrane in the absence of surface tension,
+\(\gamma=0\).
+The outer membrane energy reduces to
+\begin{equation}
+F_{\rm out}
+=
+\pi\int_R^\infty r\,dr
+\Big[
+\kappa (J-D\theta^d)^2
++\kappa (J+D\theta^p)^2
++\kappa_t \big[(\theta^d)^2+(\theta^p)^2\big]
+\Big],
+\end{equation}
+where
+\(
+J=\phi'+\phi/r
+\)
+and
+\(
+D\theta=\theta'+\theta/r
+\).
+
+\paragraph{Euler--Lagrange identities.}
+For \(\gamma=0\), variation with respect to \(\theta^d\) and \(\theta^p\) gives
+\begin{equation}
+\theta^p(r)=\theta^d(r)\equiv\theta(r),
+\end{equation}
+so the distal and proximal monolayers have identical tilt everywhere.
+With this identification, the outer energy decouples into shape and tilt parts:
+\begin{equation}
+(J-D\theta)^2+(J+D\theta)^2
+=
+2J^2+2(D\theta)^2.
+\end{equation}
+
+\paragraph{Outer shape field.}
+The shape enters only through \(J\).
+Minimization of the outer energy yields
+\begin{equation}
+J(r)=\phi'(r)+\frac{\phi(r)}{r}=0,
+\qquad r\ge R.
+\end{equation}
+The solution that decays at infinity is
+\begin{equation}
+\phi(r)=\phi_*\frac{R}{r},
+\end{equation}
+where \(\phi_*=\phi(R)\).
+Integrating \(\phi=dz/dr\) gives a logarithmic profile,
+\begin{equation}
+z(r)-z(R)=\phi_*R\ln\!\frac{r}{R},
+\end{equation}
+so the tensionless membrane forms a slowly flaring ``trumpet'' rather than a cone.
+
+\paragraph{Outer tilt field.}
+The common tilt \(\theta(r)\) satisfies
+\begin{equation}
+r^2\theta''+r\theta'-(1+\lambda^2 r^2)\theta=0,
+\qquad
+\lambda=\sqrt{\frac{\kappa_t}{\kappa}}.
+\end{equation}
+Imposing decay at infinity gives
+\begin{equation}
+\theta(r)=\theta(R)\frac{K_1(\lambda r)}{K_1(\lambda R)},
+\qquad r\ge R.
+\end{equation}
+
+\paragraph{Inner (disk-covered) region.}
+Over the disk (\(0\le r\le R\)) the membrane is flat.
+The tilt field \(\theta_C(r)\) minimizes
+\begin{equation}
+F_{\rm in}
+=
+2\pi\int_0^R r\,dr
+\left[
+\frac{\kappa}{2}(D\theta_C)^2
++\frac{\kappa_t}{2}\theta_C^2
+\right],
+\end{equation}
+and satisfies the same equation as above.
+Regularity at \(r=0\) gives
+\begin{equation}
+\theta_C(r)=\theta_B\frac{I_1(\lambda r)}{I_1(\lambda R)},
+\end{equation}
+where \(\theta_B=\theta_C(R)\).
+
+\paragraph{Boundary matching (1D-style continuation).}
+Director continuity at the rim implies
+\begin{equation}
+\theta^d(R)=\theta_B-\phi_*,
+\qquad
+\theta^p(R)=\phi_*.
+\end{equation}
+Since \(\theta^d=\theta^p\) in the tensionless minimum, this fixes
+\begin{equation}
+\phi_*=\frac{\theta_B}{2},
+\qquad
+\theta(R)=\frac{\theta_B}{2}.
+\end{equation}
+
+\paragraph{Total energy.}
+The elastic energies are
+\begin{align}
+F_{\rm in,el}
+&=
+\pi\kappa R\lambda
+\frac{I_0(\lambda R)}{I_1(\lambda R)}\theta_B^2,\\
+F_{\rm out,el}
+&=
+\frac{\pi}{2}\kappa R\lambda
+\frac{K_0(\lambda R)}{K_1(\lambda R)}\theta_B^2,
+\end{align}
+and the contact contribution is
+\begin{equation}
+F_{\rm cont}=-2\pi R\,h\frac{\Delta\varepsilon}{a}\,\theta_B.
+\end{equation}
+Thus
+\begin{equation}
+F_{\rm tot}(\theta_B)
+=
+\pi\kappa R\lambda
+\left[
+\frac{I_0(\lambda R)}{I_1(\lambda R)}
++\frac{1}{2}\frac{K_0(\lambda R)}{K_1(\lambda R)}
+\right]\theta_B^2
+-2\pi R\,h\frac{\Delta\varepsilon}{a}\,\theta_B.
+\end{equation}
+
+\paragraph{Optimal boundary tilt.}
+Minimization yields
+\begin{equation}
+\boxed{
+\theta_B^{\rm opt}
+=
+\frac{h(\Delta\varepsilon/a)}
+{\sqrt{\kappa\kappa_t}
+\left[
+\dfrac{I_0(\lambda R)}{I_1(\lambda R)}
++\dfrac{1}{2}\dfrac{K_0(\lambda R)}{K_1(\lambda R)}
+\right]}
+}
+\end{equation}
+and therefore
+\begin{equation}
+\phi_*^{\rm opt}=\frac{\theta_B^{\rm opt}}{2}.
+\end{equation}
+
+\paragraph{Optimal fields.}
+The minimizing fields are
+\begin{align}
+\theta_C^{\rm opt}(r)
+&=\theta_B^{\rm opt}\frac{I_1(\lambda r)}{I_1(\lambda R)},
+\qquad 0\le r\le R,\\
+\theta_d^{\rm opt}(r)
+&=\theta_p^{\rm opt}(r)
+=\frac{\theta_B^{\rm opt}}{2}
+\frac{K_1(\lambda r)}{K_1(\lambda R)},
+\qquad r\ge R,\\
+\phi^{\rm opt}(r)
+&=\frac{\theta_B^{\rm opt}}{2}\frac{R}{r},
+\qquad r\ge R.
+\end{align}
+
+\subsection{Finite tension: one-disk solution (axisymmetric, free rim)}
+
+We consider a single disk of radius $R$ covered by a flat membrane patch ($0\le r\le R$) and
+a free outer membrane ($r\ge R$) under finite surface tension $\gamma>0$.
+We work in the small-angle regime, so the midplane slope is described by the tangent angle $\phi(r)$.
+For convenience define
+\begin{equation}
+J(r)\equiv \phi'(r)+\frac{\phi(r)}{r},\qquad
+D\theta(r)\equiv \theta'(r)+\frac{\theta(r)}{r},
+\qquad
+\lambda \equiv \sqrt{\frac{\kappa_t}{\kappa}}.
+\end{equation}
+
+%------------------------------------------------------------
+\paragraph{Outer free membrane energy ($r\ge R$).}
+The outer energy reads
+\begin{equation}
+F_{\rm out}
+=\pi\int_R^\infty r\,dr
+\Big[
+\kappa\big(J-D\theta^d\big)^2+\kappa_t(\theta^d)^2
++\kappa\big(J+D\theta^p\big)^2+\kappa_t(\theta^p)^2
++\gamma \phi^2
+\Big].
+\end{equation}
+
+Variation yields a coupled Euler--Lagrange system which implies the exact identity
+\begin{equation}
+\boxed{\ \theta^p(r)-\theta^d(r)=\frac{\gamma}{\kappa_t}\,\phi(r)\ }.
+\label{eq:theta_diff_identity}
+\end{equation}
+Eliminating $\theta^{d,p}$ gives a closed equation for $\phi$ of the form
+\begin{equation}
+r^2\phi''+r\phi'-(1+\psi^2 r^2)\phi=0,
+\qquad
+\boxed{\ \psi^2=\frac{\gamma}{\kappa}\,\frac{\kappa_t}{2\kappa_t+\gamma}\ }.
+\end{equation}
+The decaying solution is
+\begin{equation}
+\boxed{
+\phi(r)=\phi_*\frac{K_1(\psi r)}{K_1(\psi R)}
+},
+\qquad \phi_*\equiv \phi(R).
+\label{eq:phi_outer}
+\end{equation}
+Moreover,
+\begin{equation}
+J(R)=\phi'(R)+\frac{\phi_*}{R}
+=-\psi\,\phi_*\,\frac{K_0(\psi R)}{K_1(\psi R)}.
+\end{equation}
+
+The tilt fields solve forced modified-Bessel equations.
+A convenient representation is
+\begin{align}
+\theta^d(r)&=A\,K_1(\lambda r)+q\,\phi(r),\\
+\theta^p(r)&=A\,K_1(\lambda r)-q\,\phi(r),
+\end{align}
+where the particular-solution coefficient is
+\begin{equation}
+q=\frac{\psi^2}{\psi^2-\lambda^2}=-\frac{\gamma}{2\kappa_t},
+\end{equation}
+so that Eq.~\eqref{eq:theta_diff_identity} is satisfied identically.
+
+%------------------------------------------------------------
+\paragraph{Inner disk-covered region ($0\le r\le R$).}
+Over the disk the membrane is flat, and the tilt field $\theta_C(r)$ minimizes
+\begin{equation}
+F_{\rm in}
+=2\pi\int_0^R r\,dr
+\left[
+\frac{\kappa}{2}(D\theta_C)^2+\frac{\kappa_t}{2}\theta_C^2
+\right],
+\end{equation}
+giving
+\begin{equation}
+\boxed{
+\theta_C(r)=\theta_B\frac{I_1(\lambda r)}{I_1(\lambda R)}
+},
+\qquad \theta_B\equiv \theta_C(R).
+\label{eq:thetaC_inner}
+\end{equation}
+The corresponding exact inner elastic energy is
+\begin{equation}
+\boxed{
+F_{\rm in,el}
+=\pi\kappa R\lambda\,\theta_B^2\,\frac{I_0(\lambda R)}{I_1(\lambda R)}
+}.
+\label{eq:Fin_el}
+\end{equation}
+
+%------------------------------------------------------------
+\paragraph{Contact driving term.}
+We include the linear ``contact'' contribution
+\begin{equation}
+F_{\rm cont}=-2\pi R\,h\,\frac{\Delta\varepsilon}{a}\,\theta_B.
+\label{eq:Fcont}
+\end{equation}
+
+%------------------------------------------------------------
+\paragraph{Free-rim kinematics (1D-style director continuation).}
+To generalize the 1D building-block construction, we impose at $r=R$
+\begin{equation}
+\boxed{
+\theta^d(R)=\theta_B-\phi_*,
+\qquad
+\theta^p(R)=\phi_*
+}.
+\label{eq:BC_kin}
+\end{equation}
+Using $\theta^{d,p}(R)=A K_1(\lambda R)\pm q\phi_*$ and $q=-\gamma/(2\kappa_t)$,
+Eq.~\eqref{eq:BC_kin} yields
+\begin{equation}
+\boxed{
+A=\frac{\theta_B}{2K_1(\lambda R)},
+\qquad
+\phi_*=\frac{\theta_B}{2\mu},
+\qquad
+\mu\equiv 1-\frac{\gamma}{2\kappa_t}.
+}
+\label{eq:A_phi_star_vs_thetaB}
+\end{equation}
+
+%------------------------------------------------------------
+\paragraph{Outer energy reduced to a quadratic in $\theta_B$.}
+Evaluating the outer energy on-shell yields an effective quadratic form in the boundary values.
+Define the outer ``Dirichlet-to-Neumann'' stiffnesses
+\begin{equation}
+A_\psi \equiv \pi\kappa R\,\psi\,\frac{K_0(\psi R)}{K_1(\psi R)},
+\qquad
+B_\lambda \equiv \pi\kappa R\,\lambda\,\frac{K_0(\lambda R)}{K_1(\lambda R)}.
+\end{equation}
+Using Eq.~\eqref{eq:A_phi_star_vs_thetaB} one finds
+\begin{equation}
+\boxed{
+F_{\rm out}
+=\left[
+\frac{A_\psi}{4\mu^2}+\frac{B_\lambda}{2}
+\right]\theta_B^2
+\;+\;\text{const}.
+}
+\label{eq:Fout_reduced_thetaB}
+\end{equation}
+Together with Eqs.~\eqref{eq:Fin_el} and \eqref{eq:Fcont}, the total energy becomes
+\begin{equation}
+F_{\rm tot}(\theta_B)
+=
+\underbrace{\left[
+\pi\kappa R\lambda\frac{I_0(\lambda R)}{I_1(\lambda R)}
++\frac{1}{2}\pi\kappa R\lambda\frac{K_0(\lambda R)}{K_1(\lambda R)}
++\frac{1}{4\mu^2}\pi\kappa R\psi\frac{K_0(\psi R)}{K_1(\psi R)}
+\right]}_{\equiv\,K_{\rm eff}}
+\theta_B^2
+-2\pi R\,h\,\frac{\Delta\varepsilon}{a}\,\theta_B
++\text{const}.
+\end{equation}
+
+\paragraph{Optimal boundary tilt and kink.}
+Minimizing $F_{\rm tot}$ gives
+\begin{equation}
+\boxed{
+\theta_B^{\rm opt}
+=
+\frac{h(\Delta\varepsilon/a)}{
+\kappa\left[
+\lambda\frac{I_0(\lambda R)}{I_1(\lambda R)}
++\frac{\lambda}{2}\frac{K_0(\lambda R)}{K_1(\lambda R)}
++\frac{\psi}{4\mu^2}\frac{K_0(\psi R)}{K_1(\psi R)}
+\right]
+}
+},
+\qquad
+\boxed{
+\phi_*^{\rm opt}=\frac{\theta_B^{\rm opt}}{2\mu}
+}.
+\label{eq:thetaBopt_phiopt}
+\end{equation}
+
+%------------------------------------------------------------
+\paragraph{Optimal fields.}
+The minimizing inner field is
+\begin{equation}
+\boxed{
+\theta_C^{\rm opt}(r)
+=
+\theta_B^{\rm opt}\,\frac{I_1(\lambda r)}{I_1(\lambda R)},
+\qquad 0\le r\le R.
+}
+\end{equation}
+The minimizing outer shape field is
+\begin{equation}
+\boxed{
+\phi^{\rm opt}(r)=\phi_*^{\rm opt}\,\frac{K_1(\psi r)}{K_1(\psi R)},
+\qquad r\ge R.
+}
+\end{equation}
+Finally, the minimizing distal/proximal tilts are
+\begin{equation}
+\boxed{
+\theta_d^{\rm opt}(r)
+=
+\frac{\theta_B^{\rm opt}}{2K_1(\lambda R)}\,K_1(\lambda r)
+-\frac{\gamma}{2\kappa_t}\,\phi^{\rm opt}(r),
+\qquad
+\theta_p^{\rm opt}(r)
+=
+\frac{\theta_B^{\rm opt}}{2K_1(\lambda R)}\,K_1(\lambda r)
++\frac{\gamma}{2\kappa_t}\,\phi^{\rm opt}(r)
+}
+\end{equation}
+for the case of $r\ge R$.
+
+
+These satisfy $\theta_p^{\rm opt}-\theta_d^{\rm opt}=(\gamma/\kappa_t)\phi^{\rm opt}$ as required.
+
+\section{Numerical parameter choice and reference energy scale}
+\label{sec:one_disk_numbers}
+
+In order to provide a concrete benchmark for comparison with numerical
+minimization, we now fix a specific set of parameters and evaluate the
+optimized energy of a single caveolin disk embedded in an infinite,
+tensionless membrane.
+
+\subsection{Choice of units and parameters}
+
+We choose the bending modulus as the energy unit,
+\begin{equation}
+\kappa \equiv 1 ,
+\end{equation}
+corresponding physically to a monolayer bending rigidity
+\(\kappa = 10\,k_B T\).
+
+Lengths are measured in simulation units such that
+\begin{equation}
+R_{\mathrm{sim}} = 0.466666\ldots \equiv \frac{7\,\mathrm{nm}}{15\,\mathrm{nm}},
+\end{equation}
+i.e. one simulation length unit corresponds to \(15\,\mathrm{nm}\).
+
+The remaining parameters are chosen as
+\begin{align}
+\kappa_t &= 225 , \\
+\lambda &= \sqrt{\kappa_t / \kappa} = 15 , \\
+\frac{h \Delta \varepsilon}{a} &= 4.286 ,
+\end{align}
+which correspond physically to
+\(\kappa_t = 10\,k_B T/\mathrm{nm}^2\),
+\(h = 2\,\mathrm{nm}\),
+\(a = 0.7\,\mathrm{nm}^2\),
+and \(\Delta\varepsilon = 1\,k_B T\).
+
+With these values, the key dimensionless combination is
+\begin{equation}
+\lambda R = 15 \times 0.466666\ldots = 7 .
+\end{equation}
+
+\subsection{Optimized boundary tilt}
+
+For a tensionless membrane, the total energy reduces to a quadratic form
+in the boundary tilt angle \(\theta_B\),
+\begin{equation}
+F_{\mathrm{tot}}(\theta_B)
+=
+A\,\theta_B^2 - B\,\theta_B ,
+\end{equation}
+with
+\begin{align}
+A &= \pi \kappa R \lambda
+\left[
+\frac{I_0(\lambda R)}{I_1(\lambda R)}
++
+\frac{1}{2}
+\frac{K_0(\lambda R)}{K_1(\lambda R)}
+\right], \\
+B &= 2\pi R \left( \frac{h \Delta\varepsilon}{a} \right).
+\end{align}
+
+Evaluating the Bessel-function ratios at \(\lambda R = 7\),
+\begin{equation}
+\frac{I_0(7)}{I_1(7)} \simeq 1.08046,
+\qquad
+\frac{K_0(7)}{K_1(7)} \simeq 0.93530 ,
+\end{equation}
+gives
+\begin{equation}
+A \simeq 34.04,
+\qquad
+B \simeq 12.57 .
+\end{equation}
+
+Minimization with respect to \(\theta_B\) yields
+\begin{equation}
+\theta_B^{\ast} = \frac{B}{2A} \simeq 0.185 .
+\end{equation}
+
+\subsection{Energy breakdown and total energy}
+
+At the optimal tilt angle, the individual contributions to the energy are
+\begin{align}
+F_{\mathrm{in,el}} &\simeq +0.81 , \\
+F_{\mathrm{out,el}} &\simeq +0.35 , \\
+F_{\mathrm{contact}} &\simeq -2.32 .
+\end{align}
+
+Summing all contributions gives the optimized total energy
+\begin{equation}
+F_{\mathrm{tot}}^{\ast}
+=
+F_{\mathrm{in,el}} + F_{\mathrm{out,el}} + F_{\mathrm{contact}}
+\simeq -1.16 ,
+\end{equation}
+in units of the bending modulus \(\kappa\).
+
+This value provides a reference benchmark for numerical simulations of
+a single caveolin disk embedded in an effectively infinite,
+tensionless membrane.
+
+
+\end{document}
