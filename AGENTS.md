@@ -7,8 +7,37 @@ organized under `geometry/`, `modules/`, `runtime/` and other directories.
 
 ## Operating Mode (Agentic Development)
 
-### Design Gate (MANDATORY BEFORE CODING)
-Before making ANY code changes, you MUST produce a **Feature Contract** and a **PR Plan**.
+### Branch Rule (MANDATORY BEFORE CODING)
+Do not implement on the default branch or an unrelated existing branch.
+Create and work from a new branch for each approved stream of work.
+
+### Planning Gate (DEFAULT WORKFLOW)
+Before starting substantial work, produce a **Plan Mode plan** and wait for user approval.
+After the plan is approved, the coding agent may implement the approved substeps without
+writing a separate Feature Contract for every small change.
+
+The approved plan should cover:
+- Goal
+- Scope / non-goals
+- Acceptance criteria
+- Expected tests and validation
+- Planned PR split when the work is large
+
+Within an approved plan, the coding agent may:
+- make small local design decisions
+- try, compare, and discard implementation approaches
+- add instrumentation, diagnostics, and focused tests needed to reach the goal
+- make tightly related follow-up fixes discovered during implementation
+
+### Design Gate (REQUIRED FOR HIGH-RISK CHANGES)
+Produce a **Feature Contract** and wait for user approval before implementing any of the following:
+- new features with meaningful user-visible behavior
+- changes to public interfaces (functions, classes, CLI, config)
+- data model or file format changes
+- changes to `runtime/` entry points or main-flow behavior
+- architecture changes affecting performance-sensitive paths, solvers, caching, or data layout
+- changes to theory-facing model assumptions or physical interpretation
+- any work that materially exceeds the approved plan
 
 **Feature Contract (1 page max)**
 - Goal (1 sentence)
@@ -21,12 +50,12 @@ Before making ANY code changes, you MUST produce a **Feature Contract** and a **
 - Test plan (unit + integration/e2e; what each test proves)
 - Performance considerations (if hot loops touched)
 
-**PR Plan**
-- Split the work into small PRs (see Change Budget below).
-- For each PR: scope + tests + risk.
+If anything is ambiguous, ask concise clarifying questions before implementing.
 
-**Hard rule:** Do NOT implement until the Feature Contract is approved by the user.
-If anything is ambiguous, ask concise clarifying questions at this stage.
+### Modeling Guardrails
+- Do not introduce tuning knobs, fudge factors, or hidden parameters whose purpose is to force agreement with theoretical results.
+- Small perturbations that break symmetry or improve numerical robustness are acceptable only when they are explicit, justified, and limited in scope.
+- If a change affects numerical behavior, convergence, stability, or energy outcomes, document the assumption and validate it with tests and, when relevant, benchmarks.
 
 ---
 
