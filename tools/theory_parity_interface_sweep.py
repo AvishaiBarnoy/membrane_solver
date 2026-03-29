@@ -160,10 +160,12 @@ def run_candidate(
             in {
                 "disk_theta_at_R",
                 "disk_t_in_at_R",
+                "outer_geometry_trace_at_R_plus",
                 "outer_t_out_trace_at_R_plus",
                 "phi_trace_at_R_plus",
                 "disk_minus_outer_trace",
                 "disk_minus_phi_trace",
+                "outer_geometry_vs_tilt_trace_gap",
             }
         },
         "outer_profile_parity": {

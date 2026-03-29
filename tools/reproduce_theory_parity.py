@@ -364,10 +364,12 @@ def _interface_trace_diagnostics(
         "disk_theta_at_R": 0.0,
         "disk_t_in_at_R": 0.0,
         "outer_t_out_first_shell": 0.0,
+        "outer_geometry_trace_at_R_plus": 0.0,
         "outer_t_out_trace_at_R_plus": 0.0,
         "phi_trace_at_R_plus": 0.0,
         "disk_minus_outer_trace": 0.0,
         "disk_minus_phi_trace": 0.0,
+        "outer_geometry_vs_tilt_trace_gap": 0.0,
         "outer_first_shell_minus_outer_trace": 0.0,
     }
     if mode != "physical_edge_staggered_v1":
@@ -430,10 +432,14 @@ def _interface_trace_diagnostics(
             "disk_theta_at_R": float(np.mean(disk_theta)),
             "disk_t_in_at_R": float(np.mean(disk_t_in)),
             "outer_t_out_first_shell": float(np.mean(first_t_out)),
+            "outer_geometry_trace_at_R_plus": phi_trace_mean,
             "outer_t_out_trace_at_R_plus": float(np.mean(trace_t_out)),
             "phi_trace_at_R_plus": phi_trace_mean,
             "disk_minus_outer_trace": float(np.mean(disk_t_in - trace_t_out)),
             "disk_minus_phi_trace": float(np.mean(disk_theta) - 2.0 * phi_trace_mean),
+            "outer_geometry_vs_tilt_trace_gap": float(
+                phi_trace_mean - np.mean(trace_t_out)
+            ),
             "outer_first_shell_minus_outer_trace": float(
                 np.mean(first_t_out - trace_t_out)
             ),
