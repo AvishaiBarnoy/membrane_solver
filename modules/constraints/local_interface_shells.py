@@ -65,6 +65,35 @@ def radial_unit_vectors(positions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return r, r_hat
 
 
+def _wrapped_angle_delta(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Return wrapped absolute angular differences."""
+    diff = np.abs(np.asarray(a, dtype=float) - np.asarray(b, dtype=float))
+    return np.minimum(diff, 2.0 * np.pi - diff)
+
+
+def _match_rows_by_azimuth(
+    source_phi: np.ndarray, target_rows: np.ndarray, target_phi: np.ndarray
+) -> np.ndarray:
+    """Match ordered rows by azimuth, preserving cyclic order when counts agree."""
+    source_phi = np.asarray(source_phi, dtype=float)
+    target_rows = np.asarray(target_rows, dtype=int)
+    target_phi = np.asarray(target_phi, dtype=float)
+
+    if source_phi.size == target_rows.size and source_phi.size > 0:
+        best_shift = 0
+        best_cost = float("inf")
+        for shift in range(source_phi.size):
+            cand_phi = np.roll(target_phi, -shift)
+            cost = float(np.mean(_wrapped_angle_delta(source_phi, cand_phi)))
+            if cost < best_cost:
+                best_cost = cost
+                best_shift = shift
+        return np.asarray(np.roll(target_rows, -best_shift), dtype=int)
+
+    dphi = _wrapped_angle_delta(source_phi[:, None], target_phi[None, :])
+    return np.asarray(target_rows[np.argmin(dphi, axis=1)], dtype=int)
+
+
 def build_local_interface_shell_data(
     mesh: Mesh,
     *,
@@ -109,22 +138,11 @@ def build_local_interface_shell_data(
         np.arctan2(positions[disk_rows, 1], positions[disk_rows, 0]), 2.0 * np.pi
     )
 
-    dphi_out = np.abs(phi_out[:, None] - phi_rim[None, :])
-    dphi_out = np.minimum(dphi_out, 2.0 * np.pi - dphi_out)
-    rim_rows_matched = rim_rows[np.argmin(dphi_out, axis=1)]
-
-    dphi_disk = np.abs(phi_rim[:, None] - phi_disk[None, :])
-    dphi_disk = np.minimum(dphi_disk, 2.0 * np.pi - dphi_disk)
-    disk_rows_matched = disk_rows[np.argmin(dphi_disk, axis=1)]
-    rim_rows_for_disk = rim_rows[np.argmin(dphi_disk.T, axis=1)]
-
-    dphi_rim_out = np.abs(phi_rim[:, None] - phi_out[None, :])
-    dphi_rim_out = np.minimum(dphi_rim_out, 2.0 * np.pi - dphi_rim_out)
-    outer_rows_for_rim = outer_rows[np.argmin(dphi_rim_out, axis=1)]
-
-    dphi_disk_out = np.abs(phi_disk[:, None] - phi_out[None, :])
-    dphi_disk_out = np.minimum(dphi_disk_out, 2.0 * np.pi - dphi_disk_out)
-    outer_rows_for_disk = outer_rows[np.argmin(dphi_disk_out, axis=1)]
+    rim_rows_matched = _match_rows_by_azimuth(phi_out, rim_rows, phi_rim)
+    disk_rows_matched = _match_rows_by_azimuth(phi_rim, disk_rows, phi_disk)
+    rim_rows_for_disk = _match_rows_by_azimuth(phi_disk, rim_rows, phi_rim)
+    outer_rows_for_rim = _match_rows_by_azimuth(phi_rim, outer_rows, phi_out)
+    outer_rows_for_disk = _match_rows_by_azimuth(phi_disk, outer_rows, phi_out)
 
     _, rim_r_hat = radial_unit_vectors(positions[rim_rows_matched])
     _, disk_r_hat = radial_unit_vectors(positions[disk_rows_matched])

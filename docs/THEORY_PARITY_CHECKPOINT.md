@@ -34,6 +34,7 @@
 - Current kept interface-side improvement:
   - the physical-edge law now pairs the first outer shell to disk-boundary rows by explicit nearest azimuth (`rim_rows_for_disk`) instead of relying on independently ordered rings
   - a second-shell-supported composition was tested and produced the same behavior on the current family, so it was not kept as a separate runtime change
+  - the local-shell builder now uses an order-preserving cyclic azimuth match when adjacent rings have equal counts; this cleans up pair regularity but does not materially change the current parity metrics
 
 ## Physical-Edge Family
 - The profile helper in [tools/theory_parity_interface_profiles.py](/Users/User/github/membrane_solver/tools/theory_parity_interface_profiles.py) now defines the generic family:

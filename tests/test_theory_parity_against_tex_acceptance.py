@@ -387,3 +387,37 @@ def test_generated_physical_edge_family_varies_smoothly_around_primary(
     hi_ratio = float(hi["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
     assert lo_ratio < primary_ratio
     assert hi_ratio > primary_ratio
+
+    lo_split = lo["metrics"]["diagnostics"]["outer_split"]
+    primary_split = primary["metrics"]["diagnostics"]["outer_split"]
+    hi_split = hi["metrics"]["diagnostics"]["outer_split"]
+
+    lo_delta = float(lo["metrics"]["diagnostics"]["outer_shell_geometry"]["delta_r"])
+    primary_delta = float(
+        primary["metrics"]["diagnostics"]["outer_shell_geometry"]["delta_r"]
+    )
+    hi_delta = float(hi["metrics"]["diagnostics"]["outer_shell_geometry"]["delta_r"])
+    assert lo_delta > primary_delta > hi_delta
+
+    lo_phi = float(lo_split["phi_mean"])
+    primary_phi = float(primary_split["phi_mean"])
+    hi_phi = float(hi_split["phi_mean"])
+    assert lo_phi < primary_phi <= hi_phi
+
+    lo_phi_ratio = float(lo_split["phi_over_half_theta"])
+    primary_phi_ratio = float(primary_split["phi_over_half_theta"])
+    hi_phi_ratio = float(hi_split["phi_over_half_theta"])
+    assert lo_phi_ratio < primary_phi_ratio <= hi_phi_ratio
+
+    lo_tout = float(lo_split["t_out_mean"])
+    primary_tout = float(primary_split["t_out_mean"])
+    hi_tout = float(hi_split["t_out_mean"])
+    assert abs(lo_tout) < 1.0e-6
+    assert abs(primary_tout) < 1.0e-6
+    assert abs(hi_tout) < 1.0e-6
+
+    lo_tin = float(lo_split["t_in_mean"])
+    primary_tin = float(primary_split["t_in_mean"])
+    hi_tin = float(hi_split["t_in_mean"])
+    assert lo_tin < primary_tin
+    assert abs(primary_tin - hi_tin) < 0.01

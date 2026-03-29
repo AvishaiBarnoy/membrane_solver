@@ -48,6 +48,9 @@ def test_build_local_interface_shell_data_orders_shells_and_matches_rows() -> No
     assert data.rim_rows_for_disk.size == data.disk_rows.size
     assert data.outer_rows_for_rim.size == data.rim_rows.size
     assert data.outer_rows_for_disk.size == data.disk_rows.size
+    assert np.unique(data.rim_rows_for_disk).size == data.rim_rows_for_disk.size
+    assert np.unique(data.outer_rows_for_rim).size == data.outer_rows_for_rim.size
+    assert np.unique(data.outer_rows_for_disk).size == data.outer_rows_for_disk.size
 
     _, rim_r_hat = radial_unit_vectors(positions[data.rim_rows_matched])
     _, disk_r_hat = radial_unit_vectors(positions[data.disk_rows_matched])
