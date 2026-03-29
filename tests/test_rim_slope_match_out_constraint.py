@@ -317,6 +317,7 @@ def test_rim_slope_match_out_shared_rim_staggered_mode_targets_outer_ring() -> N
 
     rim_rows = _collect_group_rows(mesh, "rim")
     outer_rows = _collect_group_rows(mesh, "outer")
+    disk_rows = _collect_group_rows(mesh, "disk")
 
     normal = np.array([0.0, 0.0, 1.0], dtype=float)
     rim_order = _order_by_angle(positions[rim_rows], normal)
@@ -324,6 +325,7 @@ def test_rim_slope_match_out_shared_rim_staggered_mode_targets_outer_ring() -> N
 
     rim_rows = rim_rows[rim_order]
     outer_rows = outer_rows[outer_order]
+    disk_rows = disk_rows[_order_by_angle(positions[disk_rows], normal)]
 
     r_vec_outer = positions[outer_rows].copy()
     r_vec_outer[:, 2] = 0.0
@@ -356,6 +358,54 @@ def test_rim_slope_match_out_shared_rim_staggered_mode_targets_outer_ring() -> N
 
     t_out_rad = np.einsum("ij,ij->i", tilts_out[outer_rows], r_dir_outer)
     t_in_rad = np.einsum("ij,ij->i", tilts_in[outer_rows], r_dir_outer)
+    r_vec_disk = positions[disk_rows].copy()
+    r_vec_disk[:, 2] = 0.0
+    r_hat_disk = r_vec_disk / np.linalg.norm(r_vec_disk, axis=1)[:, None]
+    t_in_disk = np.einsum("ij,ij->i", tilts_in[disk_rows], r_hat_disk)
 
     assert np.allclose(t_out_rad, phi, atol=1.0e-6)
-    assert np.allclose(t_in_rad, 0.2 - phi, atol=1.0e-6)
+    assert np.allclose(t_in_rad, 0.01, atol=1.0e-6)
+    assert np.allclose(t_in_disk, 0.2 - phi, atol=1.0e-6)
+
+
+def test_matching_ring_diagnostics_reports_physical_edge_local_shell() -> None:
+    data = _build_rim_match_geometry(z_bump=0.12)
+    data["global_parameters"]["rim_slope_match_mode"] = "physical_edge_staggered_v1"
+    mesh = parse_geometry(data)
+
+    from modules.constraints import rim_slope_match_out as constraint
+
+    diag = constraint.matching_ring_diagnostics(
+        mesh, mesh.global_parameters, mesh.positions_view()
+    )
+
+    assert bool(diag["available"]) is True
+    assert diag["construction_mode"] == "physical_edge_local_shell"
+    assert float(diag["disk_radius"]) == pytest.approx(0.6, abs=1.0e-6)
+    assert float(diag["rim_radius"]) == pytest.approx(0.6, abs=1.0e-6)
+    assert float(diag["outer_radius"]) == pytest.approx(1.0, abs=1.0e-6)
+
+
+def test_matching_ring_diagnostics_falls_back_to_outer_rim_preset_rows() -> None:
+    data = _build_rim_match_geometry()
+    for vertex in data["vertices"]:
+        if len(vertex) < 4:
+            continue
+        opts = dict(vertex[3] or {})
+        if opts.get("rim_slope_match_group") == "outer":
+            opts.pop("rim_slope_match_group", None)
+            opts["pin_to_circle_group"] = "outer"
+            vertex[3] = opts
+
+    data["global_parameters"]["rim_slope_match_mode"] = "physical_edge_staggered_v1"
+    mesh = parse_geometry(data)
+
+    from modules.constraints import rim_slope_match_out as constraint
+
+    diag = constraint.matching_ring_diagnostics(
+        mesh, mesh.global_parameters, mesh.positions_view()
+    )
+
+    assert bool(diag["available"])
+    assert diag["construction_mode"] == "physical_edge_local_shell"
+    assert float(diag["outer_radius"]) == pytest.approx(1.0, abs=1.0e-6)

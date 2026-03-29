@@ -37,13 +37,14 @@ RATIO_KEYS = ("theta_ratio", "elastic_ratio", "contact_ratio", "total_ratio")
 
 def _finite(report: dict[str, Any]) -> bool:
     reduced = report["metrics"]["reduced_terms"]
+    theory = report["metrics"].get("legacy_anchor", report["metrics"]["theory"])
     vals = [
         float(report["metrics"]["final_energy"]),
         float(reduced["elastic_measured"]),
         float(reduced["contact_measured"]),
         float(reduced["total_measured"]),
     ]
-    vals.extend(float(report["metrics"]["theory"]["ratios"][k]) for k in RATIO_KEYS)
+    vals.extend(float(theory["ratios"][k]) for k in RATIO_KEYS)
     return bool(np.all(np.isfinite(np.asarray(vals, dtype=float))))
 
 
@@ -81,6 +82,7 @@ def build_mesh_convergence_audit(
         report, mesh_meta, runtime = _run_level(
             mesh_path=mesh_path, refine_level=lvl, protocol=protocol
         )
+        theory = report["metrics"].get("legacy_anchor", report["metrics"]["theory"])
         eq = build_equivalence_audit(
             report=report,
             radii=(0.35, 7.0 / 15.0, 0.6),
@@ -92,10 +94,7 @@ def build_mesh_convergence_audit(
                 "level": int(lvl),
                 "mesh": mesh_meta,
                 "runtime_s": float(runtime),
-                "ratios": {
-                    k: float(report["metrics"]["theory"]["ratios"][k])
-                    for k in RATIO_KEYS
-                },
+                "ratios": {k: float(theory["ratios"][k]) for k in RATIO_KEYS},
                 "total_measured": float(
                     report["metrics"]["reduced_terms"]["total_measured"]
                 ),

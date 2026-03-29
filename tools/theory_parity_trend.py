@@ -36,8 +36,14 @@ def compute_ratio_trend(
 ) -> dict[str, Any]:
     """Compute ratio deltas against configured target tolerances."""
     rows: dict[str, Any] = {}
-    target_ratios = targets["targets"]["ratios"]
-    report_ratios = report["metrics"]["theory"]["ratios"]
+    target_root = targets["targets"]
+    if "legacy_anchor" in target_root:
+        target_ratios = target_root["legacy_anchor"]["ratios"]
+    else:
+        target_ratios = target_root["ratios"]
+    report_ratios = report["metrics"].get("legacy_anchor", report["metrics"]["theory"])[
+        "ratios"
+    ]
 
     within_count = 0
     for name, cfg in target_ratios.items():

@@ -1,14 +1,38 @@
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
+from tools.theory_parity_interface_profiles import build_profiled_fixture
+
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = ROOT / "tests" / "fixtures" / "theory_parity_targets.yaml"
 SCRIPT = ROOT / "tools" / "reproduce_theory_parity.py"
+BASE_FIXTURE = (
+    ROOT / "tests" / "fixtures" / "kozlov_1disk_3d_free_disk_theory_parity.yaml"
+)
+I50_FIXTURE = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "kozlov_1disk_3d_free_disk_theory_parity_i50_interface.yaml"
+)
+I60_FIXTURE = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "kozlov_1disk_3d_free_disk_theory_parity_i60_interface.yaml"
+)
+NEAR_EDGE_FIXTURE = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "kozlov_1disk_3d_free_disk_theory_parity_near_edge_v1.yaml"
+)
 
 
 def _get_path(dct: dict[str, Any], path: str) -> Any:
@@ -16,6 +40,39 @@ def _get_path(dct: dict[str, Any], path: str) -> Any:
     for key in path.split("."):
         cur = cur[key]
     return cur
+
+
+def _write_temp_fixture(doc: dict[str, Any], *, label: str) -> Path:
+    handle = tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=f"_{label}.yaml",
+        prefix="theory_parity_acceptance_",
+        delete=False,
+        dir=str(ROOT / "tests" / "fixtures"),
+        encoding="utf-8",
+    )
+    path = Path(handle.name)
+    try:
+        handle.write(yaml.safe_dump(doc, sort_keys=False))
+    finally:
+        handle.close()
+    return path
+
+
+def _build_physical_edge_profile_fixture(profile: str, lane: str) -> dict[str, Any]:
+    base_doc = yaml.safe_load(BASE_FIXTURE.read_text(encoding="utf-8")) or {}
+    doc = build_profiled_fixture(base_doc=base_doc, profile=profile, lane=lane)
+    gp = dict(doc.get("global_parameters") or {})
+    gp["rim_slope_match_mode"] = "physical_edge_staggered_v1"
+    gp["tilt_solver"] = "cg"
+    gp["tilt_cg_max_iters"] = 120
+    gp["tilt_mass_mode_in"] = "consistent"
+    doc["global_parameters"] = gp
+    constraints = [str(x) for x in (doc.get("constraint_modules") or [])]
+    doc["constraint_modules"] = [
+        x for x in constraints if x != "tilt_thetaB_boundary_in"
+    ]
+    return doc
 
 
 @pytest.mark.acceptance
@@ -34,13 +91,32 @@ def test_reproduce_theory_parity_matches_tex_targets_with_tolerances(tmp_path) -
     assert report["meta"]["protocol"] == targets["meta"]["protocol"]
     assert report["meta"]["format"] == "yaml"
 
-    ratios = targets["targets"]["ratios"]
-    for name, cfg in ratios.items():
-        actual = float(report["metrics"]["theory"]["ratios"][name])
+    tex = targets["targets"]["tex_benchmark"]
+    for name in ("thetaB_star", "elastic_star", "contact_star", "total_star"):
+        cfg = tex[name]
+        actual = float(report["metrics"]["tex_benchmark"][name])
         expected = float(cfg["expected"])
         abs_tol = float(cfg["abs_tol"])
         assert actual == pytest.approx(expected, abs=abs_tol), (
             f"{name}: expected {expected} +/- {abs_tol}, got {actual}"
+        )
+
+    ratios = tex["ratios"]
+    for name, cfg in ratios.items():
+        actual = float(report["metrics"]["tex_benchmark"]["ratios"][name])
+        expected = float(cfg["expected"])
+        abs_tol = float(cfg["abs_tol"])
+        assert actual == pytest.approx(expected, abs=abs_tol), (
+            f"{name}: expected {expected} +/- {abs_tol}, got {actual}"
+        )
+
+    legacy_ratios = targets["targets"]["legacy_anchor"]["ratios"]
+    for name, cfg in legacy_ratios.items():
+        actual = float(report["metrics"]["legacy_anchor"]["ratios"][name])
+        expected = float(cfg["expected"])
+        abs_tol = float(cfg["abs_tol"])
+        assert actual == pytest.approx(expected, abs=abs_tol), (
+            f"legacy {name}: expected {expected} +/- {abs_tol}, got {actual}"
         )
 
     rel = targets["targets"]["relations"]
@@ -51,3 +127,150 @@ def test_reproduce_theory_parity_matches_tex_targets_with_tolerances(tmp_path) -
         assert float(reduced["elastic_measured"]) > 0.0
     if bool(rel.get("total_measured_negative", False)):
         assert float(reduced["total_measured"]) < 0.0
+
+
+@pytest.mark.acceptance
+def test_coarse_lane_reports_finite_outer_shell_geometry_for_parity(tmp_path) -> None:
+    out_yaml = tmp_path / "coarse_outer_shell_report.yaml"
+    subprocess.run(
+        [sys.executable, str(SCRIPT), "--out", str(out_yaml)],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+    geom = report["metrics"]["diagnostics"]["outer_shell_geometry"]
+
+    assert bool(geom["available"])
+    assert float(geom["outer_radius"]) < 12.0
+
+
+@pytest.mark.acceptance
+def test_physical_edge_profiled_lane_improves_thetaB_over_coarse_lane(tmp_path) -> None:
+    coarse_out = tmp_path / "coarse_report.yaml"
+    profiled_out = tmp_path / "profiled_report.yaml"
+    subprocess.run(
+        [sys.executable, str(SCRIPT), "--out", str(coarse_out)],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    fixture_path = _write_temp_fixture(
+        _build_physical_edge_profile_fixture("near_edge_v1", "near_edge_v1_acceptance"),
+        label="near_edge_v1",
+    )
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--mesh",
+                str(fixture_path),
+                "--out",
+                str(profiled_out),
+            ],
+            check=True,
+            cwd=str(ROOT),
+        )
+    finally:
+        if fixture_path.exists():
+            fixture_path.unlink()
+
+    coarse = yaml.safe_load(coarse_out.read_text(encoding="utf-8"))
+    profiled = yaml.safe_load(profiled_out.read_text(encoding="utf-8"))
+
+    assert profiled["meta"]["lane"] == "near_edge_v1_acceptance"
+    assert float(profiled["metrics"]["thetaB_value"]) > float(
+        coarse["metrics"]["thetaB_value"]
+    )
+    geom = profiled["metrics"]["diagnostics"]["outer_shell_geometry"]
+    assert bool(geom["available"])
+    assert geom["construction_mode"] == "physical_edge_local_shell"
+    assert float(geom["rim_radius"]) == pytest.approx(7.0 / 15.0, abs=5.0e-3)
+    assert float(geom["outer_radius"]) < 1.0
+
+
+@pytest.mark.acceptance
+def test_tracked_i50_fixture_improves_geometry_and_thetaB_over_coarse_lane(
+    tmp_path,
+) -> None:
+    coarse_out = tmp_path / "coarse_report.yaml"
+    i50_out = tmp_path / "i50_report.yaml"
+    subprocess.run(
+        [sys.executable, str(SCRIPT), "--out", str(coarse_out)],
+        check=True,
+        cwd=str(ROOT),
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mesh",
+            str(I50_FIXTURE),
+            "--out",
+            str(i50_out),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    coarse = yaml.safe_load(coarse_out.read_text(encoding="utf-8"))
+    i50 = yaml.safe_load(i50_out.read_text(encoding="utf-8"))
+
+    coarse_theta = float(coarse["metrics"]["thetaB_value"])
+    i50_theta = float(i50["metrics"]["thetaB_value"])
+    geom = i50["metrics"]["diagnostics"]["outer_shell_geometry"]
+
+    assert i50["meta"]["lane"] == "i50_interface_v1"
+    assert i50_theta > coarse_theta
+    assert bool(geom["available"])
+    assert geom["construction_mode"] == "physical_edge_local_shell"
+    assert float(geom["rim_radius"]) == pytest.approx(7.0 / 15.0, abs=5.0e-3)
+    assert float(geom["outer_radius"]) < 1.0
+
+
+@pytest.mark.acceptance
+def test_tracked_i60_and_near_edge_fixtures_use_local_shell_physical_edge_mode(
+    tmp_path,
+) -> None:
+    i60_out = tmp_path / "i60_report.yaml"
+    near_edge_out = tmp_path / "near_edge_report.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mesh",
+            str(I60_FIXTURE),
+            "--out",
+            str(i60_out),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mesh",
+            str(NEAR_EDGE_FIXTURE),
+            "--out",
+            str(near_edge_out),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    i60 = yaml.safe_load(i60_out.read_text(encoding="utf-8"))
+    near_edge = yaml.safe_load(near_edge_out.read_text(encoding="utf-8"))
+
+    i60_geom = i60["metrics"]["diagnostics"]["outer_shell_geometry"]
+    near_edge_geom = near_edge["metrics"]["diagnostics"]["outer_shell_geometry"]
+
+    assert i60["meta"]["lane"] == "i60_interface_v1"
+    assert near_edge["meta"]["lane"] == "near_edge_v1"
+    assert i60_geom["construction_mode"] == "physical_edge_local_shell"
+    assert near_edge_geom["construction_mode"] == "physical_edge_local_shell"
+    assert float(i60_geom["rim_radius"]) == pytest.approx(7.0 / 15.0, abs=5.0e-3)
+    assert float(near_edge_geom["rim_radius"]) == pytest.approx(7.0 / 15.0, abs=5.0e-3)
+    assert float(i60_geom["outer_radius"]) < 1.0
+    assert float(near_edge_geom["outer_radius"]) < 1.0
