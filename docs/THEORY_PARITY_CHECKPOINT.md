@@ -74,13 +74,14 @@
   - optimized parity remains smooth across `lo / primary / hi` and is slightly tighter around the TeX target than the previous baseline set
   - fixed-`thetaB` elastic terms still vary smoothly with near-edge geometry
   - the new one-sided trace diagnostics show that the geometric outer slope trace at `R+` is close to the TeX relation `phi_* = theta_B / 2`
-  - but the outer-leaflet trace and outer height profile are still not near the TeX continuation law
+  - but the free-membrane-side leaflet traces and outer height profile are still not near the TeX continuation law
   - the outer-side mismatch is now clearly split:
     - what we get right:
       - `thetaB`
       - total energy
       - geometric slope trace `phi(R+)`
     - what we still get wrong:
+      - free-side `t_in(R+)` is effectively zero instead of `thetaB / 2`
       - outer `tilt_out` trace at `R+`
       - outer height/profile `z(r)`
   - the family remains in a non-pathological regime and can be used as the active parity-development base

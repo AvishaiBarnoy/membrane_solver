@@ -295,6 +295,14 @@ def test_physical_edge_default_fixture_is_the_default_development_lane(
     assert float(split["phi_mean"]) > 0.0
     assert float(split["phi_over_half_theta"]) > 0.0
     assert abs(float(traces["disk_minus_phi_trace"])) < 0.01
+    assert abs(float(traces["disk_t_in_at_R"]) - default_theta) < 0.01
+    assert abs(float(traces["outer_t_in_trace_at_R_plus"])) < 0.01
+    assert float(traces["outer_t_out_trace_at_R_plus"]) > float(
+        traces["outer_t_in_trace_at_R_plus"]
+    )
+    assert float(traces["phi_trace_at_R_plus"]) > float(
+        traces["outer_t_out_trace_at_R_plus"]
+    )
     assert bool(traces["available"])
     assert bool(profile["available"])
     assert float(profile["sample_count"]) >= 10.0

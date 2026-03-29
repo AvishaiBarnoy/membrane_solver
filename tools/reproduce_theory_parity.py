@@ -409,13 +409,18 @@ def _interface_trace_diagnostics(
         "available": False,
         "disk_theta_at_R": 0.0,
         "disk_t_in_at_R": 0.0,
+        "outer_t_in_first_shell": 0.0,
+        "outer_t_in_trace_at_R_plus": 0.0,
         "outer_t_out_first_shell": 0.0,
         "outer_geometry_trace_at_R_plus": 0.0,
         "outer_t_out_trace_at_R_plus": 0.0,
         "phi_trace_at_R_plus": 0.0,
         "disk_minus_outer_trace": 0.0,
         "disk_minus_phi_trace": 0.0,
+        "outer_inner_minus_outer_trace": 0.0,
+        "outer_inner_minus_phi_trace": 0.0,
         "outer_geometry_vs_tilt_trace_gap": 0.0,
+        "outer_inner_first_shell_minus_trace": 0.0,
         "outer_first_shell_minus_outer_trace": 0.0,
     }
     if mode != "physical_edge_staggered_v1":
@@ -446,8 +451,17 @@ def _interface_trace_diagnostics(
     tilts_in = np.asarray(mesh.tilts_in_view(), dtype=float)
     tilts_out = np.asarray(mesh.tilts_out_view(), dtype=float)
     disk_t_in = np.einsum("ij,ij->i", tilts_in[disk_rows], disk_r_hat)
+    first_t_in = np.einsum("ij,ij->i", tilts_in[first_rows], first_r_hat)
+    second_t_in = np.einsum("ij,ij->i", tilts_in[second_rows], second_r_hat)
     first_t_out = np.einsum("ij,ij->i", tilts_out[first_rows], first_r_hat)
     second_t_out = np.einsum("ij,ij->i", tilts_out[second_rows], second_r_hat)
+    trace_t_in = extrapolate_trace_to_radius(
+        target_radius=float(shell_data.disk_radius),
+        first_radius=float(shell_data.rim_radius),
+        first_values=first_t_in,
+        second_radius=float(shell_data.outer_radius),
+        second_values=second_t_in,
+    )
     trace_t_out = extrapolate_trace_to_radius(
         target_radius=float(shell_data.disk_radius),
         first_radius=float(shell_data.rim_radius),
@@ -477,14 +491,21 @@ def _interface_trace_diagnostics(
             "available": True,
             "disk_theta_at_R": float(np.mean(disk_theta)),
             "disk_t_in_at_R": float(np.mean(disk_t_in)),
+            "outer_t_in_first_shell": float(np.mean(first_t_in)),
+            "outer_t_in_trace_at_R_plus": float(np.mean(trace_t_in)),
             "outer_t_out_first_shell": float(np.mean(first_t_out)),
             "outer_geometry_trace_at_R_plus": phi_trace_mean,
             "outer_t_out_trace_at_R_plus": float(np.mean(trace_t_out)),
             "phi_trace_at_R_plus": phi_trace_mean,
             "disk_minus_outer_trace": float(np.mean(disk_t_in - trace_t_out)),
             "disk_minus_phi_trace": float(np.mean(disk_theta) - 2.0 * phi_trace_mean),
+            "outer_inner_minus_outer_trace": float(np.mean(trace_t_in - trace_t_out)),
+            "outer_inner_minus_phi_trace": float(np.mean(trace_t_in - phi_trace)),
             "outer_geometry_vs_tilt_trace_gap": float(
                 phi_trace_mean - np.mean(trace_t_out)
+            ),
+            "outer_inner_first_shell_minus_trace": float(
+                np.mean(first_t_in - trace_t_in)
             ),
             "outer_first_shell_minus_outer_trace": float(
                 np.mean(first_t_out - trace_t_out)

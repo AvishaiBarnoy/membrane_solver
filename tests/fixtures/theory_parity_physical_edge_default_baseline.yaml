@@ -42,11 +42,16 @@ metrics:
       available: true
       disk_theta_at_R: 0.18000000000000002
       disk_t_in_at_R: 0.17624366820931817
+      outer_t_in_first_shell: -0.000759453343938565
+      outer_t_in_trace_at_R_plus: -0.0013204777219611337
       outer_t_out_first_shell: 0.003784678806312157
       outer_t_out_trace_at_R_plus: 0.041308800093634114
       phi_trace_at_R_plus: 0.09029051397066068
       disk_minus_outer_trace: 0.13493486811568403
       disk_minus_phi_trace: -0.0005810279413213382
+      outer_inner_minus_outer_trace: -0.04262927781559525
+      outer_inner_minus_phi_trace: -0.09161099169262181
+      outer_inner_first_shell_minus_trace: 0.0005610243780225688
       outer_first_shell_minus_outer_trace: -0.03752412128732196
     outer_profile_parity:
       available: true
@@ -83,11 +88,16 @@ tolerances:
     interface_traces_at_R:
       disk_theta_at_R: 1.0e-06
       disk_t_in_at_R: 0.0005
+      outer_t_in_first_shell: 0.0005
+      outer_t_in_trace_at_R_plus: 0.0005
       outer_t_out_first_shell: 0.0005
       outer_t_out_trace_at_R_plus: 0.0005
       phi_trace_at_R_plus: 0.0005
       disk_minus_outer_trace: 0.0005
       disk_minus_phi_trace: 0.0005
+      outer_inner_minus_outer_trace: 0.0005
+      outer_inner_minus_phi_trace: 0.0005
+      outer_inner_first_shell_minus_trace: 0.0005
       outer_first_shell_minus_outer_trace: 0.0005
       available: 0.0
     outer_profile_parity:
