@@ -670,3 +670,116 @@ def test_compute_energy_and_gradient_array_uses_joint_projection_for_leaflets() 
     assert energy == 3.25
     assert cm.calls == 1
     assert np.allclose(grad_arr, 0.0, atol=0.0, rtol=0.0)
+
+
+def test_joint_sparse_projection_operator_cache_reuse_and_invalidation(
+    monkeypatch,
+) -> None:
+    cm = ConstraintModuleManager([])
+    cm.modules = {
+        "joint": DummyJointRowConstraint(
+            [
+                (
+                    (
+                        np.asarray([0, 1], dtype=int),
+                        np.asarray([[1.0, 0.0, 0.0], [0.0, 0.5, 0.0]], dtype=float),
+                    ),
+                    (
+                        np.asarray([1], dtype=int),
+                        np.asarray([[0.0, 1.0, 0.0]], dtype=float),
+                    ),
+                    None,
+                ),
+                (
+                    None,
+                    None,
+                    (
+                        np.asarray([1, 2], dtype=int),
+                        np.asarray([[0.0, 0.0, 1.0], [0.5, 0.0, 0.0]], dtype=float),
+                    ),
+                ),
+            ]
+        )
+    }
+    mesh = DummyMesh(3)
+
+    build_calls = {"n": 0}
+    real_build = ConstraintModuleManager._build_joint_sparse_projection_operator
+
+    def _counted_build(*args, **kwargs):
+        build_calls["n"] += 1
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(
+        ConstraintModuleManager,
+        "_build_joint_sparse_projection_operator",
+        staticmethod(_counted_build),
+    )
+
+    gp = {"tilt_thetaB_value": 0.01}
+    grad = np.asarray([[2.0, -1.0, 0.5], [0.1, 0.2, 0.3], [0.0, 0.0, 0.0]], dtype=float)
+    tilt_in = np.asarray(
+        [[0.0, 0.5, 0.0], [1.0, -2.0, 0.5], [0.25, 0.75, -1.0]], dtype=float
+    )
+    tilt_out = np.asarray(
+        [[-1.0, 0.5, 0.0], [0.2, -0.1, 0.4], [0.0, 1.5, -0.5]], dtype=float
+    )
+
+    cm.apply_joint_gradient_modifications_array(
+        grad.copy(),
+        tilt_in.copy(),
+        tilt_out.copy(),
+        mesh=mesh,
+        global_params=gp,
+    )
+    assert build_calls["n"] == 1
+
+    cm.apply_joint_gradient_modifications_array(
+        grad.copy(),
+        tilt_in.copy(),
+        tilt_out.copy(),
+        mesh=mesh,
+        global_params={"tilt_thetaB_value": 0.02},
+    )
+    assert build_calls["n"] == 1
+
+    row_constraints = cm.modules["joint"]._row_constraints
+    row_constraints[0] = (
+        (
+            np.asarray([0, 1], dtype=int),
+            np.asarray([[1.5, 0.0, 0.0], [0.0, 0.5, 0.0]], dtype=float),
+        ),
+        (
+            np.asarray([1], dtype=int),
+            np.asarray([[0.0, 1.0, 0.0]], dtype=float),
+        ),
+        None,
+    )
+    cm.apply_joint_gradient_modifications_array(
+        grad.copy(),
+        tilt_in.copy(),
+        tilt_out.copy(),
+        mesh=mesh,
+        global_params=gp,
+    )
+    assert build_calls["n"] == 2
+
+    mesh._tilt_fixed_flags_version += 1
+    cm.apply_joint_gradient_modifications_array(
+        grad.copy(),
+        tilt_in.copy(),
+        tilt_out.copy(),
+        mesh=mesh,
+        global_params=gp,
+    )
+    assert build_calls["n"] == 3
+
+    mesh._version += 1
+    cm.apply_joint_gradient_modifications_array(
+        grad.copy(),
+        tilt_in.copy(),
+        tilt_out.copy(),
+        mesh=mesh,
+        global_params=gp,
+    )
+    assert build_calls["n"] == 4
