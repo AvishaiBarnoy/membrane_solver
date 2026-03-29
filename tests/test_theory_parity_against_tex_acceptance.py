@@ -87,6 +87,30 @@ def _build_physical_edge_profile_fixture(profile: str, lane: str) -> dict[str, A
     return doc
 
 
+def _run_fixture_report(
+    doc: dict[str, Any], *, label: str, tmp_path: Path
+) -> dict[str, Any]:
+    fixture_path = _write_temp_fixture(doc, label=label)
+    out_yaml = tmp_path / f"{label}.yaml"
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--mesh",
+                str(fixture_path),
+                "--out",
+                str(out_yaml),
+            ],
+            check=True,
+            cwd=str(ROOT),
+        )
+    finally:
+        if fixture_path.exists():
+            fixture_path.unlink()
+    return yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+
+
 @pytest.mark.acceptance
 def test_reproduce_theory_parity_matches_tex_targets_with_tolerances(tmp_path) -> None:
     out_yaml = tmp_path / "theory_parity_report.yaml"
@@ -483,3 +507,55 @@ def test_generated_physical_edge_family_varies_smoothly_around_primary(
     ]
     assert max(phi_rmse) - min(phi_rmse) < 0.1
     assert max(z_rmse) - min(z_rmse) < 0.05
+
+
+@pytest.mark.acceptance
+def test_default_lane_reports_real_zero_bump_and_shows_kick_sensitivity(
+    tmp_path,
+) -> None:
+    current_doc = yaml.safe_load(DEFAULT_FIXTURE.read_text(encoding="utf-8")) or {}
+    current = _run_fixture_report(
+        current_doc, label="default_current_bump", tmp_path=tmp_path
+    )
+
+    tiny_doc = yaml.safe_load(DEFAULT_FIXTURE.read_text(encoding="utf-8")) or {}
+    tiny_gp = dict(tiny_doc.get("global_parameters") or {})
+    tiny_gp["parity_physical_edge_z_bump"] = 1.0e-12
+    tiny_doc["global_parameters"] = tiny_gp
+    tiny = _run_fixture_report(tiny_doc, label="default_tiny_bump", tmp_path=tmp_path)
+
+    zero_doc = yaml.safe_load(DEFAULT_FIXTURE.read_text(encoding="utf-8")) or {}
+    zero_gp = dict(zero_doc.get("global_parameters") or {})
+    zero_gp["parity_physical_edge_z_bump"] = 0.0
+    zero_doc["global_parameters"] = zero_gp
+    zero = _run_fixture_report(zero_doc, label="default_zero_bump", tmp_path=tmp_path)
+
+    current_total = float(current["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+    tiny_total = float(tiny["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+    zero_total = float(zero["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+    current_theta = float(current["metrics"]["thetaB_value"])
+    tiny_theta = float(tiny["metrics"]["thetaB_value"])
+    zero_theta = float(zero["metrics"]["thetaB_value"])
+
+    current_traces = current["metrics"]["diagnostics"]["interface_traces_at_R"]
+    tiny_traces = tiny["metrics"]["diagnostics"]["interface_traces_at_R"]
+    zero_traces = zero["metrics"]["diagnostics"]["interface_traces_at_R"]
+
+    current_outer_trace = float(current_traces["outer_t_out_trace_at_R_plus"])
+    tiny_outer_trace = float(tiny_traces["outer_t_out_trace_at_R_plus"])
+    zero_outer_trace = float(zero_traces["outer_t_out_trace_at_R_plus"])
+
+    current_gap = float(current_traces["outer_geometry_vs_tilt_trace_gap"])
+    tiny_gap = float(tiny_traces["outer_geometry_vs_tilt_trace_gap"])
+    zero_phi_trace = float(zero_traces["phi_trace_at_R_plus"])
+
+    assert current_total > tiny_total
+    assert current_total > zero_total
+    assert tiny_total > zero_total
+    assert current_theta == pytest.approx(tiny_theta, abs=1.0e-12)
+    assert current_theta > zero_theta
+    assert current_outer_trace > tiny_outer_trace
+    assert current_outer_trace > abs(zero_outer_trace)
+    assert current_gap < tiny_gap
+    assert abs(zero_phi_trace) < 1.0e-6
+    assert abs(zero_outer_trace) < 5.0e-3

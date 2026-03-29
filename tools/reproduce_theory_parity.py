@@ -144,10 +144,8 @@ def _activate_local_outer_shell_for_parity(mesh) -> dict[str, float]:
         except AssertionError:
             shell_data = None
         if shell_data is not None:
-            bump = float(
-                mesh.global_parameters.get("parity_physical_edge_z_bump")
-                or DEFAULT_PHYSICAL_EDGE_Z_BUMP
-            )
+            bump_raw = mesh.global_parameters.get("parity_physical_edge_z_bump")
+            bump = DEFAULT_PHYSICAL_EDGE_Z_BUMP if bump_raw is None else float(bump_raw)
             changed = False
             for row in np.asarray(shell_data.rim_rows, dtype=int):
                 vid = int(mesh.vertex_ids[int(row)])
