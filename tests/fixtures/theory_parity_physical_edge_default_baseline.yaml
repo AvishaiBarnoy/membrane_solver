@@ -12,28 +12,41 @@ meta:
   format: yaml
   fixed_polish_steps: 0
 metrics:
-  final_energy: -1.1842408962554303
-  thetaB_value: 0.19000000000000003
+  final_energy: -1.1588453547994413
+  thetaB_value: 0.18000000000000002
   reduced_terms:
-    elastic_measured: 1.2035286945005963
-    contact_measured: -2.3877695907560263
-    total_measured: -1.1842408962554303
+    elastic_measured: 1.1032521522325835
+    contact_measured: -2.2620975070320246
+    total_measured: -1.1588453547994413
   theory:
+    radius: 0.4666666666666667
+    kappa: 2.0
+    kappa_t: 450.0
+    drive: 4.286
+    thetaB_star: 0.09228467963227531
+    elastic_star: 0.5798803992594971
+    contact_star: -1.159760798518994
+    total_star: -0.5798803992594969
     ratios:
-      theta_ratio: 2.0588466119954987
-      elastic_ratio: 2.0754774536913017
-      contact_ratio: 2.0588466119955
-      total_ratio: 2.042215770299699
+      theta_ratio: 1.9504862639957357
+      elastic_ratio: 1.9025512047681354
+      contact_ratio: 1.9504862639957365
+      total_ratio: 1.998421323223338
   diagnostics:
     outer_split:
-      phi_mean: 0.004162564411299302
-      t_in_mean: 0.1858374469392309
+      available: true
+      phi_mean: 0.003756340222184136
+      t_in_mean: 0.17624366820931817
       t_out_mean: 0.0
-      theta_disk_mean: 0.19000000000000003
-      phi_over_half_theta: 0.04381646748736106
+      theta_disk_mean: 0.18000000000000002
+      phi_over_half_theta: 0.04173711357982373
     outer_shell_geometry:
+      available: 1.0
+      construction_mode: physical_edge_local_shell
       rim_radius: 0.46666666666666706
-      outer_radius: 0.6514103092037068
+      outer_radius: 0.6575523487185159
+      delta_r: 0.1908856820518488
+      n_outer_rows: 12.0
 tolerances:
   final_energy: 0.002
   thetaB_value: 1.0e-06

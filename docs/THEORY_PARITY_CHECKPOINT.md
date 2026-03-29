@@ -22,14 +22,14 @@
 ## Physical-Edge Default Lane
 - The new tracked default lane is [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml).
 - Current default report:
-  - `thetaB = 0.19`
-  - `final_energy = -1.18424`
-  - `tex total_ratio = 1.02111`
-  - `tex elastic_ratio = 1.03774`
+  - `thetaB = 0.18`
+  - `final_energy = -1.15885`
+  - `tex total_ratio = 0.99921`
+  - `tex elastic_ratio = 0.95128`
   - `rim_radius ≈ 0.46667`
-  - `outer_radius ≈ 0.65141`
-  - `phi_mean ≈ 0.00416`
-  - `phi_over_half_theta ≈ 0.04382`
+  - `outer_radius ≈ 0.65755`
+  - `phi_mean ≈ 0.00376`
+  - `phi_over_half_theta ≈ 0.04174`
 - This lane is derived from the same physical-edge construction as the earlier `near_edge_v1` reference, but is now tracked as the generic bottom-up default rather than as a one-off named fix.
 - Current kept interface-side improvement:
   - the physical-edge law now pairs the first outer shell to disk-boundary rows by explicit nearest azimuth (`rim_rows_for_disk`) instead of relying on independently ordered rings
@@ -38,19 +38,19 @@
 
 ## Physical-Edge Family
 - The profile helper in [tools/theory_parity_interface_profiles.py](/Users/User/github/membrane_solver/tools/theory_parity_interface_profiles.py) now defines the generic default family:
-  - `default_lo = (0.78, 2.7)`
-  - `default = (0.76, 2.6)`
-  - `default_hi = (0.758, 2.6)`
+  - `default_lo = (0.776, 2.68)`
+  - `default = (0.772, 2.66)`
+  - `default_hi = (0.771, 2.655)`
 - Current optimized sweep on this branch:
-  - `default_lo`: `thetaB = 0.18`, `tex total_ratio = 0.98369`, `outer_radius ≈ 0.66165`
-  - `default`: `thetaB = 0.19`, `tex total_ratio = 1.02111`, `outer_radius ≈ 0.65141`
-  - `default_hi`: `thetaB = 0.19`, `tex total_ratio = 1.02580`, `outer_radius ≈ 0.65039`
+  - `default_lo`: `thetaB = 0.18`, `tex total_ratio = 0.99152`, `outer_radius ≈ 0.65960`
+  - `default`: `thetaB = 0.18`, `tex total_ratio = 0.99921`, `outer_radius ≈ 0.65755`
+  - `default_hi`: `thetaB = 0.18`, `tex total_ratio = 1.00110`, `outer_radius ≈ 0.65704`
   - `coarse`: `thetaB = 0.09`, `tex total_ratio = 0.49139`, `outer_radius ≈ 0.72784`
 - Current fixed-`thetaB = 0.185` comparison:
   - `coarse`: `elastic = 2.13375`, `contact = -2.32493`, `total = -0.19119`, `phi_over_half_theta ≈ 0.00643`
-  - `default_lo`: `elastic = 0.99453`, `contact = -2.32493`, `total = -1.33040`, `phi_over_half_theta ≈ 0.12454`
-  - `default`: `elastic = 0.98462`, `contact = -2.32493`, `total = -1.34032`, `phi_over_half_theta ≈ 0.19529`
-  - `default_hi`: `elastic = 0.97903`, `contact = -2.32493`, `total = -1.34590`, `phi_over_half_theta ≈ 0.19871`
+  - `default_lo`: `elastic = 0.96211`, `contact = -2.32493`, `total = -1.36283`, `phi_over_half_theta ≈ 0.14277`
+  - `default`: `elastic = 0.91989`, `contact = -2.32493`, `total = -1.40505`, `phi_over_half_theta ≈ 0.16956`
+  - `default_hi`: `elastic = 0.91984`, `contact = -2.32493`, `total = -1.40509`, `phi_over_half_theta ≈ 0.17208`
 - Practical conclusion:
   - contact remains effectively fixed across the physical-edge family
   - optimized parity remains smooth across `lo / primary / hi` and is slightly tighter around the TeX target than the previous baseline set
@@ -59,8 +59,8 @@
 
 ## Performance
 - Exact reproducer-path benchmark, current branch:
-  - `legacy_coarse`: `13.680 s`
-  - `physical_edge_default`: `20.218 s`
+  - `legacy_coarse`: `11.831 s`
+  - `physical_edge_default`: `17.565 s`
 
 ## Benchmark Split
 - `legacy_anchor` means the historical internal benchmark based on summed leaflet moduli:

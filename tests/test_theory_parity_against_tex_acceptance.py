@@ -251,7 +251,9 @@ def test_physical_edge_default_fixture_is_the_default_development_lane(
 
     assert default["meta"]["lane"] == "physical_edge_default"
     assert default_theta > float(coarse["metrics"]["thetaB_value"])
+    assert abs(default_theta - tex_theta) < 0.01
     assert abs(default_theta - tex_theta) < abs(coarse_theta - tex_theta)
+    assert abs(default_total_ratio - 1.0) < 0.01
     assert abs(default_total_ratio - 1.0) < abs(coarse_total_ratio - 1.0)
     assert abs(default_elastic_ratio - 1.0) < abs(coarse_elastic_ratio - 1.0)
     assert bool(geom["available"])
@@ -439,5 +441,4 @@ def test_generated_physical_edge_family_varies_smoothly_around_primary(
     lo_tin = float(lo_split["t_in_mean"])
     primary_tin = float(primary_split["t_in_mean"])
     hi_tin = float(hi_split["t_in_mean"])
-    assert lo_tin < primary_tin
-    assert abs(primary_tin - hi_tin) < 0.01
+    assert max(lo_tin, primary_tin, hi_tin) - min(lo_tin, primary_tin, hi_tin) < 0.01

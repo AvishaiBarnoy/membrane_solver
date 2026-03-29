@@ -67,15 +67,13 @@ def test_build_profiled_fixture_rejects_unknown_profile() -> None:
         build_profiled_fixture(base_doc={"vertices": []}, profile="unknown")
 
 
-def test_default_family_aliases_match_physical_edge_reference_profiles() -> None:
-    assert (
-        INTERFACE_PROFILES["default_lo"]
-        == INTERFACE_PROFILES["physical_edge_family_lo"]
-    )
-    assert (
-        INTERFACE_PROFILES["default"] == INTERFACE_PROFILES["physical_edge_primary_v1"]
-    )
-    assert (
-        INTERFACE_PROFILES["default_hi"]
-        == INTERFACE_PROFILES["physical_edge_family_hi"]
-    )
+def test_default_family_profiles_define_a_distinct_ordered_construction_rule() -> None:
+    default_lo = INTERFACE_PROFILES["default_lo"]
+    default = INTERFACE_PROFILES["default"]
+    default_hi = INTERFACE_PROFILES["default_hi"]
+
+    assert default_lo is not None
+    assert default is not None
+    assert default_hi is not None
+    assert default_lo[0] > default[0] > default_hi[0]
+    assert default_lo[1] > default[1] > default_hi[1]
