@@ -44,13 +44,14 @@ def parse_candidate(spec: str) -> tuple[str, tuple[str, ...]]:
 
 def _finite(report: dict[str, Any]) -> bool:
     reduced = report["metrics"]["reduced_terms"]
+    theory = report["metrics"].get("legacy_anchor", report["metrics"]["theory"])
     vals = [
         float(report["metrics"]["final_energy"]),
         float(reduced["elastic_measured"]),
         float(reduced["contact_measured"]),
         float(reduced["total_measured"]),
     ]
-    vals.extend(float(report["metrics"]["theory"]["ratios"][k]) for k in RATIO_KEYS)
+    vals.extend(float(theory["ratios"][k]) for k in RATIO_KEYS)
     return bool(np.all(np.isfinite(np.asarray(vals, dtype=float))))
 
 
@@ -102,9 +103,8 @@ def run_candidate(
         report = _collect_report(mesh_path=mesh, protocol=protocol)
         runtimes.append(time.perf_counter() - t0)
         last_report = report
-        ratios = {
-            k: float(report["metrics"]["theory"]["ratios"][k]) for k in RATIO_KEYS
-        }
+        theory = report["metrics"].get("legacy_anchor", report["metrics"]["theory"])
+        ratios = {k: float(theory["ratios"][k]) for k in RATIO_KEYS}
         for key in RATIO_KEYS:
             ratios_by_key[key].append(float(ratios[key]))
         scores.append(_score(ratios, target_ratio))

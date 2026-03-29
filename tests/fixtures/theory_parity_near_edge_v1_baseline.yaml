@@ -2,46 +2,46 @@ meta:
   fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_near_edge_v1.yaml
   lane: near_edge_v1
   protocol:
-    - g10
-    - r
-    - V2
-    - t5e-3
-    - g8
-    - t2e-3
-    - g12
-  baseline_version: v1
+  - g10
+  - r
+  - V2
+  - t5e-3
+  - g8
+  - t2e-3
+  - g12
   format: yaml
+  fixed_polish_steps: 0
 metrics:
-  final_energy: -1.1554494852370398
-  thetaB_value: 0.18000000000000002
+  final_energy: -1.188427229726054
+  thetaB_value: 0.19000000000000003
   reduced_terms:
-    elastic_measured: 1.1064881892437036
-    contact_measured: -2.261937674480743
-    total_measured: -1.1554494852370398
+    elastic_measured: 1.1993423610299727
+    contact_measured: -2.387769590756027
+    total_measured: -1.188427229726054
   theory:
     ratios:
-      theta_ratio: 1.9504862639957357
-      elastic_ratio: 1.9084073598765643
-      contact_ratio: 1.9504862639957365
-      total_ratio: 1.9925651681149088
+      theta_ratio: 2.0588466119954987
+      elastic_ratio: 2.068258148682942
+      contact_ratio: 2.0588466119955005
+      total_ratio: 2.049435075308059
   diagnostics:
     outer_shell_geometry:
-      rim_radius: 0.466666666666667
-      outer_radius: 0.6558802195875743
+      rim_radius: 0.46666666666666706
+      outer_radius: 0.6514310394370955
 tolerances:
-  final_energy: 2.0e-3
-  thetaB_value: 1.0e-6
+  final_energy: 0.002
+  thetaB_value: 1.0e-06
   reduced_terms:
-    elastic_measured: 2.0e-3
-    contact_measured: 2.0e-3
-    total_measured: 2.0e-3
+    elastic_measured: 0.002
+    contact_measured: 0.002
+    total_measured: 0.002
   theory:
     ratios:
-      theta_ratio: 2.0e-4
-      elastic_ratio: 2.0e-4
-      contact_ratio: 2.0e-4
-      total_ratio: 2.0e-4
+      theta_ratio: 0.0002
+      elastic_ratio: 0.0002
+      contact_ratio: 0.0002
+      total_ratio: 0.0002
   diagnostics:
     outer_shell_geometry:
-      rim_radius: 5.0e-3
-      outer_radius: 1.0e-3
+      rim_radius: 0.005
+      outer_radius: 0.001

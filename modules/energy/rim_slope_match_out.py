@@ -62,6 +62,7 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh
+from modules.constraints.local_interface_shells import build_local_interface_shell_data
 
 logger = logging.getLogger("membrane_solver")
 _WARNED_DISK_EQUALS_RIM = False
@@ -115,12 +116,21 @@ def _resolve_matching_mode(param_resolver) -> str:
         "pointwise_radial_v1",
         "ring_average_radial_v1",
         "shared_rim_staggered_v1",
+        "physical_edge_staggered_v1",
     }:
         raise ValueError(
             "rim_slope_match_mode must be 'pointwise_radial_v1' or "
-            "'ring_average_radial_v1' or 'shared_rim_staggered_v1'."
+            "'ring_average_radial_v1' or 'shared_rim_staggered_v1' or "
+            "'physical_edge_staggered_v1'."
         )
     return mode
+
+
+def _uses_outer_shell_tilt_matching(matching_mode: str) -> bool:
+    return matching_mode in {
+        "shared_rim_staggered_v1",
+        "physical_edge_staggered_v1",
+    }
 
 
 def _resolve_normal(param_resolver) -> np.ndarray | None:
@@ -262,7 +272,7 @@ def _tilt_match_rows_and_directions(
     """Return tilt rows and tangent radial directions for the active mode."""
     active_mode = matching_mode
 
-    if active_mode == "shared_rim_staggered_v1":
+    if _uses_outer_shell_tilt_matching(active_mode):
         tilt_rows0 = outer_rows[outer_idx0]
         tilt_rows1 = outer_rows[outer_idx1]
         tilt_normals = (
@@ -385,18 +395,18 @@ def compute_energy_and_gradient_array(
     group = _resolve_group(param_resolver, "rim_slope_match_group")
     outer_group = _resolve_group(param_resolver, "rim_slope_match_outer_group")
     disk_group = _resolve_group(param_resolver, "rim_slope_match_disk_group")
-    disk_group = _sanitize_disk_group(rim_group=group, disk_group=disk_group)
     matching_mode = _resolve_matching_mode(param_resolver)
-    if group is None or outer_group is None:
+    if matching_mode != "physical_edge_staggered_v1":
+        disk_group = _sanitize_disk_group(rim_group=group, disk_group=disk_group)
+    if matching_mode == "physical_edge_staggered_v1":
+        interface_group = disk_group or group
+        if interface_group is None:
+            return 0.0
+    elif group is None or outer_group is None:
         return 0.0
 
     k_match = _resolve_strength(param_resolver)
     if k_match == 0.0:
-        return 0.0
-
-    rim_rows = _collect_group_rows(mesh, group)
-    outer_rows = _collect_group_rows(mesh, outer_group)
-    if rim_rows.size == 0 or outer_rows.size == 0:
         return 0.0
 
     if tilts_out is None:
@@ -405,7 +415,7 @@ def compute_energy_and_gradient_array(
         tilts_out = np.asarray(tilts_out, dtype=float)
         if tilts_out.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
-    if disk_group is not None:
+    if matching_mode == "physical_edge_staggered_v1" or disk_group is not None:
         if tilts_in is None:
             tilts_in = mesh.tilts_in_view()
         else:
@@ -415,21 +425,42 @@ def compute_energy_and_gradient_array(
 
     center = _resolve_center(param_resolver)
     normal = _resolve_normal(param_resolver)
-    if normal is None:
-        normal = _fit_plane_normal(positions[rim_rows])
-    if normal is None:
-        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+    if matching_mode == "physical_edge_staggered_v1":
+        try:
+            local_shells = build_local_interface_shell_data(
+                mesh, positions=positions, group=str(interface_group)
+            )
+        except AssertionError:
+            return 0.0
+        rim_rows = np.asarray(local_shells.disk_rows, dtype=int)
+        outer_rows = np.asarray(local_shells.rim_rows, dtype=int)
+        if rim_rows.size == 0 or outer_rows.size == 0:
+            return 0.0
+        if normal is None:
+            normal = _fit_plane_normal(positions[rim_rows])
+        if normal is None:
+            normal = np.array([0.0, 0.0, 1.0], dtype=float)
+        rim_pos = positions[rim_rows]
+        outer_pos = positions[outer_rows]
+    else:
+        rim_rows = _collect_group_rows(mesh, group)
+        outer_rows = _collect_group_rows(mesh, outer_group)
+        if rim_rows.size == 0 or outer_rows.size == 0:
+            return 0.0
+        if normal is None:
+            normal = _fit_plane_normal(positions[rim_rows])
+        if normal is None:
+            normal = np.array([0.0, 0.0, 1.0], dtype=float)
+        rim_pos = positions[rim_rows]
+        outer_pos = positions[outer_rows]
 
-    rim_pos = positions[rim_rows]
-    outer_pos = positions[outer_rows]
+        rim_order = _order_by_angle(rim_pos, center=center, normal=normal)
+        outer_order = _order_by_angle(outer_pos, center=center, normal=normal)
 
-    rim_order = _order_by_angle(rim_pos, center=center, normal=normal)
-    outer_order = _order_by_angle(outer_pos, center=center, normal=normal)
-
-    rim_rows = rim_rows[rim_order]
-    outer_rows = outer_rows[outer_order]
-    rim_pos = positions[rim_rows]
-    outer_pos = positions[outer_rows]
+        rim_rows = rim_rows[rim_order]
+        outer_rows = outer_rows[outer_order]
+        rim_pos = positions[rim_rows]
+        outer_pos = positions[outer_rows]
     outer_idx0 = np.arange(len(rim_rows), dtype=int)
     outer_idx1 = np.arange(len(rim_rows), dtype=int)
     outer_w0 = np.ones(len(rim_rows), dtype=float)
@@ -508,7 +539,15 @@ def compute_energy_and_gradient_array(
     disk_weights = None
     disk_r_hat = None
     local_disk = False
-    if disk_group is not None:
+    if matching_mode == "physical_edge_staggered_v1":
+        disk_rows = rim_rows.copy()
+        disk_r_hat = r_hat.copy()
+        disk_weights = None
+        local_disk = True
+        theta_disk = np.einsum("ij,ij->i", tilts_in[disk_rows], disk_r_hat).astype(
+            float, copy=False
+        )
+    elif disk_group is not None:
         disk_rows = _collect_group_rows(mesh, disk_group)
         if disk_rows.size:
             disk_pos = positions[disk_rows]

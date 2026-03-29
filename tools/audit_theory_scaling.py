@@ -66,7 +66,9 @@ def _run_with_params(
 def _extract_run(
     *, key: str, value: float, report: dict[str, Any], runtime_s: float
 ) -> dict[str, Any]:
-    ratios = report["metrics"]["theory"]["ratios"]
+    ratios = report["metrics"].get("legacy_anchor", report["metrics"]["theory"])[
+        "ratios"
+    ]
     reduced = report["metrics"]["reduced_terms"]
     return {
         "parameter": key,
