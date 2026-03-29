@@ -39,6 +39,12 @@ PRIMARY_FIXTURE = (
     / "fixtures"
     / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_primary.yaml"
 )
+DEFAULT_FIXTURE = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+)
 
 
 def _get_path(dct: dict[str, Any], path: str) -> Any:
@@ -199,11 +205,11 @@ def test_physical_edge_profiled_lane_improves_thetaB_over_coarse_lane(tmp_path) 
 
 
 @pytest.mark.acceptance
-def test_physical_edge_primary_fixture_is_the_default_development_lane(
+def test_physical_edge_default_fixture_is_the_default_development_lane(
     tmp_path,
 ) -> None:
     coarse_out = tmp_path / "coarse_report.yaml"
-    primary_out = tmp_path / "primary_report.yaml"
+    default_out = tmp_path / "default_report.yaml"
     subprocess.run(
         [sys.executable, str(SCRIPT), "--out", str(coarse_out)],
         check=True,
@@ -214,26 +220,40 @@ def test_physical_edge_primary_fixture_is_the_default_development_lane(
             sys.executable,
             str(SCRIPT),
             "--mesh",
-            str(PRIMARY_FIXTURE),
+            str(DEFAULT_FIXTURE),
             "--out",
-            str(primary_out),
+            str(default_out),
         ],
         check=True,
         cwd=str(ROOT),
     )
 
     coarse = yaml.safe_load(coarse_out.read_text(encoding="utf-8"))
-    primary = yaml.safe_load(primary_out.read_text(encoding="utf-8"))
-    geom = primary["metrics"]["diagnostics"]["outer_shell_geometry"]
-    split = primary["metrics"]["diagnostics"]["outer_split"]
+    default = yaml.safe_load(default_out.read_text(encoding="utf-8"))
+    geom = default["metrics"]["diagnostics"]["outer_shell_geometry"]
+    split = default["metrics"]["diagnostics"]["outer_split"]
 
-    assert primary["meta"]["lane"] == "physical_edge_primary_v1"
-    assert float(primary["metrics"]["thetaB_value"]) > float(
-        coarse["metrics"]["thetaB_value"]
+    default_theta = float(default["metrics"]["thetaB_value"])
+    coarse_theta = float(coarse["metrics"]["thetaB_value"])
+    tex_theta = float(default["metrics"]["tex_benchmark"]["thetaB_star"])
+    default_total_ratio = float(
+        default["metrics"]["tex_benchmark"]["ratios"]["total_ratio"]
     )
-    assert float(primary["metrics"]["tex_benchmark"]["ratios"]["total_ratio"]) > float(
+    coarse_total_ratio = float(
         coarse["metrics"]["tex_benchmark"]["ratios"]["total_ratio"]
     )
+    default_elastic_ratio = float(
+        default["metrics"]["tex_benchmark"]["ratios"]["elastic_ratio"]
+    )
+    coarse_elastic_ratio = float(
+        coarse["metrics"]["tex_benchmark"]["ratios"]["elastic_ratio"]
+    )
+
+    assert default["meta"]["lane"] == "physical_edge_default"
+    assert default_theta > float(coarse["metrics"]["thetaB_value"])
+    assert abs(default_theta - tex_theta) < abs(coarse_theta - tex_theta)
+    assert abs(default_total_ratio - 1.0) < abs(coarse_total_ratio - 1.0)
+    assert abs(default_elastic_ratio - 1.0) < abs(coarse_elastic_ratio - 1.0)
     assert bool(geom["available"])
     assert geom["construction_mode"] == "physical_edge_local_shell"
     assert float(geom["rim_radius"]) == pytest.approx(7.0 / 15.0, abs=5.0e-3)
@@ -333,9 +353,9 @@ def test_generated_physical_edge_family_varies_smoothly_around_primary(
     tmp_path,
 ) -> None:
     labels = [
-        "physical_edge_family_lo",
-        "physical_edge_primary_v1",
-        "physical_edge_family_hi",
+        "default_lo",
+        "default",
+        "default_hi",
     ]
     reports = {}
     for label in labels:
@@ -362,9 +382,9 @@ def test_generated_physical_edge_family_varies_smoothly_around_primary(
                 fixture_path.unlink()
         reports[label] = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
 
-    lo = reports["physical_edge_family_lo"]
-    primary = reports["physical_edge_primary_v1"]
-    hi = reports["physical_edge_family_hi"]
+    lo = reports["default_lo"]
+    primary = reports["default"]
+    hi = reports["default_hi"]
 
     lo_outer = float(
         lo["metrics"]["diagnostics"]["outer_shell_geometry"]["outer_radius"]

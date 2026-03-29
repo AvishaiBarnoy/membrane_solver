@@ -27,7 +27,7 @@ def _ring_radii(doc: dict) -> set[float]:
 
 def test_parse_candidate_supports_base_and_profile_specs() -> None:
     assert parse_candidate("coarse:base") == {"label": "coarse", "mode": "base"}
-    assert parse_candidate("i50:profile") == {"label": "i50", "mode": "profile"}
+    assert parse_candidate("default:profile") == {"label": "default", "mode": "profile"}
 
 
 def test_parse_candidate_rejects_invalid_specs() -> None:
@@ -75,9 +75,7 @@ def test_build_profiled_fixture_applies_general_near_edge_profile() -> None:
     assert profiled["global_parameters"]["theory_parity_lane"] == "general_near_edge_v1"
 
 
-def test_build_profiled_fixture_supports_generic_physical_edge_primary_profile() -> (
-    None
-):
+def test_build_profiled_fixture_supports_generic_default_profile() -> None:
     base_doc = yaml.safe_load(
         (
             ROOT / "tests" / "fixtures" / "kozlov_1disk_3d_free_disk_theory_parity.yaml"
@@ -85,16 +83,15 @@ def test_build_profiled_fixture_supports_generic_physical_edge_primary_profile()
     )
     profiled = build_profiled_fixture(
         base_doc=base_doc,
-        profile="physical_edge_primary_v1",
-        lane="physical_edge_primary_v1",
+        profile="default",
+        lane="physical_edge_default",
     )
     radii = _ring_radii(profiled)
-    inner_radius, outer_radius = INTERFACE_PROFILES["physical_edge_primary_v1"]
+    inner_radius, outer_radius = INTERFACE_PROFILES["default"]
     assert inner_radius in radii
     assert outer_radius in radii
     assert (
-        profiled["global_parameters"]["theory_parity_lane"]
-        == "physical_edge_primary_v1"
+        profiled["global_parameters"]["theory_parity_lane"] == "physical_edge_default"
     )
 
 

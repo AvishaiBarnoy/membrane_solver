@@ -23,11 +23,11 @@ def test_fixed_theta_compare_shows_contact_stability_and_profiled_elastic_collap
             "--profile",
             "coarse",
             "--profile",
-            "physical_edge_family_lo",
+            "default_lo",
             "--profile",
-            "physical_edge_primary_v1",
+            "default",
             "--profile",
-            "physical_edge_family_hi",
+            "default_hi",
             "--out",
             str(out_yaml),
         ],
@@ -41,15 +41,15 @@ def test_fixed_theta_compare_shows_contact_stability_and_profiled_elastic_collap
     assert report["meta"]["theta_value"] == pytest.approx(0.185)
     assert list(rows) == [
         "coarse",
-        "physical_edge_family_lo",
-        "physical_edge_primary_v1",
-        "physical_edge_family_hi",
+        "default_lo",
+        "default",
+        "default_hi",
     ]
 
     coarse = rows["coarse"]
-    family_lo = rows["physical_edge_family_lo"]
-    primary = rows["physical_edge_primary_v1"]
-    family_hi = rows["physical_edge_family_hi"]
+    family_lo = rows["default_lo"]
+    primary = rows["default"]
+    family_hi = rows["default_hi"]
 
     coarse_contact = float(coarse["reduced_terms"]["contact_measured"])
     lo_contact = float(family_lo["reduced_terms"]["contact_measured"])

@@ -164,9 +164,9 @@ def main() -> int:
         if args.profile
         else [
             "coarse",
-            "physical_edge_family_lo",
-            "physical_edge_primary_v1",
-            "physical_edge_family_hi",
+            "default_lo",
+            "default",
+            "default_hi",
         ]
     )
 

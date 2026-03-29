@@ -16,6 +16,9 @@ NEAR_EDGE_BASELINE = (
 PRIMARY_BASELINE = (
     ROOT / "tests" / "fixtures" / "theory_parity_physical_edge_primary_baseline.yaml"
 )
+DEFAULT_BASELINE = (
+    ROOT / "tests" / "fixtures" / "theory_parity_physical_edge_default_baseline.yaml"
+)
 SCRIPT = ROOT / "tools" / "reproduce_theory_parity.py"
 I50_FIXTURE = (
     ROOT
@@ -40,6 +43,12 @@ PRIMARY_FIXTURE = (
     / "tests"
     / "fixtures"
     / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_primary.yaml"
+)
+DEFAULT_FIXTURE = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
 )
 
 
@@ -174,6 +183,40 @@ def test_reproduce_theory_parity_near_edge_v1_matches_yaml_baseline_with_toleran
     )
 
     baseline = yaml.safe_load(NEAR_EDGE_BASELINE.read_text(encoding="utf-8"))
+    report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+
+    assert report["meta"]["fixture"] == baseline["meta"]["fixture"]
+    assert report["meta"]["lane"] == baseline["meta"]["lane"]
+    assert report["meta"]["protocol"] == baseline["meta"]["protocol"]
+    assert report["meta"]["format"] == "yaml"
+
+    for path, expected in _iter_leaf_scalars(baseline["metrics"]):
+        tol = _get_path(baseline["tolerances"], path)
+        actual = _get_path(report["metrics"], path)
+        assert actual == pytest.approx(expected, abs=tol), (
+            f"{path}: expected {expected} +/- {tol}, got {actual}"
+        )
+
+
+@pytest.mark.acceptance
+def test_reproduce_theory_parity_physical_edge_default_matches_yaml_baseline_with_tolerances(
+    tmp_path,
+) -> None:
+    out_yaml = tmp_path / "theory_parity_physical_edge_default_report.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mesh",
+            str(DEFAULT_FIXTURE),
+            "--out",
+            str(out_yaml),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    baseline = yaml.safe_load(DEFAULT_BASELINE.read_text(encoding="utf-8"))
     report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
 
     assert report["meta"]["fixture"] == baseline["meta"]["fixture"]

@@ -41,9 +41,9 @@ DEFAULT_OUT = (
 )
 DEFAULT_CANDIDATES = (
     "coarse:base",
-    "physical_edge_family_lo:profile",
-    "physical_edge_primary_v1:profile",
-    "physical_edge_family_hi:profile",
+    "default_lo:profile",
+    "default:profile",
+    "default_hi:profile",
 )
 
 

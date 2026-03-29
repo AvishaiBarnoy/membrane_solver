@@ -65,3 +65,17 @@ def test_build_profiled_fixture_applies_general_near_edge_profile() -> None:
 def test_build_profiled_fixture_rejects_unknown_profile() -> None:
     with pytest.raises(ValueError):
         build_profiled_fixture(base_doc={"vertices": []}, profile="unknown")
+
+
+def test_default_family_aliases_match_physical_edge_reference_profiles() -> None:
+    assert (
+        INTERFACE_PROFILES["default_lo"]
+        == INTERFACE_PROFILES["physical_edge_family_lo"]
+    )
+    assert (
+        INTERFACE_PROFILES["default"] == INTERFACE_PROFILES["physical_edge_primary_v1"]
+    )
+    assert (
+        INTERFACE_PROFILES["default_hi"]
+        == INTERFACE_PROFILES["physical_edge_family_hi"]
+    )
