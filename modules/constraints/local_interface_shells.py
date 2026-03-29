@@ -18,6 +18,9 @@ class LocalInterfaceShellData:
     outer_rows: np.ndarray
     disk_rows_matched: np.ndarray
     rim_rows_matched: np.ndarray
+    rim_rows_for_disk: np.ndarray
+    outer_rows_for_rim: np.ndarray
+    outer_rows_for_disk: np.ndarray
     disk_radius: float
     rim_radius: float
     outer_radius: float
@@ -113,6 +116,15 @@ def build_local_interface_shell_data(
     dphi_disk = np.abs(phi_rim[:, None] - phi_disk[None, :])
     dphi_disk = np.minimum(dphi_disk, 2.0 * np.pi - dphi_disk)
     disk_rows_matched = disk_rows[np.argmin(dphi_disk, axis=1)]
+    rim_rows_for_disk = rim_rows[np.argmin(dphi_disk.T, axis=1)]
+
+    dphi_rim_out = np.abs(phi_rim[:, None] - phi_out[None, :])
+    dphi_rim_out = np.minimum(dphi_rim_out, 2.0 * np.pi - dphi_rim_out)
+    outer_rows_for_rim = outer_rows[np.argmin(dphi_rim_out, axis=1)]
+
+    dphi_disk_out = np.abs(phi_disk[:, None] - phi_out[None, :])
+    dphi_disk_out = np.minimum(dphi_disk_out, 2.0 * np.pi - dphi_disk_out)
+    outer_rows_for_disk = outer_rows[np.argmin(dphi_disk_out, axis=1)]
 
     _, rim_r_hat = radial_unit_vectors(positions[rim_rows_matched])
     _, disk_r_hat = radial_unit_vectors(positions[disk_rows_matched])
@@ -122,6 +134,9 @@ def build_local_interface_shell_data(
         outer_rows=outer_rows,
         disk_rows_matched=disk_rows_matched,
         rim_rows_matched=rim_rows_matched,
+        rim_rows_for_disk=rim_rows_for_disk,
+        outer_rows_for_rim=outer_rows_for_rim,
+        outer_rows_for_disk=outer_rows_for_disk,
         disk_radius=float(disk_radius),
         rim_radius=float(rim_radius),
         outer_radius=float(outer_radius),

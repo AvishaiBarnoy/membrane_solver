@@ -45,11 +45,23 @@ def test_build_local_interface_shell_data_orders_shells_and_matches_rows() -> No
     assert data.disk_radius < data.rim_radius < data.outer_radius
     assert data.rim_rows_matched.size == data.outer_rows.size
     assert data.disk_rows_matched.size == data.rim_rows.size
+    assert data.rim_rows_for_disk.size == data.disk_rows.size
+    assert data.outer_rows_for_rim.size == data.rim_rows.size
+    assert data.outer_rows_for_disk.size == data.disk_rows.size
 
     _, rim_r_hat = radial_unit_vectors(positions[data.rim_rows_matched])
     _, disk_r_hat = radial_unit_vectors(positions[data.disk_rows_matched])
     assert np.allclose(np.linalg.norm(rim_r_hat[:, :2], axis=1), 1.0, atol=1.0e-12)
     assert np.allclose(np.linalg.norm(disk_r_hat[:, :2], axis=1), 1.0, atol=1.0e-12)
+    assert set(map(int, data.rim_rows_for_disk.tolist())).issubset(
+        set(map(int, data.rim_rows.tolist()))
+    )
+    assert set(map(int, data.outer_rows_for_rim.tolist())).issubset(
+        set(map(int, data.outer_rows.tolist()))
+    )
+    assert set(map(int, data.outer_rows_for_disk.tolist())).issubset(
+        set(map(int, data.outer_rows.tolist()))
+    )
 
 
 @pytest.mark.unit
