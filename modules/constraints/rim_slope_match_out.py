@@ -401,7 +401,7 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         except AssertionError:
             return None
         rim_rows = np.asarray(local_shells.disk_rows, dtype=int)
-        outer_rows = np.asarray(local_shells.rim_rows, dtype=int)
+        outer_rows = np.asarray(local_shells.rim_rows_for_disk, dtype=int)
         if rim_rows.size == 0 or outer_rows.size == 0:
             return None
         if normal is None:

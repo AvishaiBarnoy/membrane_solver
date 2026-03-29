@@ -433,7 +433,7 @@ def compute_energy_and_gradient_array(
         except AssertionError:
             return 0.0
         rim_rows = np.asarray(local_shells.disk_rows, dtype=int)
-        outer_rows = np.asarray(local_shells.rim_rows, dtype=int)
+        outer_rows = np.asarray(local_shells.rim_rows_for_disk, dtype=int)
         if rim_rows.size == 0 or outer_rows.size == 0:
             return 0.0
         if normal is None:

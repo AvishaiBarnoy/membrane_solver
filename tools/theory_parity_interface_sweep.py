@@ -41,9 +41,9 @@ DEFAULT_OUT = (
 )
 DEFAULT_CANDIDATES = (
     "coarse:base",
-    "i50:profile",
-    "i60:profile",
-    "near_edge_v1:profile",
+    "default_lo:profile",
+    "default:profile",
+    "default_hi:profile",
 )
 
 
@@ -140,6 +140,38 @@ def run_candidate(
         },
         "tex_ratios": {
             key: float(val) for key, val in metrics["tex_benchmark"]["ratios"].items()
+        },
+        "outer_split": {
+            key: float(val)
+            for key, val in metrics["diagnostics"]["outer_split"].items()
+            if key
+            in {
+                "phi_mean",
+                "t_in_mean",
+                "t_out_mean",
+                "theta_disk_mean",
+                "phi_over_half_theta",
+            }
+        },
+        "interface_traces_at_R": {
+            key: float(val)
+            for key, val in metrics["diagnostics"]["interface_traces_at_R"].items()
+            if key
+            in {
+                "disk_theta_at_R",
+                "disk_t_in_at_R",
+                "outer_geometry_trace_at_R_plus",
+                "outer_t_out_trace_at_R_plus",
+                "phi_trace_at_R_plus",
+                "disk_minus_outer_trace",
+                "disk_minus_phi_trace",
+                "outer_geometry_vs_tilt_trace_gap",
+            }
+        },
+        "outer_profile_parity": {
+            key: float(val)
+            for key, val in metrics["diagnostics"]["outer_profile_parity"].items()
+            if key in {"phi_profile_rel_rmse", "z_profile_rel_rmse", "sample_count"}
         },
         "outer_shell_geometry": {
             "rim_radius": rim_radius,

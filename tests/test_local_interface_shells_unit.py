@@ -11,6 +11,7 @@ from geometry.geom_io import load_data, parse_geometry
 from modules.constraints.local_interface_shells import (
     build_local_interface_shell_data,
     collect_disk_boundary_rows,
+    extrapolate_trace_to_radius,
     local_interface_constraint_diagnostics,
     radial_unit_vectors,
 )
@@ -45,11 +46,26 @@ def test_build_local_interface_shell_data_orders_shells_and_matches_rows() -> No
     assert data.disk_radius < data.rim_radius < data.outer_radius
     assert data.rim_rows_matched.size == data.outer_rows.size
     assert data.disk_rows_matched.size == data.rim_rows.size
+    assert data.rim_rows_for_disk.size == data.disk_rows.size
+    assert data.outer_rows_for_rim.size == data.rim_rows.size
+    assert data.outer_rows_for_disk.size == data.disk_rows.size
+    assert np.unique(data.rim_rows_for_disk).size == data.rim_rows_for_disk.size
+    assert np.unique(data.outer_rows_for_rim).size == data.outer_rows_for_rim.size
+    assert np.unique(data.outer_rows_for_disk).size == data.outer_rows_for_disk.size
 
     _, rim_r_hat = radial_unit_vectors(positions[data.rim_rows_matched])
     _, disk_r_hat = radial_unit_vectors(positions[data.disk_rows_matched])
     assert np.allclose(np.linalg.norm(rim_r_hat[:, :2], axis=1), 1.0, atol=1.0e-12)
     assert np.allclose(np.linalg.norm(disk_r_hat[:, :2], axis=1), 1.0, atol=1.0e-12)
+    assert set(map(int, data.rim_rows_for_disk.tolist())).issubset(
+        set(map(int, data.rim_rows.tolist()))
+    )
+    assert set(map(int, data.outer_rows_for_rim.tolist())).issubset(
+        set(map(int, data.outer_rows.tolist()))
+    )
+    assert set(map(int, data.outer_rows_for_disk.tolist())).issubset(
+        set(map(int, data.outer_rows.tolist()))
+    )
 
 
 @pytest.mark.unit
@@ -80,3 +96,31 @@ def test_local_interface_constraint_diagnostics_reports_available_shells() -> No
     )
     assert report["matching_strategy"] == "nearest_azimuth"
     assert report["shell_source"] == "disk_boundary_local_shells"
+
+
+@pytest.mark.unit
+def test_extrapolate_trace_to_radius_uses_two_shells_and_falls_back_to_first_shell() -> (
+    None
+):
+    target_radius = 0.5
+    first_radius = 0.7
+    second_radius = 0.9
+    first_values = np.array([0.2, 0.4], dtype=float)
+    second_values = np.array([0.3, 0.6], dtype=float)
+
+    trace = extrapolate_trace_to_radius(
+        target_radius=target_radius,
+        first_radius=first_radius,
+        first_values=first_values,
+        second_radius=second_radius,
+        second_values=second_values,
+    )
+    fallback = extrapolate_trace_to_radius(
+        target_radius=target_radius,
+        first_radius=first_radius,
+        first_values=first_values,
+    )
+
+    np.testing.assert_allclose(trace, np.array([0.1, 0.2], dtype=float))
+    np.testing.assert_allclose(fallback, first_values)
+    assert not np.allclose(trace, first_values)

@@ -1,6 +1,6 @@
 meta:
-  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_near_edge_v1.yaml
-  lane: near_edge_v1
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_primary.yaml
+  lane: physical_edge_primary_v1
   protocol:
   - g10
   - r
@@ -25,6 +25,12 @@ metrics:
       contact_ratio: 2.0588466119955
       total_ratio: 2.042215770299699
   diagnostics:
+    outer_split:
+      phi_mean: 0.004162564411299302
+      t_in_mean: 0.1858374469392309
+      t_out_mean: 0.0
+      theta_disk_mean: 0.19000000000000003
+      phi_over_half_theta: 0.04381646748736106
     outer_shell_geometry:
       rim_radius: 0.46666666666666706
       outer_radius: 0.6514103092037068
@@ -42,6 +48,12 @@ tolerances:
       contact_ratio: 0.0002
       total_ratio: 0.0002
   diagnostics:
+    outer_split:
+      phi_mean: 0.0005
+      t_in_mean: 0.0005
+      t_out_mean: 0.0005
+      theta_disk_mean: 1.0e-06
+      phi_over_half_theta: 0.0005
     outer_shell_geometry:
       rim_radius: 0.005
       outer_radius: 0.001

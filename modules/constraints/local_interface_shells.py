@@ -18,6 +18,9 @@ class LocalInterfaceShellData:
     outer_rows: np.ndarray
     disk_rows_matched: np.ndarray
     rim_rows_matched: np.ndarray
+    rim_rows_for_disk: np.ndarray
+    outer_rows_for_rim: np.ndarray
+    outer_rows_for_disk: np.ndarray
     disk_radius: float
     rim_radius: float
     outer_radius: float
@@ -60,6 +63,61 @@ def radial_unit_vectors(positions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     r_hat[good, 0] = positions[good, 0] / r[good]
     r_hat[good, 1] = positions[good, 1] / r[good]
     return r, r_hat
+
+
+def _wrapped_angle_delta(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Return wrapped absolute angular differences."""
+    diff = np.abs(np.asarray(a, dtype=float) - np.asarray(b, dtype=float))
+    return np.minimum(diff, 2.0 * np.pi - diff)
+
+
+def _match_rows_by_azimuth(
+    source_phi: np.ndarray, target_rows: np.ndarray, target_phi: np.ndarray
+) -> np.ndarray:
+    """Match ordered rows by azimuth, preserving cyclic order when counts agree."""
+    source_phi = np.asarray(source_phi, dtype=float)
+    target_rows = np.asarray(target_rows, dtype=int)
+    target_phi = np.asarray(target_phi, dtype=float)
+
+    if source_phi.size == target_rows.size and source_phi.size > 0:
+        best_shift = 0
+        best_cost = float("inf")
+        for shift in range(source_phi.size):
+            cand_phi = np.roll(target_phi, -shift)
+            cost = float(np.mean(_wrapped_angle_delta(source_phi, cand_phi)))
+            if cost < best_cost:
+                best_cost = cost
+                best_shift = shift
+        return np.asarray(np.roll(target_rows, -best_shift), dtype=int)
+
+    dphi = _wrapped_angle_delta(source_phi[:, None], target_phi[None, :])
+    return np.asarray(target_rows[np.argmin(dphi, axis=1)], dtype=int)
+
+
+def extrapolate_trace_to_radius(
+    *,
+    target_radius: float,
+    first_radius: float,
+    first_values: np.ndarray,
+    second_radius: float | None = None,
+    second_values: np.ndarray | None = None,
+) -> np.ndarray:
+    """Extrapolate aligned shell values back to ``target_radius``.
+
+    Uses a two-shell linear extrapolation when the second shell is available.
+    Falls back to the first-shell values when only one usable outer shell exists.
+    """
+    out = np.asarray(first_values, dtype=float)
+    if second_radius is None or second_values is None:
+        return np.array(out, copy=True)
+
+    dr = float(second_radius) - float(first_radius)
+    if abs(dr) <= 1.0e-12:
+        return np.array(out, copy=True)
+
+    second = np.asarray(second_values, dtype=float)
+    slope = (second - out) / dr
+    return out + (float(target_radius) - float(first_radius)) * slope
 
 
 def build_local_interface_shell_data(
@@ -106,13 +164,11 @@ def build_local_interface_shell_data(
         np.arctan2(positions[disk_rows, 1], positions[disk_rows, 0]), 2.0 * np.pi
     )
 
-    dphi_out = np.abs(phi_out[:, None] - phi_rim[None, :])
-    dphi_out = np.minimum(dphi_out, 2.0 * np.pi - dphi_out)
-    rim_rows_matched = rim_rows[np.argmin(dphi_out, axis=1)]
-
-    dphi_disk = np.abs(phi_rim[:, None] - phi_disk[None, :])
-    dphi_disk = np.minimum(dphi_disk, 2.0 * np.pi - dphi_disk)
-    disk_rows_matched = disk_rows[np.argmin(dphi_disk, axis=1)]
+    rim_rows_matched = _match_rows_by_azimuth(phi_out, rim_rows, phi_rim)
+    disk_rows_matched = _match_rows_by_azimuth(phi_rim, disk_rows, phi_disk)
+    rim_rows_for_disk = _match_rows_by_azimuth(phi_disk, rim_rows, phi_rim)
+    outer_rows_for_rim = _match_rows_by_azimuth(phi_rim, outer_rows, phi_out)
+    outer_rows_for_disk = _match_rows_by_azimuth(phi_disk, outer_rows, phi_out)
 
     _, rim_r_hat = radial_unit_vectors(positions[rim_rows_matched])
     _, disk_r_hat = radial_unit_vectors(positions[disk_rows_matched])
@@ -122,6 +178,9 @@ def build_local_interface_shell_data(
         outer_rows=outer_rows,
         disk_rows_matched=disk_rows_matched,
         rim_rows_matched=rim_rows_matched,
+        rim_rows_for_disk=rim_rows_for_disk,
+        outer_rows_for_rim=outer_rows_for_rim,
+        outer_rows_for_disk=outer_rows_for_disk,
         disk_radius=float(disk_radius),
         rim_radius=float(rim_radius),
         outer_radius=float(outer_radius),
@@ -171,6 +230,7 @@ __all__ = [
     "LocalInterfaceShellData",
     "build_local_interface_shell_data",
     "collect_disk_boundary_rows",
+    "extrapolate_trace_to_radius",
     "local_interface_constraint_diagnostics",
     "order_rows_by_angle",
     "radial_unit_vectors",

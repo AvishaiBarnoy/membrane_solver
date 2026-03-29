@@ -15,6 +15,12 @@ INTERFACE_PROFILES: dict[str, tuple[float, float] | None] = {
     "i60": (0.76, 2.6),
     "tight": (0.6, 0.8),
     "near_edge_v1": (0.76, 2.6),
+    "default_lo": (0.776, 2.68),
+    "default": (0.772, 2.66),
+    "default_hi": (0.771, 2.655),
+    "physical_edge_family_lo": (0.78, 2.7),
+    "physical_edge_primary_v1": (0.76, 2.6),
+    "physical_edge_family_hi": (0.758, 2.6),
 }
 
 

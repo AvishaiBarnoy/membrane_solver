@@ -65,3 +65,15 @@ def test_build_profiled_fixture_applies_general_near_edge_profile() -> None:
 def test_build_profiled_fixture_rejects_unknown_profile() -> None:
     with pytest.raises(ValueError):
         build_profiled_fixture(base_doc={"vertices": []}, profile="unknown")
+
+
+def test_default_family_profiles_define_a_distinct_ordered_construction_rule() -> None:
+    default_lo = INTERFACE_PROFILES["default_lo"]
+    default = INTERFACE_PROFILES["default"]
+    default_hi = INTERFACE_PROFILES["default_hi"]
+
+    assert default_lo is not None
+    assert default is not None
+    assert default_hi is not None
+    assert default_lo[0] > default[0] > default_hi[0]
+    assert default_lo[1] > default[1] > default_hi[1]

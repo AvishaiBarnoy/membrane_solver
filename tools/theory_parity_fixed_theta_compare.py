@@ -114,6 +114,38 @@ def _summarize_row(
         "tex_ratios": {
             k: float(v) for k, v in metrics["tex_benchmark"]["ratios"].items()
         },
+        "outer_split": {
+            k: float(v)
+            for k, v in metrics["diagnostics"]["outer_split"].items()
+            if k
+            in {
+                "phi_mean",
+                "t_in_mean",
+                "t_out_mean",
+                "theta_disk_mean",
+                "phi_over_half_theta",
+            }
+        },
+        "interface_traces_at_R": {
+            key: float(val)
+            for key, val in metrics["diagnostics"]["interface_traces_at_R"].items()
+            if key
+            in {
+                "disk_theta_at_R",
+                "disk_t_in_at_R",
+                "outer_geometry_trace_at_R_plus",
+                "outer_t_out_trace_at_R_plus",
+                "phi_trace_at_R_plus",
+                "disk_minus_outer_trace",
+                "disk_minus_phi_trace",
+                "outer_geometry_vs_tilt_trace_gap",
+            }
+        },
+        "outer_profile_parity": {
+            key: float(val)
+            for key, val in metrics["diagnostics"]["outer_profile_parity"].items()
+            if key in {"phi_profile_rel_rmse", "z_profile_rel_rmse", "sample_count"}
+        },
         "outer_shell_geometry": {
             "rim_radius": rim_radius,
             "outer_radius": outer_radius,
@@ -147,7 +179,16 @@ def main() -> int:
     mesh_path = Path(args.mesh)
     base_doc = yaml.safe_load(mesh_path.read_text(encoding="utf-8")) or {}
     protocol = tuple(str(cmd) for cmd in args.protocol)
-    profiles = list(args.profile) if args.profile else ["coarse", "i50", "near_edge_v1"]
+    profiles = (
+        list(args.profile)
+        if args.profile
+        else [
+            "coarse",
+            "default_lo",
+            "default",
+            "default_hi",
+        ]
+    )
 
     rows: list[dict[str, Any]] = []
     for profile in profiles:

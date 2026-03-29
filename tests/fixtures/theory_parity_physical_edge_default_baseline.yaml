@@ -1,0 +1,97 @@
+meta:
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml
+  lane: physical_edge_default
+  protocol:
+  - g10
+  - r
+  - V2
+  - t5e-3
+  - g8
+  - t2e-3
+  - g12
+  format: yaml
+  fixed_polish_steps: 0
+metrics:
+  final_energy: -1.1588453547994413
+  thetaB_value: 0.18000000000000002
+  reduced_terms:
+    elastic_measured: 1.1032521522325835
+    contact_measured: -2.2620975070320246
+    total_measured: -1.1588453547994413
+  theory:
+    ratios:
+      theta_ratio: 1.9504862639957357
+      elastic_ratio: 1.9025512047681354
+      contact_ratio: 1.9504862639957365
+      total_ratio: 1.998421323223338
+  diagnostics:
+    outer_split:
+      available: true
+      phi_mean: 0.003756340222184136
+      t_in_mean: 0.17624366820931817
+      t_out_mean: 0.0
+      theta_disk_mean: 0.18000000000000002
+      phi_over_half_theta: 0.04173711357982373
+    outer_shell_geometry:
+      available: 1.0
+      rim_radius: 0.46666666666666706
+      outer_radius: 0.6575523487185159
+      delta_r: 0.1908856820518488
+      n_outer_rows: 12.0
+    interface_traces_at_R:
+      available: true
+      disk_theta_at_R: 0.18000000000000002
+      disk_t_in_at_R: 0.17624366820931817
+      outer_t_out_first_shell: 0.003784678806312157
+      outer_t_out_trace_at_R_plus: 0.041308800093634114
+      phi_trace_at_R_plus: 0.09029051397066068
+      disk_minus_outer_trace: 0.13493486811568403
+      disk_minus_phi_trace: -0.0005810279413213382
+      outer_first_shell_minus_outer_trace: -0.03752412128732196
+    outer_profile_parity:
+      available: true
+      phi_profile_rel_rmse: 1.9128246023625395
+      z_profile_rel_rmse: 0.9990774409837767
+      sample_count: 27.0
+tolerances:
+  final_energy: 0.002
+  thetaB_value: 1.0e-06
+  reduced_terms:
+    elastic_measured: 0.002
+    contact_measured: 0.002
+    total_measured: 0.002
+  theory:
+    ratios:
+      theta_ratio: 0.0002
+      elastic_ratio: 0.0002
+      contact_ratio: 0.0002
+      total_ratio: 0.0002
+  diagnostics:
+    outer_split:
+      phi_mean: 0.0005
+      t_in_mean: 0.0005
+      t_out_mean: 0.0005
+      theta_disk_mean: 1.0e-06
+      phi_over_half_theta: 0.0005
+      available: 0.0
+    outer_shell_geometry:
+      rim_radius: 0.005
+      outer_radius: 0.001
+      available: 0.0
+      delta_r: 0.001
+      n_outer_rows: 0.0
+    interface_traces_at_R:
+      disk_theta_at_R: 1.0e-06
+      disk_t_in_at_R: 0.0005
+      outer_t_out_first_shell: 0.0005
+      outer_t_out_trace_at_R_plus: 0.0005
+      phi_trace_at_R_plus: 0.0005
+      disk_minus_outer_trace: 0.0005
+      disk_minus_phi_trace: 0.0005
+      outer_first_shell_minus_outer_trace: 0.0005
+      available: 0.0
+    outer_profile_parity:
+      available: 0.0
+      phi_profile_rel_rmse: 0.005
+      z_profile_rel_rmse: 0.005
+      sample_count: 0.0
