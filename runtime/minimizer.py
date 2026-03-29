@@ -1363,6 +1363,29 @@ class Minimizer:
                 )
             total_energy += float(scale) * float(res[0])
 
+        if not tilt_only and hasattr(
+            self.constraint_manager, "apply_joint_gradient_modifications_array"
+        ):
+            self.constraint_manager.apply_joint_gradient_modifications_array(
+                grad_dummy,
+                tilt_in_grad_arr,
+                tilt_out_grad_arr,
+                self.mesh,
+                self.global_params,
+            )
+        elif hasattr(
+            self.constraint_manager, "apply_tilt_gradient_modifications_array"
+        ):
+            self.constraint_manager.apply_tilt_gradient_modifications_array(
+                tilt_in_grad_arr,
+                tilt_out_grad_arr,
+                self.mesh,
+                self.global_params,
+                positions=positions,
+                tilts_in=tilts_in,
+                tilts_out=tilts_out,
+            )
+
         return float(total_energy)
 
     def _relax_tilts(
@@ -2232,29 +2255,28 @@ STEP SIZE:\t {self.step_size}
             )
             total_energy += E_mod
 
-        # Apply constraint modifications to the shape gradient. When leaflet
-        # tilts are active, joint shape+tilt constraints should project the
-        # shape block against the full coupled manifold while leaving the
-        # tilt block at zero in this outer shape step.
-        if self._uses_leaflet_tilts() and hasattr(
-            self.constraint_manager, "apply_joint_gradient_modifications_array"
-        ):
-            zero_tilt_in = np.zeros_like(grad_arr)
-            zero_tilt_out = np.zeros_like(grad_arr)
-            self.constraint_manager.apply_joint_gradient_modifications_array(
-                grad_arr,
-                zero_tilt_in,
-                zero_tilt_out,
-                self.mesh,
-                self.global_params,
-                positions=positions,
-                tilts_in=self.mesh.tilts_in_view(),
-                tilts_out=self.mesh.tilts_out_view(),
-            )
-        elif hasattr(self.constraint_manager, "apply_gradient_modifications_array"):
-            self.constraint_manager.apply_gradient_modifications_array(
-                grad_arr, self.mesh, self.global_params
-            )
+        # Apply constraint modifications to the gradient (e.g., Lagrange multipliers)
+        if hasattr(self.constraint_manager, "apply_gradient_modifications_array"):
+            # Check if we should use joint projection (shape + tilt)
+            if self._uses_leaflet_tilts() and hasattr(
+                self.constraint_manager, "apply_joint_gradient_modifications_array"
+            ):
+                # We need the current tilt gradients to do joint projection.
+                # However, compute_energy_and_gradient_array is traditionally shape-only.
+                # If tilt leaflets are active, we might be in a coupled step.
+                # For now, we only apply shape-only modifications here to avoid
+                # recursion/stale tilt grads, UNLESS the caller specifically
+                # requested a joint solve.
+                #
+                # TODO: Refactor Minimizer to have a unified compute_coupled_gradients()
+                # that returns (shape_grad, tilt_in_grad, tilt_out_grad).
+                self.constraint_manager.apply_gradient_modifications_array(
+                    grad_arr, self.mesh, self.global_params
+                )
+            else:
+                self.constraint_manager.apply_gradient_modifications_array(
+                    grad_arr, self.mesh, self.global_params
+                )
 
         # Always zero gradients for fixed vertices in the array pipeline.
         fixed_mask = self.mesh.fixed_mask
