@@ -20,6 +20,8 @@ from commands.context import CommandContext
 from commands.executor import execute_command_line
 from geometry.geom_io import load_data, parse_geometry
 from geometry.tilt_operators import p1_vertex_divergence
+from modules.constraints.local_interface_shells import build_local_interface_shell_data
+from modules.constraints.rim_slope_match_out import matching_ring_diagnostics
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
@@ -44,6 +46,26 @@ DEFAULT_EXPANSION_STATE = (
 )
 DEFAULT_PROTOCOL = ("g10", "r", "V2", "t5e-3", "g8", "t2e-3", "g12")
 DEFAULT_THEORY_RADIUS = 7.0 / 15.0
+DEFAULT_TEX_BENDING_MODULUS = 1.0
+DEFAULT_TEX_TILT_MODULUS = 225.0
+DEFAULT_PHYSICAL_EDGE_Z_BUMP = 1.0e-3
+
+
+def _report_fixture_path(mesh_path: Path) -> str:
+    """Return a stable report label for the active fixture path."""
+    resolved = Path(mesh_path).resolve()
+    try:
+        return str(resolved.relative_to(ROOT))
+    except ValueError:
+        return str(resolved)
+
+
+def _parity_lane_name(mesh_path: Path, mesh) -> str:
+    """Return the configured parity lane name for diagnostics and tests."""
+    configured = str(mesh.global_parameters.get("theory_parity_lane") or "").strip()
+    if configured:
+        return configured
+    return Path(mesh_path).stem
 
 
 def _build_context(mesh_path: Path) -> CommandContext:
@@ -57,6 +79,140 @@ def _build_context(mesh_path: Path) -> CommandContext:
         quiet=True,
     )
     return CommandContext(mesh, minim, minim.stepper)
+
+
+def _stabilize_rim_radius_for_parity(mesh) -> dict[str, float]:
+    """Keep the tagged legacy rim shell on its current circle during parity runs."""
+    mode = str(mesh.global_parameters.get("rim_slope_match_mode") or "").strip().lower()
+    if mode == "physical_edge_staggered_v1":
+        return {"available": 0.0, "radius": 0.0, "count": 0.0}
+    positions = mesh.positions_view()
+    r = np.linalg.norm(positions[:, :2], axis=1)
+    rows: list[int] = []
+    changed = False
+    for row, vid in enumerate(mesh.vertex_ids):
+        opts = dict(getattr(mesh.vertices[int(vid)], "options", None) or {})
+        if str(opts.get("rim_slope_match_group") or "") != "rim":
+            continue
+        rows.append(int(row))
+        constraints = list(opts.get("constraints") or [])
+        if "pin_to_circle" not in constraints:
+            constraints.append("pin_to_circle")
+            changed = True
+        opts["constraints"] = constraints
+        opts["pin_to_circle_group"] = "rim_hold"
+        opts["pin_to_circle_normal"] = [0.0, 0.0, 1.0]
+        opts["pin_to_circle_point"] = [0.0, 0.0, 0.0]
+        mesh.vertices[int(vid)].options = opts
+    if not rows:
+        return {"available": 0.0, "radius": 0.0, "count": 0.0}
+
+    radius = float(np.median(r[np.asarray(rows, dtype=int)]))
+    for row in rows:
+        vid = int(mesh.vertex_ids[int(row)])
+        opts = dict(getattr(mesh.vertices[vid], "options", None) or {})
+        if float(opts.get("pin_to_circle_radius") or 0.0) != float(radius):
+            opts["pin_to_circle_radius"] = float(radius)
+            mesh.vertices[vid].options = opts
+            changed = True
+    if changed:
+        mesh.increment_version()
+    return {"available": 1.0, "radius": float(radius), "count": float(len(rows))}
+
+
+def _activate_local_outer_shell_for_parity(mesh) -> dict[str, float]:
+    """Retag a nearby shell as `outer` for parity diagnostics."""
+    mode = str(mesh.global_parameters.get("rim_slope_match_mode") or "").strip().lower()
+    if mode == "physical_edge_staggered_v1":
+        try:
+            shell_data = build_local_interface_shell_data(
+                mesh, positions=mesh.positions_view(), group="disk"
+            )
+        except AssertionError:
+            shell_data = None
+        if shell_data is not None:
+            bump = float(
+                mesh.global_parameters.get("parity_physical_edge_z_bump")
+                or DEFAULT_PHYSICAL_EDGE_Z_BUMP
+            )
+            changed = False
+            for row in np.asarray(shell_data.rim_rows, dtype=int):
+                vid = int(mesh.vertex_ids[int(row)])
+                vertex = mesh.vertices[vid]
+                if abs(float(vertex.position[2])) < 0.5 * bump:
+                    vertex.position[2] = float(bump)
+                    changed = True
+            if changed:
+                mesh.build_position_cache()
+        diag = matching_ring_diagnostics(
+            mesh, mesh.global_parameters, mesh.positions_view()
+        )
+        return {
+            "available": float(bool(diag.get("available"))),
+            "construction_mode": str(
+                diag.get("construction_mode") or "physical_edge_local_shell"
+            ),
+            "rim_radius": float(diag.get("rim_radius") or 0.0),
+            "outer_radius": float(diag.get("outer_radius") or 0.0),
+            "delta_r": float(
+                float(diag.get("outer_radius") or 0.0)
+                - float(diag.get("rim_radius") or 0.0)
+            ),
+            "n_outer_rows": float(diag.get("outer_count") or 0.0),
+        }
+    positions = mesh.positions_view()
+    r = np.linalg.norm(positions[:, :2], axis=1)
+    rim_rows: list[int] = []
+    changed = False
+    for row, vid in enumerate(mesh.vertex_ids):
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if opts.get("rim_slope_match_group") == "rim":
+            rim_rows.append(int(row))
+        if opts.get("rim_slope_match_group") == "outer":
+            opts = dict(opts)
+            opts.pop("rim_slope_match_group", None)
+            mesh.vertices[int(vid)].options = opts
+            changed = True
+    if not rim_rows:
+        return {
+            "available": 0.0,
+            "rim_radius": 0.0,
+            "outer_radius": 0.0,
+            "delta_r": 0.0,
+            "n_outer_rows": 0.0,
+        }
+
+    rim_radius = float(np.max(r[np.asarray(rim_rows, dtype=int)]))
+    shell_radii = np.unique(np.round(r[r > rim_radius + 1.0e-3], 3))
+    if shell_radii.size == 0:
+        if changed:
+            mesh.increment_version()
+        return {
+            "available": 0.0,
+            "rim_radius": float(rim_radius),
+            "outer_radius": 0.0,
+            "delta_r": 0.0,
+            "n_outer_rows": 0.0,
+        }
+
+    outer_radius = float(shell_radii[0])
+    outer_rows = np.where(np.isclose(r, outer_radius, atol=1.0e-3))[0]
+    for row in outer_rows:
+        vid = int(mesh.vertex_ids[int(row)])
+        opts = dict(getattr(mesh.vertices[vid], "options", None) or {})
+        opts["rim_slope_match_group"] = "outer"
+        mesh.vertices[vid].options = opts
+        changed = True
+    if changed:
+        mesh.increment_version()
+    return {
+        "available": 1.0,
+        "construction_mode": "legacy_retagged_outer_shell",
+        "rim_radius": float(rim_radius),
+        "outer_radius": float(outer_radius),
+        "delta_r": float(outer_radius - rim_radius),
+        "n_outer_rows": float(len(outer_rows)),
+    }
 
 
 def _tilt_stats_quantiles(mesh) -> dict[str, float]:
@@ -124,33 +280,71 @@ def _collect_report_from_context(
     )
     total_meas = float(minim.compute_energy())
 
-    theta_star = 0.0
-    elastic_star = 0.0
-    contact_star = 0.0
-    total_star = 0.0
-    if kappa > 0.0 and kappa_t > 0.0 and drive != 0.0 and r_theory > 0.0:
-        lam = float(np.sqrt(kappa_t / kappa))
-        x = float(lam * r_theory)
-        ratio_i = float(special.iv(0, x) / special.iv(1, x))
-        ratio_k = float(special.kv(0, x) / special.kv(1, x))
-        den = float(ratio_i + 0.5 * ratio_k)
-        theta_star = float(drive / (np.sqrt(kappa * kappa_t) * den))
-        fin_star = float(np.pi * kappa * r_theory * lam * ratio_i * theta_star**2)
-        fout_star = float(
-            np.pi * kappa * r_theory * lam * 0.5 * ratio_k * theta_star**2
-        )
-        elastic_star = float(fin_star + fout_star)
-        contact_star = float(-2.0 * np.pi * r_theory * drive * theta_star)
-        total_star = float(elastic_star + contact_star)
+    def _benchmark_terms(
+        *, kappa_value: float, kappa_t_value: float, radius_value: float
+    ) -> dict[str, float]:
+        theta_star = 0.0
+        elastic_star = 0.0
+        contact_star = 0.0
+        total_star = 0.0
+        if (
+            kappa_value > 0.0
+            and kappa_t_value > 0.0
+            and drive != 0.0
+            and radius_value > 0.0
+        ):
+            lam = float(np.sqrt(kappa_t_value / kappa_value))
+            x = float(lam * radius_value)
+            ratio_i = float(special.iv(0, x) / special.iv(1, x))
+            ratio_k = float(special.kv(0, x) / special.kv(1, x))
+            den = float(ratio_i + 0.5 * ratio_k)
+            theta_star = float(drive / (np.sqrt(kappa_value * kappa_t_value) * den))
+            fin_star = float(
+                np.pi * kappa_value * radius_value * lam * ratio_i * theta_star**2
+            )
+            fout_star = float(
+                np.pi * kappa_value * radius_value * lam * 0.5 * ratio_k * theta_star**2
+            )
+            elastic_star = float(fin_star + fout_star)
+            contact_star = float(-2.0 * np.pi * radius_value * drive * theta_star)
+            total_star = float(elastic_star + contact_star)
+        return {
+            "radius": float(radius_value),
+            "kappa": float(kappa_value),
+            "kappa_t": float(kappa_t_value),
+            "drive": float(drive),
+            "thetaB_star": float(theta_star),
+            "elastic_star": float(elastic_star),
+            "contact_star": float(contact_star),
+            "total_star": float(total_star),
+            "ratios": {
+                "theta_ratio": _ratio(theta_meas, theta_star),
+                "elastic_ratio": _ratio(elastic_meas, elastic_star),
+                "contact_ratio": _ratio(contact_meas, contact_star),
+                "total_ratio": _ratio(total_meas, total_star),
+            },
+        }
 
     def _ratio(meas: float, theory: float) -> float:
         if abs(theory) < 1e-16:
             return 0.0
         return float(meas / theory)
 
+    legacy_anchor = _benchmark_terms(
+        kappa_value=float(kappa),
+        kappa_t_value=float(kappa_t),
+        radius_value=float(r_theory),
+    )
+    tex_benchmark = _benchmark_terms(
+        kappa_value=float(DEFAULT_TEX_BENDING_MODULUS),
+        kappa_t_value=float(DEFAULT_TEX_TILT_MODULUS),
+        radius_value=float(r_theory),
+    )
+
     report = {
         "meta": {
-            "fixture": str(mesh_path.relative_to(ROOT)),
+            "fixture": _report_fixture_path(mesh_path),
+            "lane": _parity_lane_name(mesh_path, ctx.mesh),
             "protocol": list(protocol),
             "format": "yaml",
         },
@@ -172,22 +366,14 @@ def _collect_report_from_context(
                 "contact_measured": contact_meas,
                 "total_measured": total_meas,
             },
-            "theory": {
-                "radius": r_theory,
-                "kappa": kappa,
-                "kappa_t": kappa_t,
-                "drive": drive,
-                "thetaB_star": theta_star,
-                "elastic_star": elastic_star,
-                "contact_star": contact_star,
-                "total_star": total_star,
-                "ratios": {
-                    "theta_ratio": _ratio(theta_meas, theta_star),
-                    "elastic_ratio": _ratio(elastic_meas, elastic_star),
-                    "contact_ratio": _ratio(contact_meas, contact_star),
-                    "total_ratio": _ratio(total_meas, total_star),
-                },
+            "diagnostics": {
+                "outer_shell_geometry": matching_ring_diagnostics(
+                    ctx.mesh, ctx.mesh.global_parameters, ctx.mesh.positions_view()
+                )
             },
+            "theory": legacy_anchor,
+            "legacy_anchor": legacy_anchor,
+            "tex_benchmark": tex_benchmark,
         },
     }
     return report
@@ -197,10 +383,16 @@ def _collect_report(
     mesh_path: Path, protocol: tuple[str, ...], fixed_polish_steps: int = 0
 ) -> dict[str, Any]:
     ctx = _build_context(mesh_path)
+    _stabilize_rim_radius_for_parity(ctx.mesh)
+    _activate_local_outer_shell_for_parity(ctx.mesh)
     for cmd in protocol:
         execute_command_line(ctx, cmd)
+        _stabilize_rim_radius_for_parity(ctx.mesh)
+        _activate_local_outer_shell_for_parity(ctx.mesh)
     for _ in range(int(fixed_polish_steps)):
         execute_command_line(ctx, "g1")
+        _stabilize_rim_radius_for_parity(ctx.mesh)
+        _activate_local_outer_shell_for_parity(ctx.mesh)
     report = _collect_report_from_context(
         ctx=ctx, mesh_path=mesh_path, protocol=protocol
     )

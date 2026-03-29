@@ -1,0 +1,47 @@
+meta:
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_near_edge_v1.yaml
+  lane: near_edge_v1
+  protocol:
+    - g10
+    - r
+    - V2
+    - t5e-3
+    - g8
+    - t2e-3
+    - g12
+  baseline_version: v1
+  format: yaml
+metrics:
+  final_energy: -1.1554494852370398
+  thetaB_value: 0.18000000000000002
+  reduced_terms:
+    elastic_measured: 1.1064881892437036
+    contact_measured: -2.261937674480743
+    total_measured: -1.1554494852370398
+  theory:
+    ratios:
+      theta_ratio: 1.9504862639957357
+      elastic_ratio: 1.9084073598765643
+      contact_ratio: 1.9504862639957365
+      total_ratio: 1.9925651681149088
+  diagnostics:
+    outer_shell_geometry:
+      rim_radius: 0.466666666666667
+      outer_radius: 0.6558802195875743
+tolerances:
+  final_energy: 2.0e-3
+  thetaB_value: 1.0e-6
+  reduced_terms:
+    elastic_measured: 2.0e-3
+    contact_measured: 2.0e-3
+    total_measured: 2.0e-3
+  theory:
+    ratios:
+      theta_ratio: 2.0e-4
+      elastic_ratio: 2.0e-4
+      contact_ratio: 2.0e-4
+      total_ratio: 2.0e-4
+  diagnostics:
+    outer_shell_geometry:
+      rim_radius: 5.0e-3
+      outer_radius: 1.0e-3

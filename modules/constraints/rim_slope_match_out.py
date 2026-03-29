@@ -32,6 +32,7 @@ import logging
 import numpy as np
 
 from geometry.entities import Mesh
+from modules.constraints.local_interface_shells import build_local_interface_shell_data
 
 logger = logging.getLogger("membrane_solver")
 _WARNED_DISK_EQUALS_RIM = False
@@ -80,12 +81,21 @@ def _resolve_matching_mode(global_params) -> str:
         "pointwise_radial_v1",
         "ring_average_radial_v1",
         "shared_rim_staggered_v1",
+        "physical_edge_staggered_v1",
     }:
         raise ValueError(
             "rim_slope_match_mode must be 'pointwise_radial_v1' or "
-            "'ring_average_radial_v1' or 'shared_rim_staggered_v1'."
+            "'ring_average_radial_v1' or 'shared_rim_staggered_v1' or "
+            "'physical_edge_staggered_v1'."
         )
     return mode
+
+
+def _uses_outer_shell_tilt_matching(matching_mode: str) -> bool:
+    return matching_mode in {
+        "shared_rim_staggered_v1",
+        "physical_edge_staggered_v1",
+    }
 
 
 def _tilt_target_rows_weights_and_direction(
@@ -98,7 +108,7 @@ def _tilt_target_rows_weights_and_direction(
 ) -> tuple[list[int], list[float], np.ndarray] | None:
     """Return target rows and tangent radial direction for tilt matching."""
     r_hat = data["r_hat"]
-    if matching_mode == "shared_rim_staggered_v1":
+    if _uses_outer_shell_tilt_matching(matching_mode):
         outer_rows = np.asarray(data["outer_rows"], dtype=int)
         row0 = int(outer_rows[np.asarray(data["outer_idx0"], dtype=int)[i]])
         row1 = int(outer_rows[np.asarray(data["outer_idx1"], dtype=int)[i]])
@@ -128,6 +138,57 @@ def _tilt_target_rows_weights_and_direction(
         return None
     r_dir = r_dir / r_norm
     return rows, weights, r_dir
+
+
+def _disk_theta_rows_weights_and_direction(
+    *,
+    data: dict,
+    i: int,
+    theta_scalar_active: bool,
+) -> tuple[list[int], list[float], list[np.ndarray]] | None:
+    """Return disk-side rows and directions for the inner scalar-theta law."""
+    disk_rows = data.get("disk_rows")
+    disk_r_hat = data.get("disk_r_hat")
+    if disk_rows is None or disk_r_hat is None:
+        return None
+
+    if theta_scalar_active:
+        if data["local_disk"]:
+            return [int(disk_rows[i])], [1.0], [np.asarray(disk_r_hat[i], dtype=float)]
+        disk_weights = data.get("disk_weights")
+        if disk_weights is None:
+            return None
+        disk_weights = np.asarray(disk_weights, dtype=float)
+        weight_sum = float(np.sum(disk_weights))
+        if weight_sum <= 0.0:
+            return None
+        rows = [int(row_idx) for row_idx in disk_rows]
+        weights = [float(w / weight_sum) for w in disk_weights]
+        dirs = [np.asarray(vec, dtype=float) for vec in disk_r_hat]
+        return rows, weights, dirs
+
+    rows: list[int] = []
+    weights: list[float] = []
+    dirs: list[np.ndarray] = []
+    if data["local_disk"]:
+        rows.append(int(disk_rows[i]))
+        weights.append(1.0)
+        dirs.append(np.asarray(disk_r_hat[i], dtype=float))
+    else:
+        disk_weights = data.get("disk_weights")
+        if disk_weights is None:
+            return None
+        disk_weights = np.asarray(disk_weights, dtype=float)
+        weight_sum = float(np.sum(disk_weights))
+        if weight_sum <= 0.0:
+            return None
+        for row_idx, factor in zip(
+            disk_rows, (disk_weights / weight_sum)[:, None] * disk_r_hat
+        ):
+            rows.append(int(row_idx))
+            weights.append(1.0)
+            dirs.append(np.asarray(factor, dtype=float))
+    return rows, weights, dirs
 
 
 def _resolve_normal(global_params) -> np.ndarray | None:
@@ -275,14 +336,20 @@ def _interp_ring_positions(
 
 
 def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
+    matching_mode = _resolve_matching_mode(global_params)
     group = _resolve_group(global_params, "rim_slope_match_group")
     outer_group = _resolve_group(global_params, "rim_slope_match_outer_group")
     disk_group = _resolve_group(global_params, "rim_slope_match_disk_group")
-    disk_group = _sanitize_disk_group(rim_group=group, disk_group=disk_group)
+    if matching_mode != "physical_edge_staggered_v1":
+        disk_group = _sanitize_disk_group(rim_group=group, disk_group=disk_group)
     theta_param = None
     if global_params is not None:
         theta_param = global_params.get("rim_slope_match_thetaB_param")
-    if group is None or outer_group is None:
+    if matching_mode == "physical_edge_staggered_v1":
+        interface_group = disk_group or group
+        if interface_group is None:
+            return None
+    elif group is None or outer_group is None:
         return None
     center = _resolve_center(global_params)
     raw_normal = _resolve_normal(global_params)
@@ -297,6 +364,7 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
     cache_key = (
         int(mesh._version),
         int(mesh._vertex_ids_version),
+        str(matching_mode),
         str(group),
         str(outer_group),
         None if disk_group is None else str(disk_group),
@@ -316,27 +384,44 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         elif cached is not None and cached.get("key") == cache_key:
             return cached.get("value")
 
-    rim_rows = _collect_group_rows(mesh, group)
-    outer_rows = _collect_group_rows(mesh, outer_group)
-    if rim_rows.size == 0 or outer_rows.size == 0:
-        return None
-
     normal = raw_normal
-    if normal is None:
-        normal = _fit_plane_normal(positions[rim_rows])
-    if normal is None:
-        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+    if matching_mode == "physical_edge_staggered_v1":
+        try:
+            local_shells = build_local_interface_shell_data(
+                mesh, positions=positions, group=str(interface_group)
+            )
+        except AssertionError:
+            return None
+        rim_rows = np.asarray(local_shells.disk_rows, dtype=int)
+        outer_rows = np.asarray(local_shells.rim_rows, dtype=int)
+        if rim_rows.size == 0 or outer_rows.size == 0:
+            return None
+        if normal is None:
+            normal = _fit_plane_normal(positions[rim_rows])
+        if normal is None:
+            normal = np.array([0.0, 0.0, 1.0], dtype=float)
+        rim_pos = positions[rim_rows]
+        outer_pos = positions[outer_rows]
+    else:
+        rim_rows = _collect_group_rows(mesh, group)
+        outer_rows = _collect_group_rows(mesh, outer_group)
+        if rim_rows.size == 0 or outer_rows.size == 0:
+            return None
+        if normal is None:
+            normal = _fit_plane_normal(positions[rim_rows])
+        if normal is None:
+            normal = np.array([0.0, 0.0, 1.0], dtype=float)
 
-    rim_pos = positions[rim_rows]
-    outer_pos = positions[outer_rows]
+        rim_pos = positions[rim_rows]
+        outer_pos = positions[outer_rows]
 
-    rim_order = _order_by_angle(rim_pos, center=center, normal=normal)
-    outer_order = _order_by_angle(outer_pos, center=center, normal=normal)
+        rim_order = _order_by_angle(rim_pos, center=center, normal=normal)
+        outer_order = _order_by_angle(outer_pos, center=center, normal=normal)
 
-    rim_rows = rim_rows[rim_order]
-    outer_rows = outer_rows[outer_order]
-    rim_pos = positions[rim_rows]
-    outer_pos = positions[outer_rows]
+        rim_rows = rim_rows[rim_order]
+        outer_rows = outer_rows[outer_order]
+        rim_pos = positions[rim_rows]
+        outer_pos = positions[outer_rows]
     outer_idx0 = np.arange(len(rim_rows), dtype=int)
     outer_idx1 = np.arange(len(rim_rows), dtype=int)
     outer_w0 = np.ones(len(rim_rows), dtype=float)
@@ -384,7 +469,12 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
     disk_weights = None
     local_disk = False
     theta_scalar = theta_token
-    if disk_group is not None:
+    if matching_mode == "physical_edge_staggered_v1":
+        disk_rows = rim_rows.copy()
+        disk_r_hat = r_hat.copy()
+        disk_weights = None
+        local_disk = True
+    elif disk_group is not None:
         disk_rows = _collect_group_rows(mesh, disk_group)
         if disk_rows.size:
             disk_pos = positions[disk_rows]
@@ -426,6 +516,12 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         "disk_weights": disk_weights,
         "normal": normal,
         "theta_scalar": theta_scalar,
+        "matching_mode": matching_mode,
+        "construction_mode": (
+            "physical_edge_local_shell"
+            if matching_mode == "physical_edge_staggered_v1"
+            else "legacy_tagged_rim_shell"
+        ),
     }
     if mesh._geometry_cache_active(positions):
         cached = getattr(mesh, cache_attr, None)
@@ -439,10 +535,12 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
 
 def matching_ring_diagnostics(mesh: Mesh, global_params, positions: np.ndarray) -> dict:
     """Report tagged ring candidates seen by the rim-matching constraint path."""
+    matching_mode = _resolve_matching_mode(global_params)
     group = _resolve_group(global_params, "rim_slope_match_group")
     outer_group = _resolve_group(global_params, "rim_slope_match_outer_group")
     disk_group = _resolve_group(global_params, "rim_slope_match_disk_group")
-    disk_group = _sanitize_disk_group(rim_group=group, disk_group=disk_group)
+    if matching_mode != "physical_edge_staggered_v1":
+        disk_group = _sanitize_disk_group(rim_group=group, disk_group=disk_group)
     center = _resolve_center(global_params)
     normal = _resolve_normal(global_params)
 
@@ -453,7 +551,35 @@ def matching_ring_diagnostics(mesh: Mesh, global_params, positions: np.ndarray) 
         "outer_group": outer_group,
         "disk_group": disk_group,
         "outer_source": "tagged_group",
+        "matching_mode": matching_mode,
     }
+    if matching_mode == "physical_edge_staggered_v1":
+        interface_group = disk_group or group
+        out["reason"] = "missing_interface_group"
+        out["outer_source"] = "local_interface_shell"
+        if interface_group is None:
+            return out
+        try:
+            local_shells = build_local_interface_shell_data(
+                mesh, positions=positions, group=str(interface_group)
+            )
+        except AssertionError as exc:
+            out["reason"] = str(exc)
+            return out
+        out.update(
+            {
+                "available": True,
+                "reason": "ok",
+                "construction_mode": "physical_edge_local_shell",
+                "rim_count": int(local_shells.disk_rows.size),
+                "outer_count": int(local_shells.rim_rows.size),
+                "disk_count": int(local_shells.disk_rows.size),
+                "rim_radius": float(local_shells.disk_radius),
+                "outer_radius": float(local_shells.rim_radius),
+                "disk_radius": float(local_shells.disk_radius),
+            }
+        )
+        return out
     if group is None or outer_group is None:
         return out
 
@@ -492,6 +618,7 @@ def matching_ring_diagnostics(mesh: Mesh, global_params, positions: np.ndarray) 
     out["rim_radius"] = _median_radius(rim_rows)
     out["outer_radius"] = _median_radius(outer_rows)
     out["disk_radius"] = _median_radius(disk_rows)
+    out["construction_mode"] = "legacy_tagged_rim_shell"
     return out
 
 
@@ -739,10 +866,32 @@ def matching_residual_diagnostics(
         theta_disk = np.full(phi.shape, theta_disk_scalar, dtype=float)
         out["disk_theta_source"] = "weighted_disk_mean"
 
-    tilt_in_rad = (
-        tilt_w0 * np.einsum("ij,ij->i", mesh.tilts_in_view()[tilt_rows0], r_dir)
-        + tilt_w1 * np.einsum("ij,ij->i", mesh.tilts_in_view()[tilt_rows1], r_dir)
-    )[valid]
+    if theta_scalar is not None:
+        if local_disk:
+            tilt_in_rad = np.einsum(
+                "ij,ij->i", mesh.tilts_in_view()[disk_rows], disk_r_hat
+            )[valid]
+        else:
+            weight_sum = (
+                float(np.sum(disk_weights)) if disk_weights is not None else 0.0
+            )
+            if weight_sum <= 0.0:
+                out["disk_theta_source"] = "degenerate_disk_weights"
+                out["inner_residual_available"] = False
+                return out
+            tilt_in_scalar = float(
+                np.sum(
+                    np.asarray(disk_weights, dtype=float)
+                    * np.einsum("ij,ij->i", mesh.tilts_in_view()[disk_rows], disk_r_hat)
+                )
+                / weight_sum
+            )
+            tilt_in_rad = np.full(np.count_nonzero(valid), tilt_in_scalar, dtype=float)
+    else:
+        tilt_in_rad = (
+            tilt_w0 * np.einsum("ij,ij->i", mesh.tilts_in_view()[tilt_rows0], r_dir)
+            + tilt_w1 * np.einsum("ij,ij->i", mesh.tilts_in_view()[tilt_rows1], r_dir)
+        )[valid]
     inner_target = theta_disk[valid] - phi_valid
     inner_residual = tilt_in_rad - inner_target
     out["inner_residual_available"] = True
@@ -763,15 +912,15 @@ def constraint_gradients_joint_array(
 ) -> (
     list[
         tuple[
-            tuple[np.ndarray, np.ndarray] | None,
-            tuple[np.ndarray, np.ndarray] | None,
-            tuple[np.ndarray, np.ndarray] | None,
+            tuple[np.ndarray, np.ndarray] | None,  # shape
+            tuple[np.ndarray, np.ndarray] | None,  # tilt_in
+            tuple[np.ndarray, np.ndarray] | None,  # tilt_out
         ]
     ]
     | None
 ):
-    """Return sparse joint rows spanning shape and leaflet tilt blocks."""
-    _ = index_map, tilts_in, tilts_out
+    """Return paired shape/tilt gradients for joint KKT projection."""
+    _ = tilts_in, tilts_out
     data = _build_matching_data(mesh, global_params, positions)
     if data is None:
         return None
@@ -788,10 +937,11 @@ def constraint_gradients_joint_array(
     inv_dr = data["inv_dr"]
     valid = data["valid"]
     normal = data["normal"]
-    theta_scalar = data["theta_scalar"]
     matching_mode = _resolve_matching_mode(global_params)
+    theta_scalar = data["theta_scalar"]
 
     normals = mesh.vertex_normals(positions=positions)
+
     constraints: list[
         tuple[
             tuple[np.ndarray, np.ndarray] | None,
@@ -799,20 +949,12 @@ def constraint_gradients_joint_array(
             tuple[np.ndarray, np.ndarray] | None,
         ]
     ] = []
-    agg_shape_outer_rows: list[int] = []
-    agg_shape_outer_vecs: list[np.ndarray] = []
-    agg_out_rows: list[int] = []
-    agg_out_vecs: list[np.ndarray] = []
-    agg_shape_inner_rows: list[int] = []
-    agg_shape_inner_vecs: list[np.ndarray] = []
-    agg_in_rows: list[int] = []
-    agg_in_vecs: list[np.ndarray] = []
 
     for i, ok in enumerate(valid):
         if not ok or weight_sqrt[i] == 0.0:
             continue
-        coeff_shape = weight_sqrt[i] * inv_dr[i]
-        coeff_tilt = weight_sqrt[i]
+        coeff_s = weight_sqrt[i] * inv_dr[i]
+        coeff_t = weight_sqrt[i]
 
         target = _tilt_target_rows_weights_and_direction(
             data=data,
@@ -825,104 +967,84 @@ def constraint_gradients_joint_array(
             continue
         target_rows, target_weights, r_dir = target
 
+        # 1. Outer constraint: t_out . r_dir - phi = 0
+        # Partials: dC/dt_out = r_dir, dC/dx = -d(phi)/dx
+
+        # d(phi)/dx component (shape)
+        # phi = (h_out - h_rim) / dr
+        # d(phi)/dx_rim = -normal / dr
+        # d(phi)/dx_out = +normal / dr
         out0 = outer_rows[outer_idx0[i]]
         out1 = outer_rows[outer_idx1[i]]
 
-        rows_shape = [int(rim_rows[i]), int(out0)]
-        vecs_shape_outer = [
-            coeff_shape * normal,
-            -coeff_shape * outer_w0[i] * normal,
-        ]
-        vecs_shape_inner = [
-            -coeff_shape * normal,
-            coeff_shape * outer_w0[i] * normal,
-        ]
+        rows_s = [int(rim_rows[i]), int(out0)]
+        # dC/dx = -d(phi)/dx => rim component is +normal/dr, out is -normal/dr
+        vecs_s = [coeff_s * normal, -coeff_s * outer_w0[i] * normal]
         if out1 != out0 or outer_w1[i] != 0.0:
-            rows_shape.append(int(out1))
-            vecs_shape_outer.append(-coeff_shape * outer_w1[i] * normal)
-            vecs_shape_inner.append(coeff_shape * outer_w1[i] * normal)
+            rows_s.append(int(out1))
+            vecs_s.append(-coeff_s * outer_w1[i] * normal)
 
-        rows_tilt = [int(row) for row in target_rows]
-        vecs_tilt = [coeff_tilt * float(w) * r_dir for w in target_weights]
-        out_part = (
-            np.asarray(rows_tilt, dtype=int),
-            np.asarray(vecs_tilt, dtype=float),
+        shape_part = (np.asarray(rows_s, dtype=int), np.asarray(vecs_s, dtype=float))
+
+        # dC/dt_out component (tilt)
+        rows_tout = [int(row) for row in target_rows]
+        vecs_tout = [coeff_t * float(w) * r_dir for w in target_weights]
+        tout_part = (
+            np.asarray(rows_tout, dtype=int),
+            np.asarray(vecs_tout, dtype=float),
         )
-        shape_part_outer = (
-            np.asarray(rows_shape, dtype=int),
-            np.asarray(vecs_shape_outer, dtype=float),
-        )
-        if matching_mode == "ring_average_radial_v1":
-            agg_shape_outer_rows.extend(shape_part_outer[0].tolist())
-            agg_shape_outer_vecs.extend(shape_part_outer[1])
-            agg_out_rows.extend(out_part[0].tolist())
-            agg_out_vecs.extend(out_part[1])
-        else:
-            constraints.append((shape_part_outer, None, out_part))
 
-        if disk_rows is None or disk_r_hat is None:
-            continue
+        # Row 1: (Shape, None, Tilt_Out)
+        constraints.append((shape_part, None, tout_part))
 
-        rows_in = [int(row) for row in target_rows]
-        vecs_in = [coeff_tilt * float(w) * r_dir for w in target_weights]
-        if theta_scalar is None:
-            if data["local_disk"]:
-                rows_in.append(int(disk_rows[i]))
-                vecs_in.append(-coeff_tilt * disk_r_hat[i])
-            elif data["disk_weights"] is not None:
-                disk_weights = np.asarray(data["disk_weights"], dtype=float)
-                weight_sum = float(np.sum(disk_weights))
-                if weight_sum > 0.0:
-                    factors = (disk_weights / weight_sum)[:, None] * disk_r_hat
-                    for row_idx, factor in zip(disk_rows, factors):
-                        rows_in.append(int(row_idx))
-                        vecs_in.append(-coeff_tilt * factor)
-
-        shape_part_inner = (
-            np.asarray(rows_shape, dtype=int),
-            np.asarray(vecs_shape_inner, dtype=float),
-        )
-        in_part = (
-            np.asarray(rows_in, dtype=int),
-            np.asarray(vecs_in, dtype=float),
-        )
-        if matching_mode == "ring_average_radial_v1":
-            agg_shape_inner_rows.extend(shape_part_inner[0].tolist())
-            agg_shape_inner_vecs.extend(shape_part_inner[1])
-            agg_in_rows.extend(in_part[0].tolist())
-            agg_in_vecs.extend(in_part[1])
-        else:
-            constraints.append((shape_part_inner, in_part, None))
-
-    if matching_mode == "ring_average_radial_v1":
-        if agg_shape_outer_rows or agg_out_rows:
-            constraints.append(
-                (
-                    (
-                        np.asarray(agg_shape_outer_rows, dtype=int),
-                        np.asarray(agg_shape_outer_vecs, dtype=float),
-                    ),
-                    None,
-                    (
-                        np.asarray(agg_out_rows, dtype=int),
-                        np.asarray(agg_out_vecs, dtype=float),
-                    ),
-                )
+        # 2. Inner constraint: t_in . r_dir - (theta_B - phi) = 0
+        # C = t_in . r_dir + phi - theta_B = 0
+        # Partials: dC/dt_in = r_dir, dC/dx = +d(phi)/dx
+        if disk_rows is not None and disk_r_hat is not None:
+            # dC/dx = +d(phi)/dx => rim component is -normal/dr, out is +normal/dr
+            vecs_s_in = [-coeff_s * normal, coeff_s * outer_w0[i] * normal]
+            if out1 != out0 or outer_w1[i] != 0.0:
+                vecs_s_in.append(coeff_s * outer_w1[i] * normal)
+            shape_part_in = (
+                np.asarray(rows_s, dtype=int),
+                np.asarray(vecs_s_in, dtype=float),
             )
-        if agg_shape_inner_rows or agg_in_rows:
-            constraints.append(
-                (
-                    (
-                        np.asarray(agg_shape_inner_rows, dtype=int),
-                        np.asarray(agg_shape_inner_vecs, dtype=float),
-                    ),
-                    (
-                        np.asarray(agg_in_rows, dtype=int),
-                        np.asarray(agg_in_vecs, dtype=float),
-                    ),
-                    None,
+
+            if theta_scalar is not None:
+                disk_target = _disk_theta_rows_weights_and_direction(
+                    data=data,
+                    i=i,
+                    theta_scalar_active=True,
                 )
+                if disk_target is None:
+                    continue
+                rows_disk, weights_disk, dirs_disk = disk_target
+                rows_tin = list(rows_disk)
+                vecs_tin = [
+                    coeff_t * float(w) * np.asarray(vec, dtype=float)
+                    for w, vec in zip(weights_disk, dirs_disk)
+                ]
+            else:
+                rows_tin = [int(row) for row in target_rows]
+                vecs_tin = [coeff_t * float(w) * r_dir for w in target_weights]
+                disk_target = _disk_theta_rows_weights_and_direction(
+                    data=data,
+                    i=i,
+                    theta_scalar_active=False,
+                )
+                if disk_target is not None:
+                    rows_disk, _weights_disk, dirs_disk = disk_target
+                    rows_tin.extend(rows_disk)
+                    vecs_tin.extend(
+                        [-coeff_t * np.asarray(vec, dtype=float) for vec in dirs_disk]
+                    )
+
+            tin_part = (
+                np.asarray(rows_tin, dtype=int),
+                np.asarray(vecs_tin, dtype=float),
             )
+            # Row 2: (Shape, Tilt_In, None)
+            constraints.append((shape_part_in, tin_part, None))
 
     return constraints or None
 
@@ -1113,12 +1235,8 @@ def constraint_gradients_tilt_rows_array(
     disk_r_hat = data["disk_r_hat"]
     weight_sqrt = data["weight_sqrt"]
     valid = data["valid"]
-    local_disk = data["local_disk"]
-    disk_weights = data["disk_weights"]
-    weight_sqrt = data["weight_sqrt"]
     theta_scalar = data["theta_scalar"]
     matching_mode = _resolve_matching_mode(global_params)
-    weight_sqrt = data["weight_sqrt"]
 
     normals = mesh.vertex_normals(positions=positions)
 
@@ -1162,23 +1280,39 @@ def constraint_gradients_tilt_rows_array(
                 constraints.append((None, out_part))
             continue
 
-        rows_in = [int(row) for row in target_rows]
-        vecs_in = [coeff * float(w) * r_dir for w in target_weights]
-
-        if theta_scalar is None:
-            if local_disk:
-                rows_in.append(int(disk_rows[i]))
-                vecs_in.append(-coeff * disk_r_hat[i])
-            else:
-                if disk_weights is None:
+        if theta_scalar is not None:
+            disk_target = _disk_theta_rows_weights_and_direction(
+                data=data,
+                i=i,
+                theta_scalar_active=True,
+            )
+            if disk_target is None:
+                if matching_mode == "ring_average_radial_v1":
+                    agg_out_rows.extend(out_part[0].tolist())
+                    agg_out_vecs.extend(out_part[1])
+                else:
                     constraints.append((None, out_part))
-                    continue
-                weight_sum = float(np.sum(disk_weights))
-                if weight_sum > 0.0:
-                    factors = (disk_weights / weight_sum)[:, None] * disk_r_hat
-                    for row_idx, factor in zip(disk_rows, factors):
-                        rows_in.append(int(row_idx))
-                        vecs_in.append(-coeff * factor)
+                continue
+            rows_disk, weights_disk, dirs_disk = disk_target
+            rows_in = list(rows_disk)
+            vecs_in = [
+                coeff * float(w) * np.asarray(vec, dtype=float)
+                for w, vec in zip(weights_disk, dirs_disk)
+            ]
+        else:
+            rows_in = [int(row) for row in target_rows]
+            vecs_in = [coeff * float(w) * r_dir for w in target_weights]
+            disk_target = _disk_theta_rows_weights_and_direction(
+                data=data,
+                i=i,
+                theta_scalar_active=False,
+            )
+            if disk_target is not None:
+                rows_disk, _weights_disk, dirs_disk = disk_target
+                rows_in.extend(rows_disk)
+                vecs_in.extend(
+                    [-coeff * np.asarray(vec, dtype=float) for vec in dirs_disk]
+                )
 
         in_part = (
             np.asarray(rows_in, dtype=int),
@@ -1410,6 +1544,20 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
         else:
             target_in = float(theta_disk - phi[i])
 
+        if theta_scalar is not None:
+            disk_target = _disk_theta_rows_weights_and_direction(
+                data=data,
+                i=i,
+                theta_scalar_active=True,
+            )
+            if disk_target is None:
+                continue
+            rows_in, weights_in, dirs_in = disk_target
+        else:
+            rows_in = [int(row) for row in target_rows]
+            weights_in = [float(w) for w in target_weights]
+            dirs_in = [np.asarray(r_dir, dtype=float) for _ in target_rows]
+
         fixed_in = [
             bool(
                 getattr(
@@ -1418,20 +1566,20 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
                     False,
                 )
             )
-            for row in target_rows
+            for row in rows_in
         ]
         if not any(fixed_in):
             t_in_rad = 0.0
             denom_in = 0.0
-            for row, weight in zip(target_rows, target_weights):
-                t_in_rad += float(weight) * float(np.dot(tilts_in[int(row)], r_dir))
+            for row, weight, vec in zip(rows_in, weights_in, dirs_in):
+                t_in_rad += float(weight) * float(np.dot(tilts_in[int(row)], vec))
                 denom_in += float(weight) * float(weight)
             if denom_in > 1.0e-12:
                 delta_in = float(target_in - t_in_rad)
-                for row, weight in zip(target_rows, target_weights):
+                for row, weight, vec in zip(rows_in, weights_in, dirs_in):
                     idx = int(row)
                     tilts_in[idx] = (
-                        tilts_in[idx] + (delta_in * float(weight) / denom_in) * r_dir
+                        tilts_in[idx] + (delta_in * float(weight) / denom_in) * vec
                     )
 
     mesh.set_tilts_in_from_array(tilts_in)
@@ -1440,7 +1588,6 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
 
 __all__ = [
     "coarse_rim_family_diagnostics",
-    "constraint_gradients_joint_array",
     "constraint_gradients_array",
     "constraint_gradients_rows_array",
     "constraint_gradients_tilt_array",

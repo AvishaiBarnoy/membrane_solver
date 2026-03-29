@@ -11,19 +11,46 @@ meta:
   baseline_version: v1
   format: yaml
 targets:
-  ratios:
-    theta_ratio:
-      expected: 0.7585224359983416
-      abs_tol: 0.3
-    elastic_ratio:
-      expected: 0.8478536224065294
-      abs_tol: 0.3
-    contact_ratio:
-      expected: 0.758522435998342
-      abs_tol: 0.3
-    total_ratio:
-      expected: 0.6691912495901546
-      abs_tol: 0.3
+  tex_benchmark:
+    thetaB_star:
+      expected: 0.18456935926455062
+      abs_tol: 1.0e-9
+    elastic_star:
+      expected: 1.1597607985189942
+      abs_tol: 1.0e-9
+    contact_star:
+      expected: -2.319521597037988
+      abs_tol: 1.0e-9
+    total_star:
+      expected: -1.1597607985189937
+      abs_tol: 1.0e-9
+    ratios:
+      theta_ratio:
+        expected: 0.4876215659989338
+        abs_tol: 0.1
+      elastic_ratio:
+        expected: 0.4843859667204165
+        abs_tol: 0.1
+      contact_ratio:
+        expected: 0.48762156599893414
+        abs_tol: 0.1
+      total_ratio:
+        expected: 0.4908571652774517
+        abs_tol: 0.1
+  legacy_anchor:
+    ratios:
+      theta_ratio:
+        expected: 0.9752431319978676
+        abs_tol: 0.3
+      elastic_ratio:
+        expected: 0.968771933440833
+        abs_tol: 0.3
+      contact_ratio:
+        expected: 0.9752431319978683
+        abs_tol: 0.3
+      total_ratio:
+        expected: 0.9817143305549034
+        abs_tol: 0.3
   relations:
     contact_measured_negative: true
     elastic_measured_positive: true

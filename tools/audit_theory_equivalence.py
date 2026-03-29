@@ -67,8 +67,8 @@ def build_equivalence_audit(
     sum_tolerance: float,
 ) -> dict[str, Any]:
     reduced = report["metrics"]["reduced_terms"]
-    ratios = report["metrics"]["theory"]["ratios"]
-    theory = report["metrics"]["theory"]
+    theory = report["metrics"].get("legacy_anchor", report["metrics"]["theory"])
+    ratios = theory["ratios"]
 
     theta_ratio = float(ratios["theta_ratio"])
     contact_ratio = float(ratios["contact_ratio"])

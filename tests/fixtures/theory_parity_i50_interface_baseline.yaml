@@ -1,0 +1,47 @@
+meta:
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_i50_interface.yaml
+  lane: i50_interface_v1
+  protocol:
+    - g10
+    - r
+    - V2
+    - t5e-3
+    - g8
+    - t2e-3
+    - g12
+  baseline_version: v1
+  format: yaml
+metrics:
+  final_energy: -1.1259617309634034
+  thetaB_value: 0.17
+  reduced_terms:
+    elastic_measured: 1.010463692612629
+    contact_measured: -2.1364254235760323
+    total_measured: -1.1259617309634034
+  theory:
+    ratios:
+      theta_ratio: 1.8421259159959724
+      elastic_ratio: 1.7425381055041256
+      contact_ratio: 1.8421259159959735
+      total_ratio: 1.9417137264878215
+  diagnostics:
+    outer_shell_geometry:
+      rim_radius: 0.46666666666666706
+      outer_radius: 0.6736453108498857
+tolerances:
+  final_energy: 2.0e-3
+  thetaB_value: 1.0e-6
+  reduced_terms:
+    elastic_measured: 2.0e-3
+    contact_measured: 2.0e-3
+    total_measured: 2.0e-3
+  theory:
+    ratios:
+      theta_ratio: 2.0e-4
+      elastic_ratio: 2.0e-4
+      contact_ratio: 2.0e-4
+      total_ratio: 2.0e-4
+  diagnostics:
+    outer_shell_geometry:
+      rim_radius: 5.0e-3
+      outer_radius: 1.0e-3

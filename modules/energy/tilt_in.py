@@ -109,7 +109,10 @@ def _shared_rim_active_row_weights(mesh: Mesh, param_resolver) -> np.ndarray | N
     has_explicit_override = (
         exclude_rim_rows or exclude_outer_rows or outer_row_energy_weight is not None
     )
-    if mode != "shared_rim_staggered_v1" and not has_explicit_override:
+    if (
+        mode not in {"shared_rim_staggered_v1", "physical_edge_staggered_v1"}
+        and not has_explicit_override
+    ):
         return None
     if not has_explicit_override:
         return None

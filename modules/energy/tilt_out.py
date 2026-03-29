@@ -41,7 +41,7 @@ def _shared_rim_active_row_weights(mesh: Mesh, param_resolver) -> np.ndarray | N
     if not _resolve_exclude_shared_rim_outer_rows(param_resolver):
         return None
     mode = str(param_resolver.get(None, "rim_slope_match_mode") or "").strip().lower()
-    if mode != "shared_rim_staggered_v1":
+    if mode not in {"shared_rim_staggered_v1", "physical_edge_staggered_v1"}:
         return None
 
     cache = getattr(mesh, "_tilt_out_shared_rim_active_row_weights_cache", None)

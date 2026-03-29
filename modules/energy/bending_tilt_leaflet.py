@@ -219,6 +219,113 @@ def _accumulate_leaflet_tilt_gradient(
     np.add.at(tilt_grad_arr, tri_rows[:, 2], scaled)
 
 
+def _inner_recovered_divergence(
+    *,
+    cache_tag: str,
+    tri_rows: np.ndarray,
+    tri_area: np.ndarray,
+    div_tri: np.ndarray,
+    n_vertices: int,
+    ctx=None,
+    scratch_tag: str,
+) -> tuple[np.ndarray, np.ndarray | None, np.ndarray | None]:
+    """Return divergence used for inner-leaflet evaluation.
+
+    For the inner leaflet, recover a per-vertex divergence from surrounding
+    triangle values using barycentric area weights, then average it back to
+    triangles. Other leaflets keep the raw constant-per-triangle divergence.
+    """
+    div_tri = np.asarray(div_tri, dtype=float)
+    if str(cache_tag) != "in" or div_tri.size == 0:
+        return div_tri, None, None
+
+    tri_area = np.asarray(tri_area, dtype=float)
+    w = tri_area / 3.0
+    if ctx is not None:
+        v_area = ctx.scratch_array(
+            f"{scratch_tag}_v_area", shape=(n_vertices,), dtype=float
+        )
+        v_div_num = ctx.scratch_array(
+            f"{scratch_tag}_v_div_num", shape=(n_vertices,), dtype=float
+        )
+        v_div = ctx.scratch_array(
+            f"{scratch_tag}_v_div", shape=(n_vertices,), dtype=float
+        )
+        div_eval = ctx.scratch_array(
+            f"{scratch_tag}_div_eval", shape=div_tri.shape, dtype=float
+        )
+        v_area.fill(0.0)
+        v_div_num.fill(0.0)
+        v_div.fill(0.0)
+    else:
+        v_area = np.zeros(n_vertices, dtype=float)
+        v_div_num = np.zeros(n_vertices, dtype=float)
+        v_div = np.zeros(n_vertices, dtype=float)
+        div_eval = np.zeros_like(div_tri)
+
+    np.add.at(v_area, tri_rows[:, 0], w)
+    np.add.at(v_area, tri_rows[:, 1], w)
+    np.add.at(v_area, tri_rows[:, 2], w)
+    np.add.at(v_div_num, tri_rows[:, 0], w * div_tri)
+    np.add.at(v_div_num, tri_rows[:, 1], w * div_tri)
+    np.add.at(v_div_num, tri_rows[:, 2], w * div_tri)
+
+    good_v = v_area > 1.0e-20
+    v_div[good_v] = v_div_num[good_v] / v_area[good_v]
+    div_eval[:] = (
+        v_div[tri_rows[:, 0]] + v_div[tri_rows[:, 1]] + v_div[tri_rows[:, 2]]
+    ) / 3.0
+    return div_eval, v_div, v_area
+
+
+def _inner_recovered_divergence_pullback(
+    *,
+    cache_tag: str,
+    tri_rows: np.ndarray,
+    tri_area: np.ndarray,
+    coeff_div_eval: np.ndarray,
+    v_area: np.ndarray | None,
+    ctx=None,
+    scratch_tag: str,
+) -> np.ndarray:
+    """Map dE/d(div_eval) back to raw triangle-divergence coefficients."""
+    coeff_div_eval = np.asarray(coeff_div_eval, dtype=float)
+    if str(cache_tag) != "in" or coeff_div_eval.size == 0:
+        return coeff_div_eval
+    if v_area is None:
+        raise ValueError("Recovered inner divergence requires vertex areas.")
+
+    n_vertices = int(v_area.shape[0])
+    if ctx is not None:
+        v_grad = ctx.scratch_array(
+            f"{scratch_tag}_v_grad", shape=(n_vertices,), dtype=float
+        )
+        inv_v_area = ctx.scratch_array(
+            f"{scratch_tag}_inv_v_area", shape=(n_vertices,), dtype=float
+        )
+        coeff_div = ctx.scratch_array(
+            f"{scratch_tag}_coeff_div", shape=coeff_div_eval.shape, dtype=float
+        )
+        v_grad.fill(0.0)
+        inv_v_area.fill(0.0)
+    else:
+        v_grad = np.zeros(n_vertices, dtype=float)
+        inv_v_area = np.zeros_like(v_area)
+        coeff_div = np.zeros_like(coeff_div_eval)
+
+    np.add.at(v_grad, tri_rows[:, 0], coeff_div_eval / 3.0)
+    np.add.at(v_grad, tri_rows[:, 1], coeff_div_eval / 3.0)
+    np.add.at(v_grad, tri_rows[:, 2], coeff_div_eval / 3.0)
+    good_v = v_area > 1.0e-20
+    inv_v_area[good_v] = 1.0 / v_area[good_v]
+    coeff_div[:] = (tri_area / 3.0) * (
+        v_grad[tri_rows[:, 0]] * inv_v_area[tri_rows[:, 0]]
+        + v_grad[tri_rows[:, 1]] * inv_v_area[tri_rows[:, 1]]
+        + v_grad[tri_rows[:, 2]] * inv_v_area[tri_rows[:, 2]]
+    )
+    return coeff_div
+
+
 def _apply_inner_divergence_update_mode(
     mesh: Mesh,
     global_params,
@@ -633,6 +740,7 @@ def _leaflet_triangle_payload(
     g0_use = None
     g1_use = None
     g2_use = None
+    area_use = None
     if ctx is not None:
         _area_cache, g0_cache, g1_cache, g2_cache, tri_rows_cache = (
             ctx.geometry.p1_triangle_shape_gradients(mesh, positions)
@@ -643,10 +751,12 @@ def _leaflet_triangle_payload(
         )
     if tri_rows_cache.size and tri_rows_cache.shape[0] == tri_rows_full.shape[0]:
         if tri_keep.size:
+            area_use = _area_cache[tri_keep]
             g0_use = g0_cache[tri_keep]
             g1_use = g1_cache[tri_keep]
             g2_use = g2_cache[tri_keep]
         else:
+            area_use = _area_cache
             g0_use = g0_cache
             g1_use = g1_cache
             g2_use = g2_cache
@@ -659,6 +769,7 @@ def _leaflet_triangle_payload(
         "weights": weights,
         "tri_rows": tri_rows,
         "tri_keep": tri_keep,
+        "tri_area": area_use,
         "g0": g0_use,
         "g1": g1_use,
         "g2": g2_use,
@@ -791,6 +902,7 @@ def _total_energy_leaflet(
     vertex_areas_vor = np.asarray(payload["vertex_areas_vor"], dtype=float)
     weights = np.asarray(payload["weights"], dtype=float)
     tri_rows = np.asarray(payload["tri_rows"], dtype=np.int32)
+    tri_area = payload["tri_area"]
     if tri_rows.size == 0:
         return 0.0
 
@@ -821,6 +933,9 @@ def _total_energy_leaflet(
             tri_rows=tri_rows,
             transport_model=transport_model,
         )
+    if tri_area is None:
+        tri_area = mesh.p1_triangle_shape_gradient_cache(positions)[0]
+    tri_area = np.asarray(tri_area, dtype=float)
     div_term = float(div_sign) * div_tri
     div_term = _apply_inner_divergence_update_mode(
         mesh,
@@ -829,6 +944,14 @@ def _total_energy_leaflet(
         tri_rows=tri_rows,
         cache_tag=cache_tag,
         div_term=div_term,
+    )
+    div_eval_tri, _, _ = _inner_recovered_divergence(
+        cache_tag=cache_tag,
+        tri_rows=tri_rows,
+        tri_area=tri_area,
+        div_tri=div_term,
+        n_vertices=len(mesh.vertex_ids),
+        scratch_tag=f"btl_{cache_tag}",
     )
 
     _, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
@@ -851,7 +974,7 @@ def _total_energy_leaflet(
         cache_tag=cache_tag,
     )
     base_tri = np.asarray(static_payload["base_tri"], dtype=float)
-    term_tri = base_tri + div_term[:, None]
+    term_tri = base_tri + div_eval_tri[:, None]
     va_eff = np.stack([va0_eff, va1_eff, va2_eff], axis=1)
     kappa_tri = np.asarray(static_payload["kappa_tri"], dtype=float)
 
@@ -936,6 +1059,7 @@ def compute_energy_and_gradient_array_leaflet(
     weights = np.asarray(payload["weights"], dtype=float)
     tri_rows = np.asarray(payload["tri_rows"], dtype=np.int32)
     tri_keep = np.asarray(payload["tri_keep"], dtype=bool)
+    tri_area = payload["tri_area"]
 
     if tri_rows_full.size == 0 or tri_rows.size == 0:
         return 0.0
@@ -975,6 +1099,9 @@ def compute_energy_and_gradient_array_leaflet(
             tri_rows=tri_rows,
             transport_model=transport_model,
         )
+    if tri_area is None:
+        tri_area = mesh.p1_triangle_shape_gradient_cache(positions)[0]
+    tri_area = np.asarray(tri_area, dtype=float)
     div_term = float(div_sign) * div_tri
     div_term = _apply_inner_divergence_update_mode(
         mesh,
@@ -983,6 +1110,15 @@ def compute_energy_and_gradient_array_leaflet(
         tri_rows=tri_rows,
         cache_tag=cache_tag,
         div_term=div_term,
+    )
+    div_eval_tri, _, div_eval_vertex_area = _inner_recovered_divergence(
+        cache_tag=cache_tag,
+        tri_rows=tri_rows,
+        tri_area=tri_area,
+        div_tri=div_term,
+        n_vertices=len(mesh.vertex_ids),
+        ctx=ctx,
+        scratch_tag=f"btl_{cache_tag}",
     )
 
     vertex_areas_eff, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
@@ -1015,9 +1151,9 @@ def compute_energy_and_gradient_array_leaflet(
                 dtype=base_tri.dtype,
             )
             np.copyto(term_tri, base_tri)
-            term_tri += div_term[:, None]
+            term_tri += div_eval_tri[:, None]
         else:
-            term_tri = base_tri + div_term[:, None]
+            term_tri = base_tri + div_eval_tri[:, None]
         total_energy = float(
             0.5
             * np.sum(
@@ -1038,14 +1174,22 @@ def compute_energy_and_gradient_array_leaflet(
                 cache_tag=cache_tag,
                 kappa_tri=kappa_tri,
                 base_tri=base_tri,
-                div_term=div_term,
+                div_term=div_eval_tri,
                 va0_eff=va0_eff,
                 va1_eff=va1_eff,
                 va2_eff=va2_eff,
             )
             if str(cache_tag) == "in":
                 setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
-            dE_ddiv = float(div_sign) * dE_ddiv_base
+            dE_ddiv = _inner_recovered_divergence_pullback(
+                cache_tag=cache_tag,
+                tri_rows=tri_rows,
+                tri_area=tri_area,
+                coeff_div_eval=float(div_sign) * dE_ddiv_base,
+                v_area=div_eval_vertex_area,
+                ctx=ctx,
+                scratch_tag=f"btl_{cache_tag}",
+            )
             factor = dE_ddiv[:, None]
             _accumulate_leaflet_tilt_gradient(
                 tilt_grad_arr,
@@ -1101,7 +1245,7 @@ def compute_energy_and_gradient_array_leaflet(
         base_term[region_rows] = 0.0
 
     base_tri = base_term[tri_rows]
-    term_tri = base_tri + div_term[:, None]
+    term_tri = base_tri + div_eval_tri[:, None]
     kappa_tri = kappa_arr[tri_rows]
     total_energy = float(
         0.5
@@ -1391,14 +1535,22 @@ def compute_energy_and_gradient_array_leaflet(
             cache_tag=cache_tag,
             kappa_tri=kappa_tri,
             base_tri=base_tri,
-            div_term=div_term,
+            div_term=div_eval_tri,
             va0_eff=va0_eff,
             va1_eff=va1_eff,
             va2_eff=va2_eff,
         )
         if str(cache_tag) == "in":
             setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
-        dE_ddiv = float(div_sign) * dE_ddiv_base
+        dE_ddiv = _inner_recovered_divergence_pullback(
+            cache_tag=cache_tag,
+            tri_rows=tri_rows,
+            tri_area=tri_area,
+            coeff_div_eval=float(div_sign) * dE_ddiv_base,
+            v_area=div_eval_vertex_area,
+            ctx=ctx,
+            scratch_tag=f"btl_{cache_tag}",
+        )
         factor = dE_ddiv[:, None]
 
         np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
