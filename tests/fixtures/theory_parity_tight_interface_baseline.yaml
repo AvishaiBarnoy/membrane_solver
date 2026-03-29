@@ -1,0 +1,55 @@
+meta:
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_tight_interface.yaml
+  lane: tight_interface_v1
+  protocol:
+    - g10
+    - r
+    - V2
+    - t5e-3
+    - g8
+    - t2e-3
+    - g12
+  baseline_version: v1
+  format: yaml
+metrics:
+  final_energy: -2.1018260111814624
+  thetaB_value: 0.3000000000000001
+  reduced_terms:
+    elastic_measured: 1.66833650053858
+    contact_measured: -3.7701625117200424
+    total_measured: -2.1018260111814624
+  theory:
+    ratios:
+      theta_ratio: 1.6254052199964466
+      elastic_ratio: 1.438517755272495
+      contact_ratio: 1.6254052199964477
+      total_ratio: 1.8122926847204004
+  diagnostics:
+    outer_shell_geometry:
+      rim_radius: 0.466666666666667
+      outer_radius: 0.5189873831253482
+      delta_r: 0.052320716458681193
+    outer_split:
+      phi_mean: 0.016847433369267823
+      phi_over_half_theta: 0.11231622246178545
+tolerances:
+  final_energy: 2.0e-3
+  thetaB_value: 1.0e-6
+  reduced_terms:
+    elastic_measured: 2.0e-3
+    contact_measured: 2.0e-3
+    total_measured: 2.0e-3
+  theory:
+    ratios:
+      theta_ratio: 2.0e-4
+      elastic_ratio: 2.0e-4
+      contact_ratio: 2.0e-4
+      total_ratio: 2.0e-4
+  diagnostics:
+    outer_shell_geometry:
+      rim_radius: 5.0e-3
+      outer_radius: 1.0e-3
+      delta_r: 1.0e-3
+    outer_split:
+      phi_mean: 5.0e-4
+      phi_over_half_theta: 5.0e-3
