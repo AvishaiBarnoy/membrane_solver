@@ -191,19 +191,25 @@
 - Two variants were tested:
   - `trace_ring_free_geometry`
   - `trace_ring_planar_geometry`
-- Structural outcome:
-  - the inserted-ring fixture can be generated and parsed
-  - but the full parity protocol fails at the refine step on this topology, so the current trace-ring insertion is not refinable in the existing mesh workflow
-- No-refine diagnostic outcome:
-  - free-geometry variant:
-    - `thetaB ≈ 0.22`
-    - TeX `total_ratio ≈ -303.43`
-    - reconstructed free-side directors become catastrophically wrong
-  - planar-geometry variant:
-    - `thetaB ≈ 0.10`
-    - TeX `total_ratio ≈ -304.69`
-    - `phi(R+)` and `t_out(R+)` collapse to `0`
+- First outcome:
+  - the initial local ring insertion broke refinement because the annulus faces were not rewritten consistently
+- After rewriting the local annulus faces, the refined trace-ring variants did run through the full parity protocol.
+- Refined outcome:
+  - baseline current default:
+    - `thetaB ≈ 0.18`
+    - TeX `total_ratio ≈ 0.999`
+  - free-geometry refined trace ring:
+    - `thetaB ≈ 0.30`
+    - TeX `total_ratio ≈ 1.584`
+    - `phi(R+)` turns negative (`≈ -0.0427`)
+    - director continuity becomes much worse (`disk_vs_free_inner_director_gap ≈ 0.427`)
+  - planar-geometry refined trace ring:
+    - `thetaB ≈ 0.30`
+    - TeX `total_ratio ≈ 1.876`
+    - `phi(R+)` collapses to `0`
+    - director continuity remains very poor (`disk_vs_free_inner_director_gap ≈ 0.347`)
 - Conclusion:
-  - adding a trace ring is not, by itself, a viable parity fix in the current edge-only mesh/protocol
+  - even with full refinement, adding a trace ring is not a viable parity fix in the current edge-only mesh/protocol
   - the planar ghost version is especially not acceptable as a production direction
+  - interpreting the discrete disk rim as `[R, R+ε]` does not rescue the current formulation
   - if a trace layer is revisited later, it likely needs a more principled mesh/discretization treatment rather than a local ring insertion on the current topology
