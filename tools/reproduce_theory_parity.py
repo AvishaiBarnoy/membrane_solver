@@ -515,6 +515,99 @@ def _interface_trace_diagnostics(
     return out
 
 
+def _interface_shell_diagnostics(
+    mesh, positions: np.ndarray, theta_meas: float
+) -> dict[str, float | str | bool]:
+    """Return direct diagnostics on an explicit outer shell at ``R+epsilon``."""
+    mode = str(mesh.global_parameters.get("rim_slope_match_mode") or "").strip().lower()
+    out: dict[str, float | str | bool] = {
+        "available": False,
+        "shell_source": "",
+        "disk_radius": 0.0,
+        "shell_radius": 0.0,
+        "epsilon": 0.0,
+        "t_in_at_R_plus_epsilon": 0.0,
+        "t_out_at_R_plus_epsilon": 0.0,
+        "phi_secant_at_R_plus_epsilon": 0.0,
+        "disk_director_angle_at_R": 0.0,
+        "free_inner_director_angle_at_R_plus_epsilon": 0.0,
+        "free_outer_director_angle_at_R_plus_epsilon": 0.0,
+        "disk_vs_free_inner_director_gap": 0.0,
+        "free_inner_vs_free_outer_director_gap": 0.0,
+    }
+    if mode != "physical_edge_staggered_v1":
+        return out
+
+    trace_layer_radius = mesh.global_parameters.get("parity_trace_layer_radius")
+    if trace_layer_radius is None:
+        return out
+
+    try:
+        shell_data = build_local_interface_shell_data(
+            mesh, positions=positions, group="disk"
+        )
+    except AssertionError:
+        return out
+
+    center = _resolve_center(mesh.global_parameters)
+    normal = _resolve_normal(mesh.global_parameters)
+    if normal is None:
+        normal = _fit_plane_normal(positions[shell_data.disk_rows])
+    if normal is None:
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
+    disk_rows = np.asarray(shell_data.disk_rows, dtype=int)
+    shell_rows = np.asarray(shell_data.rim_rows_for_disk, dtype=int)
+    _, disk_r_hat = radial_unit_vectors(positions[disk_rows])
+    _, shell_r_hat = radial_unit_vectors(positions[shell_rows])
+
+    tilts_in = np.asarray(mesh.tilts_in_view(), dtype=float)
+    tilts_out = np.asarray(mesh.tilts_out_view(), dtype=float)
+    disk_t_in = np.einsum("ij,ij->i", tilts_in[disk_rows], disk_r_hat)
+    shell_t_in = np.einsum("ij,ij->i", tilts_in[shell_rows], shell_r_hat)
+    shell_t_out = np.einsum("ij,ij->i", tilts_out[shell_rows], shell_r_hat)
+
+    rel = positions - center[None, :]
+    heights = np.einsum("ij,j->i", rel, normal)
+    disk_height = heights[disk_rows]
+    shell_height = heights[shell_rows]
+    epsilon = float(shell_data.rim_radius) - float(shell_data.disk_radius)
+    if abs(epsilon) <= 1.0e-12:
+        return out
+    phi_secant = (shell_height - disk_height) / epsilon
+
+    disk_director = np.full(disk_t_in.shape, float(theta_meas), dtype=float)
+    free_inner_director = phi_secant + shell_t_in
+    free_outer_director = shell_t_out
+
+    out.update(
+        {
+            "available": True,
+            "shell_source": "explicit_trace_layer",
+            "disk_radius": float(shell_data.disk_radius),
+            "shell_radius": float(shell_data.rim_radius),
+            "epsilon": float(epsilon),
+            "t_in_at_R_plus_epsilon": float(np.mean(shell_t_in)),
+            "t_out_at_R_plus_epsilon": float(np.mean(shell_t_out)),
+            "phi_secant_at_R_plus_epsilon": float(np.mean(phi_secant)),
+            "disk_director_angle_at_R": float(np.mean(disk_director)),
+            "free_inner_director_angle_at_R_plus_epsilon": float(
+                np.mean(free_inner_director)
+            ),
+            "free_outer_director_angle_at_R_plus_epsilon": float(
+                np.mean(free_outer_director)
+            ),
+            "disk_vs_free_inner_director_gap": float(
+                np.mean(disk_director - free_inner_director)
+            ),
+            "free_inner_vs_free_outer_director_gap": float(
+                np.mean(free_inner_director - free_outer_director)
+            ),
+        }
+    )
+    return out
+
+
 def _interface_director_diagnostics(
     mesh, positions: np.ndarray, theta_meas: float
 ) -> dict[str, float | bool]:
@@ -549,6 +642,46 @@ def _interface_director_diagnostics(
         }
     )
     return out
+
+
+def _primary_interface_readout(
+    mesh, positions: np.ndarray, theta_meas: float
+) -> dict[str, float | str | bool]:
+    """Return the preferred interface readout for the active lane.
+
+    When an explicit `R+epsilon` shell exists, use it as the primary outer-side
+    measurement. Otherwise fall back to the extrapolated `R+` trace.
+    """
+    shell = _interface_shell_diagnostics(mesh, positions, theta_meas)
+    if bool(shell.get("available", False)):
+        return {
+            "available": True,
+            "source": "direct_trace_layer",
+            "t_in": float(shell.get("t_in_at_R_plus_epsilon") or 0.0),
+            "t_out": float(shell.get("t_out_at_R_plus_epsilon") or 0.0),
+            "phi": float(shell.get("phi_secant_at_R_plus_epsilon") or 0.0),
+            "disk_vs_free_inner_director_gap": float(
+                shell.get("disk_vs_free_inner_director_gap") or 0.0
+            ),
+            "free_inner_vs_free_outer_director_gap": float(
+                shell.get("free_inner_vs_free_outer_director_gap") or 0.0
+            ),
+        }
+    traces = _interface_trace_diagnostics(mesh, positions, theta_meas)
+    directors = _interface_director_diagnostics(mesh, positions, theta_meas)
+    return {
+        "available": bool(traces.get("available", False)),
+        "source": "extrapolated_trace",
+        "t_in": float(traces.get("outer_t_in_trace_at_R_plus") or 0.0),
+        "t_out": float(traces.get("outer_t_out_trace_at_R_plus") or 0.0),
+        "phi": float(traces.get("phi_trace_at_R_plus") or 0.0),
+        "disk_vs_free_inner_director_gap": float(
+            directors.get("disk_vs_free_inner_director_gap") or 0.0
+        ),
+        "free_inner_vs_free_outer_director_gap": float(
+            directors.get("free_inner_vs_free_outer_director_gap") or 0.0
+        ),
+    }
 
 
 def _outer_profile_parity(
@@ -618,6 +751,151 @@ def _outer_profile_parity(
     return out
 
 
+def _trace_error_split(
+    mesh, positions: np.ndarray, theta_meas: float
+) -> dict[str, float | bool]:
+    """Split trace error into coarse reconstruction vs first-shell operator mismatch."""
+    mode = str(mesh.global_parameters.get("rim_slope_match_mode") or "").strip().lower()
+    out: dict[str, float | bool] = {
+        "available": False,
+        "lambda_value_tex": 0.0,
+        "disk_radius": 0.0,
+        "first_shell_radius": 0.0,
+        "second_shell_radius": 0.0,
+        "delta_r_first_shell": 0.0,
+        "delta_r_second_shell": 0.0,
+        "lambda_delta_r_first_shell": 0.0,
+        "lambda_delta_r_second_shell": 0.0,
+        "t_in_trace_minus_first_shell": 0.0,
+        "t_out_trace_minus_first_shell": 0.0,
+        "phi_trace_minus_first_secant": 0.0,
+        "first_shell_t_in_minus_tex": 0.0,
+        "first_shell_t_out_minus_tex": 0.0,
+        "first_shell_phi_minus_tex": 0.0,
+        "first_shell_free_inner_director_minus_tex": 0.0,
+        "trace_free_inner_director_minus_tex": 0.0,
+        "trace_t_in_minus_tex": 0.0,
+        "trace_t_out_minus_tex": 0.0,
+        "trace_phi_minus_tex": 0.0,
+    }
+    if mode != "physical_edge_staggered_v1":
+        return out
+
+    try:
+        shell_data = build_local_interface_shell_data(
+            mesh, positions=positions, group="disk"
+        )
+    except AssertionError:
+        return out
+
+    center = _resolve_center(mesh.global_parameters)
+    normal = _resolve_normal(mesh.global_parameters)
+    if normal is None:
+        normal = _fit_plane_normal(positions[shell_data.disk_rows])
+    if normal is None:
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
+    disk_rows = np.asarray(shell_data.disk_rows, dtype=int)
+    first_rows = np.asarray(shell_data.rim_rows_for_disk, dtype=int)
+    second_rows = np.asarray(shell_data.outer_rows_for_disk, dtype=int)
+
+    _, disk_r_hat = radial_unit_vectors(positions[disk_rows])
+    _, first_r_hat = radial_unit_vectors(positions[first_rows])
+    _, second_r_hat = radial_unit_vectors(positions[second_rows])
+
+    tilts_in = np.asarray(mesh.tilts_in_view(), dtype=float)
+    tilts_out = np.asarray(mesh.tilts_out_view(), dtype=float)
+    first_t_in = np.einsum("ij,ij->i", tilts_in[first_rows], first_r_hat)
+    second_t_in = np.einsum("ij,ij->i", tilts_in[second_rows], second_r_hat)
+    first_t_out = np.einsum("ij,ij->i", tilts_out[first_rows], first_r_hat)
+    second_t_out = np.einsum("ij,ij->i", tilts_out[second_rows], second_r_hat)
+
+    trace_t_in = extrapolate_trace_to_radius(
+        target_radius=float(shell_data.disk_radius),
+        first_radius=float(shell_data.rim_radius),
+        first_values=first_t_in,
+        second_radius=float(shell_data.outer_radius),
+        second_values=second_t_in,
+    )
+    trace_t_out = extrapolate_trace_to_radius(
+        target_radius=float(shell_data.disk_radius),
+        first_radius=float(shell_data.rim_radius),
+        first_values=first_t_out,
+        second_radius=float(shell_data.outer_radius),
+        second_values=second_t_out,
+    )
+
+    rel = positions - center[None, :]
+    heights = np.einsum("ij,j->i", rel, normal)
+    disk_height = heights[disk_rows]
+    first_height = heights[first_rows]
+    second_height = heights[second_rows]
+    first_secant = (first_height - disk_height) / (
+        float(shell_data.rim_radius) - float(shell_data.disk_radius)
+    )
+    phi_trace = _quadratic_boundary_slope(
+        target_radius=float(shell_data.disk_radius),
+        boundary_height=disk_height,
+        first_radius=float(shell_data.rim_radius),
+        first_height=first_height,
+        second_radius=float(shell_data.outer_radius),
+        second_height=second_height,
+    )
+
+    r_theory = float(
+        mesh.global_parameters.get("theory_radius") or DEFAULT_THEORY_RADIUS
+    )
+    lambda_tex = float(np.sqrt(DEFAULT_TEX_TILT_MODULUS / DEFAULT_TEX_BENDING_MODULUS))
+    x_R = lambda_tex * r_theory
+    x_first = lambda_tex * float(shell_data.rim_radius)
+    k1_R = float(special.kv(1, x_R))
+    if not np.isfinite(k1_R) or abs(k1_R) <= 1.0e-16:
+        return out
+    tex_trace = 0.5 * float(theta_meas)
+    tex_first_tilt = tex_trace * float(special.kv(1, x_first) / k1_R)
+    tex_first_phi = tex_trace * float(r_theory / float(shell_data.rim_radius))
+
+    out.update(
+        {
+            "available": True,
+            "lambda_value_tex": lambda_tex,
+            "disk_radius": float(shell_data.disk_radius),
+            "first_shell_radius": float(shell_data.rim_radius),
+            "second_shell_radius": float(shell_data.outer_radius),
+            "delta_r_first_shell": float(
+                float(shell_data.rim_radius) - float(shell_data.disk_radius)
+            ),
+            "delta_r_second_shell": float(
+                float(shell_data.outer_radius) - float(shell_data.disk_radius)
+            ),
+            "lambda_delta_r_first_shell": float(
+                lambda_tex
+                * (float(shell_data.rim_radius) - float(shell_data.disk_radius))
+            ),
+            "lambda_delta_r_second_shell": float(
+                lambda_tex
+                * (float(shell_data.outer_radius) - float(shell_data.disk_radius))
+            ),
+            "t_in_trace_minus_first_shell": float(np.mean(trace_t_in - first_t_in)),
+            "t_out_trace_minus_first_shell": float(np.mean(trace_t_out - first_t_out)),
+            "phi_trace_minus_first_secant": float(np.mean(phi_trace - first_secant)),
+            "first_shell_t_in_minus_tex": float(np.mean(first_t_in - tex_first_tilt)),
+            "first_shell_t_out_minus_tex": float(np.mean(first_t_out - tex_first_tilt)),
+            "first_shell_phi_minus_tex": float(np.mean(first_secant - tex_first_phi)),
+            "first_shell_free_inner_director_minus_tex": float(
+                np.mean((first_secant + first_t_in) - (tex_first_phi + tex_first_tilt))
+            ),
+            "trace_free_inner_director_minus_tex": float(
+                np.mean((phi_trace + trace_t_in) - (2.0 * tex_trace))
+            ),
+            "trace_t_in_minus_tex": float(np.mean(trace_t_in - tex_trace)),
+            "trace_t_out_minus_tex": float(np.mean(trace_t_out - tex_trace)),
+            "trace_phi_minus_tex": float(np.mean(phi_trace - tex_trace)),
+        }
+    )
+    return out
+
+
 def _collect_report_from_context(
     *,
     ctx: CommandContext,
@@ -628,6 +906,12 @@ def _collect_report_from_context(
     breakdown = minim.compute_energy_breakdown()
     tilt_stats = _tilt_stats_quantiles(ctx.mesh)
     gp = ctx.mesh.global_parameters
+    mode_match = str(gp.get("rim_slope_match_mode") or "").strip().lower()
+    scaffold_trace_lane = (
+        mode_match == "physical_edge_staggered_v1"
+        and gp.get("parity_trace_layer_radius") is not None
+        and int(gp.get("parity_outer_shells", 0) or 0) > 0
+    )
 
     kappa = float(
         (gp.get("bending_modulus_in") or 0.0) + (gp.get("bending_modulus_out") or 0.0)
@@ -639,6 +923,24 @@ def _collect_report_from_context(
     r_theory = float(gp.get("theory_radius") or DEFAULT_THEORY_RADIUS)
 
     theta_meas = float(gp.get("tilt_thetaB_value") or 0.0)
+    if scaffold_trace_lane:
+        try:
+            shell_data = build_local_interface_shell_data(
+                ctx.mesh, positions=ctx.mesh.positions_view(), group="disk"
+            )
+            disk_rows = np.asarray(shell_data.disk_rows, dtype=int)
+            _, disk_r_hat = radial_unit_vectors(ctx.mesh.positions_view()[disk_rows])
+            theta_meas = float(
+                np.mean(
+                    np.einsum(
+                        "ij,ij->i",
+                        np.asarray(ctx.mesh.tilts_in_view(), dtype=float)[disk_rows],
+                        disk_r_hat,
+                    )
+                )
+            )
+        except AssertionError:
+            pass
     contact_meas = float(breakdown.get("tilt_thetaB_contact_in") or 0.0)
     elastic_meas = float(
         (breakdown.get("tilt_in") or 0.0)
@@ -728,10 +1030,19 @@ def _collect_report_from_context(
     interface_traces = _interface_trace_diagnostics(
         ctx.mesh, ctx.mesh.positions_view(), theta_meas
     )
+    interface_shell = _interface_shell_diagnostics(
+        ctx.mesh, ctx.mesh.positions_view(), theta_meas
+    )
     interface_directors = _interface_director_diagnostics(
         ctx.mesh, ctx.mesh.positions_view(), theta_meas
     )
+    interface_primary = _primary_interface_readout(
+        ctx.mesh, ctx.mesh.positions_view(), theta_meas
+    )
     outer_profile = _outer_profile_parity(
+        ctx.mesh, ctx.mesh.positions_view(), theta_meas
+    )
+    trace_error_split = _trace_error_split(
         ctx.mesh, ctx.mesh.positions_view(), theta_meas
     )
 
@@ -776,8 +1087,11 @@ def _collect_report_from_context(
                     )
                 ),
                 "interface_traces_at_R": interface_traces,
+                "interface_shell_at_R_plus_epsilon": interface_shell,
+                "interface_primary_readout": interface_primary,
                 "interface_directors": interface_directors,
                 "outer_profile_parity": outer_profile,
+                "trace_error_split": trace_error_split,
             },
             "theory": legacy_anchor,
             "legacy_anchor": legacy_anchor,

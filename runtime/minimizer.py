@@ -1746,12 +1746,59 @@ class Minimizer:
         if not has_free:
             return
 
+        def _apply_scaffold_interface_shape_projection() -> None:
+            mode_match = (
+                str(self.global_params.get("rim_slope_match_mode") or "")
+                .strip()
+                .lower()
+            )
+            trace_radius = self.global_params.get("parity_trace_layer_radius")
+            outer_shells = int(self.global_params.get("parity_outer_shells", 0) or 0)
+            if (
+                mode_match != "physical_edge_staggered_v1"
+                or trace_radius is None
+                or outer_shells <= 0
+            ):
+                return
+            residual_threshold = 0.1
+            for mod in self.constraint_modules:
+                if (
+                    getattr(mod, "__name__", "")
+                    != "modules.constraints.rim_slope_match_out"
+                ):
+                    continue
+                diagnostics_fn = getattr(mod, "matching_residual_diagnostics", None)
+                if not callable(diagnostics_fn):
+                    break
+                diagnostics = diagnostics_fn(
+                    self.mesh,
+                    self.global_params,
+                    self.mesh.positions_view(),
+                )
+                if not bool(diagnostics.get("available", False)):
+                    break
+                outer = diagnostics.get("outer_residual", {})
+                inner = diagnostics.get("inner_residual", {})
+                outer_max_abs = float(outer.get("max_abs", 0.0) or 0.0)
+                inner_max_abs = float(inner.get("max_abs", 0.0) or 0.0)
+                if max(outer_max_abs, inner_max_abs) <= residual_threshold:
+                    return
+                break
+            self.constraint_manager.enforce_all(
+                self.mesh,
+                global_params=self.global_params,
+                context="tilt_block",
+            )
+            self.mesh.project_tilts_to_tangent()
+            self.mesh.increment_version()
+
         with self.mesh.geometry_freeze(positions):
             # Ensure tilt-only constraints (e.g. thetaB boundary projection) are
             # applied before the first tilt-gradient evaluation. Otherwise a
             # change in a scalar tilt parameter (like thetaB) can leave the tilt
             # field in a stale state (often all zeros), making the relaxation
             # no-op even though constraints require a non-zero boundary tilt.
+            _apply_scaffold_interface_shape_projection()
             if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
                 self.constraint_manager.enforce_tilt_constraints(
                     self.mesh, global_params=self.global_params
@@ -2163,6 +2210,7 @@ class Minimizer:
             }
 
         self._set_leaflet_tilts_from_arrays_fast(tilts_in, tilts_out)
+        _apply_scaffold_interface_shape_projection()
         if hasattr(self.constraint_manager, "enforce_tilt_constraints"):
             self.constraint_manager.enforce_tilt_constraints(
                 self.mesh, global_params=self.global_params
@@ -2538,6 +2586,17 @@ STEP SIZE:\t {self.step_size}
         by comparing the total energy after a partial tilt relaxation for a few
         candidate thetaB values.
         """
+        mode_match = (
+            str(self.global_params.get("rim_slope_match_mode") or "").strip().lower()
+        )
+        trace_radius = self.global_params.get("parity_trace_layer_radius")
+        outer_shells = int(self.global_params.get("parity_outer_shells", 0) or 0)
+        if (
+            mode_match == "physical_edge_staggered_v1"
+            and trace_radius is not None
+            and outer_shells > 0
+        ):
+            return
         if not bool(self.global_params.get("tilt_thetaB_optimize", False)):
             return
 

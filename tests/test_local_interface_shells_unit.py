@@ -16,7 +16,12 @@ from modules.constraints.local_interface_shells import (
     local_interface_constraint_diagnostics,
     radial_unit_vectors,
 )
-from tools.theory_parity_interface_profiles import build_trace_ring_fixture
+from runtime.topology import detect_vertex_edge_collisions
+from tools.theory_parity_interface_profiles import (
+    build_gap_filled_outer_shell_scaffold_fixture,
+    build_outer_shell_scaffold_fixture,
+    build_trace_ring_fixture,
+)
 
 
 @pytest.mark.unit
@@ -156,3 +161,130 @@ def test_build_local_interface_shell_data_honors_trace_layer_radius_override() -
     assert data.disk_radius == pytest.approx(7.0 / 15.0, abs=1.0e-9)
     assert data.rim_radius == pytest.approx((7.0 / 15.0) + 0.01, abs=1.0e-9)
     assert data.outer_radius > data.rim_radius
+
+
+@pytest.mark.unit
+def test_build_local_interface_shell_data_uses_first_support_shell_beyond_trace_layer() -> (
+    None
+):
+    base_doc = yaml.safe_load(
+        (
+            ROOT
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    traced = build_outer_shell_scaffold_fixture(
+        base_doc=base_doc,
+        label="trace_layer_support_unit",
+        trace_radius=(7.0 / 15.0) + 0.005,
+        outer_shells=3,
+        outer_shells_d=0.05,
+        planar_geometry=False,
+    )
+    fixture_path = ROOT / "tests" / "fixtures" / "_tmp_trace_layer_support_unit.yaml"
+    fixture_path.write_text(yaml.safe_dump(traced, sort_keys=False), encoding="utf-8")
+    try:
+        mesh = parse_geometry(load_data(str(fixture_path)))
+        positions = mesh.positions_view()
+        data = build_local_interface_shell_data(mesh, positions=positions)
+    finally:
+        fixture_path.unlink(missing_ok=True)
+
+    assert data.disk_radius == pytest.approx(7.0 / 15.0, abs=1.0e-9)
+    assert data.rim_radius == pytest.approx((7.0 / 15.0) + 0.005, abs=1.0e-9)
+    assert data.outer_radius == pytest.approx((7.0 / 15.0) + 0.055, abs=1.0e-9)
+
+
+@pytest.mark.unit
+def test_scaffold_builder_removes_old_disk_to_original_rim_spoke_edges() -> None:
+    base_doc = yaml.safe_load(
+        (
+            ROOT
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    scaffold = build_outer_shell_scaffold_fixture(
+        base_doc=base_doc,
+        label="trace_layer_support_edge_cleanup",
+        trace_radius=(7.0 / 15.0) + 0.005,
+        outer_shells=3,
+        outer_shells_d=0.05,
+        planar_geometry=False,
+    )
+    fixture_path = (
+        ROOT / "tests" / "fixtures" / "_tmp_trace_layer_support_edge_cleanup.yaml"
+    )
+    fixture_path.write_text(yaml.safe_dump(scaffold, sort_keys=False), encoding="utf-8")
+    try:
+        mesh = parse_geometry(load_data(str(fixture_path)))
+        positions = mesh.positions_view()
+        data = build_local_interface_shell_data(mesh, positions=positions)
+        collisions = detect_vertex_edge_collisions(mesh, threshold=1.0e-3)
+    finally:
+        fixture_path.unlink(missing_ok=True)
+
+    disk_rows = set(map(int, data.disk_rows.tolist()))
+    original_outer_rows = {
+        int(row)
+        for row in range(positions.shape[0])
+        if np.isclose(np.linalg.norm(positions[row, :2]), 0.772, atol=1.0e-9)
+    }
+    assert original_outer_rows
+    stale_spokes = [
+        (int(edge.tail_index), int(edge.head_index))
+        for edge in mesh.edges.values()
+        if {int(edge.tail_index), int(edge.head_index)} & disk_rows
+        and {int(edge.tail_index), int(edge.head_index)} & original_outer_rows
+    ]
+    assert stale_spokes == []
+    assert len(collisions) == 12
+
+
+@pytest.mark.unit
+def test_gap_filled_scaffold_keeps_first_unpinned_release_ring_near_original_rim() -> (
+    None
+):
+    base_doc = yaml.safe_load(
+        (
+            ROOT
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    scaffold = build_gap_filled_outer_shell_scaffold_fixture(
+        base_doc=base_doc,
+        label="trace_layer_gap_filled_release_unit",
+        trace_radius=(7.0 / 15.0) + 0.005,
+        outer_shells=3,
+        planar_geometry=False,
+    )
+    fixture_path = (
+        ROOT / "tests" / "fixtures" / "_tmp_trace_layer_gap_filled_release_unit.yaml"
+    )
+    fixture_path.write_text(yaml.safe_dump(scaffold, sort_keys=False), encoding="utf-8")
+    try:
+        mesh = parse_geometry(load_data(str(fixture_path)))
+        positions = mesh.positions_view()
+        data = build_local_interface_shell_data(mesh, positions=positions)
+    finally:
+        fixture_path.unlink(missing_ok=True)
+
+    radii = np.linalg.norm(positions[:, :2], axis=1)
+    release_rows = [
+        int(row)
+        for row, vertex in mesh.vertices.items()
+        if bool(vertex.options.get("outer_shell_release_ring"))
+    ]
+    assert release_rows
+    release_radius = float(np.mean(radii[release_rows]))
+    original_outer_radius = float(np.max(radii[radii < 1.0 + 1.0e-9]))
+    assert data.rim_radius == pytest.approx((7.0 / 15.0) + 0.005, abs=1.0e-9)
+    assert data.outer_radius < release_radius < original_outer_radius
+    assert (original_outer_radius - release_radius) < (
+        original_outer_radius - data.outer_radius
+    )

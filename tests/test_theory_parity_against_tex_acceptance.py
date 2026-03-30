@@ -13,7 +13,10 @@ from tools.reproduce_theory_parity import (
     _collect_report_from_context,
     _run_protocol_with_parity_activation,
 )
-from tools.theory_parity_interface_profiles import build_profiled_fixture
+from tools.theory_parity_interface_profiles import (
+    build_profiled_fixture,
+    build_trace_ring_fixture,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 TARGETS = ROOT / "tests" / "fixtures" / "theory_parity_targets.yaml"
@@ -51,6 +54,88 @@ DEFAULT_FIXTURE = (
     / "fixtures"
     / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
 )
+GHOST_FIXTURE = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_ghost_eps005.yaml"
+)
+SCAFFOLD_FIXED_D_FIXTURE = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_eps005_n3_d005.yaml"
+)
+SCAFFOLD_GAPFILL_RELEASE_FIXTURE = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_gapfill_eps005_n3_release.yaml"
+)
+DEFAULT_BASELINE = (
+    ROOT / "tests" / "fixtures" / "theory_parity_physical_edge_default_baseline.yaml"
+)
+GHOST_BAD_BRANCH_BASELINE = {
+    "thetaB_value": 0.21000000000000005,
+    "tex_total_ratio": 1.1552837784931795,
+    "direct_t_in": 0.008275776127628786,
+    "direct_t_out": 0.0,
+    "direct_phi": 0.0,
+    "trace_t_in": 0.008442659985337097,
+    "trace_t_out": 0.0,
+    "trace_phi": 0.0,
+    "disk_vs_free_inner_director_gap": 0.20172422387237126,
+    "free_inner_vs_free_outer_director_gap": 0.008275776127628786,
+}
+LONG_INTERFACE_PROTOCOL = (
+    "g40",
+    "r",
+    "V5",
+    "g100",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V1",
+    "energy",
+    "V5",
+    "energy",
+    "V5",
+    "energy",
+    "V5",
+    "energy",
+    "V5",
+    "energy",
+    "V5",
+    "energy",
+    "V10",
+    "energy",
+    "V10",
+    "energy",
+    "V10",
+    "energy",
+)
+LONG_INTERFACE_REPAIR_SUFFIX = ("u", "V2", "cg", "g20", "energy")
 
 
 def _get_path(dct: dict[str, Any], path: str) -> Any:
@@ -93,6 +178,30 @@ def _build_physical_edge_profile_fixture(profile: str, lane: str) -> dict[str, A
     return doc
 
 
+def _build_physical_edge_ghost_shell_fixture(
+    *, epsilon: float, lane: str
+) -> dict[str, Any]:
+    """Return the default physical-edge fixture with an explicit `R+eps` shell."""
+    base_doc = yaml.safe_load(DEFAULT_FIXTURE.read_text(encoding="utf-8")) or {}
+    doc = build_trace_ring_fixture(
+        base_doc=base_doc,
+        label=lane,
+        trace_radius=(7.0 / 15.0) + float(epsilon),
+        planar_geometry=False,
+    )
+    gp = dict(doc.get("global_parameters") or {})
+    gp["rim_slope_match_mode"] = "physical_edge_staggered_v1"
+    gp["tilt_solver"] = "cg"
+    gp["tilt_cg_max_iters"] = 120
+    gp["tilt_mass_mode_in"] = "consistent"
+    doc["global_parameters"] = gp
+    constraints = [str(x) for x in (doc.get("constraint_modules") or [])]
+    doc["constraint_modules"] = [
+        x for x in constraints if x != "tilt_thetaB_boundary_in"
+    ]
+    return doc
+
+
 def _run_fixture_report(
     doc: dict[str, Any], *, label: str, tmp_path: Path
 ) -> dict[str, Any]:
@@ -115,6 +224,239 @@ def _run_fixture_report(
         if fixture_path.exists():
             fixture_path.unlink()
     return yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+
+
+def _load_default_baseline() -> dict[str, Any]:
+    """Return the tracked physical-edge default baseline report."""
+    return yaml.safe_load(DEFAULT_BASELINE.read_text(encoding="utf-8"))
+
+
+def _run_context_report(
+    mesh_path: Path, *, protocol: tuple[str, ...]
+) -> dict[str, Any]:
+    ctx = _build_context(mesh_path)
+    _run_protocol_with_parity_activation(ctx, protocol=protocol)
+    return _collect_report_from_context(ctx=ctx, mesh_path=mesh_path, protocol=protocol)
+
+
+@pytest.mark.acceptance
+def test_physical_edge_ghost_shell_reports_direct_outer_interface_shell() -> None:
+    epsilon = 0.005
+    ctx = _build_context(GHOST_FIXTURE)
+    _run_protocol_with_parity_activation(ctx, protocol=DEFAULT_PROTOCOL)
+    report = _collect_report_from_context(
+        ctx=ctx, mesh_path=GHOST_FIXTURE, protocol=DEFAULT_PROTOCOL
+    )
+
+    shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
+    traces = report["metrics"]["diagnostics"]["interface_traces_at_R"]
+    geom = report["metrics"]["diagnostics"]["outer_shell_geometry"]
+    primary = report["metrics"]["diagnostics"]["interface_primary_readout"]
+
+    assert bool(shell["available"])
+    assert shell["shell_source"] == "explicit_trace_layer"
+    assert float(shell["disk_radius"]) == pytest.approx(7.0 / 15.0, abs=1.0e-9)
+    assert float(shell["epsilon"]) == pytest.approx(epsilon, abs=1.0e-9)
+    assert float(shell["shell_radius"]) == pytest.approx(
+        (7.0 / 15.0) + epsilon, abs=1.0e-9
+    )
+    assert float(geom["outer_radius"]) == pytest.approx(
+        float(shell["shell_radius"]), abs=1.0e-9
+    )
+    assert float(shell["t_in_at_R_plus_epsilon"]) == pytest.approx(
+        float(traces["outer_t_in_first_shell"]), abs=1.0e-12
+    )
+    assert float(shell["t_out_at_R_plus_epsilon"]) == pytest.approx(
+        float(traces["outer_t_out_first_shell"]), abs=1.0e-12
+    )
+    assert bool(primary["available"])
+    assert primary["source"] == "direct_trace_layer"
+    assert float(primary["t_in"]) == pytest.approx(
+        float(shell["t_in_at_R_plus_epsilon"]), abs=1.0e-12
+    )
+
+
+@pytest.mark.acceptance
+def test_physical_edge_ghost_shell_fixture_relieves_known_bad_branch(tmp_path) -> None:
+    out_yaml = tmp_path / "ghost_report.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mesh",
+            str(GHOST_FIXTURE),
+            "--out",
+            str(out_yaml),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+    shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
+    traces = report["metrics"]["diagnostics"]["interface_traces_at_R"]
+    primary = report["metrics"]["diagnostics"]["interface_primary_readout"]
+
+    current_ratio = float(report["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+
+    assert float(report["metrics"]["thetaB_value"]) == pytest.approx(
+        GHOST_BAD_BRANCH_BASELINE["thetaB_value"], abs=0.03
+    )
+    assert abs(current_ratio - 1.0) < abs(
+        GHOST_BAD_BRANCH_BASELINE["tex_total_ratio"] - 1.0
+    )
+    assert float(shell["t_out_at_R_plus_epsilon"]) > 2.0e-3
+    assert float(traces["outer_t_out_trace_at_R_plus"]) > 2.0e-3
+    assert primary["source"] == "direct_trace_layer"
+
+
+@pytest.mark.acceptance
+def test_physical_edge_ghost_shell_improves_direct_interface_behavior_over_bad_branch(
+    tmp_path,
+) -> None:
+    out_yaml = tmp_path / "ghost_report.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mesh",
+            str(GHOST_FIXTURE),
+            "--out",
+            str(out_yaml),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+    shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
+    primary = report["metrics"]["diagnostics"]["interface_primary_readout"]
+    ratio = float(report["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+    theta = float(report["metrics"]["thetaB_value"])
+
+    assert float(shell["t_in_at_R_plus_epsilon"]) > 5.0e-3
+    assert float(shell["t_out_at_R_plus_epsilon"]) > (
+        GHOST_BAD_BRANCH_BASELINE["direct_t_out"] + 2.0e-3
+    )
+    assert float(shell["phi_secant_at_R_plus_epsilon"]) > 1.0e-4
+    assert float(shell["free_inner_vs_free_outer_director_gap"]) < (
+        GHOST_BAD_BRANCH_BASELINE["free_inner_vs_free_outer_director_gap"] - 0.005
+    )
+    assert primary["source"] == "direct_trace_layer"
+    assert abs(theta - GHOST_BAD_BRANCH_BASELINE["thetaB_value"]) < 0.05
+    assert abs(ratio - 1.0) < 0.2
+
+
+@pytest.mark.acceptance
+def test_scaffold_long_interface_schedule_stays_on_inner_leaflet_only_branch() -> None:
+    fixed = _run_context_report(
+        SCAFFOLD_FIXED_D_FIXTURE,
+        protocol=LONG_INTERFACE_PROTOCOL,
+    )
+    gapfill = _run_context_report(
+        SCAFFOLD_GAPFILL_RELEASE_FIXTURE,
+        protocol=LONG_INTERFACE_PROTOCOL,
+    )
+
+    for report in (fixed, gapfill):
+        breakdown = report["metrics"]["breakdown"]
+        shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
+        ratios = report["metrics"]["theory"]["ratios"]
+
+        assert float(report["metrics"]["thetaB_value"]) == pytest.approx(
+            0.2, abs=1.0e-9
+        )
+        assert abs(float(breakdown["bending_tilt_out"])) < 1.0e-12
+        assert abs(float(breakdown["tilt_out"])) < 1.0e-12
+        assert abs(float(shell["t_out_at_R_plus_epsilon"])) < 1.0e-12
+        assert abs(float(shell["phi_secant_at_R_plus_epsilon"])) < 1.0e-12
+        assert float(ratios["elastic_ratio"]) > 2.0
+        assert float(ratios["total_ratio"]) > 2.0
+
+    fixed_shell = fixed["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
+    gapfill_shell = gapfill["metrics"]["diagnostics"][
+        "interface_shell_at_R_plus_epsilon"
+    ]
+    assert (
+        abs(
+            float(fixed_shell["t_in_at_R_plus_epsilon"])
+            - float(gapfill_shell["t_in_at_R_plus_epsilon"])
+        )
+        < 2.0e-3
+    )
+
+
+@pytest.mark.acceptance
+def test_scaffold_gapfill_base_long_schedule_activates_outer_leaflet_without_repair() -> (
+    None
+):
+    report = _run_context_report(
+        SCAFFOLD_GAPFILL_RELEASE_FIXTURE,
+        protocol=LONG_INTERFACE_PROTOCOL,
+    )
+
+    breakdown = report["metrics"]["breakdown"]
+    shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
+    ratios = report["metrics"]["theory"]["ratios"]
+
+    assert float(breakdown["bending_tilt_out"]) > 1.0e-3
+    assert float(breakdown["tilt_out"]) > 1.0e-3
+    assert float(shell["t_out_at_R_plus_epsilon"]) > 1.0e-3
+    assert abs(float(shell["phi_secant_at_R_plus_epsilon"])) > 1.0e-4
+    assert (
+        abs(
+            abs(float(shell["t_in_at_R_plus_epsilon"]))
+            - abs(float(shell["t_out_at_R_plus_epsilon"]))
+        )
+        < 0.05
+    )
+    assert float(ratios["elastic_ratio"]) < 2.0
+    assert float(ratios["total_ratio"]) < 2.0
+
+
+@pytest.mark.acceptance
+def test_scaffold_gapfill_reports_measured_thetaB_from_disk_boundary() -> None:
+    report = _run_context_report(
+        SCAFFOLD_GAPFILL_RELEASE_FIXTURE,
+        protocol=LONG_INTERFACE_PROTOCOL,
+    )
+
+    traces = report["metrics"]["diagnostics"]["interface_traces_at_R"]
+    measured_theta = float(traces["disk_t_in_at_R"])
+    report_theta = float(report["metrics"]["thetaB_value"])
+
+    assert report_theta == pytest.approx(measured_theta, abs=1.0e-6)
+
+
+@pytest.mark.acceptance
+def test_scaffold_long_interface_repair_turns_on_outer_leaflet_only_by_blowing_up_elastic_energy() -> (
+    None
+):
+    fixed = _run_context_report(
+        SCAFFOLD_FIXED_D_FIXTURE,
+        protocol=LONG_INTERFACE_PROTOCOL + LONG_INTERFACE_REPAIR_SUFFIX,
+    )
+    gapfill = _run_context_report(
+        SCAFFOLD_GAPFILL_RELEASE_FIXTURE,
+        protocol=LONG_INTERFACE_PROTOCOL + LONG_INTERFACE_REPAIR_SUFFIX,
+    )
+
+    for report in (fixed, gapfill):
+        breakdown = report["metrics"]["breakdown"]
+        shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
+        ratios = report["metrics"]["theory"]["ratios"]
+
+        assert float(report["metrics"]["final_energy"]) > 0.0
+        assert float(breakdown["bending_tilt_out"]) > 1.0
+        assert float(breakdown["tilt_out"]) > 0.01
+        assert float(shell["t_out_at_R_plus_epsilon"]) > 0.01
+        assert float(shell["phi_secant_at_R_plus_epsilon"]) > 0.05
+        assert float(ratios["elastic_ratio"]) > 10.0
+        assert float(ratios["total_ratio"]) < 0.0
+
+    assert float(fixed["metrics"]["breakdown"]["bending_tilt_out"]) > float(
+        gapfill["metrics"]["breakdown"]["bending_tilt_out"]
+    )
 
 
 @pytest.mark.acceptance
@@ -600,3 +942,143 @@ def test_default_lane_reports_real_zero_bump_and_shows_kick_sensitivity(
     assert current_gap < tiny_gap
     assert abs(zero_phi_trace) < 1.0e-6
     assert abs(zero_outer_trace) < 5.0e-3
+
+
+@pytest.mark.acceptance
+def test_physical_edge_default_reports_trace_resolution_and_operator_split(
+    tmp_path,
+) -> None:
+    out_yaml = tmp_path / "default_report.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mesh",
+            str(DEFAULT_FIXTURE),
+            "--out",
+            str(out_yaml),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+    split = report["metrics"]["diagnostics"]["trace_error_split"]
+
+    assert bool(split["available"])
+    assert float(split["lambda_delta_r_first_shell"]) > 2.0
+    assert abs(float(split["t_in_trace_minus_first_shell"])) > 1.0e-4
+    assert abs(float(split["phi_trace_minus_first_secant"])) > 0.05
+    assert abs(float(split["first_shell_phi_minus_tex"])) > 0.05
+    assert abs(float(split["first_shell_free_inner_director_minus_tex"])) > 0.05
+    assert abs(float(split["trace_t_in_minus_tex"])) > 0.05
+
+
+@pytest.mark.acceptance
+def test_physical_edge_default_improves_free_side_trace_continuation_over_baseline(
+    tmp_path,
+) -> None:
+    out_yaml = tmp_path / "default_report.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mesh",
+            str(DEFAULT_FIXTURE),
+            "--out",
+            str(out_yaml),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    baseline = _load_default_baseline()
+    current = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+
+    baseline_traces = baseline["metrics"]["diagnostics"]["interface_traces_at_R"]
+    current_traces = current["metrics"]["diagnostics"]["interface_traces_at_R"]
+
+    baseline_t_in = float(baseline_traces["outer_t_in_trace_at_R_plus"])
+    current_t_in = float(current_traces["outer_t_in_trace_at_R_plus"])
+    baseline_t_out = float(baseline_traces["outer_t_out_trace_at_R_plus"])
+    current_t_out = float(current_traces["outer_t_out_trace_at_R_plus"])
+    baseline_gap = abs(float(baseline_traces["disk_minus_outer_trace"]))
+    current_gap = abs(float(current_traces["disk_minus_outer_trace"]))
+    target_half_theta = 0.5 * float(current["metrics"]["thetaB_value"])
+
+    assert current_t_in > baseline_t_in + 0.02
+    assert abs(current_t_in - target_half_theta) < abs(
+        baseline_t_in - target_half_theta
+    )
+    assert current_t_out >= baseline_t_out - 0.01
+    assert current_gap < baseline_gap - 0.02
+
+
+@pytest.mark.acceptance
+def test_physical_edge_default_keeps_theta_and_energy_in_guardrail_while_fixing_interface(
+    tmp_path,
+) -> None:
+    out_yaml = tmp_path / "default_report.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mesh",
+            str(DEFAULT_FIXTURE),
+            "--out",
+            str(out_yaml),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    baseline = _load_default_baseline()
+    current = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+
+    current_theta = float(current["metrics"]["thetaB_value"])
+    baseline_theta = float(baseline["metrics"]["thetaB_value"])
+    current_ratio = float(current["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+
+    # The field-level fix is primary, but it should not come from a branch collapse.
+    assert abs(current_theta - baseline_theta) < 0.03
+    assert abs(current_ratio - 1.0) < 0.15
+
+
+@pytest.mark.acceptance
+def test_physical_edge_default_improves_director_and_profile_parity_over_baseline(
+    tmp_path,
+) -> None:
+    out_yaml = tmp_path / "default_report.yaml"
+    subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mesh",
+            str(DEFAULT_FIXTURE),
+            "--out",
+            str(out_yaml),
+        ],
+        check=True,
+        cwd=str(ROOT),
+    )
+
+    baseline = _load_default_baseline()
+    current = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+
+    baseline_directors = baseline["metrics"]["diagnostics"]["interface_directors"]
+    current_directors = current["metrics"]["diagnostics"]["interface_directors"]
+    baseline_profile = baseline["metrics"]["diagnostics"]["outer_profile_parity"]
+    current_profile = current["metrics"]["diagnostics"]["outer_profile_parity"]
+
+    assert float(current_directors["disk_vs_free_inner_director_gap"]) < (
+        float(baseline_directors["disk_vs_free_inner_director_gap"]) - 0.02
+    )
+    assert float(current_directors["free_inner_vs_free_outer_director_gap"]) < (
+        float(baseline_directors["free_inner_vs_free_outer_director_gap"]) - 0.01
+    )
+    assert float(current_profile["phi_profile_rel_rmse"]) < (
+        float(baseline_profile["phi_profile_rel_rmse"]) - 0.2
+    )
+    assert float(current_profile["z_profile_rel_rmse"]) < (
+        float(baseline_profile["z_profile_rel_rmse"]) - 0.05
+    )

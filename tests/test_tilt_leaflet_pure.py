@@ -1,10 +1,12 @@
 import importlib
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -20,6 +22,7 @@ from tools.reproduce_flat_disk_one_leaflet import (
     _configure_benchmark_mesh,
     _load_mesh_from_fixture,
 )
+from tools.theory_parity_interface_profiles import build_trace_ring_fixture
 
 LEAFLET_CASES = {
     "in": {
@@ -684,6 +687,128 @@ def test_tilt_out_shared_rim_flag_excludes_outer_rows_from_lumped_energy() -> No
     )
     assert float(energy) == pytest.approx(expected_energy, rel=1e-12, abs=1e-12)
     assert tilt_grad[1] == pytest.approx(np.zeros(3), abs=1e-12)
+
+
+def test_trace_layer_rows_use_derived_interface_weight_for_outer_tilt_energy_module() -> (
+    None
+):
+    tilt_out_module = importlib.import_module("modules.energy.tilt_out")
+    base_doc = yaml.safe_load(
+        (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    traced = build_trace_ring_fixture(
+        base_doc=base_doc,
+        label="trace_layer_weight_unit",
+        trace_radius=(7.0 / 15.0) + 0.005,
+        planar_geometry=False,
+    )
+    handle = tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix="_trace_layer_weight_unit.yaml",
+        prefix="tilt_leaflet_pure_",
+        delete=False,
+        dir=str(Path(__file__).resolve().parent / "fixtures"),
+        encoding="utf-8",
+    )
+    fixture_path = Path(handle.name)
+    try:
+        handle.write(yaml.safe_dump(traced, sort_keys=False))
+    finally:
+        handle.close()
+    try:
+        mesh = _load_mesh_from_fixture(fixture_path)
+    finally:
+        fixture_path.unlink(missing_ok=True)
+
+    gp = mesh.global_parameters
+    resolver = ParameterResolver(gp)
+    weights_out = tilt_out_module._explicit_trace_layer_active_row_weights(
+        mesh, resolver
+    )
+
+    assert weights_out is not None
+    shell_data = tilt_out_module.build_local_interface_shell_data(
+        mesh, positions=mesh.positions_view()
+    )
+    zero_rows = np.asarray(shell_data.rim_rows, dtype=int)
+    expected_scale = np.sqrt(
+        (float(shell_data.rim_radius) - float(shell_data.disk_radius))
+        / (float(shell_data.outer_radius) - float(shell_data.disk_radius))
+    )
+    assert zero_rows.size > 0
+    assert weights_out[zero_rows] == pytest.approx(
+        np.full(zero_rows.size, expected_scale), abs=1.0e-12
+    )
+    one_mask = np.ones(len(mesh.vertex_ids), dtype=bool)
+    one_mask[zero_rows] = False
+    assert weights_out[one_mask] == pytest.approx(
+        np.ones(np.count_nonzero(one_mask)), abs=1.0e-12
+    )
+
+
+def test_trace_layer_rows_use_derived_interface_weight_for_inner_tilt_energy_module() -> (
+    None
+):
+    tilt_in_module = importlib.import_module("modules.energy.tilt_in")
+    base_doc = yaml.safe_load(
+        (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    traced = build_trace_ring_fixture(
+        base_doc=base_doc,
+        label="trace_layer_weight_inner_unit",
+        trace_radius=(7.0 / 15.0) + 0.005,
+        planar_geometry=False,
+    )
+    handle = tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix="_trace_layer_weight_inner_unit.yaml",
+        prefix="tilt_leaflet_pure_",
+        delete=False,
+        dir=str(Path(__file__).resolve().parent / "fixtures"),
+        encoding="utf-8",
+    )
+    fixture_path = Path(handle.name)
+    try:
+        handle.write(yaml.safe_dump(traced, sort_keys=False))
+    finally:
+        handle.close()
+    try:
+        mesh = _load_mesh_from_fixture(fixture_path)
+    finally:
+        fixture_path.unlink(missing_ok=True)
+
+    gp = mesh.global_parameters
+    resolver = ParameterResolver(gp)
+    weights_in = tilt_in_module._explicit_trace_layer_active_row_weights(mesh, resolver)
+    active_weights = tilt_in_module._active_row_weights(mesh, resolver)
+
+    assert weights_in is not None
+    assert active_weights is not None
+    shell_data = tilt_in_module.build_local_interface_shell_data(
+        mesh, positions=mesh.positions_view()
+    )
+    zero_rows = np.asarray(shell_data.rim_rows, dtype=int)
+    expected_scale = np.sqrt(
+        (float(shell_data.rim_radius) - float(shell_data.disk_radius))
+        / (float(shell_data.outer_radius) - float(shell_data.disk_radius))
+    )
+    assert zero_rows.size > 0
+    assert active_weights[zero_rows] == pytest.approx(
+        np.full(zero_rows.size, expected_scale), abs=1.0e-12
+    )
+    one_mask = np.ones(len(mesh.vertex_ids), dtype=bool)
+    one_mask[zero_rows] = False
+    assert active_weights[one_mask] == pytest.approx(
+        np.ones(np.count_nonzero(one_mask)), abs=1.0e-12
+    )
 
 
 def test_tilt_out_consistent_array_matches_dict_energy_and_gradient() -> None:
