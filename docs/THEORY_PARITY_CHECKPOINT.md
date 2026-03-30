@@ -40,11 +40,19 @@
 - New outer-profile parity diagnostics:
   - `phi_profile_rel_rmse ≈ 1.913`
   - `z_profile_rel_rmse ≈ 0.999`
+- New geometry-vs-tilt split:
+  - `outer_geometry_trace_at_R+ ≈ 0.09029`
+  - `outer_t_out_trace_at_R+ ≈ 0.04131`
+  - `outer_geometry_vs_tilt_trace_gap ≈ 0.04898`
 - This lane is derived from the same physical-edge construction as the earlier `near_edge_v1` reference, but is now tracked as the generic bottom-up default rather than as a one-off named fix.
 - Current kept interface-side improvement:
   - the physical-edge law now pairs the first outer shell to disk-boundary rows by explicit nearest azimuth (`rim_rows_for_disk`) instead of relying on independently ordered rings
   - a second-shell-supported composition was tested and produced the same behavior on the current family, so it was not kept as a separate runtime change
   - the local-shell builder now uses an order-preserving cyclic azimuth match when adjacent rings have equal counts; this cleans up pair regularity but does not materially change the current parity metrics
+  - the TeX-facing diagnostics PR is merged:
+    - same-point one-sided interface traces at `R`
+    - outer-profile parity against the TeX field
+    - explicit geometry-vs-tilt trace separation on the outer side
 
 ## Physical-Edge Family
 - The profile helper in [tools/theory_parity_interface_profiles.py](/Users/User/github/membrane_solver/tools/theory_parity_interface_profiles.py) now defines the generic default family:
@@ -66,8 +74,81 @@
   - optimized parity remains smooth across `lo / primary / hi` and is slightly tighter around the TeX target than the previous baseline set
   - fixed-`thetaB` elastic terms still vary smoothly with near-edge geometry
   - the new one-sided trace diagnostics show that the geometric outer slope trace at `R+` is close to the TeX relation `phi_* = theta_B / 2`
-  - but the outer-leaflet trace and outer height profile are still not near the TeX continuation law
+  - but the free-membrane-side leaflet traces and outer height profile are still not near the TeX continuation law
+  - the outer-side mismatch is now clearly split:
+    - what we get right:
+      - `thetaB`
+      - total energy
+      - geometric slope trace `phi(R+)`
+    - what we still get wrong:
+      - free-side `t_in(R+)` is effectively zero instead of `thetaB / 2`
+      - outer `tilt_out` trace at `R+`
+      - outer height/profile `z(r)`
   - the family remains in a non-pathological regime and can be used as the active parity-development base
+
+## Symmetry Breaking
+- The physical-edge parity reproducer still needs an explicit symmetry-breaking kick to leave the flat symmetric branch, but it no longer needs that kick for the full run.
+- In [tools/reproduce_theory_parity.py](/Users/User/github/membrane_solver/tools/reproduce_theory_parity.py), `_activate_local_outer_shell_for_parity(...)` applies a small `z` bump (`parity_physical_edge_z_bump`, defaulting to `DEFAULT_PHYSICAL_EDGE_Z_BUMP`) to the first local outer shell when its height is too close to zero.
+- Current reproducer behavior:
+  - `parity_physical_edge_z_bump = 0.0` now really means no kick
+  - the default physical-edge path uses the configured bump only to leave the symmetric branch, then releases it to `0.0` immediately after the first protocol step
+  - releasing the bump after the first step preserves the current good branch exactly on the default lane
+- Diagnostic result from the current default family:
+  - with the current kick (`1e-3`):
+    - `default`: `thetaB = 0.18`, `tex total_ratio = 0.99921`, `outer_t_out_trace_at_R+ ≈ 0.04131`, `trace_gap ≈ 0.04898`
+  - with a tiny kick (`1e-12`):
+    - `default`: `thetaB = 0.18`, `tex total_ratio = 0.96974`, `outer_t_out_trace_at_R+ ≈ 0.01008`, `trace_gap ≈ 0.07461`
+  - with zero kick (`0.0`) for the full run:
+    - `default`: `thetaB = 0.17`, `tex total_ratio = 0.93973`, `phi_trace(R+) ≈ 0.0`, `outer_t_out_trace(R+) ≈ 0.0`
+  - with transient release (`1e-3` until `g10`, then `0.0`):
+    - `default`: `thetaB = 0.18`, `tex total_ratio = 0.99921`, `phi_trace(R+) ≈ 0.09029`, `outer_t_out_trace(R+) ≈ 0.04131`
+- Shell-level interpretation on `default`:
+  - current kick:
+    - first-shell geometric secant `≈ 0.00376`
+    - first-shell `tilt_out ≈ 0.00378`
+    - extrapolated trace `t_out(R+) ≈ 0.04131`
+  - tiny kick:
+    - first-shell geometric secant `≈ 0.00057`
+    - first-shell `tilt_out ≈ 0.00058`
+    - extrapolated trace `t_out(R+) ≈ 0.01008`
+- Conclusion:
+  - the current near-TeX physical-edge parity result is still branch-selection dependent
+  - a persistent kick is not required once the branch is selected; a transient kick after initialization is enough on the current default lane
+  - fully kick-free recovery of the good branch remains open work
+
+## Rejected Next-Step Candidate
+- A follow-up runtime pass tested whether the remaining gap could be reduced by changing only how the physical-edge outer `tilt_out` field is represented/read near `R+`, while keeping the geometric `phi` law unchanged.
+- Two candidate directions were rejected:
+  - replacing the physical-edge law with a one-sided boundary-trace target built from the first two outer shells
+  - changing only the outer-tilt row/weight representation to an extrapolated trace
+- Outcome:
+  - both directions made the outer-tilt trace worse rather than better
+  - the first one also drove the family to a bad branch (`thetaB ≈ 0.25`, `tex total_ratio ≈ 1.74`)
+  - the second kept energy/theta roughly unchanged but collapsed `outer_t_out_trace_at_R+` toward zero, increasing the geometry-vs-tilt gap
+- Conclusion:
+  - the remaining gap is not fixed by swapping outer rows/weights in `rim_slope_match_out`
+  - the next higher-signal target is how the outer `tilt_out` field itself is formed/regularized near the first two shells outside `R`
+
+## Rejected Resolution-Only Candidate
+- A follow-up mesh-construction pass tested whether the bad free-side trace split could be fixed by moving the first outer shell closer to `R` while keeping the current physics unchanged.
+- First observation:
+  - current default lane:
+    - `outer_radius ≈ 0.65755`
+    - `delta_r ≈ 0.19089`
+    - decay length is `1 / lambda ≈ 0.06667`
+    - so the first outer shell sits about `2.86` decay lengths away from `R`
+- One-ring tightening alone was not viable:
+  - when the first shell was pushed inward with the current law, parity destabilized badly
+  - `t_in(R+)` remained near zero
+  - `phi(R+)` and total parity worsened instead of improving
+- A more principled three-ring refined family was then tried by moving the first two outer rings inward together.
+- Outcome:
+  - all three refined cases timed out before producing a usable parity report
+  - so “better radial resolution with the current coupling” is not a practical fix by itself
+- Conclusion:
+  - under-resolution near `R+` is part of the problem
+  - but the remaining mismatch is not a pure mesh-spacing issue
+  - the free-side leaflet continuity/coupling law is still the more likely dominant gap
 
 ## Performance
 - Exact reproducer-path benchmark, current branch:
@@ -90,4 +171,68 @@
 - Keep `legacy_coarse` only as a regression/history anchor.
 - Use `physical_edge_default` plus the `default_lo / default / default_hi` family as the active parity-development path.
 - Evaluate future operator changes only against the physical-edge family and treat improvements to the coarse lane as incidental, not primary.
-- The next real gap is no longer total energy parity; it is the missing TeX match in the outer-leaflet trace and outer height profile.
+- The next real gap is no longer total energy parity; it is the missing TeX match in the free-membrane-side leaflet traces and outer height profile.
+- Current free-side trace picture on the default lane:
+  - `t_in(R+) ≈ -0.00132`
+  - `t_out(R+) ≈ 0.04131`
+  - `phi(R+) ≈ 0.09029`
+- Director audit on the same default lane:
+  - reconstructed disk-side director at `R-`: `~0.17624`
+  - reconstructed free-side inner director at `R+`: `~0.08897`
+  - reconstructed free-side outer director at `R+`: `~0.04131`
+  - so the current gap is not only a tilt-decomposition issue; director continuity itself still appears to be broken in the discrete solution
+- The most promising next stream is now continuity/coupling work on the free side of the interface:
+  - inspect how `tilt_in` and `tilt_out` are formed/regularized on the first two outer shells
+  - do not start with more mesh squeezing or more `rim_slope_match_out` row/weight edits
+  - keep the current physical-edge family as the evaluation set while changing the free-side leaflet coupling
+
+## Experimental Trace-Ring Attempt
+- A diagnostics-only discretization experiment inserted an explicit free-side trace ring at `R + ε` with `ε ≈ 0.0333` (`trace_radius = 0.50` in current scaled units).
+- Two variants were tested:
+  - `trace_ring_free_geometry`
+  - `trace_ring_planar_geometry`
+- First outcome:
+  - the initial local ring insertion broke refinement because the annulus faces were not rewritten consistently
+- After rewriting the local annulus faces, the refined trace-ring variants did run through the full parity protocol.
+- Refined outcome:
+  - baseline current default:
+    - `thetaB ≈ 0.18`
+    - TeX `total_ratio ≈ 0.999`
+  - free-geometry refined trace ring:
+    - `thetaB ≈ 0.30`
+    - TeX `total_ratio ≈ 1.584`
+    - `phi(R+)` turns negative (`≈ -0.0427`)
+    - director continuity becomes much worse (`disk_vs_free_inner_director_gap ≈ 0.427`)
+  - planar-geometry refined trace ring:
+    - `thetaB ≈ 0.30`
+    - TeX `total_ratio ≈ 1.876`
+    - `phi(R+)` collapses to `0`
+    - director continuity remains very poor (`disk_vs_free_inner_director_gap ≈ 0.347`)
+- Reassessment after fixing the actual construction:
+  - the earlier `no_refine` runs were not valid tests of the intended idea because the inserted `R+ε` ring was free to drift radially in `[x,y]`
+  - the trace-layer builder now pins that ring to the target circle, so the intended ordering is preserved:
+    - `R ≈ 0.46667`
+    - `R+ε ≈ 0.47667`
+    - first free-side shell `R+ ≈ 0.48667` in the `no_refine` runs
+  - corrected `no_refine` result with pinned `R+ε`:
+    - `thetaB ≈ 0.32`
+    - TeX `total_ratio ≈ 3.426`
+    - `disk_t_in(R) ≈ 0.320`
+    - `t_in(R+) ≈ -0.00166`
+    - `t_out(R+) ≈ 0`
+    - `phi(R+) ≈ 0`
+  - corrected refined+retagged result with pinned `R+ε` and extra minimization:
+    - `thetaB ≈ 0.21`
+    - TeX `total_ratio ≈ 2.308`
+    - `disk_t_in(R) ≈ 0.210`
+    - `t_in(R+) ≈ 0.0095`
+    - `t_out(R+) ≈ 0`
+    - `phi(R+) ≈ 0`
+  - both free and planar variants collapse onto the same bad branch once the ring is pinned radially; the planar option does not rescue parity
+- Conclusion:
+  - once the `R+ε` layer is actually kept at the intended radius, the trace-layer construction still does not solve parity
+  - both `no_refine` and refined-retagged variants collapse to a bad branch with effectively zero free-side geometry trace
+  - even with full refinement, adding a trace ring is not a viable parity fix in the current edge-only mesh/protocol
+  - the planar ghost version is especially not acceptable as a production direction
+  - interpreting the discrete disk rim as `[R, R+ε]` does not rescue the current formulation
+  - if a trace layer is revisited later, it likely needs a more principled mesh/discretization treatment rather than a local ring insertion on the current topology

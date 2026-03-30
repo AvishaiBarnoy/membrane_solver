@@ -71,6 +71,20 @@ def _wrapped_angle_delta(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.minimum(diff, 2.0 * np.pi - diff)
 
 
+def _resolve_trace_layer_radius(mesh: Mesh) -> float | None:
+    """Return an experimental trace-layer radius override when configured."""
+    global_params = getattr(mesh, "global_parameters", None)
+    raw = (
+        None
+        if global_params is None
+        else global_params.get("parity_trace_layer_radius")
+    )
+    if raw is None:
+        return None
+    radius = float(raw)
+    return radius if np.isfinite(radius) and radius > 0.0 else None
+
+
 def _match_rows_by_azimuth(
     source_phi: np.ndarray, target_rows: np.ndarray, target_phi: np.ndarray
 ) -> np.ndarray:
@@ -134,10 +148,21 @@ def build_local_interface_shell_data(
     disk_radius = float(np.max(radii[disk_rows]))
     disk_mask = np.zeros(radii.shape[0], dtype=bool)
     disk_mask[disk_rows] = True
+    trace_layer_radius = _resolve_trace_layer_radius(mesh)
     rim_candidates = (~disk_mask) & (radii > (disk_radius + 1.0e-9))
     if not np.any(rim_candidates):
         raise AssertionError("Missing outer candidates beyond disk boundary radius.")
-    rim_radius = float(np.min(radii[rim_candidates]))
+    if trace_layer_radius is None:
+        rim_radius = float(np.min(radii[rim_candidates]))
+    else:
+        shell_radii = np.unique(np.round(radii[rim_candidates], 12))
+        shell_radii = shell_radii[shell_radii >= (disk_radius + 1.0e-9)]
+        if shell_radii.size == 0:
+            raise AssertionError(
+                "Missing trace-layer shell candidates beyond disk boundary radius."
+            )
+        idx = int(np.argmin(np.abs(shell_radii - float(trace_layer_radius))))
+        rim_radius = float(shell_radii[idx])
     rim_tol = max(1.0e-9, 1.0e-5 * max(1.0, abs(rim_radius)))
     rim_rows = order_rows_by_angle(
         positions,

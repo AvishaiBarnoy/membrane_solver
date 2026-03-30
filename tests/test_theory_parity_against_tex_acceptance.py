@@ -7,6 +7,12 @@ from typing import Any
 import pytest
 import yaml
 
+from tools.reproduce_theory_parity import (
+    DEFAULT_PROTOCOL,
+    _build_context,
+    _collect_report_from_context,
+    _run_protocol_with_parity_activation,
+)
 from tools.theory_parity_interface_profiles import build_profiled_fixture
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -85,6 +91,30 @@ def _build_physical_edge_profile_fixture(profile: str, lane: str) -> dict[str, A
         x for x in constraints if x != "tilt_thetaB_boundary_in"
     ]
     return doc
+
+
+def _run_fixture_report(
+    doc: dict[str, Any], *, label: str, tmp_path: Path
+) -> dict[str, Any]:
+    fixture_path = _write_temp_fixture(doc, label=label)
+    out_yaml = tmp_path / f"{label}.yaml"
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--mesh",
+                str(fixture_path),
+                "--out",
+                str(out_yaml),
+            ],
+            check=True,
+            cwd=str(ROOT),
+        )
+    finally:
+        if fixture_path.exists():
+            fixture_path.unlink()
+    return yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
 
 
 @pytest.mark.acceptance
@@ -233,6 +263,7 @@ def test_physical_edge_default_fixture_is_the_default_development_lane(
     geom = default["metrics"]["diagnostics"]["outer_shell_geometry"]
     split = default["metrics"]["diagnostics"]["outer_split"]
     traces = default["metrics"]["diagnostics"]["interface_traces_at_R"]
+    directors = default["metrics"]["diagnostics"]["interface_directors"]
     profile = default["metrics"]["diagnostics"]["outer_profile_parity"]
 
     default_theta = float(default["metrics"]["thetaB_value"])
@@ -265,11 +296,45 @@ def test_physical_edge_default_fixture_is_the_default_development_lane(
     assert float(split["phi_mean"]) > 0.0
     assert float(split["phi_over_half_theta"]) > 0.0
     assert abs(float(traces["disk_minus_phi_trace"])) < 0.01
+    assert abs(float(traces["disk_t_in_at_R"]) - default_theta) < 0.01
+    assert abs(float(traces["outer_t_in_trace_at_R_plus"])) < 0.01
+    assert float(traces["outer_t_out_trace_at_R_plus"]) > float(
+        traces["outer_t_in_trace_at_R_plus"]
+    )
+    assert float(traces["phi_trace_at_R_plus"]) > float(
+        traces["outer_t_out_trace_at_R_plus"]
+    )
     assert bool(traces["available"])
+    assert bool(directors["available"])
+    assert float(directors["disk_director_angle_at_R"]) > float(
+        directors["free_inner_director_angle_at_R_plus"]
+    )
+    assert float(directors["free_inner_director_angle_at_R_plus"]) > float(
+        directors["free_outer_director_angle_at_R_plus"]
+    )
+    assert float(directors["disk_vs_free_inner_director_gap"]) > 0.05
+    assert float(directors["free_inner_vs_free_outer_director_gap"]) > 0.01
     assert bool(profile["available"])
     assert float(profile["sample_count"]) >= 10.0
     assert float(profile["phi_profile_rel_rmse"]) > 0.0
     assert float(profile["z_profile_rel_rmse"]) > 0.0
+
+
+@pytest.mark.acceptance
+def test_physical_edge_default_releases_kick_after_branch_selection() -> None:
+    ctx = _build_context(DEFAULT_FIXTURE)
+    ctx.mesh.global_parameters.set("parity_physical_edge_z_bump", 1.0e-3)
+
+    _run_protocol_with_parity_activation(ctx, protocol=tuple(DEFAULT_PROTOCOL))
+    report = _collect_report_from_context(
+        ctx=ctx, mesh_path=DEFAULT_FIXTURE, protocol=tuple(DEFAULT_PROTOCOL)
+    )
+
+    assert float(ctx.mesh.global_parameters.get("parity_physical_edge_z_bump")) == 0.0
+    assert float(report["metrics"]["thetaB_value"]) == pytest.approx(0.18, abs=1.0e-9)
+    assert float(report["metrics"]["tex_benchmark"]["ratios"]["total_ratio"]) == (
+        pytest.approx(0.999210661611669, abs=1.0e-6)
+    )
 
 
 @pytest.mark.acceptance
@@ -483,3 +548,55 @@ def test_generated_physical_edge_family_varies_smoothly_around_primary(
     ]
     assert max(phi_rmse) - min(phi_rmse) < 0.1
     assert max(z_rmse) - min(z_rmse) < 0.05
+
+
+@pytest.mark.acceptance
+def test_default_lane_reports_real_zero_bump_and_shows_kick_sensitivity(
+    tmp_path,
+) -> None:
+    current_doc = yaml.safe_load(DEFAULT_FIXTURE.read_text(encoding="utf-8")) or {}
+    current = _run_fixture_report(
+        current_doc, label="default_current_bump", tmp_path=tmp_path
+    )
+
+    tiny_doc = yaml.safe_load(DEFAULT_FIXTURE.read_text(encoding="utf-8")) or {}
+    tiny_gp = dict(tiny_doc.get("global_parameters") or {})
+    tiny_gp["parity_physical_edge_z_bump"] = 1.0e-12
+    tiny_doc["global_parameters"] = tiny_gp
+    tiny = _run_fixture_report(tiny_doc, label="default_tiny_bump", tmp_path=tmp_path)
+
+    zero_doc = yaml.safe_load(DEFAULT_FIXTURE.read_text(encoding="utf-8")) or {}
+    zero_gp = dict(zero_doc.get("global_parameters") or {})
+    zero_gp["parity_physical_edge_z_bump"] = 0.0
+    zero_doc["global_parameters"] = zero_gp
+    zero = _run_fixture_report(zero_doc, label="default_zero_bump", tmp_path=tmp_path)
+
+    current_total = float(current["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+    tiny_total = float(tiny["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+    zero_total = float(zero["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
+    current_theta = float(current["metrics"]["thetaB_value"])
+    tiny_theta = float(tiny["metrics"]["thetaB_value"])
+    zero_theta = float(zero["metrics"]["thetaB_value"])
+
+    current_traces = current["metrics"]["diagnostics"]["interface_traces_at_R"]
+    tiny_traces = tiny["metrics"]["diagnostics"]["interface_traces_at_R"]
+    zero_traces = zero["metrics"]["diagnostics"]["interface_traces_at_R"]
+
+    current_outer_trace = float(current_traces["outer_t_out_trace_at_R_plus"])
+    tiny_outer_trace = float(tiny_traces["outer_t_out_trace_at_R_plus"])
+    zero_outer_trace = float(zero_traces["outer_t_out_trace_at_R_plus"])
+
+    current_gap = float(current_traces["outer_geometry_vs_tilt_trace_gap"])
+    tiny_gap = float(tiny_traces["outer_geometry_vs_tilt_trace_gap"])
+    zero_phi_trace = float(zero_traces["phi_trace_at_R_plus"])
+
+    assert current_total > tiny_total
+    assert current_total > zero_total
+    assert tiny_total > zero_total
+    assert current_theta == pytest.approx(tiny_theta, abs=1.0e-12)
+    assert current_theta > zero_theta
+    assert current_outer_trace > tiny_outer_trace
+    assert current_outer_trace > abs(zero_outer_trace)
+    assert current_gap < tiny_gap
+    assert abs(zero_phi_trace) < 1.0e-6
+    assert abs(zero_outer_trace) < 5.0e-3

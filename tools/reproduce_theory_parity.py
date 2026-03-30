@@ -144,10 +144,8 @@ def _activate_local_outer_shell_for_parity(mesh) -> dict[str, float]:
         except AssertionError:
             shell_data = None
         if shell_data is not None:
-            bump = float(
-                mesh.global_parameters.get("parity_physical_edge_z_bump")
-                or DEFAULT_PHYSICAL_EDGE_Z_BUMP
-            )
+            bump_raw = mesh.global_parameters.get("parity_physical_edge_z_bump")
+            bump = DEFAULT_PHYSICAL_EDGE_Z_BUMP if bump_raw is None else float(bump_raw)
             changed = False
             for row in np.asarray(shell_data.rim_rows, dtype=int):
                 vid = int(mesh.vertex_ids[int(row)])
@@ -247,6 +245,54 @@ def _activate_local_outer_shell_for_parity(mesh) -> dict[str, float]:
         local_diag["legacy_solver_rim_radius"] = float(rim_radius)
         return local_diag
     return legacy_diag
+
+
+def _parity_physical_edge_bump_value(mesh) -> float | None:
+    """Return the configured physical-edge z bump for parity runs."""
+    mode = str(mesh.global_parameters.get("rim_slope_match_mode") or "").strip().lower()
+    if mode != "physical_edge_staggered_v1":
+        return None
+    bump_raw = mesh.global_parameters.get("parity_physical_edge_z_bump")
+    if bump_raw is None:
+        return float(DEFAULT_PHYSICAL_EDGE_Z_BUMP)
+    return float(bump_raw)
+
+
+def _release_parity_physical_edge_bump(mesh) -> bool:
+    """Drop the physical-edge parity bump after branch selection."""
+    bump = _parity_physical_edge_bump_value(mesh)
+    if bump is None or abs(float(bump)) <= 0.0:
+        return False
+    mesh.global_parameters.set("parity_physical_edge_z_bump", 0.0)
+    return True
+
+
+def _run_protocol_with_parity_activation(
+    ctx: CommandContext,
+    *,
+    protocol: tuple[str, ...],
+    fixed_polish_steps: int = 0,
+) -> None:
+    """Run the parity protocol while keeping outer-shell diagnostics in sync."""
+    _stabilize_rim_radius_for_parity(ctx.mesh)
+    ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
+        ctx.mesh
+    )
+    bump_released = False
+    for cmd_index, cmd in enumerate(protocol):
+        execute_command_line(ctx, cmd)
+        if cmd_index == 0 and not bump_released:
+            bump_released = _release_parity_physical_edge_bump(ctx.mesh)
+        _stabilize_rim_radius_for_parity(ctx.mesh)
+        ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
+            ctx.mesh
+        )
+    for _ in range(int(fixed_polish_steps)):
+        execute_command_line(ctx, "g1")
+        _stabilize_rim_radius_for_parity(ctx.mesh)
+        ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
+            ctx.mesh
+        )
 
 
 def _tilt_stats_quantiles(mesh) -> dict[str, float]:
@@ -363,13 +409,18 @@ def _interface_trace_diagnostics(
         "available": False,
         "disk_theta_at_R": 0.0,
         "disk_t_in_at_R": 0.0,
+        "outer_t_in_first_shell": 0.0,
+        "outer_t_in_trace_at_R_plus": 0.0,
         "outer_t_out_first_shell": 0.0,
         "outer_geometry_trace_at_R_plus": 0.0,
         "outer_t_out_trace_at_R_plus": 0.0,
         "phi_trace_at_R_plus": 0.0,
         "disk_minus_outer_trace": 0.0,
         "disk_minus_phi_trace": 0.0,
+        "outer_inner_minus_outer_trace": 0.0,
+        "outer_inner_minus_phi_trace": 0.0,
         "outer_geometry_vs_tilt_trace_gap": 0.0,
+        "outer_inner_first_shell_minus_trace": 0.0,
         "outer_first_shell_minus_outer_trace": 0.0,
     }
     if mode != "physical_edge_staggered_v1":
@@ -400,8 +451,17 @@ def _interface_trace_diagnostics(
     tilts_in = np.asarray(mesh.tilts_in_view(), dtype=float)
     tilts_out = np.asarray(mesh.tilts_out_view(), dtype=float)
     disk_t_in = np.einsum("ij,ij->i", tilts_in[disk_rows], disk_r_hat)
+    first_t_in = np.einsum("ij,ij->i", tilts_in[first_rows], first_r_hat)
+    second_t_in = np.einsum("ij,ij->i", tilts_in[second_rows], second_r_hat)
     first_t_out = np.einsum("ij,ij->i", tilts_out[first_rows], first_r_hat)
     second_t_out = np.einsum("ij,ij->i", tilts_out[second_rows], second_r_hat)
+    trace_t_in = extrapolate_trace_to_radius(
+        target_radius=float(shell_data.disk_radius),
+        first_radius=float(shell_data.rim_radius),
+        first_values=first_t_in,
+        second_radius=float(shell_data.outer_radius),
+        second_values=second_t_in,
+    )
     trace_t_out = extrapolate_trace_to_radius(
         target_radius=float(shell_data.disk_radius),
         first_radius=float(shell_data.rim_radius),
@@ -431,17 +491,60 @@ def _interface_trace_diagnostics(
             "available": True,
             "disk_theta_at_R": float(np.mean(disk_theta)),
             "disk_t_in_at_R": float(np.mean(disk_t_in)),
+            "outer_t_in_first_shell": float(np.mean(first_t_in)),
+            "outer_t_in_trace_at_R_plus": float(np.mean(trace_t_in)),
             "outer_t_out_first_shell": float(np.mean(first_t_out)),
             "outer_geometry_trace_at_R_plus": phi_trace_mean,
             "outer_t_out_trace_at_R_plus": float(np.mean(trace_t_out)),
             "phi_trace_at_R_plus": phi_trace_mean,
             "disk_minus_outer_trace": float(np.mean(disk_t_in - trace_t_out)),
             "disk_minus_phi_trace": float(np.mean(disk_theta) - 2.0 * phi_trace_mean),
+            "outer_inner_minus_outer_trace": float(np.mean(trace_t_in - trace_t_out)),
+            "outer_inner_minus_phi_trace": float(np.mean(trace_t_in - phi_trace)),
             "outer_geometry_vs_tilt_trace_gap": float(
                 phi_trace_mean - np.mean(trace_t_out)
             ),
+            "outer_inner_first_shell_minus_trace": float(
+                np.mean(first_t_in - trace_t_in)
+            ),
             "outer_first_shell_minus_outer_trace": float(
                 np.mean(first_t_out - trace_t_out)
+            ),
+        }
+    )
+    return out
+
+
+def _interface_director_diagnostics(
+    mesh, positions: np.ndarray, theta_meas: float
+) -> dict[str, float | bool]:
+    """Return director-continuity diagnostics using current trace conventions."""
+    traces = _interface_trace_diagnostics(mesh, positions, theta_meas)
+    out: dict[str, float | bool] = {
+        "available": bool(traces.get("available", False)),
+        "disk_director_angle_at_R": 0.0,
+        "free_inner_director_angle_at_R_plus": 0.0,
+        "free_outer_director_angle_at_R_plus": 0.0,
+        "disk_vs_free_inner_director_gap": 0.0,
+        "free_inner_vs_free_outer_director_gap": 0.0,
+    }
+    if not bool(traces.get("available", False)):
+        return out
+
+    disk_angle = float(traces.get("disk_t_in_at_R") or 0.0)
+    free_inner_angle = float(traces.get("phi_trace_at_R_plus") or 0.0) + float(
+        traces.get("outer_t_in_trace_at_R_plus") or 0.0
+    )
+    free_outer_angle = float(traces.get("outer_t_out_trace_at_R_plus") or 0.0)
+    out.update(
+        {
+            "available": True,
+            "disk_director_angle_at_R": disk_angle,
+            "free_inner_director_angle_at_R_plus": free_inner_angle,
+            "free_outer_director_angle_at_R_plus": free_outer_angle,
+            "disk_vs_free_inner_director_gap": float(disk_angle - free_inner_angle),
+            "free_inner_vs_free_outer_director_gap": float(
+                free_inner_angle - free_outer_angle
             ),
         }
     )
@@ -625,6 +728,9 @@ def _collect_report_from_context(
     interface_traces = _interface_trace_diagnostics(
         ctx.mesh, ctx.mesh.positions_view(), theta_meas
     )
+    interface_directors = _interface_director_diagnostics(
+        ctx.mesh, ctx.mesh.positions_view(), theta_meas
+    )
     outer_profile = _outer_profile_parity(
         ctx.mesh, ctx.mesh.positions_view(), theta_meas
     )
@@ -670,6 +776,7 @@ def _collect_report_from_context(
                     )
                 ),
                 "interface_traces_at_R": interface_traces,
+                "interface_directors": interface_directors,
                 "outer_profile_parity": outer_profile,
             },
             "theory": legacy_anchor,
@@ -684,22 +791,9 @@ def _collect_report(
     mesh_path: Path, protocol: tuple[str, ...], fixed_polish_steps: int = 0
 ) -> dict[str, Any]:
     ctx = _build_context(mesh_path)
-    _stabilize_rim_radius_for_parity(ctx.mesh)
-    ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
-        ctx.mesh
+    _run_protocol_with_parity_activation(
+        ctx, protocol=protocol, fixed_polish_steps=fixed_polish_steps
     )
-    for cmd in protocol:
-        execute_command_line(ctx, cmd)
-        _stabilize_rim_radius_for_parity(ctx.mesh)
-        ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
-            ctx.mesh
-        )
-    for _ in range(int(fixed_polish_steps)):
-        execute_command_line(ctx, "g1")
-        _stabilize_rim_radius_for_parity(ctx.mesh)
-        ctx.mesh._parity_outer_shell_geometry = _activate_local_outer_shell_for_parity(
-            ctx.mesh
-        )
     report = _collect_report_from_context(
         ctx=ctx, mesh_path=mesh_path, protocol=protocol
     )
