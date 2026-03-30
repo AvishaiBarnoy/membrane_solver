@@ -13,6 +13,7 @@ from tools.theory_parity_interface_profiles import (
     SOURCE_OUTER_RADIUS,
     build_profiled_fixture,
     build_scaled_fixture,
+    build_trace_ring_fixture,
 )
 from tools.theory_parity_interface_sweep import parse_candidate, rank_rows
 
@@ -93,6 +94,54 @@ def test_build_profiled_fixture_supports_generic_default_profile() -> None:
     assert (
         profiled["global_parameters"]["theory_parity_lane"] == "physical_edge_default"
     )
+
+
+def test_build_trace_ring_fixture_inserts_new_first_outer_ring() -> None:
+    base_doc = yaml.safe_load(
+        (
+            ROOT
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    traced = build_trace_ring_fixture(
+        base_doc=base_doc,
+        label="trace_ring_free_geometry",
+        trace_radius=0.50,
+        planar_geometry=False,
+    )
+    radii = _ring_radii(traced)
+    assert 0.5 in radii
+    assert INTERFACE_PROFILES["default"][0] in radii
+    assert (
+        traced["global_parameters"]["theory_parity_lane"] == "trace_ring_free_geometry"
+    )
+    ring_opts = traced["vertices"][len(base_doc["vertices"])][3]
+    assert ring_opts["preset"] == "rim"
+    assert ring_opts["rim_slope_match_group"] == "rim"
+    assert "pin_to_plane" not in list(ring_opts.get("constraints") or [])
+
+
+def test_build_trace_ring_fixture_can_pin_trace_ring_to_plane() -> None:
+    base_doc = yaml.safe_load(
+        (
+            ROOT
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    traced = build_trace_ring_fixture(
+        base_doc=base_doc,
+        label="trace_ring_planar_geometry",
+        trace_radius=0.50,
+        planar_geometry=True,
+    )
+    ring_opts = traced["vertices"][len(base_doc["vertices"])][3]
+    assert ring_opts["preset"] == "rim"
+    assert ring_opts["rim_slope_match_group"] == "rim"
+    assert "pin_to_plane" in list(ring_opts.get("constraints") or [])
 
 
 def test_rank_rows_prefers_score_then_runtime_then_label() -> None:

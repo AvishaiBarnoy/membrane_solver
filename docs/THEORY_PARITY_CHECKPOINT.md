@@ -185,3 +185,25 @@
   - inspect how `tilt_in` and `tilt_out` are formed/regularized on the first two outer shells
   - do not start with more mesh squeezing or more `rim_slope_match_out` row/weight edits
   - keep the current physical-edge family as the evaluation set while changing the free-side leaflet coupling
+
+## Experimental Trace-Ring Attempt
+- A diagnostics-only discretization experiment inserted an explicit free-side trace ring at `R + ε` with `ε ≈ 0.0333` (`trace_radius = 0.50` in current scaled units).
+- Two variants were tested:
+  - `trace_ring_free_geometry`
+  - `trace_ring_planar_geometry`
+- Structural outcome:
+  - the inserted-ring fixture can be generated and parsed
+  - but the full parity protocol fails at the refine step on this topology, so the current trace-ring insertion is not refinable in the existing mesh workflow
+- No-refine diagnostic outcome:
+  - free-geometry variant:
+    - `thetaB ≈ 0.22`
+    - TeX `total_ratio ≈ -303.43`
+    - reconstructed free-side directors become catastrophically wrong
+  - planar-geometry variant:
+    - `thetaB ≈ 0.10`
+    - TeX `total_ratio ≈ -304.69`
+    - `phi(R+)` and `t_out(R+)` collapse to `0`
+- Conclusion:
+  - adding a trace ring is not, by itself, a viable parity fix in the current edge-only mesh/protocol
+  - the planar ghost version is especially not acceptable as a production direction
+  - if a trace layer is revisited later, it likely needs a more principled mesh/discretization treatment rather than a local ring insertion on the current topology
