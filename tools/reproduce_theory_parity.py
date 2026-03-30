@@ -515,6 +515,42 @@ def _interface_trace_diagnostics(
     return out
 
 
+def _interface_director_diagnostics(
+    mesh, positions: np.ndarray, theta_meas: float
+) -> dict[str, float | bool]:
+    """Return director-continuity diagnostics using current trace conventions."""
+    traces = _interface_trace_diagnostics(mesh, positions, theta_meas)
+    out: dict[str, float | bool] = {
+        "available": bool(traces.get("available", False)),
+        "disk_director_angle_at_R": 0.0,
+        "free_inner_director_angle_at_R_plus": 0.0,
+        "free_outer_director_angle_at_R_plus": 0.0,
+        "disk_vs_free_inner_director_gap": 0.0,
+        "free_inner_vs_free_outer_director_gap": 0.0,
+    }
+    if not bool(traces.get("available", False)):
+        return out
+
+    disk_angle = float(traces.get("disk_t_in_at_R") or 0.0)
+    free_inner_angle = float(traces.get("phi_trace_at_R_plus") or 0.0) + float(
+        traces.get("outer_t_in_trace_at_R_plus") or 0.0
+    )
+    free_outer_angle = float(traces.get("outer_t_out_trace_at_R_plus") or 0.0)
+    out.update(
+        {
+            "available": True,
+            "disk_director_angle_at_R": disk_angle,
+            "free_inner_director_angle_at_R_plus": free_inner_angle,
+            "free_outer_director_angle_at_R_plus": free_outer_angle,
+            "disk_vs_free_inner_director_gap": float(disk_angle - free_inner_angle),
+            "free_inner_vs_free_outer_director_gap": float(
+                free_inner_angle - free_outer_angle
+            ),
+        }
+    )
+    return out
+
+
 def _outer_profile_parity(
     mesh, positions: np.ndarray, theta_meas: float
 ) -> dict[str, float | bool]:
@@ -692,6 +728,9 @@ def _collect_report_from_context(
     interface_traces = _interface_trace_diagnostics(
         ctx.mesh, ctx.mesh.positions_view(), theta_meas
     )
+    interface_directors = _interface_director_diagnostics(
+        ctx.mesh, ctx.mesh.positions_view(), theta_meas
+    )
     outer_profile = _outer_profile_parity(
         ctx.mesh, ctx.mesh.positions_view(), theta_meas
     )
@@ -737,6 +776,7 @@ def _collect_report_from_context(
                     )
                 ),
                 "interface_traces_at_R": interface_traces,
+                "interface_directors": interface_directors,
                 "outer_profile_parity": outer_profile,
             },
             "theory": legacy_anchor,

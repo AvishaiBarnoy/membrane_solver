@@ -263,6 +263,7 @@ def test_physical_edge_default_fixture_is_the_default_development_lane(
     geom = default["metrics"]["diagnostics"]["outer_shell_geometry"]
     split = default["metrics"]["diagnostics"]["outer_split"]
     traces = default["metrics"]["diagnostics"]["interface_traces_at_R"]
+    directors = default["metrics"]["diagnostics"]["interface_directors"]
     profile = default["metrics"]["diagnostics"]["outer_profile_parity"]
 
     default_theta = float(default["metrics"]["thetaB_value"])
@@ -304,6 +305,15 @@ def test_physical_edge_default_fixture_is_the_default_development_lane(
         traces["outer_t_out_trace_at_R_plus"]
     )
     assert bool(traces["available"])
+    assert bool(directors["available"])
+    assert float(directors["disk_director_angle_at_R"]) > float(
+        directors["free_inner_director_angle_at_R_plus"]
+    )
+    assert float(directors["free_inner_director_angle_at_R_plus"]) > float(
+        directors["free_outer_director_angle_at_R_plus"]
+    )
+    assert float(directors["disk_vs_free_inner_director_gap"]) > 0.05
+    assert float(directors["free_inner_vs_free_outer_director_gap"]) > 0.01
     assert bool(profile["available"])
     assert float(profile["sample_count"]) >= 10.0
     assert float(profile["phi_profile_rel_rmse"]) > 0.0

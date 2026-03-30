@@ -53,6 +53,13 @@ metrics:
       outer_inner_minus_phi_trace: -0.09161099169262181
       outer_inner_first_shell_minus_trace: 0.0005610243780225688
       outer_first_shell_minus_outer_trace: -0.03752412128732196
+    interface_directors:
+      available: true
+      disk_director_angle_at_R: 0.17624366820931817
+      free_inner_director_angle_at_R_plus: 0.08897003624869955
+      free_outer_director_angle_at_R_plus: 0.041308800093634114
+      disk_vs_free_inner_director_gap: 0.08727363196061862
+      free_inner_vs_free_outer_director_gap: 0.047661236155065435
     outer_profile_parity:
       available: true
       phi_profile_rel_rmse: 1.9128246023625395
@@ -100,6 +107,13 @@ tolerances:
       outer_inner_first_shell_minus_trace: 0.0005
       outer_first_shell_minus_outer_trace: 0.0005
       available: 0.0
+    interface_directors:
+      available: 0.0
+      disk_director_angle_at_R: 0.0005
+      free_inner_director_angle_at_R_plus: 0.0005
+      free_outer_director_angle_at_R_plus: 0.0005
+      disk_vs_free_inner_director_gap: 0.0005
+      free_inner_vs_free_outer_director_gap: 0.0005
     outer_profile_parity:
       available: 0.0
       phi_profile_rel_rmse: 0.005

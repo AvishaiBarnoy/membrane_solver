@@ -129,6 +129,27 @@
   - the remaining gap is not fixed by swapping outer rows/weights in `rim_slope_match_out`
   - the next higher-signal target is how the outer `tilt_out` field itself is formed/regularized near the first two shells outside `R`
 
+## Rejected Resolution-Only Candidate
+- A follow-up mesh-construction pass tested whether the bad free-side trace split could be fixed by moving the first outer shell closer to `R` while keeping the current physics unchanged.
+- First observation:
+  - current default lane:
+    - `outer_radius ≈ 0.65755`
+    - `delta_r ≈ 0.19089`
+    - decay length is `1 / lambda ≈ 0.06667`
+    - so the first outer shell sits about `2.86` decay lengths away from `R`
+- One-ring tightening alone was not viable:
+  - when the first shell was pushed inward with the current law, parity destabilized badly
+  - `t_in(R+)` remained near zero
+  - `phi(R+)` and total parity worsened instead of improving
+- A more principled three-ring refined family was then tried by moving the first two outer rings inward together.
+- Outcome:
+  - all three refined cases timed out before producing a usable parity report
+  - so “better radial resolution with the current coupling” is not a practical fix by itself
+- Conclusion:
+  - under-resolution near `R+` is part of the problem
+  - but the remaining mismatch is not a pure mesh-spacing issue
+  - the free-side leaflet continuity/coupling law is still the more likely dominant gap
+
 ## Performance
 - Exact reproducer-path benchmark, current branch:
   - `legacy_coarse`: `13.380 s`
@@ -150,10 +171,17 @@
 - Keep `legacy_coarse` only as a regression/history anchor.
 - Use `physical_edge_default` plus the `default_lo / default / default_hi` family as the active parity-development path.
 - Evaluate future operator changes only against the physical-edge family and treat improvements to the coarse lane as incidental, not primary.
-- The next real gap is no longer total energy parity; it is the missing TeX match in the outer-leaflet trace and outer height profile.
-- The most promising next stream is now outer-field work:
-  - inspect and possibly modify how `tilt_out` is formed/regularized near the first two shells outside `R`
-  - explicitly separate two follow-ups:
-    - recover the current parity branch with much smaller or no kick
-    - improve outer-field parity once that branch-selection problem is under control
-  - add explicit profile-level checks for the outer field before attempting more interface-law changes
+- The next real gap is no longer total energy parity; it is the missing TeX match in the free-membrane-side leaflet traces and outer height profile.
+- Current free-side trace picture on the default lane:
+  - `t_in(R+) ≈ -0.00132`
+  - `t_out(R+) ≈ 0.04131`
+  - `phi(R+) ≈ 0.09029`
+- Director audit on the same default lane:
+  - reconstructed disk-side director at `R-`: `~0.17624`
+  - reconstructed free-side inner director at `R+`: `~0.08897`
+  - reconstructed free-side outer director at `R+`: `~0.04131`
+  - so the current gap is not only a tilt-decomposition issue; director continuity itself still appears to be broken in the discrete solution
+- The most promising next stream is now continuity/coupling work on the free side of the interface:
+  - inspect how `tilt_in` and `tilt_out` are formed/regularized on the first two outer shells
+  - do not start with more mesh squeezing or more `rim_slope_match_out` row/weight edits
+  - keep the current physical-edge family as the evaluation set while changing the free-side leaflet coupling
