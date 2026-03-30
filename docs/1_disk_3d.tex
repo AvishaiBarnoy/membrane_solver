@@ -421,6 +421,184 @@ With these values, the key dimensionless combination is
 \lambda R = 15 \times 0.466666\ldots = 7 .
 \end{equation}
 
+\subsection{Unscaled physical parametrization}
+
+We now rewrite the one-disk benchmark directly in physical units, without the
+intermediate rescaling by $15\,\mathrm{nm}$. We take
+\begin{equation}
+R = 7\,\mathrm{nm}, \qquad
+h = 2\,\mathrm{nm}, \qquad
+a = 0.7\,\mathrm{nm}^2, \qquad
+\Delta\varepsilon = 1\,k_B T,
+\label{eq:phys_params}
+\end{equation}
+and use the monolayer bending rigidity as the energy unit,
+\begin{equation}
+\kappa \equiv 1,
+\qquad \text{with physical value} \qquad
+\kappa = 10\,k_B T.
+\label{eq:kappa_unit_unscaled}
+\end{equation}
+The tilt modulus is taken as
+\begin{equation}
+\kappa_t = 10\,k_B T/\mathrm{nm}^2.
+\label{eq:kappat_unscaled}
+\end{equation}
+
+With this choice,
+\begin{equation}
+\lambda \equiv \sqrt{\frac{\kappa_t}{\kappa}}
+= \sqrt{\frac{10\,k_B T/\mathrm{nm}^2}{10\,k_B T}}
+= 1\,\mathrm{nm}^{-1},
+\label{eq:lambda_unscaled}
+\end{equation}
+so that the key dimensionless combination is simply
+\begin{equation}
+\lambda R = 7.
+\label{eq:lambdaR_unscaled}
+\end{equation}
+Moreover,
+\begin{equation}
+\frac{h\Delta\varepsilon}{a\kappa}
+=
+\frac{(2\,\mathrm{nm})(1\,k_B T)}
+{(0.7\,\mathrm{nm}^2)(10\,k_B T)}
+=
+0.285714\,\mathrm{nm}^{-1}.
+\label{eq:contact_ratio_unscaled}
+\end{equation}
+
+For a tensionless membrane, the total energy has the quadratic form
+\begin{equation}
+F_{\mathrm{tot}}(\theta_B)
+=
+A\,\theta_B^2 - B\,\theta_B,
+\label{eq:Ftot_quad_unscaled}
+\end{equation}
+with
+\begin{equation}
+A
+=
+\pi \kappa R \lambda
+\left[
+\frac{I_0(\lambda R)}{I_1(\lambda R)}
++
+\frac{1}{2}\frac{K_0(\lambda R)}{K_1(\lambda R)}
+\right],
+\label{eq:A_unscaled}
+\end{equation}
+and
+\begin{equation}
+B
+=
+2\pi R \left(\frac{h\Delta\varepsilon}{a}\right)\frac{1}{\kappa}
+=
+2\pi R \left(\frac{h\Delta\varepsilon}{a\kappa}\right).
+\label{eq:B_unscaled}
+\end{equation}
+
+Substituting $\lambda R = 7$ gives
+\begin{equation}
+A
+=
+\pi \cdot 1 \cdot 7 \cdot 1
+\left[
+\frac{I_0(7)}{I_1(7)}
++
+\frac{1}{2}\frac{K_0(7)}{K_1(7)}
+\right],
+\label{eq:A_eval_unscaled}
+\end{equation}
+\begin{equation}
+B
+=
+2\pi \cdot 7 \cdot 0.285714.
+\label{eq:B_eval_unscaled}
+\end{equation}
+Using
+\begin{equation}
+\frac{I_0(7)}{I_1(7)} \simeq 1.08046,
+\qquad
+\frac{K_0(7)}{K_1(7)} \simeq 0.93530,
+\label{eq:bessel_ratios_unscaled}
+\end{equation}
+we obtain
+\begin{equation}
+A \simeq 34.04,
+\qquad
+B \simeq 12.57.
+\label{eq:AB_values_unscaled}
+\end{equation}
+
+Minimization of Eq.~\eqref{eq:Ftot_quad_unscaled} gives the optimal boundary tilt
+\begin{equation}
+\theta_B^*
+=
+\frac{B}{2A}
+\simeq 0.1846 \approx 0.185.
+\label{eq:thetaBstar_unscaled}
+\end{equation}
+
+The corresponding inner elastic energy is
+\begin{equation}
+F_{\mathrm{in,el}}
+=
+\pi \kappa R \lambda
+\frac{I_0(\lambda R)}{I_1(\lambda R)}
+(\theta_B^*)^2,
+\label{eq:Fin_unscaled}
+\end{equation}
+which evaluates to
+\begin{equation}
+F_{\mathrm{in,el}} \simeq 0.81.
+\label{eq:Fin_value_unscaled}
+\end{equation}
+
+The outer elastic energy is
+\begin{equation}
+F_{\mathrm{out,el}}
+=
+\frac{\pi}{2}\kappa R \lambda
+\frac{K_0(\lambda R)}{K_1(\lambda R)}
+(\theta_B^*)^2,
+\label{eq:Fout_unscaled}
+\end{equation}
+which gives
+\begin{equation}
+F_{\mathrm{out,el}} \simeq 0.35.
+\label{eq:Fout_value_unscaled}
+\end{equation}
+
+The contact contribution is
+\begin{equation}
+F_{\mathrm{cont}}
+=
+-2\pi R \left(\frac{h\Delta\varepsilon}{a}\right)\frac{\theta_B^*}{\kappa}
+=
+-B\,\theta_B^*,
+\label{eq:Fcont_unscaled}
+\end{equation}
+hence
+\begin{equation}
+F_{\mathrm{cont}} \simeq -2.32.
+\label{eq:Fcont_value_unscaled}
+\end{equation}
+
+Finally, the optimized total energy is
+\begin{equation}
+F_{\mathrm{tot}}^*
+=
+F_{\mathrm{in,el}} + F_{\mathrm{out,el}} + F_{\mathrm{cont}}
+\simeq -1.16,
+\label{eq:Ftot_value_unscaled}
+\end{equation}
+in units of $\kappa$.
+
+Thus, working directly with the physical radius $R=7\,\mathrm{nm}$ and
+$\lambda = 1\,\mathrm{nm}^{-1}$ gives exactly the same dimensionless benchmark
+as the rescaled formulation, because the controlling combination $\lambda R$
+remains equal to $7$.
+
 \subsection{Optimized boundary tilt}
 
 For a tensionless membrane, the total energy reduces to a quadratic form

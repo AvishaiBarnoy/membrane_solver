@@ -15,6 +15,7 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh, _fast_cross
+from modules.constraints.local_interface_shells import build_local_interface_shell_data
 from modules.energy.leaflet_presence import (
     leaflet_absent_vertex_mask,
     leaflet_present_triangle_mask,
@@ -68,6 +69,70 @@ def _shared_rim_active_row_weights(mesh: Mesh, param_resolver) -> np.ndarray | N
     return weights
 
 
+def _explicit_trace_layer_active_row_weights(
+    mesh: Mesh, param_resolver
+) -> np.ndarray | None:
+    """Return interface-shell row weights for the explicit trace layer rows.
+
+    The inserted `R+epsilon` shell is an interface support layer, not a full
+    independent annulus. Its tilt mass should therefore scale with the radial
+    thickness it represents between the disk boundary and the first real
+    free-side shell.
+    """
+    mode = str(param_resolver.get(None, "rim_slope_match_mode") or "").strip().lower()
+    trace_radius = param_resolver.get(None, "parity_trace_layer_radius")
+    lane = str(param_resolver.get(None, "theory_parity_lane") or "").strip()
+    if mode != "physical_edge_staggered_v1" or trace_radius is None or not lane:
+        return None
+
+    cache = getattr(mesh, "_tilt_out_trace_layer_active_row_weights_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(mesh, "_tilt_out_trace_layer_active_row_weights_cache", cache)
+
+    cache_key = (
+        int(mesh._version),
+        int(mesh._vertex_ids_version),
+        float(trace_radius),
+        str(lane),
+    )
+    weights = cache.get(cache_key)
+    if weights is not None and weights.shape == (len(mesh.vertex_ids),):
+        return weights
+
+    mesh.build_position_cache()
+    try:
+        shell_data = build_local_interface_shell_data(
+            mesh, positions=mesh.positions_view()
+        )
+    except AssertionError:
+        return None
+
+    denom = float(shell_data.outer_radius) - float(shell_data.disk_radius)
+    numer = float(shell_data.rim_radius) - float(shell_data.disk_radius)
+    if denom <= 1.0e-12:
+        return None
+    shell_fraction = min(1.0, max(0.0, numer / denom))
+    shell_scale = float(np.sqrt(shell_fraction))
+
+    weights = np.ones(len(mesh.vertex_ids), dtype=float)
+    weights[np.asarray(shell_data.rim_rows, dtype=int)] = shell_scale
+    cache.clear()
+    cache[cache_key] = weights
+    return weights
+
+
+def _active_row_weights(mesh: Mesh, param_resolver) -> np.ndarray | None:
+    """Return the combined per-row weights for shared-rim and ghost-shell controls."""
+    shared = _shared_rim_active_row_weights(mesh, param_resolver)
+    trace = _explicit_trace_layer_active_row_weights(mesh, param_resolver)
+    if shared is None:
+        return trace
+    if trace is None:
+        return shared
+    return shared * trace
+
+
 def _resolve_tilt_modulus(param_resolver) -> float:
     k = param_resolver.get(None, "tilt_modulus_out")
     if k is None:
@@ -118,7 +183,7 @@ def compute_energy_and_gradient(
         return 0.0, shape_grad, tilt_grad
 
     tilts_out = mesh.tilts_out_view()
-    active_row_weights = _shared_rim_active_row_weights(mesh, param_resolver)
+    active_row_weights = _active_row_weights(mesh, param_resolver)
     if active_row_weights is not None:
         tilts_eff = tilts_out * active_row_weights[:, None]
     else:
@@ -224,7 +289,7 @@ def compute_energy_and_gradient_array(
         if tilts_out.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
 
-    active_row_weights = _shared_rim_active_row_weights(mesh, param_resolver)
+    active_row_weights = _active_row_weights(mesh, param_resolver)
     if active_row_weights is not None:
         tilts_eff = tilts_out * active_row_weights[:, None]
     else:
@@ -344,7 +409,7 @@ def compute_energy_array(
         if tilts_out.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilts_out must have shape (N_vertices, 3)")
 
-    active_row_weights = _shared_rim_active_row_weights(mesh, param_resolver)
+    active_row_weights = _active_row_weights(mesh, param_resolver)
     if active_row_weights is not None:
         tilts_eff = tilts_out * active_row_weights[:, None]
     else:

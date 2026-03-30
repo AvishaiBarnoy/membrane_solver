@@ -91,6 +91,23 @@ def _resolve_matching_mode(global_params) -> str:
     return mode
 
 
+def _uses_scaffold_trace_lane(global_params, matching_mode: str) -> bool:
+    """Return whether the current physical-edge lane uses an explicit scaffold trace shell."""
+    if matching_mode != "physical_edge_staggered_v1":
+        return False
+    trace_radius = (
+        None
+        if global_params is None
+        else global_params.get("parity_trace_layer_radius")
+    )
+    outer_shells = (
+        0
+        if global_params is None
+        else int(global_params.get("parity_outer_shells") or 0)
+    )
+    return trace_radius is not None and outer_shells > 0
+
+
 def _uses_outer_shell_tilt_matching(matching_mode: str) -> bool:
     return matching_mode in {
         "shared_rim_staggered_v1",
@@ -100,6 +117,8 @@ def _uses_outer_shell_tilt_matching(matching_mode: str) -> bool:
 
 def _use_disk_theta_targeting(global_params, matching_mode: str) -> bool:
     if matching_mode == "physical_edge_staggered_v1":
+        if _uses_scaffold_trace_lane(global_params, matching_mode):
+            return False
         return True
     if global_params is None:
         return False
@@ -117,11 +136,15 @@ def _tilt_target_rows_weights_and_direction(
     """Return target rows and tangent radial direction for tilt matching."""
     r_hat = data["r_hat"]
     if _uses_outer_shell_tilt_matching(matching_mode):
-        outer_rows = np.asarray(data["outer_rows"], dtype=int)
-        row0 = int(outer_rows[np.asarray(data["outer_idx0"], dtype=int)[i]])
-        row1 = int(outer_rows[np.asarray(data["outer_idx1"], dtype=int)[i]])
-        w0 = float(np.asarray(data["outer_w0"], dtype=float)[i])
-        w1 = float(np.asarray(data["outer_w1"], dtype=float)[i])
+        tilt_rows = np.asarray(data.get("tilt_rows", data["outer_rows"]), dtype=int)
+        tilt_idx0 = np.asarray(data.get("tilt_idx0", data["outer_idx0"]), dtype=int)
+        tilt_idx1 = np.asarray(data.get("tilt_idx1", data["outer_idx1"]), dtype=int)
+        tilt_w0 = np.asarray(data.get("tilt_w0", data["outer_w0"]), dtype=float)
+        tilt_w1 = np.asarray(data.get("tilt_w1", data["outer_w1"]), dtype=float)
+        row0 = int(tilt_rows[tilt_idx0[i]])
+        row1 = int(tilt_rows[tilt_idx1[i]])
+        w0 = float(tilt_w0[i])
+        w1 = float(tilt_w1[i])
         normal = w0 * np.asarray(normals[row0], dtype=float) + w1 * np.asarray(
             normals[row1], dtype=float
         )
@@ -367,8 +390,17 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         else tuple(np.asarray(raw_normal, dtype=float).reshape(3).tolist())
     )
     theta_token = None
-    if theta_param is not None and global_params is not None:
+    if (
+        theta_param is not None
+        and global_params is not None
+        and not _uses_scaffold_trace_lane(global_params, matching_mode)
+    ):
         theta_token = float(global_params.get(str(theta_param)) or 0.0)
+    trace_layer_radius = (
+        None
+        if global_params is None
+        else global_params.get("parity_trace_layer_radius")
+    )
     cache_key = (
         int(mesh._version),
         int(mesh._vertex_ids_version),
@@ -378,6 +410,7 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         None if disk_group is None else str(disk_group),
         None if theta_param is None else str(theta_param),
         theta_token,
+        None if trace_layer_radius is None else float(trace_layer_radius),
         tuple(center.tolist()),
         normal_token,
         id(positions),
@@ -400,8 +433,26 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
             )
         except AssertionError:
             return None
-        rim_rows = np.asarray(local_shells.disk_rows, dtype=int)
-        outer_rows = np.asarray(local_shells.rim_rows_for_disk, dtype=int)
+        scaffold_outer_shells = (
+            0
+            if global_params is None
+            else int(global_params.get("parity_outer_shells") or 0)
+        )
+        scaffold_trace_tilt = (
+            trace_layer_radius is not None and scaffold_outer_shells > 0
+        )
+        if trace_layer_radius is None:
+            rim_rows = np.asarray(local_shells.disk_rows, dtype=int)
+            outer_rows = np.asarray(local_shells.rim_rows_for_disk, dtype=int)
+            tilt_rows = outer_rows.copy()
+        else:
+            rim_rows = np.asarray(local_shells.disk_rows, dtype=int)
+            if scaffold_trace_tilt:
+                outer_rows = np.asarray(local_shells.rim_rows_for_disk, dtype=int)
+                tilt_rows = outer_rows.copy()
+            else:
+                outer_rows = np.asarray(local_shells.outer_rows_for_disk, dtype=int)
+                tilt_rows = outer_rows.copy()
         if rim_rows.size == 0 or outer_rows.size == 0:
             return None
         if normal is None:
@@ -410,6 +461,7 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
             normal = np.array([0.0, 0.0, 1.0], dtype=float)
         rim_pos = positions[rim_rows]
         outer_pos = positions[outer_rows]
+        tilt_pos = positions[tilt_rows]
     else:
         rim_rows = _collect_group_rows(mesh, group)
         outer_rows = _collect_group_rows(mesh, outer_group)
@@ -430,6 +482,8 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         outer_rows = outer_rows[outer_order]
         rim_pos = positions[rim_rows]
         outer_pos = positions[outer_rows]
+        tilt_rows = outer_rows.copy()
+        tilt_pos = outer_pos
     outer_idx0 = np.arange(len(rim_rows), dtype=int)
     outer_idx1 = np.arange(len(rim_rows), dtype=int)
     outer_w0 = np.ones(len(rim_rows), dtype=float)
@@ -442,6 +496,18 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         if interp is None:
             return None
         outer_pos, outer_idx0, outer_idx1, outer_w0, outer_w1 = interp
+    tilt_idx0 = np.arange(len(rim_rows), dtype=int)
+    tilt_idx1 = np.arange(len(rim_rows), dtype=int)
+    tilt_w0 = np.ones(len(rim_rows), dtype=float)
+    tilt_w1 = np.zeros(len(rim_rows), dtype=float)
+    if rim_rows.size != tilt_rows.size:
+        s_rim, total_rim = _arc_length_params(rim_pos)
+        if total_rim <= 0.0:
+            return None
+        interp_tilt = _interp_ring_positions(tilt_pos, s_rim)
+        if interp_tilt is None:
+            return None
+        _tilt_pos_interp, tilt_idx0, tilt_idx1, tilt_w0, tilt_w1 = interp_tilt
 
     r_vec = rim_pos - center[None, :]
     r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
@@ -513,6 +579,11 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         "outer_idx1": outer_idx1,
         "outer_w0": outer_w0,
         "outer_w1": outer_w1,
+        "tilt_rows": tilt_rows,
+        "tilt_idx0": tilt_idx0,
+        "tilt_idx1": tilt_idx1,
+        "tilt_w0": tilt_w0,
+        "tilt_w1": tilt_w1,
         "disk_rows": disk_rows,
         "r_hat": r_hat,
         "disk_r_hat": disk_r_hat,
@@ -800,6 +871,16 @@ def matching_residual_diagnostics(
         tilt_rows1 = outer_rows[np.asarray(data["outer_idx1"], dtype=int)]
         tilt_w0 = np.asarray(data["outer_w0"], dtype=float)
         tilt_w1 = np.asarray(data["outer_w1"], dtype=float)
+    elif matching_mode == "physical_edge_staggered_v1":
+        tilt_rows = np.asarray(data.get("tilt_rows", data["outer_rows"]), dtype=int)
+        tilt_rows0 = tilt_rows[
+            np.asarray(data.get("tilt_idx0", data["outer_idx0"]), dtype=int)
+        ]
+        tilt_rows1 = tilt_rows[
+            np.asarray(data.get("tilt_idx1", data["outer_idx1"]), dtype=int)
+        ]
+        tilt_w0 = np.asarray(data.get("tilt_w0", data["outer_w0"]), dtype=float)
+        tilt_w1 = np.asarray(data.get("tilt_w1", data["outer_w1"]), dtype=float)
     for i in range(r_hat.shape[0]):
         n = tilt_w0[i] * normals[tilt_rows0[i]] + tilt_w1[i] * normals[tilt_rows1[i]]
         n_norm = float(np.linalg.norm(n))
@@ -1739,12 +1820,205 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
     mesh.set_tilts_out_from_array(tilts_out)
 
 
+def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
+    """Project scaffold interface-shell heights onto the current rim law.
+
+    This is a scaffold-lane-only hard shape realization of the existing
+    physical-edge interface law. It adjusts the explicit `R+epsilon` shell
+    along the interface normal so that the discrete secant slope `phi`
+    matches the current coupled tilt state as closely as possible before the
+    tilt-only projection runs.
+    """
+    matching_mode = _resolve_matching_mode(global_params)
+    if matching_mode != "physical_edge_staggered_v1":
+        return
+    scaffold_outer_shells = (
+        0
+        if global_params is None
+        else int(global_params.get("parity_outer_shells") or 0)
+    )
+    trace_layer_radius = (
+        None
+        if global_params is None
+        else global_params.get("parity_trace_layer_radius")
+    )
+    if scaffold_outer_shells <= 0 or trace_layer_radius is None:
+        return
+
+    positions = mesh.positions_view()
+    data = _build_matching_data(mesh, global_params, positions)
+    if data is None:
+        return
+
+    disk_rows = data["disk_rows"]
+    disk_r_hat = data["disk_r_hat"]
+    valid = np.asarray(data["valid"], dtype=bool)
+    local_disk = bool(data["local_disk"])
+    disk_weights = data["disk_weights"]
+    normal = np.asarray(data["normal"], dtype=float)
+    outer_rows = np.asarray(data["outer_rows"], dtype=int)
+    outer_idx0 = np.asarray(data["outer_idx0"], dtype=int)
+    outer_idx1 = np.asarray(data["outer_idx1"], dtype=int)
+    outer_w0 = np.asarray(data["outer_w0"], dtype=float)
+    outer_w1 = np.asarray(data["outer_w1"], dtype=float)
+    rim_rows = np.asarray(data["rim_rows"], dtype=int)
+    inv_dr = np.asarray(data["inv_dr"], dtype=float)
+    theta_scalar = data["theta_scalar"]
+
+    tilts_in = mesh.tilts_in_view().copy(order="F")
+    tilts_out = mesh.tilts_out_view().copy(order="F")
+    normals = mesh.vertex_normals(positions=positions)
+
+    if theta_scalar is not None:
+        theta_disk = theta_scalar
+    elif disk_rows is not None and disk_r_hat is not None:
+        if local_disk:
+            theta_disk = np.einsum("ij,ij->i", tilts_in[disk_rows], disk_r_hat)
+        else:
+            weight_sum = (
+                float(np.sum(disk_weights)) if disk_weights is not None else 0.0
+            )
+            if weight_sum > 0.0:
+                theta_disk = float(
+                    np.sum(
+                        disk_weights
+                        * np.einsum("ij,ij->i", tilts_in[disk_rows], disk_r_hat)
+                    )
+                    / weight_sum
+                )
+            else:
+                theta_disk = None
+    else:
+        theta_disk = None
+
+    height_num = np.zeros(len(mesh.vertex_ids), dtype=float)
+    height_den = np.zeros(len(mesh.vertex_ids), dtype=float)
+    tilt_num = np.zeros(len(mesh.vertex_ids), dtype=float)
+    tilt_den = np.zeros(len(mesh.vertex_ids), dtype=float)
+
+    for i, ok in enumerate(valid):
+        if not ok:
+            continue
+        target = _tilt_target_rows_weights_and_direction(
+            data=data,
+            positions=positions,
+            normals=normals,
+            i=i,
+            matching_mode=matching_mode,
+        )
+        if target is None:
+            continue
+        target_rows, target_weights, r_dir = target
+        t_out_rad = 0.0
+        for row, weight in zip(target_rows, target_weights):
+            t_out_rad += float(weight) * float(np.dot(tilts_out[int(row)], r_dir))
+
+        if abs(float(inv_dr[i])) <= 1.0e-12:
+            continue
+        dr = 1.0 / float(inv_dr[i])
+        current_rim_height = float(np.dot(positions[int(rim_rows[i])], normal))
+        row0 = int(outer_rows[outer_idx0[i]])
+        row1 = int(outer_rows[outer_idx1[i]])
+        w0 = float(outer_w0[i])
+        w1 = float(outer_w1[i])
+        current_outer_height = 0.0
+        height_weight = 0.0
+        if abs(w0) > 1.0e-12:
+            current_outer_height += w0 * float(np.dot(positions[row0], normal))
+            height_weight += abs(w0)
+        if abs(w1) > 1.0e-12:
+            current_outer_height += w1 * float(np.dot(positions[row1], normal))
+            height_weight += abs(w1)
+        if height_weight <= 1.0e-12:
+            continue
+        current_outer_height /= height_weight
+        phi_current = (current_outer_height - current_rim_height) / dr
+
+        if theta_disk is None:
+            # Joint local proximal solve with equal weights on:
+            # - staying near the current shell secant phi_current
+            # - staying near the current outer radial tilt t_out_rad
+            # - satisfying the existing outer-side relation t_out = phi
+            phi_target = (2.0 * phi_current + float(t_out_rad)) / 3.0
+            t_out_target = 0.5 * (phi_target + float(t_out_rad))
+        else:
+            t_in_rad = 0.0
+            for row, weight in zip(target_rows, target_weights):
+                t_in_rad += float(weight) * float(np.dot(tilts_in[int(row)], r_dir))
+            theta_val = (
+                float(theta_disk)
+                if theta_scalar is not None or not local_disk
+                else float(theta_disk[i])
+            )
+            continuity_target = theta_val - float(t_in_rad)
+            # Joint local proximal solve with equal weights on:
+            # - staying near the current shell secant phi_current
+            # - staying near the current outer radial tilt t_out_rad
+            # - satisfying t_out = phi
+            # - satisfying t_in = theta_disk - phi
+            phi_target = (
+                2.0 * phi_current + float(t_out_rad) + 2.0 * continuity_target
+            ) / 5.0
+            t_out_target = 0.5 * (phi_target + float(t_out_rad))
+
+        target_height = current_rim_height + phi_target * dr
+        if abs(w0) > 1.0e-12:
+            height_num[row0] += w0 * target_height
+            height_den[row0] += abs(w0)
+            tilt_num[row0] += w0 * t_out_target
+            tilt_den[row0] += abs(w0)
+        if abs(w1) > 1.0e-12:
+            height_num[row1] += w1 * target_height
+            height_den[row1] += abs(w1)
+            tilt_num[row1] += w1 * t_out_target
+            tilt_den[row1] += abs(w1)
+
+    moved = False
+    for row in np.flatnonzero(height_den > 1.0e-12):
+        vid = int(mesh.vertex_ids[int(row)])
+        if getattr(mesh.vertices[vid], "fixed", False):
+            continue
+        current_pos = np.asarray(mesh.vertices[vid].position, dtype=float)
+        current_height = float(np.dot(current_pos, normal))
+        target_height = float(height_num[int(row)] / height_den[int(row)])
+        mesh.vertices[vid].position[:] = current_pos + (
+            (target_height - current_height) * normal
+        )
+        moved = True
+
+    for row in np.flatnonzero(tilt_den > 1.0e-12):
+        vid = int(mesh.vertex_ids[int(row)])
+        if getattr(mesh.vertices[vid], "tilt_fixed_out", False):
+            continue
+        normal_row = np.asarray(normals[int(row)], dtype=float)
+        pos = np.asarray(mesh.vertices[vid].position, dtype=float)
+        radius = float(np.linalg.norm(pos[:2]))
+        if radius <= 1.0e-12:
+            continue
+        r_hat_row = np.array([pos[0] / radius, pos[1] / radius, 0.0], dtype=float)
+        r_dir = r_hat_row - float(np.dot(r_hat_row, normal_row)) * normal_row
+        r_norm = float(np.linalg.norm(r_dir))
+        if r_norm <= 1.0e-12:
+            continue
+        r_dir = r_dir / r_norm
+        current = np.asarray(mesh.vertices[vid].tilt_out, dtype=float)
+        radial = float(np.dot(current, r_dir))
+        target_tilt = float(tilt_num[int(row)] / tilt_den[int(row)])
+        tangential = current - radial * r_dir
+        mesh.vertices[vid].tilt_out = tangential + target_tilt * r_dir
+
+    if moved:
+        mesh.increment_version()
+    mesh.touch_tilts_out()
+
+
 __all__ = [
     "coarse_rim_family_diagnostics",
     "constraint_gradients_array",
     "constraint_gradients_rows_array",
     "constraint_gradients_tilt_array",
     "constraint_gradients_tilt_rows_array",
+    "enforce_constraint",
     "enforce_tilt_constraint",
     "matching_residual_diagnostics",
     "matching_ring_diagnostics",

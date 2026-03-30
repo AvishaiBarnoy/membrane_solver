@@ -236,3 +236,461 @@
   - the planar ghost version is especially not acceptable as a production direction
   - interpreting the discrete disk rim as `[R, R+ε]` does not rescue the current formulation
   - if a trace layer is revisited later, it likely needs a more principled mesh/discretization treatment rather than a local ring insertion on the current topology
+
+## Ghost-shell Recheck
+
+- Revisited the outer ghost-shell idea as a discretization device, not as a `thetaB`-targeting trick.
+- Current path:
+  - use [tools/theory_parity_interface_profiles.py](/Users/User/github/membrane_solver/tools/theory_parity_interface_profiles.py) `build_trace_ring_fixture(...)`
+  - keep the inserted ring pinned to a fixed circle via `pin_to_circle`
+  - report direct shell values in [tools/reproduce_theory_parity.py](/Users/User/github/membrane_solver/tools/reproduce_theory_parity.py) under `metrics.diagnostics.interface_shell_at_R_plus_epsilon`
+- The old extrapolated block `metrics.diagnostics.interface_traces_at_R` remains in place so the direct shell and traced values can be compared on the same run.
+
+- Direct-shell acceptance coverage:
+  - tracked fixture:
+    - [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_ghost_eps005.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_ghost_eps005.yaml)
+  - modular scaffold fixture for future near-`R` experiments:
+    - [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_eps005_n3_d005.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_eps005_n3_d005.yaml)
+    - built via `build_outer_shell_scaffold_fixture(...)` with:
+      - trace shell at `R+ε`
+      - `outer_shells=3`
+      - `outer_shells_d=0.05`
+    - shell radii:
+      - `R ≈ 0.46667`
+      - `R+ε ≈ 0.47167`
+      - first support shell `≈ 0.52167`
+- [tests/test_theory_parity_against_tex_acceptance.py](/Users/User/github/membrane_solver/tests/test_theory_parity_against_tex_acceptance.py)
+    - `test_physical_edge_ghost_shell_reports_direct_outer_interface_shell`
+    - `test_physical_edge_ghost_shell_fixture_relieves_known_bad_branch`
+    - `test_physical_edge_ghost_shell_improves_direct_interface_behavior_over_bad_branch`
+  - this confirms that when `parity_trace_layer_radius` is present:
+    - the local shell builder picks the inserted shell as the first free shell
+    - direct `t_in/t_out` match the first-shell quantities used by the old trace diagnostics
+    - the parity report switches its `interface_primary_readout` source to `direct_trace_layer`
+
+- Exact parity-path benchmark and observed behavior for the current fixed ghost shell with `ε = 0.005`:
+  - baseline `physical_edge_default`:
+    - runtime: `~18.02 s`
+    - `thetaB = 0.18`
+    - TeX `total_ratio ≈ 0.99921`
+    - traced `t_in(R+) ≈ -0.00132`
+    - traced `t_out(R+) ≈ 0.04131`
+    - traced `phi(R+) ≈ 0.09029`
+  - ghost-shell lane with direct `R+ε` shell:
+    - runtime: `~10.87 s`
+    - `thetaB ≈ 0.21`
+    - TeX `total_ratio ≈ 1.101`
+    - primary readout source: `direct_trace_layer`
+    - direct `t_in(R+ε) ≈ 0.00672`
+    - direct `t_out(R+ε) ≈ 0.00394`
+    - direct outer-side slope `phi(R+ε) ≈ 1.76e-4`
+    - direct free-inner vs free-outer director gap `≈ 0.00295`
+    - traced `t_in(R+) ≈ 0.00682`
+    - traced `t_out(R+) ≈ 0.00404`
+    - traced `phi(R+) ≈ -4.46e-6`
+
+- Interpretation:
+  - the inserted shell removes the ambiguity about where the outer-side value is being read
+  - the current operator change partially relieves the worst shell collapse:
+    - `tilt_out` on the direct shell is now nonzero
+    - the free-inner vs free-outer director mismatch on the direct shell is much smaller than in the original bad branch
+    - TeX `total_ratio` is closer to `1` than the old ghost-shell collapse (`~1.155 -> ~1.101`)
+  - but parity is still not fixed:
+    - direct `phi(R+ε)` remains far too small
+    - direct `t_in(R+ε)` remains well below the expected continuation scale
+    - disk-to-free-inner continuity is still poor
+  - so the ghost shell is now a useful diagnostic lane with partial operator relief, not a solved theory-parity lane
+  - the new multi-shell scaffold builder is now available, but the `n=3, d=0.05` scaffold is not yet promoted as the active parity lane because the full parity solve on that fixture is currently unstable
+
+## Current Scaffold / Operator Handoff
+
+This section is the current handoff target for future parity work. It captures
+the active scaffold fixtures, the exact test/run paths, the operator changes
+already tried, and the latest measured behavior.
+
+### Active files for parity work
+
+- Reproducer / report path:
+  - [tools/reproduce_theory_parity.py](/Users/User/github/membrane_solver/tools/reproduce_theory_parity.py)
+    - active report source for:
+      - `metrics.diagnostics.interface_traces_at_R`
+      - `metrics.diagnostics.interface_shell_at_R_plus_epsilon`
+      - `metrics.diagnostics.interface_primary_readout`
+      - `metrics.diagnostics.trace_error_split`
+- Fixture builders / shell scaffolds:
+  - [tools/theory_parity_interface_profiles.py](/Users/User/github/membrane_solver/tools/theory_parity_interface_profiles.py)
+    - `build_trace_ring_fixture(...)`
+    - `build_outer_shell_scaffold_fixture(...)`
+    - `build_gap_filled_outer_shell_scaffold_fixture(...)`
+- Main theory-facing constraint/operator module:
+  - [modules/constraints/rim_slope_match_out.py](/Users/User/github/membrane_solver/modules/constraints/rim_slope_match_out.py)
+- Free-side tilt magnitude modules touched by the current scaffold work:
+  - [modules/energy/tilt_in.py](/Users/User/github/membrane_solver/modules/energy/tilt_in.py)
+  - [modules/energy/tilt_out.py](/Users/User/github/membrane_solver/modules/energy/tilt_out.py)
+- Runtime cadence hook touched by scaffold projection work:
+  - [runtime/minimizer.py](/Users/User/github/membrane_solver/runtime/minimizer.py)
+- Primary acceptance suite:
+  - [tests/test_theory_parity_against_tex_acceptance.py](/Users/User/github/membrane_solver/tests/test_theory_parity_against_tex_acceptance.py)
+- Focused regression/unit suites:
+  - [tests/test_rim_slope_match_out_constraint.py](/Users/User/github/membrane_solver/tests/test_rim_slope_match_out_constraint.py)
+  - [tests/test_tilt_leaflet_pure.py](/Users/User/github/membrane_solver/tests/test_tilt_leaflet_pure.py)
+  - [tests/test_local_interface_shells_unit.py](/Users/User/github/membrane_solver/tests/test_local_interface_shells_unit.py)
+  - [tests/test_theory_parity_interface_sweep.py](/Users/User/github/membrane_solver/tests/test_theory_parity_interface_sweep.py)
+
+### Active fixtures and what they mean
+
+- Baseline production comparison lane:
+  - [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml)
+  - still the reference lane for `thetaB` and total-ratio guardrails
+- Direct-shell ghost lane:
+  - [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_ghost_eps005.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_ghost_eps005.yaml)
+  - meaning:
+    - disk boundary at `R`
+    - explicit interface shell at `R+ε` with `ε = 0.005`
+    - no extra support shells beyond that diagnostic layer
+- Fixed-`d` scaffold lane:
+  - [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_eps005_n3_d005.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_eps005_n3_d005.yaml)
+  - meaning:
+    - trace shell at `R+ε`
+    - support shells at `R+ε+kd`, `k = 1..3`, with `d = 0.05`
+- Gap-filled release scaffold lane:
+  - [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_gapfill_eps005_n3_release.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_gapfill_eps005_n3_release.yaml)
+  - meaning:
+    - trace shell at `R+ε`
+    - support shells distributed across the full gap to the original first free ring
+    - one nearby unpinned release ring before the original far free ring
+  - this is the main scaffold diagnostic lane for current operator work
+
+### Scaffold geometry that future agents should keep in mind
+
+- Disk radius:
+  - `R = 7/15 ≈ 0.4666667`
+- Trace-shell radius used in current scaffold work:
+  - `R+ε ≈ 0.4716667`
+- Fixed-`d` scaffold shell radii:
+  - `0.4716667`, `0.5216667`, `0.5716667`, `0.6216667`, then the old far ring at `0.772`
+- Gap-filled release scaffold shell radii:
+  - trace shell `≈ 0.4716667`
+  - support shells `≈ 0.5317333`, `0.5918`, `0.6518667`
+  - release ring `≈ 0.7119333`
+  - original old free ring `≈ 0.772`
+- Important topology note:
+  - the scaffold builder must compact edges after rebuilding the annulus strip
+  - otherwise stale long disk-to-old-rim spokes remain in the mesh and produce large collision counts
+  - after edge compaction, the scaffold lanes return to the same collision count as the zero-shell ghost lane (`12` vertex-edge collisions), instead of the earlier `48`
+
+### Test and run entry points
+
+- Normal exact parity reproducer:
+  - [tools/reproduce_theory_parity.py](/Users/User/github/membrane_solver/tools/reproduce_theory_parity.py)
+- Acceptance helper path:
+  - [tests/test_theory_parity_against_tex_acceptance.py](/Users/User/github/membrane_solver/tests/test_theory_parity_against_tex_acceptance.py)
+    - `_build_context(...)`
+    - `_run_protocol_with_parity_activation(...)`
+    - `_collect_report_from_context(...)`
+- Default parity protocol:
+  - imported in the acceptance file as `DEFAULT_PROTOCOL`
+- Long scaffold interface protocol:
+  - defined in [tests/test_theory_parity_against_tex_acceptance.py](/Users/User/github/membrane_solver/tests/test_theory_parity_against_tex_acceptance.py) as `LONG_INTERFACE_PROTOCOL`
+  - exact sequence:
+    - `g40`
+    - `r`
+    - `V5`
+    - `g100`
+    - then repeated tilt/energy passes:
+      - `V1`, `energy` repeated many times
+      - `V5`, `energy` repeated many times
+      - `V10`, `energy` repeated three times
+- Long repair suffix:
+  - `LONG_INTERFACE_REPAIR_SUFFIX = ("u", "V2", "cg", "g20", "energy")`
+- The long scaffold protocol is the main diagnostic sequence for current free-side work allocation debugging.
+
+### Acceptance tests that matter right now
+
+- Ghost/direct-shell diagnostics:
+  - [tests/test_theory_parity_against_tex_acceptance.py](/Users/User/github/membrane_solver/tests/test_theory_parity_against_tex_acceptance.py)
+    - `test_physical_edge_ghost_shell_reports_direct_outer_interface_shell`
+    - `test_physical_edge_ghost_shell_fixture_relieves_known_bad_branch`
+    - `test_physical_edge_ghost_shell_improves_direct_interface_behavior_over_bad_branch`
+- Long scaffold branch characterization:
+  - [tests/test_theory_parity_against_tex_acceptance.py](/Users/User/github/membrane_solver/tests/test_theory_parity_against_tex_acceptance.py)
+    - `test_scaffold_long_interface_schedule_stays_on_inner_leaflet_only_branch`
+    - `test_scaffold_gapfill_base_long_schedule_activates_outer_leaflet_without_repair`
+    - `test_scaffold_long_interface_repair_turns_on_outer_leaflet_only_by_blowing_up_elastic_energy`
+- Default-lane guardrails:
+  - [tests/test_theory_parity_against_tex_acceptance.py](/Users/User/github/membrane_solver/tests/test_theory_parity_against_tex_acceptance.py)
+    - `test_physical_edge_default_reports_trace_resolution_and_operator_split`
+    - `test_physical_edge_default_keeps_theta_and_energy_in_guardrail_while_fixing_interface`
+- Focused operator/unit tests:
+  - [tests/test_rim_slope_match_out_constraint.py](/Users/User/github/membrane_solver/tests/test_rim_slope_match_out_constraint.py)
+    - scaffold trace-shell row selection
+    - scaffold shape/tilt projection semantics
+  - [tests/test_tilt_leaflet_pure.py](/Users/User/github/membrane_solver/tests/test_tilt_leaflet_pure.py)
+    - derived interface-shell weights for `tilt_in` and `tilt_out`
+  - [tests/test_local_interface_shells_unit.py](/Users/User/github/membrane_solver/tests/test_local_interface_shells_unit.py)
+    - local-shell builder behavior for trace/support shell selection
+  - [tests/test_theory_parity_interface_sweep.py](/Users/User/github/membrane_solver/tests/test_theory_parity_interface_sweep.py)
+    - fixture/scaffold generation regression coverage
+
+### Current operator / discretization changes already in the branch
+
+- [modules/energy/tilt_in.py](/Users/User/github/membrane_solver/modules/energy/tilt_in.py)
+  and [modules/energy/tilt_out.py](/Users/User/github/membrane_solver/modules/energy/tilt_out.py)
+  now apply explicit trace-layer row weights rather than treating the `R+ε`
+  shell as a full bulk annulus or as a zero-weight dummy shell.
+- The current interface-shell weight is derived from the actual radial fraction
+  represented by the trace layer:
+  - `shell_fraction = (rim_radius - disk_radius) / (outer_radius - disk_radius)`
+  - row weight uses `sqrt(shell_fraction)`
+- [modules/constraints/rim_slope_match_out.py](/Users/User/github/membrane_solver/modules/constraints/rim_slope_match_out.py)
+  now supports scaffold-specific `tilt_rows` and trace-shell targeting in the
+  physical-edge mode.
+- The same module also now contains scaffold-only hard projection logic:
+  - `enforce_constraint(...)`
+  - this is a discrete interface-shell projector for the explicit `R+ε` shell
+  - it currently performs a local joint update of:
+    - trace-shell height / secant `phi`
+    - trace-shell outer radial tilt `t_out`
+- [runtime/minimizer.py](/Users/User/github/membrane_solver/runtime/minimizer.py)
+  has a scaffold-only cadence hook during leaflet tilt relaxation:
+  - it calls the hard shape projection only at tilt-block boundaries
+  - it now gates that call on the current residual size from
+    `matching_residual_diagnostics(...)`
+  - the hard projection is skipped when the current rim mismatch is already small
+
+### What was tried and what happened
+
+- Dead branch under the long scaffold schedule:
+  - both scaffold lanes originally stayed on:
+    - `bending_tilt_out ≈ 0`
+    - `tilt_out ≈ 0`
+    - `phi(R+ε) ≈ 0`
+  - this meant the outer leaflet was effectively not participating
+- Repair branch under `LONG_INTERFACE_REPAIR_SUFFIX`:
+  - the outer leaflet could be turned on only by appending:
+    - `u`, `V2`, `cg`, `g20`, `energy`
+  - but that produced a bad high-elastic branch:
+    - positive total energy
+    - very large elastic ratio
+    - unacceptable parity
+- Unconditional aggressive shape projection:
+  - broke the dead branch
+  - but drove the scaffold lane into a high-elastic/wrong-sign branch
+- Exact joint local interface projector without residual gating:
+  - improved `|t_in|` vs `|t_out|` mismatch significantly
+  - but still over-drove the elastic part of the system
+- Residual-gated scaffold projector:
+  - current best overall balance so far
+  - keeps the outer channel active
+  - avoids the previous large elastic overshoot
+  - but still does not satisfy the shell parity target
+
+### Latest measured scaffold result
+
+These are the latest useful numbers for the main scaffold lane:
+- fixture:
+  - [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_gapfill_eps005_n3_release.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_gapfill_eps005_n3_release.yaml)
+- protocol:
+  - `LONG_INTERFACE_PROTOCOL`
+- result:
+  - `t_in(R+ε) ≈ -0.07272`
+  - `t_out(R+ε) ≈ 0.23136`
+  - `||t_in|-|t_out|| ≈ 0.15864`
+  - `bending_tilt_out ≈ 0.39011`
+  - `tilt_out ≈ 0.25613`
+  - internal energy `≈ 1.75537`
+  - external work `≈ -4.90121`
+  - total energy `≈ -3.14584`
+- interpretation:
+  - the dead branch is no longer the main issue
+  - the large elastic blow-up branch is also no longer the main issue
+  - the remaining issue is a work-allocation split:
+    - `t_out` still stays materially larger than `|t_in|`
+    - the local projector is still carrying too much of the old outer-tilt state forward
+
+### Latest failed inner-targeting experiment
+
+- A follow-up scaffold-only experiment changed `physical_edge_staggered_v1` so
+  scaffold lanes no longer routed the scalar-`thetaB` inner law through disk
+  rows when `rim_slope_match_thetaB_param` is active.
+- Instead, the inner constraint was evaluated on the free-side interface shell.
+- Outcome on the gap-filled release scaffold lane under `LONG_INTERFACE_PROTOCOL`:
+  - `thetaB ≈ 0.54`
+  - `t_in(R+ε) ≈ 0.54`
+  - `t_out(R+ε) ≈ 5.6e-08`
+  - `phi(R+ε) ≈ 5.6e-08`
+  - `bending_tilt_out ≈ 7.5e-4`
+  - `tilt_out ≈ 7.5e-5`
+- Interpretation:
+  - this did not fix the parity split
+  - it simply flipped the scaffold lane onto a different bad branch:
+    - oversized `thetaB`
+    - oversized free-side `t_in`
+    - collapsed outer geometry and `t_out`
+- Practical conclusion:
+  - pure disk-side inner targeting is wrong
+  - pure free-side inner targeting is also wrong
+  - the next candidate, if the inner law stays in this module, is a scaffold-only
+    blended inner targeting rule rather than either extreme
+
+### Current disk/free profile diagnosis
+
+- On the same failed inner-targeting branch, the radial means show that the
+  inside-disk profile is not the expected smooth `I1`-type increase:
+  - several inner rings still have small negative mean `t_in`
+  - near the edge the profile is non-monotone and jumps sharply:
+    - `r ≈ 0.45597`: `t_in ≈ 0.0814`
+    - `r = R ≈ 0.46667`: `t_in ≈ -0.1883`
+    - `r = R+ε ≈ 0.47167`: `t_in ≈ 0.54`
+- So the current scaffold branch does not preserve the desired disk-side
+  `tilt_in` behavior.
+- On the free side:
+  - `t_in` does decay after `R+ε`, but from the wrong branch:
+    - `R+ε ≈ 0.47167`: `t_in ≈ 0.54`
+    - `0.53173`: `t_in ≈ 0.1575`
+    - `0.59180`: `t_in ≈ 0.0441`
+    - `0.65187`: `t_in ≈ 0.0170`
+  - `t_out` remains essentially zero everywhere outside
+- So the current branch is not a physically acceptable “grow on `[0,R]`, decay on
+  `[R+ε,\infty)`” realization; it is an inner-only oversized-`thetaB` branch.
+
+### Important diagnostic finding: direct-shell `phi` convention bug
+
+- The earlier direct-shell report under
+  `metrics.diagnostics.interface_shell_at_R_plus_epsilon.phi_secant_at_R_plus_epsilon`
+  was using the shell-to-next-shell slope.
+- The constraint module itself uses the disk-to-trace-shell secant over `ε`.
+- This mismatch created a false impression that the scaffold lane had a sign
+  inconsistency between reported `phi(R+ε)` and the constraint’s own residuals.
+- [tools/reproduce_theory_parity.py](/Users/User/github/membrane_solver/tools/reproduce_theory_parity.py)
+  was corrected so the direct-shell report now uses the same disk-to-trace-shell
+  secant as the constraint.
+- After that fix:
+  - the scaffold report and `matching_residual_diagnostics(...)` agree on the
+    interface `phi`
+  - the remaining issue is genuinely branch selection / work allocation, not a
+    reporting-only discrepancy
+
+### Current main suspicion on the oversized-`thetaB` scaffold branch
+
+- The gap-filled scaffold fixture still has:
+  - `tilt_thetaB_optimize: true`
+  - `tilt_thetaB_optimize_every: 1`
+  - `rim_slope_match_thetaB_param: tilt_thetaB_value`
+- So the scaffold lane is still running the scalar-`thetaB` optimizer every
+  iteration while the scaffold interface law is also reading that same scalar.
+- This is now a primary suspect for why the scaffold branch can inflate
+  `thetaB` to `~0.39` and then `~0.54` under different targeting choices.
+- Future diagnosis should isolate this explicitly before more operator surgery:
+  - compare the scaffold lane with `tilt_thetaB_optimize` disabled
+  - then compare with optimization enabled but a fixed `thetaB` seed
+  - only then decide whether the branch problem is mainly:
+    - the scalar `thetaB` optimizer
+    - the interface projector
+    - or their interaction
+
+### New modeling direction under investigation
+
+- The current scaffold diagnostics now support a stronger theory-facing conclusion:
+  on parity/scaffold lanes, `thetaB` should likely be treated as a measured
+  boundary value, not as an optimized scalar that feeds back into the interface law.
+- In the continuum theory used in [docs/1_disk_3d.tex](/Users/User/github/membrane_solver/docs/1_disk_3d.tex):
+  - `thetaB` is the disk-side boundary tilt measured at `r = R`
+  - it is an output of the field solution
+  - it is not an independently optimized degree of freedom
+- The current discrete scaffold path originally did the opposite:
+  - [runtime/minimizer.py](/Users/User/github/membrane_solver/runtime/minimizer.py)
+    could optimize `tilt_thetaB_value`
+  - [modules/constraints/rim_slope_match_out.py](/Users/User/github/membrane_solver/modules/constraints/rim_slope_match_out.py)
+    then read that same scalar through `rim_slope_match_thetaB_param`
+  - so the interface law was driven by an optimizer-controlled scalar rather than
+    by the measured disk boundary field
+- That decoupling experiment has now been implemented on scaffold lanes:
+  - scaffold `rim_slope_match_out` no longer uses `theta_scalar`
+  - scaffold report `metrics.thetaB_value` is now measured from disk-side
+    `tilt_in` at `r = R`
+  - scaffold `tilt_thetaB_optimize` is bypassed in
+    [runtime/minimizer.py](/Users/User/github/membrane_solver/runtime/minimizer.py)
+- The result is decisive:
+  - the scaffold lane collapses to the trivial zero branch
+  - measured `thetaB` becomes approximately zero
+  - `t_in(R+ε)`, `t_out(R+ε)`, and `phi(R+ε)` all become approximately zero
+- This is not just a numerical accident. The structural reason is now clear:
+  - with `tilt_thetaB_contact_penalty_mode: off`, the contact module
+    [modules/energy/tilt_thetaB_contact_in.py](/Users/User/github/membrane_solver/modules/energy/tilt_thetaB_contact_in.py)
+    contributes only the scalar work term `-2π R_eff γ θ_B`
+  - in that mode it adds no field gradient to `tilt_in`
+  - so once scaffold lanes stop using the optimized scalar `thetaB` as the
+    interface driver, the field equations lose the only nontrivial boundary forcing
+  - the zero branch then becomes the natural minimum of the remaining field solve
+- Controlled scaffold runs now imply:
+  - optimizer on with scalar feedback:
+    - nontrivial branches exist, but `thetaB` can inflate to `~0.39` or `~0.54`
+    - work allocation is wrong
+  - optimizer off / measured-`thetaB` only:
+    - branch collapses to zero because the scalar contact work no longer drives
+      the field at all
+- Working hypothesis:
+  - the problem is deeper than “report `thetaB` correctly”
+  - the current parity/scaffold formulation has no theory-aligned mechanism that
+    both:
+    - lets `thetaB` emerge from the solved field
+    - and still injects the correct nontrivial boundary driving without falling
+      back to scalar-feedback branch selection
+- Current recommended investigation order:
+  1. stop revisiting scalar-decoupling; that part is done
+  2. design a scaffold-only branch-selection / boundary-driving mechanism that
+     comes from the field formulation itself rather than scalar `thetaB` feedback
+  3. likely candidates to evaluate next:
+     - a blended inner-targeting rule between disk-side and free-side rows
+     - a theory-aligned reduced-DOF / reduced-energy path where `thetaB` enters
+       as a solved boundary mode rather than a runtime scalar optimizer
+- This is now the highest-signal theory-facing next step, and it should be
+  treated as a modeling change rather than a small local projector tweak.
+
+### Default-lane guardrail status
+
+- The default lane remains the production comparison lane.
+- The scaffold work should not be promoted there yet.
+- Keep using:
+  - [tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml](/Users/User/github/membrane_solver/tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml)
+  - plus the acceptance guardrails in
+    [tests/test_theory_parity_against_tex_acceptance.py](/Users/User/github/membrane_solver/tests/test_theory_parity_against_tex_acceptance.py)
+- The current scaffold operator work is still development-only and should be evaluated first on the scaffold lane before any promotion.
+
+### Recommended next fixes
+
+- Highest-signal next direction:
+  - keep the residual-gated scaffold projector
+  - change the local interface projector so it depends less on the current
+    outer radial tilt carry-over and more on the inner continuity target
+    `theta_disk - t_in`
+- Do not start with:
+  - more shell insertion
+  - more `rim_slope_match_out` row-swapping
+  - target-function fitting
+  - new physics terms or ad hoc penalties
+- The next likely useful change is still in:
+  - [modules/constraints/rim_slope_match_out.py](/Users/User/github/membrane_solver/modules/constraints/rim_slope_match_out.py)
+  - not in the scaffold builder
+- Any future runtime cadence change must still be benchmarked on the exact
+  parity path, because this is a performance-sensitive solver path.
+
+### Minimal command/test set to resume work
+
+When a future agent resumes this stream, the minimal useful set is:
+
+- Read:
+  - [docs/THEORY_PARITY_CHECKPOINT.md](/Users/User/github/membrane_solver/docs/THEORY_PARITY_CHECKPOINT.md)
+  - [docs/1_disk_3d.tex](/Users/User/github/membrane_solver/docs/1_disk_3d.tex)
+  - [modules/constraints/rim_slope_match_out.py](/Users/User/github/membrane_solver/modules/constraints/rim_slope_match_out.py)
+  - [runtime/minimizer.py](/Users/User/github/membrane_solver/runtime/minimizer.py)
+  - [tools/reproduce_theory_parity.py](/Users/User/github/membrane_solver/tools/reproduce_theory_parity.py)
+  - [tools/theory_parity_interface_profiles.py](/Users/User/github/membrane_solver/tools/theory_parity_interface_profiles.py)
+- Run first:
+  - `pytest -q -o addopts='' tests/test_rim_slope_match_out_constraint.py::test_physical_edge_scaffold_shape_projection_moves_trace_shell_height tests/test_rim_slope_match_out_constraint.py::test_physical_edge_scaffold_uses_trace_layer_for_operator_tilt_rows`
+  - `pytest -q -o addopts='' tests/test_theory_parity_against_tex_acceptance.py::test_scaffold_gapfill_base_long_schedule_activates_outer_leaflet_without_repair`
+  - `pytest -q -o addopts='' tests/test_theory_parity_against_tex_acceptance.py::test_physical_edge_default_keeps_theta_and_energy_in_guardrail_while_fixing_interface`
+- Then, if changing shell generation:
+  - `pytest -q -o addopts='' tests/test_local_interface_shells_unit.py tests/test_theory_parity_interface_sweep.py`
+- Then benchmark the exact reproducer path on the scaffold fixture and the default fixture before claiming progress.
