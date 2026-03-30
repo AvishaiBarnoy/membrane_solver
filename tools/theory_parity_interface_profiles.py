@@ -254,19 +254,22 @@ def build_trace_ring_fixture(
         out = dict(opts)
         out["preset"] = "rim"
         out["rim_slope_match_group"] = "rim"
+        constraints = list(out.get("constraints") or [])
+        if "pin_to_circle" not in constraints:
+            constraints.append("pin_to_circle")
+        out["pin_to_circle_group"] = "trace_layer"
+        out["pin_to_circle_radius"] = float(trace_radius)
+        out["pin_to_circle_normal"] = [0.0, 0.0, 1.0]
+        out["pin_to_circle_point"] = [0.0, 0.0, 0.0]
         if planar_geometry:
-            constraints = list(out.get("constraints") or [])
             if "pin_to_plane" not in constraints:
                 constraints.append("pin_to_plane")
+        else:
+            constraints = [c for c in constraints if c != "pin_to_plane"]
+        if constraints:
             out["constraints"] = constraints
         else:
-            constraints = [
-                c for c in list(out.get("constraints") or []) if c != "pin_to_plane"
-            ]
-            if constraints:
-                out["constraints"] = constraints
-            else:
-                out.pop("constraints", None)
+            out.pop("constraints", None)
         return out
 
     def _old_rim_options(opts: dict[str, Any]) -> dict[str, Any]:
@@ -319,6 +322,7 @@ def build_trace_ring_fixture(
 
     gp = dict(doc.get("global_parameters") or {})
     gp["theory_parity_lane"] = str(label)
+    gp["parity_trace_layer_radius"] = float(trace_radius)
     doc["global_parameters"] = gp
     return doc
 

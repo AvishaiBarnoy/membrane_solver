@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -15,6 +16,7 @@ from modules.constraints.local_interface_shells import (
     local_interface_constraint_diagnostics,
     radial_unit_vectors,
 )
+from tools.theory_parity_interface_profiles import build_trace_ring_fixture
 
 
 @pytest.mark.unit
@@ -124,3 +126,33 @@ def test_extrapolate_trace_to_radius_uses_two_shells_and_falls_back_to_first_she
     np.testing.assert_allclose(trace, np.array([0.1, 0.2], dtype=float))
     np.testing.assert_allclose(fallback, first_values)
     assert not np.allclose(trace, first_values)
+
+
+@pytest.mark.unit
+def test_build_local_interface_shell_data_honors_trace_layer_radius_override() -> None:
+    base_doc = yaml.safe_load(
+        (
+            ROOT
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    traced = build_trace_ring_fixture(
+        base_doc=base_doc,
+        label="trace_layer_unit",
+        trace_radius=(7.0 / 15.0) + 0.01,
+        planar_geometry=False,
+    )
+    fixture_path = ROOT / "tests" / "fixtures" / "_tmp_trace_layer_unit.yaml"
+    fixture_path.write_text(yaml.safe_dump(traced, sort_keys=False), encoding="utf-8")
+    try:
+        mesh = parse_geometry(load_data(str(fixture_path)))
+        positions = mesh.positions_view()
+        data = build_local_interface_shell_data(mesh, positions=positions)
+    finally:
+        fixture_path.unlink(missing_ok=True)
+
+    assert data.disk_radius == pytest.approx(7.0 / 15.0, abs=1.0e-9)
+    assert data.rim_radius == pytest.approx((7.0 / 15.0) + 0.01, abs=1.0e-9)
+    assert data.outer_radius > data.rim_radius

@@ -120,6 +120,8 @@ def test_build_trace_ring_fixture_inserts_new_first_outer_ring() -> None:
     ring_opts = traced["vertices"][len(base_doc["vertices"])][3]
     assert ring_opts["preset"] == "rim"
     assert ring_opts["rim_slope_match_group"] == "rim"
+    assert "pin_to_circle" in list(ring_opts.get("constraints") or [])
+    assert float(ring_opts["pin_to_circle_radius"]) == pytest.approx(0.5, abs=1.0e-12)
     assert "pin_to_plane" not in list(ring_opts.get("constraints") or [])
 
 
@@ -141,6 +143,7 @@ def test_build_trace_ring_fixture_can_pin_trace_ring_to_plane() -> None:
     ring_opts = traced["vertices"][len(base_doc["vertices"])][3]
     assert ring_opts["preset"] == "rim"
     assert ring_opts["rim_slope_match_group"] == "rim"
+    assert "pin_to_circle" in list(ring_opts.get("constraints") or [])
     assert "pin_to_plane" in list(ring_opts.get("constraints") or [])
 
 

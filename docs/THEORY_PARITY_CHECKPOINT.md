@@ -208,7 +208,30 @@
     - TeX `total_ratio ≈ 1.876`
     - `phi(R+)` collapses to `0`
     - director continuity remains very poor (`disk_vs_free_inner_director_gap ≈ 0.347`)
+- Reassessment after fixing the actual construction:
+  - the earlier `no_refine` runs were not valid tests of the intended idea because the inserted `R+ε` ring was free to drift radially in `[x,y]`
+  - the trace-layer builder now pins that ring to the target circle, so the intended ordering is preserved:
+    - `R ≈ 0.46667`
+    - `R+ε ≈ 0.47667`
+    - first free-side shell `R+ ≈ 0.48667` in the `no_refine` runs
+  - corrected `no_refine` result with pinned `R+ε`:
+    - `thetaB ≈ 0.32`
+    - TeX `total_ratio ≈ 3.426`
+    - `disk_t_in(R) ≈ 0.320`
+    - `t_in(R+) ≈ -0.00166`
+    - `t_out(R+) ≈ 0`
+    - `phi(R+) ≈ 0`
+  - corrected refined+retagged result with pinned `R+ε` and extra minimization:
+    - `thetaB ≈ 0.21`
+    - TeX `total_ratio ≈ 2.308`
+    - `disk_t_in(R) ≈ 0.210`
+    - `t_in(R+) ≈ 0.0095`
+    - `t_out(R+) ≈ 0`
+    - `phi(R+) ≈ 0`
+  - both free and planar variants collapse onto the same bad branch once the ring is pinned radially; the planar option does not rescue parity
 - Conclusion:
+  - once the `R+ε` layer is actually kept at the intended radius, the trace-layer construction still does not solve parity
+  - both `no_refine` and refined-retagged variants collapse to a bad branch with effectively zero free-side geometry trace
   - even with full refinement, adding a trace ring is not a viable parity fix in the current edge-only mesh/protocol
   - the planar ghost version is especially not acceptable as a production direction
   - interpreting the discrete disk rim as `[R, R+ε]` does not rescue the current formulation
