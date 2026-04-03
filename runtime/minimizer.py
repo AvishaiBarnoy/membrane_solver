@@ -177,7 +177,7 @@ class Minimizer:
         self._soa_positions: np.ndarray | None = None
         self._soa_index_map: Dict[int, int] | None = None
         self._soa_grad_dummy: np.ndarray | None = None
-        self._last_mesh_op_tilt_constraints_enforced: bool | None = None
+        self._last_mesh_op_tilt_constraints_enforced: bool = False
         self._energy_context: EnergyContext | None = None
         self._module_accepts_ctx: dict[int, bool] = {}
         self._module_energy_array_spec: dict[
@@ -201,6 +201,27 @@ class Minimizer:
             "cap_magnitude": 0.0,
         }
 
+    def reset_soa_caches(self) -> None:
+        """Clear cached SOA views after mesh-replacing operations."""
+        self._soa_cache_version = -1
+        self._soa_cache_vertex_version = -1
+        self._soa_positions = None
+        self._soa_index_map = None
+        self._soa_grad_dummy = None
+        self._tilt_fixed_mask_cache = None
+        self._tilt_fixed_mask_version = -1
+        self._tilt_fixed_mask_vertex_version = -1
+        self._tilt_fixed_mask_in_cache = None
+        self._tilt_fixed_mask_in_version = -1
+        self._tilt_fixed_mask_in_vertex_version = -1
+        self._tilt_fixed_mask_out_cache = None
+        self._tilt_fixed_mask_out_version = -1
+        self._tilt_fixed_mask_out_vertex_version = -1
+        self._energy_context = None
+        self._module_energy_array_spec = {}
+        self._module_accepts_ctx = {}
+        self._stepper_accepts_trial_energy_fn = None
+
     def _validate_energy_modules_array(self) -> None:
         """Ensure energy modules support the array API required by minimization."""
         for module in self.energy_modules:
@@ -210,6 +231,11 @@ class Minimizer:
                     f"Energy module {name} lacks compute_energy_and_gradient_array; "
                     "dict fallbacks are not supported in the minimization loop."
                 )
+
+    def _use_stage_a_joint_tilt_projection(self) -> bool:
+        """Enable coupled shape+tilt projection only for the Stage A emergent lane."""
+        lane = str(self.global_params.get("theory_parity_lane") or "").strip().lower()
+        return lane == "stage_a_emergent"
 
     def energy_context(self) -> EnergyContext:
         """Return a reusable evaluation context bound to current mesh versions."""
@@ -2284,15 +2310,27 @@ STEP SIZE:\t {self.step_size}
         # tilts are active, joint shape+tilt constraints should project the
         # shape block against the full coupled manifold while leaving the
         # tilt block at zero in this outer shape step.
-        if self._uses_leaflet_tilts() and hasattr(
-            self.constraint_manager, "apply_joint_gradient_modifications_array"
+        if (
+            self._uses_leaflet_tilts()
+            and self._use_stage_a_joint_tilt_projection()
+            and hasattr(
+                self.constraint_manager, "apply_joint_gradient_modifications_array"
+            )
         ):
-            zero_tilt_in = np.zeros_like(grad_arr)
-            zero_tilt_out = np.zeros_like(grad_arr)
+            tilt_in_grad = np.zeros_like(grad_arr)
+            tilt_out_grad = np.zeros_like(grad_arr)
+            self._compute_energy_and_leaflet_tilt_gradients_array(
+                positions=positions,
+                tilts_in=self.mesh.tilts_in_view(),
+                tilts_out=self.mesh.tilts_out_view(),
+                tilt_in_grad_arr=tilt_in_grad,
+                tilt_out_grad_arr=tilt_out_grad,
+                tilt_only=True,
+            )
             self.constraint_manager.apply_joint_gradient_modifications_array(
                 grad_arr,
-                zero_tilt_in,
-                zero_tilt_out,
+                tilt_in_grad,
+                tilt_out_grad,
                 self.mesh,
                 self.global_params,
                 positions=positions,

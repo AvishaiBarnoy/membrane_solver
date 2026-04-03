@@ -21,6 +21,8 @@ class RefineCommand(Command):
             context.mesh = refine_polygonal_facets(context.mesh)
             context.mesh = refine_triangle_mesh(context.mesh)
             context.minimizer.mesh = context.mesh
+            if hasattr(context.minimizer, "reset_soa_caches"):
+                context.minimizer.reset_soa_caches()
             if getattr(context.minimizer, "live_vis", False):
                 from visualization.plotting import update_live_vis
 
@@ -71,6 +73,8 @@ class EquiangulateCommand(Command):
         logger.info("Starting equiangulation...")
         context.mesh = equiangulate_mesh(context.mesh)
         context.minimizer.mesh = context.mesh
+        if hasattr(context.minimizer, "reset_soa_caches"):
+            context.minimizer.reset_soa_caches()
         context.minimizer.enforce_constraints_after_mesh_ops(context.mesh)
         logger.info("Equiangulation complete.")
         if getattr(context.minimizer, "live_vis", False):
