@@ -624,10 +624,11 @@ def test_joint_sparse_rows_with_unsorted_duplicates_match_dense_reference() -> N
     assert np.allclose(got_out, ref_out, atol=1e-12, rtol=0.0)
 
 
-def test_compute_energy_and_gradient_array_uses_joint_projection_for_leaflets() -> None:
+def test_compute_energy_and_gradient_array_uses_joint_projection_for_stage_a() -> None:
     class RecordingConstraintManager:
         def __init__(self):
-            self.calls = 0
+            self.joint_calls = 0
+            self.legacy_calls = 0
 
         def apply_joint_gradient_modifications_array(
             self,
@@ -639,17 +640,88 @@ def test_compute_energy_and_gradient_array_uses_joint_projection_for_leaflets() 
             **kwargs,
         ):
             _ = mesh, global_params, kwargs
-            self.calls += 1
-            assert np.allclose(tilt_in_grad_arr, 0.0, atol=0.0, rtol=0.0)
-            assert np.allclose(tilt_out_grad_arr, 0.0, atol=0.0, rtol=0.0)
+            self.joint_calls += 1
+            assert np.allclose(
+                tilt_in_grad_arr,
+                np.asarray([[0.25, 0.0, 0.0], [0.0, 0.5, 0.0]]),
+                atol=0.0,
+                rtol=0.0,
+            )
+            assert np.allclose(
+                tilt_out_grad_arr,
+                np.asarray([[0.0, -0.25, 0.0], [0.0, 0.0, 0.75]]),
+                atol=0.0,
+                rtol=0.0,
+            )
+            grad_arr[:] = 0.0
+
+        def apply_gradient_modifications_array(self, grad_arr, mesh, global_params):
+            _ = grad_arr, mesh, global_params
+            self.legacy_calls += 1
+
+    mesh = DummyMesh(2)
+    cm = RecordingConstraintManager()
+    minim = object.__new__(Minimizer)
+    minim.mesh = mesh
+    minim.global_params = {"theory_parity_lane": "stage_a_emergent"}
+    minim.energy_modules = ["dummy"]
+    minim.energy_module_names = ["dummy"]
+    minim._uses_leaflet_tilts = lambda: True
+    minim._soa_views = lambda: (
+        mesh.positions_view(),
+        mesh.vertex_index_to_row,
+        np.zeros_like(mesh.positions_view()),
+    )
+
+    def _call_module_array(module, **kwargs):
+        _ = module
+        kwargs["grad_arr"][:] = np.asarray([[1.0, 2.0, 0.0], [0.0, -1.0, 1.0]])
+        return 3.25
+
+    def _tilt_gradients(**kwargs):
+        kwargs["tilt_in_grad_arr"][:] = np.asarray([[0.25, 0.0, 0.0], [0.0, 0.5, 0.0]])
+        kwargs["tilt_out_grad_arr"][:] = np.asarray(
+            [[0.0, -0.25, 0.0], [0.0, 0.0, 0.75]]
+        )
+        return 0.0
+
+    minim._call_module_array = _call_module_array
+    minim._compute_energy_and_leaflet_tilts_array = lambda *args, **kwargs: None
+    minim._compute_energy_and_leaflet_tilt_gradients_array = _tilt_gradients
+    minim.constraint_manager = cm
+
+    energy, grad_arr = Minimizer.compute_energy_and_gradient_array(minim)
+
+    assert energy == 3.25
+    assert cm.joint_calls == 1
+    assert cm.legacy_calls == 0
+    assert np.allclose(grad_arr, 0.0, atol=0.0, rtol=0.0)
+
+
+def test_compute_energy_and_gradient_array_uses_legacy_projection_outside_stage_a() -> (
+    None
+):
+    class RecordingConstraintManager:
+        def __init__(self):
+            self.joint_calls = 0
+            self.legacy_calls = 0
+
+        def apply_joint_gradient_modifications_array(self, *args, **kwargs):
+            _ = args, kwargs
+            self.joint_calls += 1
+
+        def apply_gradient_modifications_array(self, grad_arr, mesh, global_params):
+            _ = mesh, global_params
+            self.legacy_calls += 1
             grad_arr[:] = 0.0
 
     mesh = DummyMesh(2)
     cm = RecordingConstraintManager()
     minim = object.__new__(Minimizer)
     minim.mesh = mesh
-    minim.global_params = {}
+    minim.global_params = {"theory_parity_lane": "physical_edge_default"}
     minim.energy_modules = ["dummy"]
+    minim.energy_module_names = ["dummy"]
     minim._uses_leaflet_tilts = lambda: True
     minim._soa_views = lambda: (
         mesh.positions_view(),
@@ -668,7 +740,8 @@ def test_compute_energy_and_gradient_array_uses_joint_projection_for_leaflets() 
     energy, grad_arr = Minimizer.compute_energy_and_gradient_array(minim)
 
     assert energy == 3.25
-    assert cm.calls == 1
+    assert cm.joint_calls == 0
+    assert cm.legacy_calls == 1
     assert np.allclose(grad_arr, 0.0, atol=0.0, rtol=0.0)
 
 
