@@ -64,6 +64,128 @@ class QuadraticFitResult:
         return dict(asdict(self))
 
 
+def evaluate_flat_disk_scalar_tex_profile(
+    radii: Sequence[float],
+    *,
+    theta_boundary: float,
+    radius: float,
+    lambda_value: float,
+) -> np.ndarray:
+    """Evaluate the scalar-amplitude TeX profile on the supplied radii.
+
+    This helper mirrors the continuum model used in ``docs/tex/1_disk_flat.tex``:
+    - inside the disk: ``theta(r) = theta_B * I0(r/lambda) / I0(R/lambda)``
+    - outside the disk: ``theta(r) = theta_B * K0(r/lambda) / K0(R/lambda)``
+    """
+    radius_f = float(radius)
+    lam = float(lambda_value)
+    if radius_f <= 0.0:
+        raise ValueError("radius must be > 0 for scalar TeX profile evaluation.")
+    if lam <= 0.0:
+        raise ValueError("lambda_value must be > 0 for scalar TeX profile evaluation.")
+
+    rr = np.asarray(radii, dtype=float)
+    x = rr / lam
+    x_r = radius_f / lam
+    i0_r = float(special.iv(0, x_r))
+    k0_r = float(special.kv(0, x_r))
+    if abs(i0_r) <= 1e-18 or abs(k0_r) <= 1e-18:
+        raise ValueError("Invalid scalar TeX profile normalization.")
+
+    out = np.empty_like(rr, dtype=float)
+    inner = rr <= radius_f
+    out[inner] = (
+        float(theta_boundary) * np.asarray(special.iv(0, x[inner]), dtype=float) / i0_r
+    )
+    out[~inner] = (
+        float(theta_boundary) * np.asarray(special.kv(0, x[~inner]), dtype=float) / k0_r
+    )
+    return out
+
+
+def evaluate_flat_disk_vector_smoothness_profile(
+    radii: Sequence[float],
+    *,
+    theta_boundary: float,
+    radius: float,
+) -> np.ndarray:
+    """Evaluate the radial vector-field harmonic profile on the supplied radii.
+
+    For a flat radial vector field ``t(r) = f(r) e_r`` with only Dirichlet
+    smoothness energy, the regular/decaying ``n=1`` solutions are:
+    - inside the disk: ``f(r) = theta_B * r / R``
+    - outside the disk: ``f(r) = theta_B * R / r``
+    """
+    radius_f = float(radius)
+    if radius_f <= 0.0:
+        raise ValueError("radius must be > 0 for vector smoothness profile evaluation.")
+
+    rr = np.asarray(radii, dtype=float)
+    out = np.empty_like(rr, dtype=float)
+    inner = rr <= radius_f
+    out[inner] = float(theta_boundary) * rr[inner] / radius_f
+    out[~inner] = float(theta_boundary) * radius_f / np.maximum(rr[~inner], 1e-18)
+    return out
+
+
+def evaluate_flat_disk_vector_kh_profile(
+    radii: Sequence[float],
+    *,
+    theta_boundary: float,
+    radius: float,
+    lambda_value: float,
+    outer_r_max: float | None = None,
+) -> np.ndarray:
+    """Evaluate the implemented flat KH radial vector-field profile.
+
+    This matches the vector-field continuum solved by the current ``kh_physical``
+    lane:
+    - inside the disk: ``theta(r) = theta_B * I1(r/lambda) / I1(R/lambda)``
+    - outside the disk:
+      - infinite domain: ``theta(r) = theta_B * K1(r/lambda) / K1(R/lambda)``
+      - finite domain: solve ``a I1 + b K1`` with ``theta(R)=theta_B`` and
+        ``theta(outer_r_max)=0``.
+    """
+    radius_f = float(radius)
+    lam = float(lambda_value)
+    if radius_f <= 0.0:
+        raise ValueError("radius must be > 0 for vector KH profile evaluation.")
+    if lam <= 0.0:
+        raise ValueError("lambda_value must be > 0 for vector KH profile evaluation.")
+
+    rr = np.asarray(radii, dtype=float)
+    out = np.empty_like(rr, dtype=float)
+    x = rr / lam
+    x_r = radius_f / lam
+    i1_r = float(special.iv(1, x_r))
+    k1_r = float(special.kv(1, x_r))
+    if abs(i1_r) <= 1e-18 or abs(k1_r) <= 1e-18:
+        raise ValueError("Invalid vector KH profile normalization.")
+
+    inner = rr <= radius_f
+    out[inner] = (
+        float(theta_boundary) * np.asarray(special.iv(1, x[inner]), dtype=float) / i1_r
+    )
+    if outer_r_max is None:
+        out[~inner] = (
+            float(theta_boundary)
+            * np.asarray(special.kv(1, x[~inner]), dtype=float)
+            / k1_r
+        )
+        return out
+
+    coeff_i1, coeff_k1 = solve_kh_outer_finite_bvp_coefficients(
+        float(theta_boundary),
+        radius=radius_f,
+        lambda_value=lam,
+        outer_r_max=float(outer_r_max),
+    )
+    out[~inner] = coeff_i1 * np.asarray(
+        special.iv(1, x[~inner]), dtype=float
+    ) + coeff_k1 * np.asarray(special.kv(1, x[~inner]), dtype=float)
+    return out
+
+
 def tex_reference_params() -> FlatDiskTheoryParams:
     """Return the parameter set stated in docs/tex/1_disk_flat.tex."""
     return FlatDiskTheoryParams(
@@ -458,6 +580,9 @@ __all__ = [
     "build_kh_outer_finite_bvp_profile",
     "compute_flat_disk_theory",
     "compute_flat_disk_kh_physical_theory",
+    "evaluate_flat_disk_scalar_tex_profile",
+    "evaluate_flat_disk_vector_kh_profile",
+    "evaluate_flat_disk_vector_smoothness_profile",
     "physical_to_dimensionless_theory_params",
     "quadratic_min_from_scan",
     "solve_kh_outer_finite_bvp_coefficients",

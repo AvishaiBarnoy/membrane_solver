@@ -118,6 +118,21 @@ def _theory_split_coeffs(theory: Any) -> tuple[float, float, float]:
     return c_in, c_out, b_contact
 
 
+def _kh_reference_profiles(*, smoothness_model: str) -> dict[str, str]:
+    """Return explicit continuum reference labels for flat KH diagnostics."""
+    smooth = str(smoothness_model).strip().lower()
+    return {
+        "continuum_field_model": "vector_field_radial_amplitude",
+        "combined_reference_profile": "I1_inside_K1_outside",
+        "smoothness_only_reference_profile": (
+            "r_over_R_inside_R_over_r_outside"
+            if smooth == "dirichlet"
+            else "not_applicable_for_splay_twist"
+        ),
+        "scalar_tex_profile": "I0_inside_K0_outside",
+    }
+
+
 def _radial_frames(positions: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return radius, radial unit vectors, and azimuthal unit vectors."""
     r = np.linalg.norm(positions[:, :2], axis=1)
@@ -1946,6 +1961,7 @@ def _run_single_level(
             "smoothness_model": str(smoothness_model),
             "parameterization": "kh_physical",
             "theory_model": "kh_physical_strict_kh",
+            **_kh_reference_profiles(smoothness_model=str(smoothness_model)),
             "kappa_physical": float(kappa_physical),
             "kappa_t_physical": float(kappa_t_physical),
             "radius_nm": float(radius_nm),
@@ -2010,6 +2026,151 @@ def _run_single_level(
         "meets_5pct_v2": bool(meets_5pct_v2_all),
         "meets_parity_target_v2": bool(meets_parity_target_v2_all),
         "axial_symmetry_pass": bool(axial_symmetry_pass_all),
+    }
+
+
+def run_flat_disk_kh_screening_resolution_characterization(
+    *,
+    fixture: Path | str = DEFAULT_FIXTURE,
+    outer_mode: str = "disabled",
+    smoothness_model: str = "splay_twist",
+    kappa_physical: float = 10.0,
+    kappa_t_physical: float = 10.0,
+    radius_nm: float = 7.0,
+    length_scale_nm: float = 15.0,
+    drive_physical: float = (2.0 / 0.7),
+    tilt_mass_mode_in: str = "consistent",
+    optimize_preset: str = "kh_strict_outerfield_tight",
+    refine_level: int = 1,
+    rim_local_refine_steps: int = 1,
+    rim_local_refine_band_lambda: float = 3.0,
+    outer_local_refine_steps_values: Sequence[int] = (0, 1, 2),
+    outer_local_refine_rmin_lambda_values: Sequence[float] = (0.25, 0.5, 1.0),
+    outer_local_refine_rmax_lambda_values: Sequence[float] = (1.5, 2.0, 4.0),
+) -> dict[str, Any]:
+    """Characterize near-rim shell spacing for the combined flat KH benchmark."""
+    from tools.diagnostics.flat_disk_one_leaflet_theory import (
+        compute_flat_disk_kh_physical_theory,
+        physical_to_dimensionless_theory_params,
+    )
+    from tools.reproduce_flat_disk_one_leaflet import (
+        run_flat_disk_one_leaflet_benchmark,
+    )
+
+    fixture_path = Path(fixture)
+    if not fixture_path.is_absolute():
+        fixture_path = (ROOT / fixture_path).resolve()
+    if not fixture_path.exists():
+        raise FileNotFoundError(f"Fixture not found: {fixture_path}")
+
+    params = physical_to_dimensionless_theory_params(
+        kappa_physical=float(kappa_physical),
+        kappa_t_physical=float(kappa_t_physical),
+        radius_physical=float(radius_nm),
+        drive_physical=float(drive_physical),
+        length_scale=float(length_scale_nm),
+    )
+    theory = compute_flat_disk_kh_physical_theory(params)
+    lam = float(theory.lambda_value)
+
+    step_values = [int(x) for x in outer_local_refine_steps_values]
+    rmin_values = [float(x) for x in outer_local_refine_rmin_lambda_values]
+    rmax_values = [float(x) for x in outer_local_refine_rmax_lambda_values]
+    if len(step_values) == 0 or len(rmin_values) == 0 or len(rmax_values) == 0:
+        raise ValueError("screening characterization inputs must be non-empty.")
+
+    rows: list[dict[str, Any]] = []
+    complexity_rank = 0
+    for outer_steps in step_values:
+        candidates = (
+            [(0.0, 0.0)]
+            if int(outer_steps) == 0
+            else [
+                (float(rmin), float(rmax))
+                for rmin in rmin_values
+                for rmax in rmax_values
+                if float(rmax) > float(rmin)
+            ]
+        )
+        for rmin_lambda, rmax_lambda in candidates:
+            t0 = perf_counter()
+            bench = run_flat_disk_one_leaflet_benchmark(
+                fixture=fixture_path,
+                refine_level=int(refine_level),
+                outer_mode=str(outer_mode),
+                smoothness_model=str(smoothness_model),
+                theta_mode="optimize",
+                optimize_preset=str(optimize_preset),
+                parameterization="kh_physical",
+                kappa_physical=float(kappa_physical),
+                kappa_t_physical=float(kappa_t_physical),
+                radius_nm=float(radius_nm),
+                length_scale_nm=float(length_scale_nm),
+                drive_physical=float(drive_physical),
+                tilt_mass_mode_in=str(tilt_mass_mode_in),
+                rim_local_refine_steps=int(rim_local_refine_steps),
+                rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
+                outer_local_refine_steps=int(outer_steps),
+                outer_local_refine_rmin_lambda=float(rmin_lambda),
+                outer_local_refine_rmax_lambda=float(rmax_lambda),
+            )
+            runtime_seconds = float(perf_counter() - t0)
+
+            boundary = dict(bench["parity"]["boundary_at_R"])
+            rim_radius = float(boundary["rim_radius"])
+            outer_radius = float(boundary["outer_radius"])
+            dr = max(0.0, outer_radius - rim_radius)
+            theta_factor = float(bench["parity"]["theta_factor"])
+            energy_factor = float(bench["parity"]["energy_factor"])
+            rows.append(
+                {
+                    "outer_local_refine_steps": int(outer_steps),
+                    "outer_local_refine_rmin_lambda": float(rmin_lambda),
+                    "outer_local_refine_rmax_lambda": float(rmax_lambda),
+                    "theta_star": float(bench["mesh"]["theta_star"]),
+                    "total_energy": float(bench["mesh"]["total_energy"]),
+                    "theta_factor": float(theta_factor),
+                    "energy_factor": float(energy_factor),
+                    "balanced_parity_score": float(
+                        _balanced_parity_score(theta_factor, energy_factor)
+                    ),
+                    "rim_radius": float(rim_radius),
+                    "outer_radius": float(outer_radius),
+                    "first_outer_dr": float(dr),
+                    "first_outer_dr_over_lambda": float(dr / max(lam, 1.0e-18)),
+                    "runtime_seconds": float(runtime_seconds),
+                    "complexity_rank": int(complexity_rank),
+                }
+            )
+            complexity_rank += 1
+
+    selected = min(
+        rows,
+        key=lambda row: (
+            abs(float(row["first_outer_dr_over_lambda"]) - 1.0),
+            float(row["balanced_parity_score"]),
+            float(row["runtime_seconds"]),
+            int(row["complexity_rank"]),
+        ),
+    )
+    return {
+        "meta": {
+            "mode": "kh_screening_resolution_characterization",
+            "fixture": str(fixture_path.relative_to(ROOT)),
+            "parameterization": "kh_physical",
+            **_kh_reference_profiles(smoothness_model=str(smoothness_model)),
+            "optimize_preset": str(optimize_preset),
+            "outer_mode": str(outer_mode),
+            "smoothness_model": str(smoothness_model),
+            "tilt_mass_mode_in": str(tilt_mass_mode_in),
+            "refine_level": int(refine_level),
+            "rim_local_refine_steps": int(rim_local_refine_steps),
+            "rim_local_refine_band_lambda": float(rim_local_refine_band_lambda),
+            "lambda_value": float(lam),
+            "target_first_outer_dr_over_lambda": 1.0,
+        },
+        "rows": rows,
+        "selected_best": selected,
     }
 
 

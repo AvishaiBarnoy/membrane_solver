@@ -17,6 +17,7 @@ from tools.diagnostics.flat_disk_kh_term_audit import (
     run_flat_disk_kh_disk_refinement_characterization,
     run_flat_disk_kh_outerfield_averaged_sweep,
     run_flat_disk_kh_outertail_characterization,
+    run_flat_disk_kh_screening_resolution_characterization,
     run_flat_disk_kh_strict_preset_characterization,
     run_flat_disk_kh_strict_refinement_characterization,
     run_flat_disk_kh_term_audit,
@@ -210,6 +211,63 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
     resolution = report["resolution"]
     assert int(resolution["rim_edge_count"]) > 0
     assert np.isfinite(float(resolution["rim_h_over_lambda_median"]))
+    assert report["meta"]["continuum_field_model"] == "vector_field_radial_amplitude"
+    assert report["meta"]["combined_reference_profile"] == "I1_inside_K1_outside"
+    assert (
+        report["meta"]["smoothness_only_reference_profile"]
+        == "not_applicable_for_splay_twist"
+    )
+    assert report["meta"]["scalar_tex_profile"] == "I0_inside_K0_outside"
+
+
+@pytest.mark.regression
+def test_flat_disk_kh_screening_resolution_characterization_reports_dr_over_lambda(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import tools.reproduce_flat_disk_one_leaflet as flat_mod
+
+    def _fake_benchmark(**kwargs):
+        outer_steps = int(kwargs["outer_local_refine_steps"])
+        rmin = float(kwargs["outer_local_refine_rmin_lambda"])
+        rmax = float(kwargs["outer_local_refine_rmax_lambda"])
+        outer_radius = 0.4666666667 + 0.0666666667 * (1.0 + max(rmin, 0.0))
+        if outer_steps > 0:
+            outer_radius = 0.4666666667 + 0.0666666667 * (0.8 + 0.1 * rmax)
+        return {
+            "mesh": {
+                "theta_star": 6.4e-4 + 1e-5 * outer_steps,
+                "total_energy": -0.0045,
+            },
+            "parity": {
+                "theta_factor": 1.0
+                + 0.1 * abs((outer_radius - 0.4666666667) / 0.0666666667 - 1.0),
+                "energy_factor": 1.0 + 0.05 * outer_steps,
+                "boundary_at_R": {
+                    "rim_radius": 0.4666666667,
+                    "outer_radius": float(outer_radius),
+                },
+            },
+        }
+
+    monkeypatch.setattr(
+        flat_mod, "run_flat_disk_one_leaflet_benchmark", _fake_benchmark
+    )
+
+    report = run_flat_disk_kh_screening_resolution_characterization(
+        outer_local_refine_steps_values=(0, 1),
+        outer_local_refine_rmin_lambda_values=(0.25, 0.5),
+        outer_local_refine_rmax_lambda_values=(1.5, 2.0),
+    )
+    assert report["meta"]["mode"] == "kh_screening_resolution_characterization"
+    assert report["meta"]["combined_reference_profile"] == "I1_inside_K1_outside"
+    assert report["meta"]["target_first_outer_dr_over_lambda"] == pytest.approx(1.0)
+    assert len(report["rows"]) == 5
+    for row in report["rows"]:
+        assert np.isfinite(float(row["first_outer_dr_over_lambda"]))
+        assert np.isfinite(float(row["balanced_parity_score"]))
+        assert np.isfinite(float(row["runtime_seconds"]))
+    best = report["selected_best"]
+    assert abs(float(best["first_outer_dr_over_lambda"]) - 1.0) <= 0.2
 
 
 @pytest.mark.regression

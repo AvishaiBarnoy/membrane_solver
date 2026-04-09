@@ -94,6 +94,10 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Added opt-in `kh_strict_outerfield_tight` preset (strict refine=2, rim-local step=1, rim band=3λ, plus outer-annulus local refine over `[R+1λ, R+8λ]`) for outer-section mismatch tightening without coefficient retuning.
 - Added strict benchmark gate enforcing `kh_strict_outerfield_tight` outer-section improvement (`outer_near`, `outer_far`, and combined log-space outer score) vs `kh_strict_outerband_tight` while keeping inner/global parity non-worsening.
 - Added strict KH acceptance baseline fixture for `kh_strict_outerfield_tight` (`tests/fixtures/flat_disk_one_leaflet_kh_physical_outerfield_tight_disabled_baseline.yaml`) and acceptance wiring for deterministic reproduction.
+- Established the current flat-KH reference benchmark configuration as
+  `kh_strict_outerfield_tight` plus one explicit outer near-rim local refine
+  pass over `[R+0.5\lambda, R+1.5\lambda]`, which gives the best controlled
+  outer-section convergence toward theory without changing physics.
 - Added opt-in outer-annulus local vertex-averaging controls to flat-disk KH tooling:
   `--outer-local-vertex-average-steps`,
   `--outer-local-vertex-average-rmin-lambda`,
