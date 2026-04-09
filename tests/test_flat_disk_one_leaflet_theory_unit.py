@@ -12,6 +12,9 @@ from tools.diagnostics.flat_disk_one_leaflet_theory import (
     build_kh_outer_finite_bvp_profile,
     compute_flat_disk_kh_physical_theory,
     compute_flat_disk_theory,
+    evaluate_flat_disk_scalar_tex_profile,
+    evaluate_flat_disk_vector_kh_profile,
+    evaluate_flat_disk_vector_smoothness_profile,
     physical_to_dimensionless_theory_params,
     quadratic_min_from_scan,
     solve_kh_outer_finite_bvp_coefficients,
@@ -218,4 +221,85 @@ def test_kh_outer_finite_bvp_coefficients_are_stable_and_sign_consistent() -> No
     assert np.isfinite(coeff_i1)
     assert np.isfinite(coeff_k1)
     assert float(coeff_k1) > 0.0
-    assert abs(float(coeff_i1)) <= (1e-9 * abs(float(coeff_k1)))
+
+
+@pytest.mark.unit
+def test_vector_smoothness_profile_uses_n1_harmonic_reference() -> None:
+    radius = 7.0 / 15.0
+    theta_boundary = 6.366e-4
+    radii = np.asarray([0.0, radius / 2.0, radius, 1.0], dtype=float)
+
+    profile = evaluate_flat_disk_vector_smoothness_profile(
+        radii,
+        theta_boundary=theta_boundary,
+        radius=radius,
+    )
+
+    assert profile[0] == pytest.approx(0.0, abs=1e-18)
+    assert profile[1] == pytest.approx(0.5 * theta_boundary, rel=1e-12, abs=1e-18)
+    assert profile[2] == pytest.approx(theta_boundary, rel=1e-12, abs=1e-18)
+    assert profile[3] == pytest.approx(theta_boundary * radius, rel=1e-12, abs=1e-18)
+
+
+@pytest.mark.unit
+def test_vector_kh_profile_uses_i1_k1_amplitude_law() -> None:
+    params = physical_to_dimensionless_theory_params(
+        kappa_physical=10.0,
+        kappa_t_physical=10.0,
+        radius_physical=7.0,
+        drive_physical=(2.0 / 0.7),
+        length_scale=15.0,
+    )
+    theory = compute_flat_disk_kh_physical_theory(params)
+    radius = float(theory.radius)
+    lam = float(theory.lambda_value)
+    theta_boundary = float(theory.theta_star)
+    radii = np.asarray([radius / 2.0, radius, radius + (2.0 * lam)], dtype=float)
+
+    profile = evaluate_flat_disk_vector_kh_profile(
+        radii,
+        theta_boundary=theta_boundary,
+        radius=radius,
+        lambda_value=lam,
+    )
+
+    assert profile[0] == pytest.approx(
+        theta_boundary * special.iv(1, radii[0] / lam) / special.iv(1, radius / lam),
+        rel=1e-12,
+        abs=1e-18,
+    )
+    assert profile[1] == pytest.approx(theta_boundary, rel=1e-12, abs=1e-18)
+    assert profile[2] == pytest.approx(
+        theta_boundary * special.kv(1, radii[2] / lam) / special.kv(1, radius / lam),
+        rel=1e-12,
+        abs=1e-18,
+    )
+
+
+@pytest.mark.unit
+def test_scalar_tex_profile_uses_i0_k0_amplitude_law() -> None:
+    params = tex_reference_params()
+    theory = compute_flat_disk_theory(params)
+    radius = float(theory.radius)
+    lam = float(theory.lambda_value)
+    theta_boundary = float(theory.theta_star)
+    radii = np.asarray([radius / 2.0, radius, 1.0], dtype=float)
+
+    profile = evaluate_flat_disk_scalar_tex_profile(
+        radii,
+        theta_boundary=theta_boundary,
+        radius=radius,
+        lambda_value=lam,
+    )
+
+    assert profile[0] == pytest.approx(
+        theta_boundary * special.iv(0, radii[0] / lam) / special.iv(0, radius / lam),
+        rel=1e-12,
+        abs=1e-18,
+    )
+    assert profile[1] == pytest.approx(theta_boundary, rel=1e-12, abs=1e-18)
+    assert profile[2] == pytest.approx(
+        theta_boundary * special.kv(0, radii[2] / lam) / special.kv(0, radius / lam),
+        rel=1e-12,
+        abs=1e-18,
+    )

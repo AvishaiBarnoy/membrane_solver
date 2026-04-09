@@ -21,6 +21,13 @@ def test_flat_disk_kh_outer_vertex_audit_reports_finite_bands() -> None:
     assert bool(report["meta"]["include_frozen_analytic"]) is True
     assert report["meta"]["outer_reference_primary"] == "infinite"
     assert report["meta"]["outer_reference_secondary"] == "finite_outer_rmax"
+    assert report["meta"]["continuum_field_model"] == "vector_field_radial_amplitude"
+    assert report["meta"]["combined_reference_profile"] == "I1_inside_K1_outside"
+    assert (
+        report["meta"]["smoothness_only_reference_profile"]
+        == "r_over_R_inside_R_over_r_outside"
+    )
+    assert report["meta"]["scalar_tex_profile"] == "I0_inside_K0_outside"
     controls = report["meta"]["controls_effective"]
     assert int(controls["refine_level"]) == 2
     assert int(controls["outer_local_refine_steps"]) == 1

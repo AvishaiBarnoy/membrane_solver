@@ -1507,6 +1507,35 @@ def _contact_diagnostics(
     }
 
 
+def _flat_benchmark_reference_profiles(
+    *,
+    parameterization: str,
+    smoothness_model: str,
+) -> dict[str, str]:
+    """Describe the continuum reference families relevant to this benchmark."""
+    mode = str(parameterization).strip().lower()
+    smooth = str(smoothness_model).strip().lower()
+    refs = {
+        "continuum_field_model": (
+            "vector_field_radial_amplitude"
+            if mode == "kh_physical"
+            else "scalar_amplitude"
+        ),
+        "scalar_tex_profile": "I0_inside_K0_outside",
+    }
+    if mode == "kh_physical":
+        refs["combined_reference_profile"] = "I1_inside_K1_outside"
+        refs["smoothness_only_reference_profile"] = (
+            "r_over_R_inside_R_over_r_outside"
+            if smooth == "dirichlet"
+            else "not_applicable_for_splay_twist"
+        )
+    else:
+        refs["combined_reference_profile"] = "I0_inside_K0_outside"
+        refs["smoothness_only_reference_profile"] = "not_applicable_for_scalar_lane"
+    return refs
+
+
 def run_flat_disk_one_leaflet_benchmark(
     *,
     fixture: Path | str = DEFAULT_FIXTURE,
@@ -2846,6 +2875,10 @@ def run_flat_disk_one_leaflet_benchmark(
             ),
             "theory_model": theory_model,
             "theory_source": theory_source,
+            "reference_profiles": _flat_benchmark_reference_profiles(
+                parameterization=str(mode),
+                smoothness_model=str(smoothness_model),
+            ),
             "performance": {
                 "mesh_load_refine_seconds": float(mesh_load_refine_seconds),
                 "setup_seconds": float(setup_seconds),
