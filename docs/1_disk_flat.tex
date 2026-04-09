@@ -27,10 +27,12 @@ We use the standard quadratic ``massive'' tilt functional
 \begin{equation}
 F_{\rm tilt}
 =
-\frac{\kappa_t}{2}\int \left[(\nabla \theta)^2 + \lambda^{-2} \theta^2\right]\, dA ,
+\frac{1}{2}\int \left[\kappa(\nabla \theta)^2 + \kappa_t \theta^2\right]\, dA
+=
+\frac{\kappa}{2}\int \left[(\nabla \theta)^2 + \lambda^{-2} \theta^2\right]\, dA ,
 \end{equation}
-where $\kappa_t$ is the tilt modulus and $\lambda^{-1}$ is the intrinsic decay
-length of the tilt field.
+where $\kappa$ is the splay/smoothness modulus, $\kappa_t$ is the tilt modulus,
+and $\lambda^{-1}$ is the intrinsic decay length of the tilt field.
 
 We adopt the convention
 \begin{equation}
@@ -43,7 +45,7 @@ In axisymmetry this becomes, split into inner ($0\le r\le R$) and outer ($R\le r
 \begin{equation}
 F_{\rm tilt}
 =
-\frac{\kappa_t}{2}\left[
+\frac{\kappa}{2}\left[
 \int_{0}^{R}\left(\theta'^2+\lambda^{-2}\theta^2\right)2\pi r\,dr
 +
 \int_{R}^{\infty}\left(\theta'^2+\lambda^{-2}\theta^2\right)2\pi r\,dr
@@ -96,7 +98,7 @@ each region's elastic energy reduces to a boundary term:
 \begin{equation}
 F_{\rm tilt}^{[r_1,r_2]}
 =
-\pi\kappa_t\left[r\,\theta\,\theta'\right]_{r_1}^{r_2}.
+\pi\kappa\left[r\,\theta\,\theta'\right]_{r_1}^{r_2}.
 \end{equation}
 
 \paragraph{Inner elastic energy ($0\to R$):}
@@ -104,13 +106,13 @@ since $r\theta\theta'\to 0$ at $r\to 0$,
 \begin{equation}
 F_{\rm in,el}
 =
-\pi\kappa_t R\,\theta_B\,\theta'_{\rm in}(R).
+\pi\kappa R\,\theta_B\,\theta'_{\rm in}(R).
 \end{equation}
 With $\theta'_{\rm in}(r)=\theta_B\lambda^{-1}\,I_1(r/\lambda)/I_0(R/\lambda)$,
 \begin{equation}
 F_{\rm in,el}
 =
-\pi\kappa_t R\,\lambda^{-1}\,\theta_B^2\,
+\pi\kappa R\,\lambda^{-1}\,\theta_B^2\,
 \frac{I_1(R/\lambda)}{I_0(R/\lambda)}.
 \end{equation}
 
@@ -119,13 +121,13 @@ since $r\theta\theta'\to 0$ at $r\to\infty$,
 \begin{equation}
 F_{\rm out,el}
 =
--\pi\kappa_t R\,\theta_B\,\theta'_{\rm out}(R).
+-\pi\kappa R\,\theta_B\,\theta'_{\rm out}(R).
 \end{equation}
 With $\theta'_{\rm out}(r)= -\theta_B\lambda^{-1}\,K_1(r/\lambda)/K_0(R/\lambda)$,
 \begin{equation}
 F_{\rm out,el}
 =
-\pi\kappa_t R\,\lambda^{-1}\,\theta_B^2\,
+\pi\kappa R\,\lambda^{-1}\,\theta_B^2\,
 \frac{K_1(R/\lambda)}{K_0(R/\lambda)}.
 \end{equation}
 
@@ -135,7 +137,7 @@ F_{\rm el}(\theta_B)
 =
 F_{\rm in,el}+F_{\rm out,el}
 =
-\pi\kappa_t R\,\lambda^{-1}\,\theta_B^2
+\pi\kappa R\,\lambda^{-1}\,\theta_B^2
 \left[
 \frac{I_1(R/\lambda)}{I_0(R/\lambda)}
 +
@@ -151,7 +153,7 @@ F_{\rm tot}(\theta_B)=A\,\theta_B^2 - B\,\theta_B,
 \end{equation}
 with
 \begin{align}
-A &= \pi\kappa_t R\,\lambda^{-1}
+A &= \pi\kappa R\,\lambda^{-1}
 \left[
 \frac{I_1(R/\lambda)}{I_0(R/\lambda)}
 +
@@ -200,32 +202,32 @@ At $R/\lambda = 7$,
 
 Therefore
 \begin{equation}
-A \simeq 9869.8456,
+A \simeq 43.8660,
 \qquad
 B = 2\pi R\left(\frac{h\Delta\varepsilon}{a}\right)\simeq 12.5663706.
 \end{equation}
 
 The optimal boundary tilt and minimal total energy are
 \begin{equation}
-\theta_B^\ast \simeq 6.366\times 10^{-4},
+\theta_B^\ast \simeq 1.4324\times 10^{-1},
 \qquad
-F_{\rm tot}^\ast \simeq -3.9999\times 10^{-3},
+F_{\rm tot}^\ast \simeq -8.9998\times 10^{-1},
 \end{equation}
 (in units of $\kappa$).
 
 \paragraph{Energy breakdown at the optimum.}
 At $\theta_B^\ast$,
 \begin{align}
-F_{\rm in,el} &\simeq +1.8559\times 10^{-3},\\
-F_{\rm out,el} &\simeq +2.1440\times 10^{-3},\\
-F_{\rm contact} &\simeq -7.9998\times 10^{-3},
+F_{\rm in,el} &\simeq +4.1758\times 10^{-1},\\
+F_{\rm out,el} &\simeq +4.8239\times 10^{-1},\\
+F_{\rm contact} &\simeq -1.8000,
 \end{align}
 so that
 \begin{equation}
 F_{\rm tot}^\ast
 =
 F_{\rm in,el}+F_{\rm out,el}+F_{\rm contact}
-\simeq -3.9999\times 10^{-3}.
+\simeq -8.9998\times 10^{-1}.
 \end{equation}
 
 \noindent
