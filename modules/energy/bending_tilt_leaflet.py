@@ -722,7 +722,12 @@ def _leaflet_triangle_payload(
     if use_cache:
         cached = getattr(mesh, cache_attr, None)
         if cached is not None and cached.get("key") == cache_key:
-            return cached["value"]
+            payload = cached["value"]
+            if isinstance(payload, dict) and "tri_area" not in payload:
+                payload = dict(payload)
+                payload.setdefault("tri_area", None)
+                cached["value"] = payload
+            return payload
 
     k_vecs, vertex_areas_vor, weights_full, tri_rows_full = compute_curvature_data(
         mesh, positions, index_map
@@ -736,6 +741,7 @@ def _leaflet_triangle_payload(
             "weights": weights_full,
             "tri_rows": tri_rows_full,
             "tri_keep": np.zeros(0, dtype=bool),
+            "tri_area": None,
             "g0": None,
             "g1": None,
             "g2": None,
@@ -920,7 +926,7 @@ def _total_energy_leaflet(
     vertex_areas_vor = np.asarray(payload["vertex_areas_vor"], dtype=float)
     weights = np.asarray(payload["weights"], dtype=float)
     tri_rows = np.asarray(payload["tri_rows"], dtype=np.int32)
-    tri_area = payload["tri_area"]
+    tri_area = payload.get("tri_area")
     if tri_rows.size == 0:
         return 0.0
 
@@ -1084,7 +1090,7 @@ def compute_energy_and_gradient_array_leaflet(
     weights = np.asarray(payload["weights"], dtype=float)
     tri_rows = np.asarray(payload["tri_rows"], dtype=np.int32)
     tri_keep = np.asarray(payload["tri_keep"], dtype=bool)
-    tri_area = payload["tri_area"]
+    tri_area = payload.get("tri_area")
 
     if tri_rows_full.size == 0 or tri_rows.size == 0:
         return 0.0
