@@ -114,6 +114,17 @@ def _resolve_group(param_resolver) -> str | None:
     return group if group else None
 
 
+def _use_stage_a_physical_rim_support(mesh, *, group: str, mode: str) -> bool:
+    """Return whether Stage A should restrict the source to the physical rim chain."""
+    if str(mode).strip().lower() != "all":
+        return False
+    if str(group).strip().lower() != "disk":
+        return False
+    gp = getattr(mesh, "global_parameters", None)
+    lane = "" if gp is None else str(gp.get("theory_parity_lane") or "").strip().lower()
+    return lane == "stage_a_emergent"
+
+
 def _resolve_strength(param_resolver, edge) -> float:
     resolved = resolve_contact_line_strength(
         param_resolver,
@@ -176,11 +187,17 @@ def _pin_to_circle_normal(mesh: Mesh, options: dict | None) -> np.ndarray | None
 def _rim_selection_payload(mesh: Mesh, *, group: str, mode: str):
     """Return cached rim edge/row data for a `(group, mode)` selection."""
     mesh.build_position_cache()
+    support_mode = (
+        "stage_a_physical_rim_v1"
+        if _use_stage_a_physical_rim_support(mesh, group=group, mode=mode)
+        else "default"
+    )
     cache_key = (
         int(getattr(mesh, "_facet_loops_version", 0)),
         int(getattr(mesh, "_vertex_ids_version", 0)),
         str(group),
         str(mode),
+        str(support_mode),
     )
     cache_attr = "_tilt_rim_source_bilayer_selection_cache"
     cached = getattr(mesh, cache_attr, None)
@@ -236,8 +253,106 @@ def _rim_selection_payload(mesh: Mesh, *, group: str, mode: str):
         "follow": bool(follow),
         "normal_row": normal_row,
     }
+    if support_mode == "stage_a_physical_rim_v1":
+        value = _restrict_to_outermost_midpoint_chain(mesh, value)
+        if value is None:
+            setattr(mesh, cache_attr, {"key": cache_key, "value": None})
+            return None
     setattr(mesh, cache_attr, {"key": cache_key, "value": value})
     return value
+
+
+def _restrict_to_outermost_midpoint_chain(mesh: Mesh, payload: dict) -> dict | None:
+    """Restrict selected edges to the outermost midpoint-radius chain.
+
+    In the Stage A lane the bilayer source should act as a line drive on the
+    physical disk rim. After subdivision that rim is represented by the
+    outermost chain of tagged disk edges rather than by every internal tagged
+    disk edge. Selecting the maximal midpoint-radius chain preserves the total
+    rim line length across refinement while keeping support localized to the rim.
+    """
+    edge_ids = np.asarray(payload["edge_ids"], dtype=int)
+    tails = np.asarray(payload["tails"], dtype=int)
+    heads = np.asarray(payload["heads"], dtype=int)
+    if edge_ids.size == 0:
+        return None
+
+    positions = mesh.positions_view()
+    if payload["follow"]:
+        center, normal = _resolve_followed_circle_frame(
+            mesh,
+            rows=np.asarray(payload["rim_rows"], dtype=int),
+            normal_row=payload["normal_row"],
+        )
+    else:
+        center = np.array([0.0, 0.0, 0.0], dtype=float)
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
+    mid = 0.5 * (positions[tails] + positions[heads])
+    radial = mid - center[None, :]
+    radial = radial - np.einsum("ij,j->i", radial, normal)[:, None] * normal[None, :]
+    midpoint_radius = np.linalg.norm(radial, axis=1)
+    if not np.any(midpoint_radius > 1.0e-12):
+        return None
+
+    max_radius = float(np.max(midpoint_radius))
+    tol = max(1.0e-9, 1.0e-5 * max(1.0, abs(max_radius)))
+    keep = midpoint_radius >= (max_radius - tol)
+    if not np.any(keep):
+        return None
+
+    edge_ids_k = edge_ids[keep]
+    tails_k = tails[keep]
+    heads_k = heads[keep]
+    rim_rows_k = np.unique(np.concatenate([tails_k, heads_k]))
+    return {
+        "edge_ids": edge_ids_k,
+        "tails": tails_k,
+        "heads": heads_k,
+        "rim_rows": rim_rows_k,
+        "follow": bool(payload["follow"]),
+        "normal_row": payload["normal_row"],
+    }
+
+
+def _selection_diagnostics(mesh: Mesh, param_resolver) -> dict | None:
+    """Return diagnostics for the currently selected rim-source support."""
+    group = _resolve_group(param_resolver)
+    if group is None:
+        return None
+    mode = _resolve_edge_mode(param_resolver)
+    payload = _rim_selection_payload(mesh, group=group, mode=mode)
+    if payload is None:
+        return None
+
+    positions = mesh.positions_view()
+    gamma = np.asarray(
+        [
+            _resolve_strength(param_resolver, mesh.edges[int(eid)])
+            for eid in payload["edge_ids"]
+        ],
+        dtype=float,
+    )
+    tails = np.asarray(payload["tails"], dtype=int)
+    heads = np.asarray(payload["heads"], dtype=int)
+    p0 = positions[tails]
+    p1 = positions[heads]
+    lengths = np.linalg.norm(p1 - p0, axis=1)
+    radii = np.linalg.norm(positions[:, :2], axis=1)
+    return {
+        "group": str(group),
+        "mode": str(mode),
+        "edge_count": int(payload["edge_ids"].size),
+        "rim_row_count": int(np.asarray(payload["rim_rows"], dtype=int).size),
+        "rim_row_radii": sorted(
+            {
+                round(float(radii[int(row)]), 6)
+                for row in np.asarray(payload["rim_rows"], dtype=int)
+            }
+        ),
+        "total_edge_length": float(np.sum(lengths)),
+        "total_source_load": float(np.sum(gamma * lengths)),
+    }
 
 
 def _resolve_followed_circle_frame(

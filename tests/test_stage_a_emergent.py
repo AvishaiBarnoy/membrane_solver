@@ -211,4 +211,5 @@ def test_stage_a_refinement_keeps_branch_consistent() -> None:
     assert float(refined_metrics["theta_mean"]) > EMERGENT_THETA_THRESHOLD
     assert float(refined_metrics["theta_std"]) < 1.0e-2
     assert np.isfinite(float(refined_metrics["profile_rmse"]))
+    assert float(refined_metrics["zmax"]) < 1.0e-5
     assert float(refined_metrics["profile_rmse"]) < 1.5
