@@ -159,6 +159,21 @@ def _bending_tilt_in_update_mode(global_params) -> str:
     return mode
 
 
+def _use_stage_a_inner_shape_cross_suppression(
+    mesh: Mesh, global_params, *, cache_tag: str
+) -> bool:
+    """Return whether to suppress the inner shape-gradient cross term for Stage A.
+
+    This is intentionally scoped to the Stage A emergent lane only. It changes
+    the *shape-gradient* path of the inner bending-tilt coupling while leaving
+    the scalar energy and tilt-gradient paths unchanged.
+    """
+    if str(cache_tag) != "in" or global_params is None:
+        return False
+    lane = str(global_params.get("theory_parity_lane") or "").strip().lower()
+    return lane == "stage_a_emergent"
+
+
 def _inner_bending_tilt_dE_ddiv(
     *,
     mesh: Mesh,
@@ -1341,6 +1356,21 @@ def compute_energy_and_gradient_array_leaflet(
     term = base_term + div_eff
     term[~is_interior] = 0.0
 
+    suppress_shape_cross = _use_stage_a_inner_shape_cross_suppression(
+        mesh, global_params, cache_tag=cache_tag
+    )
+    setattr(
+        mesh,
+        f"_last_bending_tilt_{cache_tag}_shape_cross_stats",
+        {
+            "enabled": bool(suppress_shape_cross),
+            "cache_tag": str(cache_tag),
+            "lane": str(global_params.get("theory_parity_lane") or "")
+            if global_params is not None
+            else "",
+        },
+    )
+
     mode = _gradient_mode(global_params)
     normals = _vertex_normals(mesh, positions, tri_rows)
     if ctx is not None:
@@ -1353,7 +1383,8 @@ def compute_energy_and_gradient_array_leaflet(
     K_dir[mask_k] = k_vecs[mask_k] / k_mag[mask_k][:, None]
     K_dir[~mask_k] = normals[~mask_k]
 
-    scale_K = (kappa_arr * term * ratio).astype(float, copy=False)
+    shape_term = base_term if suppress_shape_cross else term
+    scale_K = (kappa_arr * shape_term * ratio).astype(float, copy=False)
     if ctx is not None:
         factor_K_vec = ctx.scratch_array(
             f"btl_{cache_tag}_factor_K_vec", shape=K_dir.shape, dtype=K_dir.dtype
@@ -1362,8 +1393,12 @@ def compute_energy_and_gradient_array_leaflet(
         factor_K_vec = np.empty_like(K_dir, order="F")
     np.multiply(K_dir, scale_K[:, None], out=factor_K_vec)
 
-    fA_eff = 0.5 * kappa_arr * term**2
-    fA_vor = -2.0 * kappa_arr * term * ratio * H_vor
+    if suppress_shape_cross:
+        fA_eff = 0.5 * kappa_arr * (base_term**2 + div_eff**2)
+        fA_vor = -2.0 * kappa_arr * base_term * ratio * H_vor
+    else:
+        fA_eff = 0.5 * kappa_arr * term**2
+        fA_vor = -2.0 * kappa_arr * term * ratio * H_vor
 
     if mode == "finite_difference":  # pragma: no cover - slow debugging path
         eps = float(global_params.get("bending_fd_eps", 1e-6))
