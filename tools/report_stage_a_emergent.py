@@ -38,6 +38,10 @@ DEFAULT_OUT = (
 TARGET_EMERGENT_THETA = 0.18
 EMERGENT_Z_THRESHOLD = 5.0e-5
 EMERGENT_THETA_THRESHOLD = 1.0e-2
+STAGE_A_REFERENCE_SCHEDULES = {
+    "level0": ["g3"],
+    "level1": ["g3", "r", "g5"],
+}
 
 
 def _load_mesh_from_fixture(path: Path):
@@ -204,6 +208,12 @@ def build_stage_a_report(
             "target_emergent_theta": TARGET_EMERGENT_THETA,
             "emergent_theta_threshold": EMERGENT_THETA_THRESHOLD,
             "emergent_z_threshold": EMERGENT_Z_THRESHOLD,
+            "reference_schedules": STAGE_A_REFERENCE_SCHEDULES,
+            "level1_reference_schedule_note": (
+                "Use g3 -> r -> g5 as the current Stage A level-1 benchmark "
+                "reference. Deeper schedules are a separate branch-exploration "
+                "question, not part of the benchmark definition."
+            ),
         },
         "flat_reference": {
             "theta_star": float(theory.theta_star),
@@ -213,7 +223,9 @@ def build_stage_a_report(
             "base": _run_fixture(base_fixture, ["g5"]),
             "seeded": _run_fixture(seeded_fixture, ["g5"]),
             "continuation": _run_continuation(base_fixture),
-            "refined": _run_fixture(base_fixture, ["g3", "r", "g3"]),
+            "refined": _run_fixture(
+                base_fixture, STAGE_A_REFERENCE_SCHEDULES["level1"]
+            ),
         },
     }
     return report

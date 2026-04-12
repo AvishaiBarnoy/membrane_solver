@@ -278,6 +278,14 @@ Use a **nontrivial surface with J≈0** to confirm that the reduction
 **Expected**
 - Surface approaches a catenoid-like minimal surface: `J ≈ 0` away from boundaries.
 
+**Current Stage A benchmark reference**
+- For the current stabilized Stage A lane, use the level-1 refinement path
+  `g3 -> r -> g5` as the benchmark reference schedule.
+- This is a benchmark-definition choice, not a statement that deeper schedules
+  are converged or physically preferred.
+- Schedule exploration beyond `g5` (`g10`, `g20`, `cg`, mixed paths) should be
+  treated as a separate study, not folded into the benchmark reference.
+
 ### Stage B (add rim tilt source)
 - Impose a tilt source on one boundary ring (Dirichlet or anchoring band).
 - Solve for tilt on the (nearly) minimal surface (geometry fixed or weakly coupled).
