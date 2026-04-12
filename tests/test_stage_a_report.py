@@ -9,6 +9,9 @@ def test_stage_a_report_contains_all_cases_and_flat_reference() -> None:
     assert set(report["cases"]) == {"base", "seeded", "continuation", "refined"}
     assert float(report["flat_reference"]["theta_star"]) > 0.0
     assert float(report["flat_reference"]["total_energy"]) < 0.0
+    assert report["meta"]["reference_schedules"]["level1"] == ["g3", "r", "g5"]
+    assert "benchmark reference" in report["meta"]["level1_reference_schedule_note"]
+    assert report["cases"]["refined"]["commands"] == ["g3", "r", "g5"]
 
     for metrics in report["cases"].values():
         assert metrics["branch"] in {"emergent_curved", "flat_control"}
