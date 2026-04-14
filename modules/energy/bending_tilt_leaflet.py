@@ -40,6 +40,15 @@ _BASE_TERM_BOUNDARY_OPTION_KEYS = (
 )
 
 _ASSUME_J0_PRESETS_KEY = "bending_tilt_assume_J0_presets"
+_OUTER_TRANSITION_OPERATOR_SHELLS = (
+    0.837822,
+    0.842474,
+    0.853008,
+    0.866643,
+    0.965910,
+    0.974541,
+    0.999984,
+)
 
 
 def _use_inner_recovered_divergence(global_params, *, cache_tag: str) -> bool:
@@ -172,6 +181,259 @@ def _use_stage_a_inner_shape_cross_suppression(
         return False
     lane = str(global_params.get("theory_parity_lane") or "").strip().lower()
     return lane == "stage_a_emergent"
+
+
+def _use_stage_a_outer_grad_linear_transition_operator(
+    global_params, *, cache_tag: str
+) -> bool:
+    """Return whether the Stage A outer grad_linear transition operator is enabled."""
+    if str(cache_tag) != "out" or global_params is None:
+        return False
+    lane = str(global_params.get("theory_parity_lane") or "").strip().lower()
+    return lane == "stage_a_emergent"
+
+
+def _outer_transition_operator_payload(
+    mesh: Mesh,
+    *,
+    tri_rows_full: np.ndarray,
+    tri_rows: np.ndarray,
+) -> dict[str, np.ndarray]:
+    """Build cached edge-local transition payload for the outer grad_linear operator."""
+    cache_attr = "_bending_tilt_out_transition_operator_payload"
+    cache_key = (
+        int(mesh._facet_loops_version),
+        int(mesh._vertex_ids_version),
+        int(tri_rows_full.shape[0]),
+        int(tri_rows.shape[0]),
+    )
+    cached = getattr(mesh, cache_attr, None)
+    if cached is not None and cached.get("key") == cache_key:
+        return cached["value"]
+
+    n_vertices = len(mesh.vertex_ids)
+    full_counts = np.zeros(n_vertices, dtype=np.int32)
+    keep_counts = np.zeros(n_vertices, dtype=np.int32)
+    for col in range(3):
+        np.add.at(full_counts, tri_rows_full[:, col], 1)
+        np.add.at(keep_counts, tri_rows[:, col], 1)
+
+    participation = np.zeros(n_vertices, dtype=float)
+    mask_full = full_counts > 0
+    participation[mask_full] = keep_counts[mask_full] / full_counts[mask_full]
+
+    domain = np.zeros(n_vertices, dtype=np.int8)
+    domain[(participation > 1.0e-12) & (participation < 1.0 - 1.0e-12)] = 1
+    domain[participation >= 1.0 - 1.0e-12] = 2
+
+    n_tri = tri_rows.shape[0]
+    edge_endpoint_a = np.empty((n_tri, 3), dtype=np.int32)
+    edge_endpoint_b = np.empty((n_tri, 3), dtype=np.int32)
+    edge_endpoint_a[:, 0] = tri_rows[:, 1]
+    edge_endpoint_b[:, 0] = tri_rows[:, 2]
+    edge_endpoint_a[:, 1] = tri_rows[:, 2]
+    edge_endpoint_b[:, 1] = tri_rows[:, 0]
+    edge_endpoint_a[:, 2] = tri_rows[:, 0]
+    edge_endpoint_b[:, 2] = tri_rows[:, 1]
+
+    edge_third = np.empty((n_tri, 3), dtype=np.int32)
+    edge_third[:, 0] = tri_rows[:, 0]
+    edge_third[:, 1] = tri_rows[:, 1]
+    edge_third[:, 2] = tri_rows[:, 2]
+
+    edge_to_thirds: dict[tuple[int, int], list[int]] = {}
+    for tri_idx in range(n_tri):
+        v0, v1, v2 = tri_rows[tri_idx]
+        edge_to_thirds.setdefault(tuple(sorted((int(v1), int(v2)))), []).append(int(v0))
+        edge_to_thirds.setdefault(tuple(sorted((int(v2), int(v0)))), []).append(int(v1))
+        edge_to_thirds.setdefault(tuple(sorted((int(v0), int(v1)))), []).append(int(v2))
+
+    recon_a_idx = np.full((n_tri, 3, 2), -1, dtype=np.int32)
+    recon_b_idx = np.full((n_tri, 3, 2), -1, dtype=np.int32)
+    recon_a_count = np.zeros((n_tri, 3), dtype=np.int8)
+    recon_b_count = np.zeros((n_tri, 3), dtype=np.int8)
+
+    for tri_idx in range(n_tri):
+        for edge_idx in range(3):
+            a = int(edge_endpoint_a[tri_idx, edge_idx])
+            b = int(edge_endpoint_b[tri_idx, edge_idx])
+            thirds = edge_to_thirds.get(tuple(sorted((a, b))), [])
+            a_candidates = [idx for idx in thirds if domain[idx] == domain[a]]
+            b_candidates = [idx for idx in thirds if domain[idx] == domain[b]]
+            if a_candidates:
+                recon_a_count[tri_idx, edge_idx] = min(len(a_candidates), 2)
+                recon_a_idx[tri_idx, edge_idx, : recon_a_count[tri_idx, edge_idx]] = (
+                    np.asarray(a_candidates[:2], dtype=np.int32)
+                )
+            if b_candidates:
+                recon_b_count[tri_idx, edge_idx] = min(len(b_candidates), 2)
+                recon_b_idx[tri_idx, edge_idx, : recon_b_count[tri_idx, edge_idx]] = (
+                    np.asarray(b_candidates[:2], dtype=np.int32)
+                )
+
+    edge_domain_a = domain[edge_endpoint_a]
+    edge_domain_b = domain[edge_endpoint_b]
+    transition_mask = ((edge_domain_a == 1) & (edge_domain_b == 2)) | (
+        (edge_domain_a == 2) & (edge_domain_b == 1)
+    )
+    same_mask = ~transition_mask
+
+    value = {
+        "domain": domain,
+        "participation": participation,
+        "edge_endpoint_a": edge_endpoint_a,
+        "edge_endpoint_b": edge_endpoint_b,
+        "recon_a_idx": recon_a_idx,
+        "recon_b_idx": recon_b_idx,
+        "recon_a_count": recon_a_count,
+        "recon_b_count": recon_b_count,
+        "transition_mask": transition_mask,
+        "same_mask": same_mask,
+    }
+    setattr(mesh, cache_attr, {"key": cache_key, "value": value})
+    return value
+
+
+def _mean_reconstructed_field(
+    field: np.ndarray,
+    endpoint_rows: np.ndarray,
+    recon_idx: np.ndarray,
+    recon_count: np.ndarray,
+) -> np.ndarray:
+    """Return reconstructed edge-side field, falling back to endpoint values."""
+    out = field[endpoint_rows].copy()
+    mask1 = recon_count == 1
+    if np.any(mask1):
+        out[mask1] = field[recon_idx[..., 0][mask1]]
+    mask2 = recon_count >= 2
+    if np.any(mask2):
+        out[mask2] = 0.5 * (
+            field[recon_idx[..., 0][mask2]] + field[recon_idx[..., 1][mask2]]
+        )
+    return out
+
+
+def _apply_transition_aware_beltrami_laplacian(
+    mesh: Mesh,
+    *,
+    positions: np.ndarray,
+    weights: np.ndarray,
+    tri_rows: np.ndarray,
+    tri_rows_full: np.ndarray,
+    field: np.ndarray,
+    cache_tag: str,
+) -> tuple[np.ndarray, dict[str, object]]:
+    """Apply a transition-aware outer grad_linear operator.
+
+    The reconstructed state is the vector field ``factor_K_vec`` itself. On
+    same-domain edges, the operator reduces to the current cotan/Beltrami form.
+    On partial<->full transition edges, the field jump uses reconstructed
+    same-domain side states instead of the raw endpoint states.
+    """
+    payload = _outer_transition_operator_payload(
+        mesh, tri_rows_full=tri_rows_full, tri_rows=tri_rows
+    )
+    edge_endpoint_a = np.asarray(payload["edge_endpoint_a"], dtype=np.int32)
+    edge_endpoint_b = np.asarray(payload["edge_endpoint_b"], dtype=np.int32)
+    recon_a_idx = np.asarray(payload["recon_a_idx"], dtype=np.int32)
+    recon_b_idx = np.asarray(payload["recon_b_idx"], dtype=np.int32)
+    recon_a_count = np.asarray(payload["recon_a_count"], dtype=np.int8)
+    recon_b_count = np.asarray(payload["recon_b_count"], dtype=np.int8)
+    transition_mask = np.asarray(payload["transition_mask"], dtype=bool)
+    same_mask = np.asarray(payload["same_mask"], dtype=bool)
+    participation = np.asarray(payload["participation"], dtype=float)
+    domain = np.asarray(payload["domain"], dtype=np.int8)
+
+    state_a = field[edge_endpoint_a]
+    state_b = field[edge_endpoint_b]
+    recon_a = _mean_reconstructed_field(
+        field, edge_endpoint_a, recon_a_idx, recon_a_count
+    )
+    recon_b = _mean_reconstructed_field(
+        field, edge_endpoint_b, recon_b_idx, recon_b_count
+    )
+
+    use_a = np.where(transition_mask[..., None], recon_a, state_a)
+    use_b = np.where(transition_mask[..., None], recon_b, state_b)
+    coeff = 0.5 * weights[:, :, None]
+    flux = coeff * (use_a - use_b)
+    transition_flux = np.where(transition_mask[..., None], flux, 0.0)
+    same_flux = np.where(same_mask[..., None], flux, 0.0)
+
+    out = np.zeros_like(field)
+    out_transition = np.zeros_like(field)
+    out_same = np.zeros_like(field)
+    for edge_idx in range(3):
+        a = edge_endpoint_a[:, edge_idx]
+        b = edge_endpoint_b[:, edge_idx]
+        f = flux[:, edge_idx, :]
+        ft = transition_flux[:, edge_idx, :]
+        fs = same_flux[:, edge_idx, :]
+        np.add.at(out, a, f)
+        np.add.at(out, b, -f)
+        np.add.at(out_transition, a, ft)
+        np.add.at(out_transition, b, -ft)
+        np.add.at(out_same, a, fs)
+        np.add.at(out_same, b, -fs)
+
+    radii = np.linalg.norm(positions[:, :2], axis=1)
+    shell_summary: list[dict[str, float | int]] = []
+    for target in _OUTER_TRANSITION_OPERATOR_SHELLS:
+        rows = np.where(np.isclose(radii, target, atol=1.0e-5))[0]
+        if rows.size == 0:
+            continue
+        shell_summary.append(
+            {
+                "radius": float(np.mean(radii[rows])),
+                "vertex_count": int(rows.size),
+                "transition_z_mean": float(np.mean(out_transition[rows, 2])),
+                "same_z_mean": float(np.mean(out_same[rows, 2])),
+                "total_z_mean": float(np.mean(out[rows, 2])),
+            }
+        )
+
+    transition_examples = np.argwhere(transition_mask)
+    example = None
+    if transition_examples.size:
+        tri_idx, edge_idx = transition_examples[0]
+        a = int(edge_endpoint_a[tri_idx, edge_idx])
+        b = int(edge_endpoint_b[tri_idx, edge_idx])
+        example = {
+            "triangle_index": int(tri_idx),
+            "edge_index": int(edge_idx),
+            "endpoint_rows": [a, b],
+            "endpoint_domains": [
+                "partial" if int(domain[a]) == 1 else "full",
+                "partial" if int(domain[b]) == 1 else "full",
+            ],
+            "endpoint_participation": [
+                float(participation[a]),
+                float(participation[b]),
+            ],
+            "raw_endpoint_factor_K_vec": [
+                field[a].tolist(),
+                field[b].tolist(),
+            ],
+            "reconstructed_side_states": [
+                recon_a[tri_idx, edge_idx].tolist(),
+                recon_b[tri_idx, edge_idx].tolist(),
+            ],
+        }
+
+    stats = {
+        "enabled": True,
+        "mode": "outer_grad_linear_transition_operator_v1",
+        "cache_tag": str(cache_tag),
+        "lane": str(mesh.global_parameters.get("theory_parity_lane") or ""),
+        "transition_edge_count": int(np.sum(transition_mask)),
+        "same_domain_edge_count": int(np.sum(same_mask)),
+        "nontransition_uses_raw_state": True,
+        "reconstructed_state_variable": "factor_K_vec",
+        "reconstruction_rule": "same-domain edge-adjacent third-vertex averaging",
+        "transition_example": example,
+        "shell_summary": shell_summary,
+    }
+    return out, stats
 
 
 def _inner_bending_tilt_dE_ddiv(
@@ -1393,6 +1655,18 @@ def compute_energy_and_gradient_array_leaflet(
         factor_K_vec = np.empty_like(K_dir, order="F")
     np.multiply(K_dir, scale_K[:, None], out=factor_K_vec)
 
+    transition_operator_enabled = _use_stage_a_outer_grad_linear_transition_operator(
+        global_params, cache_tag=cache_tag
+    )
+    transition_operator_stats = {
+        "enabled": False,
+        "mode": "off",
+        "cache_tag": str(cache_tag),
+        "lane": str(global_params.get("theory_parity_lane") or "")
+        if global_params is not None
+        else "",
+    }
+
     if suppress_shape_cross:
         fA_eff = 0.5 * kappa_arr * (base_term**2 + div_eff**2)
         fA_vor = -2.0 * kappa_arr * base_term * ratio * H_vor
@@ -1414,7 +1688,21 @@ def compute_energy_and_gradient_array_leaflet(
             eps=eps,
         )
     elif mode == "approx":
-        grad_arr[:] -= _apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
+        if transition_operator_enabled:
+            grad_linear_raw, transition_operator_stats = (
+                _apply_transition_aware_beltrami_laplacian(
+                    mesh,
+                    positions=positions,
+                    weights=weights,
+                    tri_rows=tri_rows,
+                    tri_rows_full=tri_rows_full,
+                    field=factor_K_vec,
+                    cache_tag=cache_tag,
+                )
+            )
+            grad_arr[:] -= grad_linear_raw
+        else:
+            grad_arr[:] -= _apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
         grad_arr[~is_interior] = 0.0
     else:
         # --- Analytic gradient backpropagation (copied from bending.py) ---
@@ -1433,7 +1721,21 @@ def compute_energy_and_gradient_array_leaflet(
 
         # Term 1: Variation assuming cotans constant (L constant)
         # factor_K_vec already zeroed at boundaries
-        grad_linear = -_apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
+        if transition_operator_enabled:
+            grad_linear_raw, transition_operator_stats = (
+                _apply_transition_aware_beltrami_laplacian(
+                    mesh,
+                    positions=positions,
+                    weights=weights,
+                    tri_rows=tri_rows,
+                    tri_rows_full=tri_rows_full,
+                    field=factor_K_vec,
+                    cache_tag=cache_tag,
+                )
+            )
+            grad_linear = -grad_linear_raw
+        else:
+            grad_linear = -_apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
 
         # Term 2: Variation of L (cotangents)
         fK = factor_K_vec
@@ -1602,6 +1904,12 @@ def compute_energy_and_gradient_array_leaflet(
         grad_arr[:] += grad_linear
         grad_arr[:] += grad_cot
         grad_arr[:] += grad_area
+
+    setattr(
+        mesh,
+        f"_last_bending_tilt_{cache_tag}_grad_linear_transition_stats",
+        transition_operator_stats,
+    )
 
     if tilt_grad_arr is not None:
         tilt_grad_arr = np.asarray(tilt_grad_arr, dtype=float)
