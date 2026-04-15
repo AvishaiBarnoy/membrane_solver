@@ -286,6 +286,23 @@ Use a **nontrivial surface with J≈0** to confirm that the reduction
 - Schedule exploration beyond `g5` (`g10`, `g20`, `cg`, mixed paths) should be
   treated as a separate study, not folded into the benchmark reference.
 
+**Current Stage A redesign status**
+- PR #496 is merged as the first operator-focused redesign pass.
+- That pass changes only the outer `grad_linear` transition coupling; scalar
+  energy, tilt gradient, `grad_cot`, and `grad_area` remain on the previous
+  formulation.
+- On the level-2 audit, it materially reduces the dominant shell seed from
+  about `+0.05498 / -0.00604 / +0.14762` to
+  `+0.02504 / -0.01826 / +0.11321`.
+- On the first `g1` after the second refine, the oscillation is reduced
+  overall: the first and outer shell lobes shrink in magnitude, even though the
+  middle shell remains present.
+- Stage A levels `0` and `1` remain unchanged to reporting precision, and the
+  targeted flat KH lane remains green.
+- This is a qualified improvement, not a full collapse of the residual level-2
+  shell-scale pattern, so further operator-focused follow-up may still be
+  needed.
+
 ### Stage B (add rim tilt source)
 - Impose a tilt source on one boundary ring (Dirichlet or anchoring band).
 - Solve for tilt on the (nearly) minimal surface (geometry fixed or weakly coupled).
