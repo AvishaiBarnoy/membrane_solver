@@ -287,21 +287,25 @@ Use a **nontrivial surface with J≈0** to confirm that the reduction
   treated as a separate study, not folded into the benchmark reference.
 
 **Current Stage A redesign status**
-- PR #496 is merged as the first operator-focused redesign pass.
-- That pass changes only the outer `grad_linear` transition coupling; scalar
-  energy, tilt gradient, `grad_cot`, and `grad_area` remain on the previous
-  formulation.
-- On the level-2 audit, it materially reduces the dominant shell seed from
-  about `+0.05498 / -0.00604 / +0.14762` to
-  `+0.02504 / -0.01826 / +0.11321`.
-- On the first `g1` after the second refine, the oscillation is reduced
-  overall: the first and outer shell lobes shrink in magnitude, even though the
-  middle shell remains present.
+- PR #498 is merged as the first patch-local outer `grad_linear` redesign.
+- That pass replaces the PR #496 edge-local transition reconstruction only
+  inside the coupled transition patch; scalar energy, tilt gradient, `grad_cot`,
+  `grad_area`, support weighting, and public interfaces remain unchanged.
+- On the level-2 audit, the previously residual target-shell pre-update seed at
+  `r ≈ 0.965910 / 0.974541 / 0.999984` collapses from
+  `+0.02504 / -0.01826 / +0.11321` to numerical zero
+  (`~+2.9e-14 / -2.9e-14 / +2.7e-14`).
+- On the first `g1` after the second refine, the target-shell oscillation is
+  effectively removed to numerical zero as well.
 - Stage A levels `0` and `1` remain unchanged to reporting precision, and the
   targeted flat KH lane remains green.
-- This is a qualified improvement, not a full collapse of the residual level-2
-  shell-scale pattern, so further operator-focused follow-up may still be
-  needed.
+- On the whole outer transition-region scan for the current benchmark path, the
+  largest remaining shellwise magnitudes are all at numerical-noise scale:
+  pre-update `|dE/dz| ≈ 2.9e-14` at `r ≈ 0.965910`, first-`g1`
+  `|z| ≈ 3.5e-16` at `r ≈ 0.999984`, and final relaxed
+  `|z| ≈ 1.7e-16` at `r ≈ 0.974541`.
+- For the current Stage A benchmark path, level `2` is now treated as
+  numerically stabilized.
 
 ### Stage B (add rim tilt source)
 - Impose a tilt source on one boundary ring (Dirichlet or anchoring band).
