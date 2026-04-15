@@ -39,20 +39,40 @@ def test_stage_a_outer_grad_linear_transition_operator_is_enabled() -> None:
 
     stats = getattr(mesh, "_last_bending_tilt_out_grad_linear_transition_stats", {})
     assert stats.get("enabled") is True
-    assert stats.get("mode") == "outer_grad_linear_transition_operator_v1"
+    assert stats.get("mode") == "outer_grad_linear_transition_patch_operator_v1"
     assert stats.get("cache_tag") == "out"
     assert str(stats.get("lane")) == "stage_a_emergent"
     assert stats.get("reconstructed_state_variable") == "factor_K_vec"
-    assert stats.get("nontransition_uses_raw_state") is True
+    assert stats.get("exterior_uses_raw_state") is True
     assert int(stats.get("transition_edge_count", 0)) > 0
-    assert int(stats.get("same_domain_edge_count", 0)) > 0
+    assert int(stats.get("patch_component_count", 0)) > 0
+    assert int(stats.get("patch_vertex_count", 0)) > 0
+    assert int(stats.get("partial_vertex_count", 0)) > 0
+    assert int(stats.get("halo_full_vertex_count", 0)) > 0
+    assert stats.get("halo_vertices_are_direct_transition_full_endpoints") is True
+    assert int(stats.get("fallback_component_count", -1)) == 0
 
-    example = stats.get("transition_example") or {}
-    assert example.get("endpoint_domains") in (["partial", "full"], ["full", "partial"])
-    raw = np.asarray(example.get("raw_endpoint_factor_K_vec"), dtype=float)
-    recon = np.asarray(example.get("reconstructed_side_states"), dtype=float)
-    assert raw.shape == (2, 3)
-    assert recon.shape == (2, 3)
+    example = stats.get("patch_example") or {}
+    assert int(example.get("component_index", -1)) >= 0
+    assert int(example.get("patch_vertex_count", 0)) > 0
+    assert int(example.get("boundary_vertex_count", 0)) > 0
+    field = np.asarray(example.get("boundary_factor_K_vec_sample"), dtype=float)
+    assert field.ndim == 2
+    assert field.shape[1] == 3
+
+    patch_shell_summary = {
+        round(float(item["radius"]), 6): item
+        for item in stats.get("patch_shell_summary", [])
+    }
+    assert set(patch_shell_summary) == {
+        0.837822,
+        0.842474,
+        0.853008,
+        0.866643,
+        0.965910,
+        0.974541,
+        0.999984,
+    }
 
     shell_summary = {
         round(float(item["radius"]), 6): item for item in stats.get("shell_summary", [])
@@ -60,6 +80,7 @@ def test_stage_a_outer_grad_linear_transition_operator_is_enabled() -> None:
     for radius in (0.965910, 0.974541, 0.999984):
         item = shell_summary[radius]
         assert int(item["vertex_count"]) > 0
-        assert np.isfinite(float(item["transition_z_mean"]))
-        assert np.isfinite(float(item["same_z_mean"]))
+        assert np.isfinite(float(item["patch_internal_z_mean"]))
+        assert np.isfinite(float(item["patch_boundary_z_mean"]))
+        assert np.isfinite(float(item["exterior_z_mean"]))
         assert np.isfinite(float(item["total_z_mean"]))
