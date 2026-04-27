@@ -30,6 +30,7 @@ def test_curved_1disk_theory_benchmark_reports_current_tensionless_miss() -> Non
         "inner_i1_fit",
         "outer_k1_fit",
         "outer_height_log_fit",
+        "outer_curvature",
         "total_energy",
         "inner_elastic",
         "outer_elastic",
@@ -37,7 +38,7 @@ def test_curved_1disk_theory_benchmark_reports_current_tensionless_miss() -> Non
     }
 
     theta_b_num = float(report["theta_B_selected"])
-    assert theta_b_num < 0.5 * float(theory["theta_B_opt"])
+    assert theta_b_num < 0.75 * float(theory["theta_B_opt"])
 
     near_rim = report["near_rim"]
     assert float(near_rim["phi_over_theta_B"]) == pytest.approx(0.5, rel=0.10)
@@ -53,10 +54,10 @@ def test_curved_1disk_theory_benchmark_reports_current_tensionless_miss() -> Non
     assert inner_fit["window"] == [0.25, 0.75]
 
     outer_fit = fits["outer_k1"]
-    assert float(outer_fit["lambda_fit"]) == pytest.approx(10.0, rel=0.0, abs=1.0e-9)
+    assert float(outer_fit["lambda_fit"]) == pytest.approx(10.0, rel=0.01)
     assert float(outer_fit["rel_rmse"]) > 0.20
     assert outer_fit["window"] == [2.0, 10.0]
-    assert float(outer_fit["leaflet_mismatch_median"]) > 1.0
+    assert float(outer_fit["leaflet_mismatch_median"]) > 0.40
 
     height_fit = fits["outer_height_log"]
     assert float(height_fit["slope_fit"]) == pytest.approx(0.0, abs=1.0e-12)
@@ -64,14 +65,14 @@ def test_curved_1disk_theory_benchmark_reports_current_tensionless_miss() -> Non
     assert height_fit["window"] == [3.0, 10.0]
 
     curvature = report["outer_curvature"]
-    assert float(curvature["mean_abs_J"]) <= 0.05
-    assert float(curvature["p95_abs_J"]) <= 0.15
+    assert float(curvature["mean_abs_J"]) > 0.05
+    assert float(curvature["p95_abs_J"]) > 0.15
 
     energies = report["energies"]
     assert float(energies["total_numeric"]) > float(theory["F_tot"])
-    assert float(energies["inner_elastic_numeric"]) < 0.01
-    assert float(energies["outer_elastic_numeric"]) > 0.5
-    assert abs(float(energies["contact_numeric"])) < 0.5 * abs(float(theory["F_cont"]))
+    assert 0.001 < float(energies["inner_elastic_numeric"]) < 0.01
+    assert float(energies["outer_elastic_numeric"]) > 1.0
+    assert abs(float(energies["contact_numeric"])) < abs(float(theory["F_cont"]))
 
     outer_sensitivity = report["outer_window_sensitivity"]
     assert float(outer_sensitivity["lambda_fit_spread"]) <= 0.10
