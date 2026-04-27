@@ -27,6 +27,7 @@ def test_curved_1disk_theory_benchmark_reports_current_tensionless_miss() -> Non
     assert report["benchmark_lock_passed"] is False
     assert set(report["benchmark_lock_failures"]) == {
         "theta_B_opt",
+        "theta_in_half_split",
         "inner_i1_fit",
         "outer_k1_fit",
         "outer_height_log_fit",
@@ -35,6 +36,7 @@ def test_curved_1disk_theory_benchmark_reports_current_tensionless_miss() -> Non
         "inner_elastic",
         "outer_elastic",
         "contact_energy",
+        "outer_log_window_sensitivity",
     }
 
     theta_b_num = float(report["theta_B_selected"])
@@ -42,7 +44,7 @@ def test_curved_1disk_theory_benchmark_reports_current_tensionless_miss() -> Non
 
     near_rim = report["near_rim"]
     assert float(near_rim["phi_over_theta_B"]) == pytest.approx(0.5, rel=0.10)
-    assert float(near_rim["theta_in_over_half_theta_B"]) == pytest.approx(1.0, rel=0.15)
+    assert float(near_rim["theta_in_over_half_theta_B"]) < 0.85
     assert float(near_rim["theta_out_over_half_theta_B"]) == pytest.approx(
         1.0, rel=0.15
     )
@@ -60,8 +62,8 @@ def test_curved_1disk_theory_benchmark_reports_current_tensionless_miss() -> Non
     assert float(outer_fit["leaflet_mismatch_median"]) > 0.40
 
     height_fit = fits["outer_height_log"]
-    assert float(height_fit["slope_fit"]) == pytest.approx(0.0, abs=1.0e-12)
-    assert float(height_fit["rel_rmse"]) == pytest.approx(0.0, abs=1.0e-12)
+    assert abs(float(height_fit["slope_fit"])) > 1.0e-10
+    assert float(height_fit["rel_rmse"]) > 0.20
     assert height_fit["window"] == [3.0, 10.0]
 
     curvature = report["outer_curvature"]
@@ -76,5 +78,5 @@ def test_curved_1disk_theory_benchmark_reports_current_tensionless_miss() -> Non
 
     outer_sensitivity = report["outer_window_sensitivity"]
     assert float(outer_sensitivity["lambda_fit_spread"]) <= 0.10
-    assert float(outer_sensitivity["log_slope_spread"]) <= 0.10
+    assert float(outer_sensitivity["log_slope_spread"]) > 0.10
     assert report["last_free_shell_radius"] > 10.0

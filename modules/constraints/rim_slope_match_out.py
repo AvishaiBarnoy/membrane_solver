@@ -115,6 +115,28 @@ def _uses_outer_shell_tilt_matching(matching_mode: str) -> bool:
     }
 
 
+def _use_curved_free_disk_shell2_tilt_continuation(global_params) -> bool:
+    """Return whether the shared-rim curved free-disk lane should target shell 2.
+
+    This lane uses the tagged first free shell as a surrogate secant ring for the
+    shape-side rim law. The outer-leaflet tilt continuation should therefore be
+    projected one shell farther, onto the first unconstrained shell matched to
+    that surrogate ring, instead of terminating on the surrogate ring itself.
+    """
+    if global_params is None:
+        return False
+    return (
+        str(global_params.get("rim_slope_match_mode") or "").strip().lower()
+        == "shared_rim_staggered_v1"
+        and str(global_params.get("rim_slope_match_group") or "").strip() == "rim"
+        and str(global_params.get("rim_slope_match_outer_group") or "").strip()
+        == "outer"
+        and str(global_params.get("rim_slope_match_disk_group") or "").strip() == "disk"
+        and str(global_params.get("tilt_thetaB_group_in") or "").strip() == "rim"
+        and bool(global_params.get("tilt_out_exclude_shared_rim_outer_rows"))
+    )
+
+
 def _use_disk_theta_targeting(global_params, matching_mode: str) -> bool:
     if matching_mode == "physical_edge_staggered_v1":
         if _uses_scaffold_trace_lane(global_params, matching_mode):
@@ -484,6 +506,32 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         outer_pos = positions[outer_rows]
         tilt_rows = outer_rows.copy()
         tilt_pos = outer_pos
+        if (
+            matching_mode == "shared_rim_staggered_v1"
+            and _use_curved_free_disk_shell2_tilt_continuation(global_params)
+        ):
+            try:
+                local_shells = build_local_interface_shell_data(
+                    mesh, positions=positions, group=str(group)
+                )
+            except AssertionError:
+                local_shells = None
+            if local_shells is not None:
+                local_rim_rows = np.asarray(local_shells.rim_rows, dtype=int)
+                local_outer_for_rim = np.asarray(
+                    local_shells.outer_rows_for_rim, dtype=int
+                )
+                row_to_target = {
+                    int(row): int(target)
+                    for row, target in zip(local_rim_rows, local_outer_for_rim)
+                }
+                matched_outer = np.asarray(
+                    [row_to_target.get(int(row), -1) for row in outer_rows],
+                    dtype=int,
+                )
+                if matched_outer.size == outer_rows.size and np.all(matched_outer >= 0):
+                    tilt_rows = matched_outer
+                    tilt_pos = positions[tilt_rows]
     outer_idx0 = np.arange(len(rim_rows), dtype=int)
     outer_idx1 = np.arange(len(rim_rows), dtype=int)
     outer_w0 = np.ones(len(rim_rows), dtype=float)
@@ -1821,28 +1869,33 @@ def enforce_tilt_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
 
 
 def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
-    """Project scaffold interface-shell heights onto the current rim law.
+    """Project interface-shell heights onto the current rim law.
 
-    This is a scaffold-lane-only hard shape realization of the existing
-    physical-edge interface law. It adjusts the explicit `R+epsilon` shell
-    along the interface normal so that the discrete secant slope `phi`
-    matches the current coupled tilt state as closely as possible before the
-    tilt-only projection runs.
+    This is a hard shape realization of the existing interface law. It adjusts
+    the explicit outer secant shell along the interface normal so that the
+    discrete secant slope `phi` matches the current coupled tilt state as
+    closely as possible before the tilt-only projection runs.
     """
     matching_mode = _resolve_matching_mode(global_params)
-    if matching_mode != "physical_edge_staggered_v1":
+    if matching_mode not in {
+        "physical_edge_staggered_v1",
+        "shared_rim_staggered_v1",
+    }:
         return
-    scaffold_outer_shells = (
-        0
-        if global_params is None
-        else int(global_params.get("parity_outer_shells") or 0)
-    )
-    trace_layer_radius = (
-        None
-        if global_params is None
-        else global_params.get("parity_trace_layer_radius")
-    )
-    if scaffold_outer_shells <= 0 or trace_layer_radius is None:
+    if matching_mode == "physical_edge_staggered_v1":
+        scaffold_outer_shells = (
+            0
+            if global_params is None
+            else int(global_params.get("parity_outer_shells") or 0)
+        )
+        trace_layer_radius = (
+            None
+            if global_params is None
+            else global_params.get("parity_trace_layer_radius")
+        )
+        if scaffold_outer_shells <= 0 or trace_layer_radius is None:
+            return
+    elif not _use_curved_free_disk_shell2_tilt_continuation(global_params):
         return
 
     positions = mesh.positions_view()
@@ -1934,7 +1987,10 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
         current_outer_height /= height_weight
         phi_current = (current_outer_height - current_rim_height) / dr
 
-        if theta_disk is None:
+        if matching_mode == "shared_rim_staggered_v1" and theta_scalar is not None:
+            phi_target = 0.5 * float(theta_scalar)
+            t_out_target = phi_target
+        elif theta_disk is None:
             # Joint local proximal solve with equal weights on:
             # - staying near the current shell secant phi_current
             # - staying near the current outer radial tilt t_out_rad

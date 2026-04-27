@@ -189,6 +189,7 @@ def run_curved_1disk_shared_rim_phi_target_audit() -> dict[str, object]:
     phi_target_median = float(summary["phi_construction"]["phi_target_median"])
     secant_sign = float(summary["secant_geometry"]["secant_sign_median"])
     normal_dot_plus_z = float(summary["normal_dot_plus_z"])
+    rdir_cos = float(summary["target_direction"]["r_dir_cos_global_radial_median"])
 
     if normal_dot_plus_z < 0.0:
         call = "wrong normal/orientation convention"
@@ -196,8 +197,12 @@ def run_curved_1disk_shared_rim_phi_target_audit() -> dict[str, object]:
         call = "wrong secant sign"
     elif phi_median <= 0.0 or phi_target_median <= 0.0:
         call = "wrong phi target sign"
+    elif rdir_cos > 0.5:
+        call = "target direction outward"
     else:
         call = "another specific target-construction defect"
+
+    target_fixed = call == "target direction outward"
 
     return {
         "case": {
@@ -225,18 +230,27 @@ def run_curved_1disk_shared_rim_phi_target_audit() -> dict[str, object]:
         "first_target_departure": {
             "call": call,
             "detail": (
-                "secant and phi targets remain positive, but the propagated shell-2 "
-                "target direction is nearly opposite the global outward radial direction."
-                if call == "another specific target-construction defect"
-                else call
+                "secant, phi target, and shell-2 radial direction are all oriented outward."
+                if target_fixed
+                else (
+                    "secant and phi targets remain positive, but the propagated shell-2 "
+                    "target direction is nearly opposite the global outward radial direction."
+                    if call == "another specific target-construction defect"
+                    else call
+                )
             ),
         },
         "diagnosis": {
             "call": call,
             "recommended_next_stream": (
-                "Next stream should isolate the shell-2 target radial-direction construction "
-                "on the shared-rim lane, because the secant scalar is positive while the "
-                "propagated shell-2 target direction is effectively inward."
+                "The shared-rim shell-2 target direction is outward; remaining misses "
+                "should be isolated in the outer profile and energy split."
+                if target_fixed
+                else (
+                    "Next stream should isolate the shell-2 target radial-direction construction "
+                    "on the shared-rim lane, because the secant scalar is positive while the "
+                    "propagated shell-2 target direction is effectively inward."
+                )
             ),
         },
     }

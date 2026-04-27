@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from modules.constraints import rim_slope_match_out as rim_slope_match_out_constraint
 from modules.energy.rim_slope_match_out import _tilt_match_rows_and_directions
 from tools.diagnostics.curved_1disk_first_two_shell_ingredient_audit import (
     THEORY_THETA_B,
@@ -102,6 +103,16 @@ def _row_component_table(mesh, rows: list[int]) -> list[dict[str, object]]:
 
 
 def _outer_shell_rows(mesh) -> tuple[list[int], list[int]]:
+    positions = mesh.positions_view()
+    data = rim_slope_match_out_constraint._build_matching_data(
+        mesh, mesh.global_parameters, positions
+    )
+    if data is not None and data.get("tilt_rows") is not None:
+        return (
+            sorted({int(v) for v in np.asarray(data["outer_rows"], dtype=int)}),
+            sorted({int(v) for v in np.asarray(data["tilt_rows"], dtype=int)}),
+        )
+
     payload_in = _leaflet_runtime_payload(mesh, leaflet="in")
     payload_out = _leaflet_runtime_payload(mesh, leaflet="out")
     rows_in = _aggregate_row_records(mesh, payload_in)
