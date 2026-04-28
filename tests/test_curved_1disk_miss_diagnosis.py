@@ -123,7 +123,7 @@ def test_curved_1disk_miss_diagnosis_explains_failure_groups() -> None:
 
     ranked = report["candidate_causes_ranked"]
     assert {row["cause"] for row in ranked} == {
-        "inner/outer leaflet imbalance or outer split attribution mismatch",
+        "reconciled energy/control audit residuals",
         "curvature generation does not propagate",
         "excess shared-rim/local-shell elastic cost",
         "wrong rim/shell target direction or shell-2 continuation",
@@ -141,13 +141,30 @@ def test_curved_1disk_miss_diagnosis_includes_energy_control_audit_evidence() ->
     energy_control_audit = {
         "root_causes_ranked": [
             {
-                "cause": "outer energy attribution mismatch",
+                "cause": "residual shape propagation weakness",
                 "rank_score": 80,
+                "recommended_stream": "isolate fixed-theta shape propagation",
             }
         ],
         "cases": [
             {
-                "theta_B": 0.12,
+                "theta_B": 0.06,
+                "numeric_energy_split": {
+                    "inner_elastic_numeric": 0.546,
+                    "outer_elastic_numeric": 0.276,
+                    "contact_numeric": -1.502,
+                    "total_numeric": -0.680,
+                },
+                "legacy_numeric_energy_split": {
+                    "inner_elastic_numeric": 0.010,
+                    "outer_elastic_numeric": 1.253,
+                    "contact_numeric": -1.502,
+                    "total_numeric": -0.680,
+                },
+                "runtime_energy_reconciliation": {
+                    "elastic_residual": 0.0,
+                    "total_residual": 0.0,
+                },
                 "control_volume": {
                     "call": "shared-rim support control volume is oversized versus narrow gap annulus",
                     "ratios": {
@@ -160,6 +177,9 @@ def test_curved_1disk_miss_diagnosis_includes_energy_control_audit_evidence() ->
                 "shell_concentration": {
                     "support_fraction_of_outer_shell_elastic": 0.18,
                     "first_two_fraction_of_outer_shell_elastic": 0.18,
+                },
+                "shell_attribution_coverage": {
+                    "unattributed_fraction": 0.0,
                 },
             }
         ],
@@ -193,9 +213,14 @@ def test_curved_1disk_miss_diagnosis_includes_energy_control_audit_evidence() ->
     control = shared_rim["evidence"]["control_volume"]
     assert control["rim_control_over_annulus"] == pytest.approx(3.0)
     assert report["energy_control_volume_audit"] == energy_control_audit
+    assert report["failure_explanations"]["energy_split"]["source"] == (
+        "energy_control_runtime_reconciled"
+    )
+    assert report["failure_explanations"]["energy_split"][
+        "shell_unattributed_outer_fraction"
+    ] == pytest.approx(0.0)
     assert any(
-        row["cause"]
-        == "inner/outer leaflet imbalance or outer split attribution mismatch"
+        row["cause"] == "reconciled energy/control audit residuals"
         and row["evidence"]["energy_control_audit"]["available"] is True
         for row in report["candidate_causes_ranked"]
     )

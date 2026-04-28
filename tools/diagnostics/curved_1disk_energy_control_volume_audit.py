@@ -311,6 +311,78 @@ def _shell_attribution_coverage(
     }
 
 
+def _runtime_module_totals(runtime_breakdown: dict[str, float]) -> dict[str, float]:
+    """Return runtime module totals grouped for diagnostic energy ownership."""
+    tilt_in = float(runtime_breakdown.get("tilt_in", 0.0))
+    tilt_out = float(runtime_breakdown.get("tilt_out", 0.0))
+    bending_tilt_in = float(runtime_breakdown.get("bending_tilt_in", 0.0))
+    bending_tilt_out = float(runtime_breakdown.get("bending_tilt_out", 0.0))
+    contact = float(runtime_breakdown.get("tilt_thetaB_contact_in", 0.0))
+    elastic = tilt_in + tilt_out + bending_tilt_in + bending_tilt_out
+    total = float(sum(float(v) for v in runtime_breakdown.values()))
+    return {
+        "tilt_in": tilt_in,
+        "tilt_out": tilt_out,
+        "bending_tilt_in": bending_tilt_in,
+        "bending_tilt_out": bending_tilt_out,
+        "elastic_total": float(elastic),
+        "contact": contact,
+        "total": total,
+    }
+
+
+def _reconciled_runtime_energy_split(
+    *,
+    legacy_energy_split: dict[str, float],
+    runtime_breakdown: dict[str, float],
+    shell_concentration: dict[str, float],
+) -> tuple[dict[str, float], dict[str, float]]:
+    """Return a disk/outer split reconciled to runtime module totals.
+
+    The older split helper estimates disk/outer energies independently from
+    local formulas.  Gate A uses the shell-attributed outer energy as the outer
+    split and assigns the remaining runtime elastic module energy to the disk
+    side, so the diagnostic split cannot invent elastic energy.
+    """
+    modules = _runtime_module_totals(runtime_breakdown)
+    outer_elastic = float(
+        shell_concentration["outer_membrane_elastic_total_from_shell_rows"]
+    )
+    inner_elastic = float(modules["elastic_total"] - outer_elastic)
+    split = {
+        "total_numeric": float(modules["total"]),
+        "inner_elastic_numeric": inner_elastic,
+        "outer_elastic_numeric": outer_elastic,
+        "contact_numeric": float(modules["contact"]),
+    }
+    elastic_residual = float(
+        modules["elastic_total"]
+        - split["inner_elastic_numeric"]
+        - split["outer_elastic_numeric"]
+    )
+    total_residual = float(
+        modules["total"]
+        - split["inner_elastic_numeric"]
+        - split["outer_elastic_numeric"]
+        - split["contact_numeric"]
+    )
+    reconciliation = {
+        **modules,
+        "elastic_residual": elastic_residual,
+        "total_residual": total_residual,
+        "legacy_total_minus_runtime_total": float(
+            legacy_energy_split["total_numeric"] - modules["total"]
+        ),
+        "legacy_inner_minus_reconciled_inner": float(
+            legacy_energy_split["inner_elastic_numeric"] - inner_elastic
+        ),
+        "legacy_outer_minus_reconciled_outer": float(
+            legacy_energy_split["outer_elastic_numeric"] - outer_elastic
+        ),
+    }
+    return split, reconciliation
+
+
 def _control_volume_evidence(mesh) -> dict[str, object]:
     """Return shared-rim support-area evidence."""
     control = _shared_rim_inner_control_volume_audit(mesh)
@@ -392,10 +464,15 @@ def _run_case(theta_b: float) -> dict[str, object]:
     """Run one forced theta case and return the energy/control-volume audit."""
     result = _run_curved_theta_candidate(float(theta_b))
     mesh = result["mesh"]
-    energy_split = _compute_numeric_energy_split(mesh)
+    legacy_energy_split = _compute_numeric_energy_split(mesh)
     expected = _expected_tex_energy(float(theta_b))
     shell_rows = _shell_energy_rows(mesh)
     shell_concentration = _support_concentration(shell_rows)
+    energy_split, runtime_reconciliation = _reconciled_runtime_energy_split(
+        legacy_energy_split=legacy_energy_split,
+        runtime_breakdown=result["breakdown"],
+        shell_concentration=shell_concentration,
+    )
     shell_coverage = _shell_attribution_coverage(
         shell_concentration=shell_concentration,
         energy_split=energy_split,
@@ -423,7 +500,10 @@ def _run_case(theta_b: float) -> dict[str, object]:
             )
         },
         "tex_at_theta": expected,
+        "legacy_numeric_energy_split": legacy_energy_split,
         "numeric_energy_split": energy_split,
+        "runtime_module_totals": _runtime_module_totals(result["breakdown"]),
+        "runtime_energy_reconciliation": runtime_reconciliation,
         "energy_ratios": {
             "outer_numeric_over_tex": diagnosis["outer_numeric_over_tex"],
             "inner_numeric_over_tex": diagnosis["inner_numeric_over_tex"],
