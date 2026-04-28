@@ -80,7 +80,7 @@ def _configure_shape_relax(mesh, *, theta_b: float) -> Minimizer:
     gp.set("tilt_thetaB_optimize", False)
     gp.set("tilt_thetaB_value", float(theta_b))
     gp.set("step_size_mode", "fixed")
-    gp.set("step_size", 0.01)
+    gp.set("step_size", 1.0e-3)
     return Minimizer(
         mesh,
         gp,
@@ -654,6 +654,7 @@ def activate_local_outer_shell(mesh, *, z_bump: float = 1.5e-4) -> float:
         mesh.vertices[vid].options["rim_slope_match_group"] = "outer"
         mesh.vertices[vid].position[2] = float(z_bump)
 
+    mesh.increment_version()
     mesh.build_position_cache()
     return shell_radius
 

@@ -22,4 +22,5 @@ def test_curved_1disk_shared_rim_phi_target_audit_reports_single_call() -> None:
         "wrong phi target sign",
         "wrong normal/orientation convention",
         "another specific target-construction defect",
+        "target direction outward",
     }

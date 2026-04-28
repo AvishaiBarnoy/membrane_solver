@@ -196,8 +196,16 @@ def _target_direction_evidence(
     rdir = out.get("target_direction_cos_global_radial")
     if rdir is not None and float(rdir) < -0.5:
         call = "target radial direction points inward"
+    elif (
+        rdir is not None
+        and float(rdir) > 0.5
+        and phi_call == "target direction outward"
+    ):
+        call = "target direction fixed; inspect energy/profile residuals"
     elif phi_call and phi_call != "another specific target-construction defect":
         call = phi_call
+    elif shell_call == "no shell-2 tilt-out departure":
+        call = "target direction fixed; inspect energy/profile residuals"
     elif shell_call:
         call = f"shell-2 continuation departure: {shell_call}"
     else:
@@ -297,7 +305,11 @@ def _rank_candidate_causes(
     target_suspicious = target_call not in {
         "not run",
         "target-direction evidence unavailable",
+        "target direction fixed; inspect energy/profile residuals",
     }
+    target_fixed = (
+        target_call == "target direction fixed; inspect energy/profile residuals"
+    )
 
     candidates = [
         {
@@ -329,14 +341,21 @@ def _rank_candidate_causes(
         },
         {
             "cause": "wrong rim/shell target direction or shell-2 continuation",
-            "rank_score": 80 if target_suspicious else 25,
+            "rank_score": 80 if target_suspicious else (10 if target_fixed else 25),
             "evidence": target_evidence,
             "conclusion": (
-                "Dedicated target-direction audits should drive the next runtime "
-                "fix if they report inward radial targets or shell-2 departure."
+                "The dedicated target-direction audit no longer reports the "
+                "inward radial target; remaining failures are energy/profile residuals."
+                if target_fixed
+                else (
+                    "Dedicated target-direction audits should drive the next runtime "
+                    "fix if they report inward radial targets or shell-2 departure."
+                )
             ),
             "smallest_next_fix_stream": (
-                "fix shell-2 target construction only after a Feature Contract"
+                "inspect energy/profile residuals before another target-direction fix"
+                if target_fixed
+                else "fix shell-2 target construction only after a Feature Contract"
             ),
         },
     ]
