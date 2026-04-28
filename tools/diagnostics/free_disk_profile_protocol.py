@@ -682,9 +682,10 @@ def configure_free_disk_curved_bilayer_stage2(
         gp.set("tilt_in_shared_rim_outer_shell_mass_mode", "consistent")
     if gp.get("tilt_out_exclude_shared_rim_outer_rows") is None:
         gp.set("tilt_out_exclude_shared_rim_outer_rows", True)
-    # In the shared-rim discretization the inner leaflet is first free on the
-    # outer support ring, so its base-term boundary should exclude that ring.
-    gp.set("bending_tilt_base_term_boundary_group_in", "outer")
+    # On the curved free-disk parity lane, zero the Helfrich base term at the
+    # physical rim for both leaflets. Excluding the activated outer support ring
+    # creates a first-shell inner-leaflet asymmetry on the shared-rim lane.
+    gp.set("bending_tilt_base_term_boundary_group_in", "rim")
     gp.set("bending_tilt_base_term_boundary_group_out", "rim")
     gp.set("rim_slope_match_strength", 0.0)
     gp.set("tilt_thetaB_optimize", False)
