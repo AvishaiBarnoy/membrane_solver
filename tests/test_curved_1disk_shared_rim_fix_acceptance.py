@@ -6,7 +6,9 @@ from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import (
     run_curved_1disk_shared_rim_phi_target_audit,
 )
 from tools.diagnostics.curved_1disk_theory_benchmark import (
+    OUTER_K1_WINDOW,
     OUTER_LOG_WINDOW,
+    _fit_outer_k1,
     _fit_outer_log_height,
     _run_curved_theta_candidate,
     _shell_profile,
@@ -55,6 +57,65 @@ def test_fixed_theta_outer_height_propagates_past_first_shell(
         window=OUTER_LOG_WINDOW,
     )
     assert abs(float(fit["slope_fit"])) > 1.0e-10
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Post-PR503 diagnostics show energy attribution reconciles, but the "
+        "fixed-theta outer trumpet still does not match the TeX log profile."
+    ),
+)
+@pytest.mark.benchmark
+@pytest.mark.slow
+def test_fixed_theta_outer_height_matches_tex_log_profile(
+    fixed_theta_result: dict[str, object],
+) -> None:
+    mesh = fixed_theta_result["mesh"]
+    shell_rows = _shell_profile(mesh)
+    radius = 7.0 / 15.0
+    outer_rows = [row for row in shell_rows if float(row["radius"]) > radius + 1.0e-6]
+    last_free_shell_radius = max(float(row["radius"]) for row in outer_rows[:-1])
+
+    fit = _fit_outer_log_height(
+        shell_rows,
+        radius=radius,
+        slope_theory=0.5 * THEORY_THETA_B * radius,
+        last_free_shell_radius=last_free_shell_radius,
+        window=OUTER_LOG_WINDOW,
+    )
+
+    assert float(fit["slope_ratio"]) == pytest.approx(1.0, rel=0.25)
+    assert float(fit["rel_rmse"]) < 0.20
+
+
+@pytest.mark.xfail(
+    reason=(
+        "The remaining fixed-theta miss is profile propagation: the outer "
+        "leaflets have not converged to the TeX K1 branch."
+    ),
+)
+@pytest.mark.benchmark
+@pytest.mark.slow
+def test_fixed_theta_outer_tilt_matches_tex_k1_profile(
+    fixed_theta_result: dict[str, object],
+) -> None:
+    mesh = fixed_theta_result["mesh"]
+    shell_rows = _shell_profile(mesh)
+    radius = 7.0 / 15.0
+    outer_rows = [row for row in shell_rows if float(row["radius"]) > radius + 1.0e-6]
+    last_free_shell_radius = max(float(row["radius"]) for row in outer_rows[:-1])
+
+    fit = _fit_outer_k1(
+        shell_rows,
+        radius=radius,
+        lambda_theory=15.0,
+        last_free_shell_radius=last_free_shell_radius,
+        window=OUTER_K1_WINDOW,
+    )
+
+    assert float(fit["lambda_ratio"]) == pytest.approx(1.0, rel=0.25)
+    assert float(fit["rel_rmse"]) < 0.20
+    assert float(fit["leaflet_mismatch_median"]) < 0.10
 
 
 @pytest.mark.benchmark
