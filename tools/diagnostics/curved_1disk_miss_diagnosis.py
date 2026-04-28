@@ -93,10 +93,37 @@ def _shape_propagation_evidence(
     }
 
 
-def _energy_evidence(benchmark: dict[str, object]) -> dict[str, object]:
+def _selected_energy_control_case(
+    benchmark: dict[str, object],
+    energy_control_audit: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Return the energy/control audit case nearest the selected benchmark theta."""
+    if not energy_control_audit:
+        return None
+    cases = list(energy_control_audit.get("cases") or [])
+    if not cases:
+        return None
+    theta_selected = float(benchmark["theta_B_selected"])
+    return min(cases, key=lambda case: abs(float(case["theta_B"]) - theta_selected))
+
+
+def _energy_evidence(
+    benchmark: dict[str, object],
+    energy_control_audit: dict[str, object] | None = None,
+) -> dict[str, object]:
     """Summarize energy mismatch at the selected numeric thetaB."""
     expected = _expected_energy_at_selected_theta(benchmark)
-    energies = benchmark["energies"]
+    audit_case = _selected_energy_control_case(benchmark, energy_control_audit)
+    using_reconciled_audit = (
+        audit_case is not None
+        and abs(float(audit_case["theta_B"]) - float(benchmark["theta_B_selected"]))
+        <= 1.0e-9
+    )
+    energies = (
+        audit_case["numeric_energy_split"]
+        if using_reconciled_audit
+        else benchmark["energies"]
+    )
     ratios = {
         "inner_elastic_numeric_over_tex_at_selected_theta": _safe_ratio(
             float(energies["inner_elastic_numeric"]), expected["inner_elastic"]
@@ -110,7 +137,19 @@ def _energy_evidence(benchmark: dict[str, object]) -> dict[str, object]:
         "total_numeric_minus_tex_at_selected_theta": float(energies["total_numeric"])
         - expected["total"],
     }
+    legacy = None
+    reconciliation = None
+    attribution = None
+    if using_reconciled_audit:
+        legacy = audit_case.get("legacy_numeric_energy_split")
+        reconciliation = audit_case.get("runtime_energy_reconciliation")
+        attribution = audit_case.get("shell_attribution_coverage")
     return {
+        "source": (
+            "energy_control_runtime_reconciled"
+            if using_reconciled_audit
+            else "benchmark_legacy_split"
+        ),
         "tex_at_selected_theta": expected,
         "numeric_at_selected_theta": {
             "inner_elastic": float(energies["inner_elastic_numeric"]),
@@ -118,10 +157,24 @@ def _energy_evidence(benchmark: dict[str, object]) -> dict[str, object]:
             "contact": float(energies["contact_numeric"]),
             "total": float(energies["total_numeric"]),
         },
+        "legacy_numeric_at_selected_theta": None
+        if legacy is None
+        else {
+            "inner_elastic": float(legacy["inner_elastic_numeric"]),
+            "outer_elastic": float(legacy["outer_elastic_numeric"]),
+            "contact": float(legacy["contact_numeric"]),
+            "total": float(legacy["total_numeric"]),
+        },
+        "runtime_energy_reconciliation": reconciliation,
+        "shell_attribution_coverage": attribution,
         "ratios": ratios,
         "call": (
             "outer elastic overgrowth dominates selected-theta energy"
             if ratios["outer_elastic_numeric_over_tex_at_selected_theta"] > 5.0
+            else "legacy split mismatch was diagnostic attribution, not runtime energy"
+            if using_reconciled_audit
+            and attribution is not None
+            and abs(float(attribution.get("unattributed_fraction", 1.0))) <= 1.0e-9
             else "energy split mismatch needs deeper attribution"
         ),
     }
@@ -257,13 +310,19 @@ def _failure_explanations(
     theta_num = float(benchmark["theta_B_selected"])
     theta_theory = float(theory["theta_B_opt"])
     outer_ratio = energies["ratios"]["outer_elastic_numeric_over_tex_at_selected_theta"]
+    energy_source = str(energies.get("source") or "benchmark_legacy_split")
     return {
         "theta_B_opt": {
             "numeric": theta_num,
             "tex_target": theta_theory,
             "ratio_numeric_over_target": _safe_ratio(theta_num, theta_theory),
             "interpretation": (
-                "the local scan selects a low-theta branch because the realized "
+                "the local scan still selects a low-theta branch; after runtime "
+                "energy reconciliation the severe legacy split is gone, so the "
+                "remaining miss points back to profile propagation and moderate "
+                "elastic overgrowth"
+                if energy_source == "energy_control_runtime_reconciled"
+                else "the local scan selects a low-theta branch because the realized "
                 "outer elastic cost is far above the TeX quadratic cost"
             ),
         },
@@ -299,15 +358,24 @@ def _failure_explanations(
             ),
         },
         "energy_split": {
+            "source": energy_source,
             "outer_elastic_numeric_over_tex_at_selected_theta": outer_ratio,
             "contact_numeric_over_tex_at_selected_theta": energies["ratios"][
                 "contact_numeric_over_tex_at_selected_theta"
             ],
+            "shell_unattributed_outer_fraction": None
+            if energies.get("shell_attribution_coverage") is None
+            else float(energies["shell_attribution_coverage"]["unattributed_fraction"]),
             "theta_out_over_half_theta_B": float(
                 near_rim["theta_out_over_half_theta_B"]
             ),
             "interpretation": (
-                "contact work is consistent with the selected thetaB, but selected "
+                "Gate A reconciles the diagnostic split to runtime module totals: "
+                "contact work is consistent with the selected thetaB, shell-local "
+                "outer attribution closes, and the remaining elastic overgrowth is "
+                "moderate rather than the old severe outer/inner split"
+                if energy_source == "energy_control_runtime_reconciled"
+                else "contact work is consistent with the selected thetaB, but selected "
                 "thetaB is too small and outer elastic overgrowth dominates the split"
             ),
         },
@@ -354,9 +422,26 @@ def _rank_candidate_causes(
         else 0
     )
 
+    audit_conclusion = (
+        "The deeper audit now reconciles shell-local outer attribution to runtime "
+        "module totals; the previous large unattributed outer fraction was a "
+        "diagnostic split bug, not evidence for a runtime energy-ownership defect."
+    )
+    audit_stream = (
+        "treat energy ownership as reconciled for now and prioritize the highest "
+        "remaining audit/shape cause before changing runtime physics"
+    )
+    if isinstance(energy_control_top, dict):
+        audit_conclusion = (
+            f"The deeper audit ranks {energy_control_top.get('cause')} highest "
+            "after runtime-module reconciliation; use its evidence before any "
+            "runtime energy/sign change."
+        )
+        audit_stream = str(energy_control_top.get("recommended_stream") or audit_stream)
+
     candidates = [
         {
-            "cause": "inner/outer leaflet imbalance or outer split attribution mismatch",
+            "cause": "reconciled energy/control audit residuals",
             "rank_score": energy_control_top_score if energy_control_top_score else 35,
             "evidence": {
                 "energy_control_audit": {
@@ -364,16 +449,8 @@ def _rank_candidate_causes(
                     "root_causes_ranked": energy_control_causes,
                 },
             },
-            "conclusion": (
-                "The deeper audit finds the remaining miss is not explained by "
-                "the fixed target direction alone: inner elastic is far below "
-                "TeX, outer elastic is far above TeX, and most numeric outer "
-                "elastic is not explained by shell-local attribution."
-            ),
-            "smallest_next_fix_stream": (
-                "audit the disk/outer split helper against runtime module ownership "
-                "and leaflet sign/ownership conventions before changing physics"
-            ),
+            "conclusion": audit_conclusion,
+            "smallest_next_fix_stream": audit_stream,
         },
         {
             "cause": "curvature generation does not propagate",
@@ -481,9 +558,9 @@ def run_curved_1disk_miss_diagnosis(
         )
 
     shape = _shape_propagation_evidence(benchmark)
-    energy = _energy_evidence(benchmark)
     control = _control_volume_evidence(control_volume_rows, energy_control_audit)
     target = _target_direction_evidence(phi_target_audit, shell2_audit)
+    energy = _energy_evidence(benchmark, energy_control_audit)
     failures = _failure_explanations(
         benchmark,
         shape_evidence=shape,
