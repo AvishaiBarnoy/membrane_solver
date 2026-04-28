@@ -129,8 +129,37 @@ def _energy_evidence(benchmark: dict[str, object]) -> dict[str, object]:
 
 def _control_volume_evidence(
     rows: Sequence[dict[str, float]] | None,
+    energy_control_audit: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Summarize shared-rim control-volume evidence from refinement sweep rows."""
+    if energy_control_audit:
+        selected_case = (energy_control_audit.get("cases") or [{}])[0]
+        control = selected_case.get("control_volume") or {}
+        ratios = control.get("ratios") or {}
+        concentration = selected_case.get("shell_concentration") or {}
+        return {
+            "available": True,
+            "theta_B": float(selected_case.get("theta_B", CONTROL_VOLUME_THETA)),
+            "outer_control_over_annulus": float(
+                ratios.get("outer_control_over_gap_annulus", 0.0)
+            ),
+            "rim_control_over_annulus": float(
+                ratios.get("rim_control_over_gap_annulus", 0.0)
+            ),
+            "outer_control_over_adjacent_shell": float(
+                ratios.get("outer_control_over_adjacent_shell", 0.0)
+            ),
+            "rim_control_over_adjacent_shell": float(
+                ratios.get("rim_control_over_adjacent_shell", 0.0)
+            ),
+            "support_fraction_of_outer_shell_elastic": float(
+                concentration.get("support_fraction_of_outer_shell_elastic", 0.0)
+            ),
+            "first_two_fraction_of_outer_shell_elastic": float(
+                concentration.get("first_two_fraction_of_outer_shell_elastic", 0.0)
+            ),
+            "call": str(control.get("call") or "energy/control audit supplied"),
+        }
     if not rows:
         return {
             "available": False,
@@ -291,6 +320,7 @@ def _rank_candidate_causes(
     target_evidence: dict[str, object],
     energy_evidence: dict[str, object],
     control_evidence: dict[str, object],
+    energy_control_audit: dict[str, object] | None = None,
 ) -> list[dict[str, object]]:
     """Return ranked root-cause candidates with compact evidence."""
     outer_energy_ratio = float(
@@ -301,6 +331,10 @@ def _rank_candidate_causes(
         float(control_evidence["outer_control_over_annulus"]) > 4.0
         or float(control_evidence["rim_control_over_annulus"]) > 2.0
     )
+    support_localized = control_evidence.get("available") and (
+        float(control_evidence.get("support_fraction_of_outer_shell_elastic", 0.0))
+        > 0.5
+    )
     target_call = str(target_evidence.get("call") or "")
     target_suspicious = target_call not in {
         "not run",
@@ -310,8 +344,37 @@ def _rank_candidate_causes(
     target_fixed = (
         target_call == "target direction fixed; inspect energy/profile residuals"
     )
+    energy_control_causes = []
+    if energy_control_audit is not None:
+        energy_control_causes = list(energy_control_audit.get("root_causes_ranked", []))
+    energy_control_top = energy_control_causes[0] if energy_control_causes else None
+    energy_control_top_score = (
+        int(energy_control_top.get("rank_score", 0))
+        if isinstance(energy_control_top, dict)
+        else 0
+    )
 
     candidates = [
+        {
+            "cause": "inner/outer leaflet imbalance or outer split attribution mismatch",
+            "rank_score": energy_control_top_score if energy_control_top_score else 35,
+            "evidence": {
+                "energy_control_audit": {
+                    "available": energy_control_audit is not None,
+                    "root_causes_ranked": energy_control_causes,
+                },
+            },
+            "conclusion": (
+                "The deeper audit finds the remaining miss is not explained by "
+                "the fixed target direction alone: inner elastic is far below "
+                "TeX, outer elastic is far above TeX, and most numeric outer "
+                "elastic is not explained by shell-local attribution."
+            ),
+            "smallest_next_fix_stream": (
+                "audit the disk/outer split helper against runtime module ownership "
+                "and leaflet sign/ownership conventions before changing physics"
+            ),
+        },
         {
             "cause": "curvature generation does not propagate",
             "rank_score": 100 if shape_blocked else 30,
@@ -326,10 +389,17 @@ def _rank_candidate_causes(
         {
             "cause": "excess shared-rim/local-shell elastic cost",
             "rank_score": int(min(95.0, 20.0 + 2.0 * outer_energy_ratio))
-            + (20 if control_oversized else 0),
+            + (20 if control_oversized else 0)
+            + (15 if support_localized else 0),
             "evidence": {
                 "energy": energy_evidence,
                 "control_volume": control_evidence,
+                "energy_control_audit": {
+                    "available": energy_control_audit is not None,
+                    "root_causes_ranked": []
+                    if energy_control_audit is None
+                    else energy_control_audit.get("root_causes_ranked", []),
+                },
             },
             "conclusion": (
                 "At selected thetaB the outer elastic term is much larger than "
@@ -368,8 +438,10 @@ def run_curved_1disk_miss_diagnosis(
     phi_target_audit: dict[str, object] | None = None,
     shell2_audit: dict[str, object] | None = None,
     control_volume_rows: Sequence[dict[str, float]] | None = None,
+    energy_control_audit: dict[str, object] | None = None,
     include_target_audits: bool = True,
     include_control_volume: bool = True,
+    include_energy_control_audit: bool = True,
 ) -> dict[str, object]:
     """Run or aggregate diagnostics into one ranked miss report."""
     benchmark = benchmark_report or run_curved_1disk_theory_benchmark()
@@ -391,10 +463,26 @@ def run_curved_1disk_miss_diagnosis(
             refine_steps=0,
             shape_steps=10,
         )
+    if include_energy_control_audit and energy_control_audit is None:
+        from tools.diagnostics.curved_1disk_energy_control_volume_audit import (
+            SELECTED_THETA_B_AFTER_SHARED_RIM_FIX,
+            THEORY_THETA_B,
+            run_curved_1disk_energy_control_volume_audit,
+        )
+
+        theta_values = (
+            float(benchmark["theta_B_selected"])
+            if benchmark_report is None
+            else SELECTED_THETA_B_AFTER_SHARED_RIM_FIX,
+            THEORY_THETA_B,
+        )
+        energy_control_audit = run_curved_1disk_energy_control_volume_audit(
+            theta_values
+        )
 
     shape = _shape_propagation_evidence(benchmark)
     energy = _energy_evidence(benchmark)
-    control = _control_volume_evidence(control_volume_rows)
+    control = _control_volume_evidence(control_volume_rows, energy_control_audit)
     target = _target_direction_evidence(phi_target_audit, shell2_audit)
     failures = _failure_explanations(
         benchmark,
@@ -406,6 +494,7 @@ def run_curved_1disk_miss_diagnosis(
         target_evidence=target,
         energy_evidence=energy,
         control_evidence=control,
+        energy_control_audit=energy_control_audit,
     )
     return {
         "title": "Curved 1-disk free-membrane miss diagnosis",
@@ -423,6 +512,7 @@ def run_curved_1disk_miss_diagnosis(
             "total_tex": float(benchmark["theory"]["F_tot"]),
         },
         "failure_explanations": failures,
+        "energy_control_volume_audit": energy_control_audit,
         "candidate_causes_ranked": candidates,
         "recommended_next_pr": {
             "feature_contract_required": True,
