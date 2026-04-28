@@ -95,6 +95,7 @@ def test_curved_1disk_miss_diagnosis_explains_failure_groups() -> None:
         ],
         include_target_audits=False,
         include_control_volume=False,
+        include_energy_control_audit=False,
     )
 
     assert report["scope"]["diagnosis_only"] is True
@@ -122,6 +123,7 @@ def test_curved_1disk_miss_diagnosis_explains_failure_groups() -> None:
 
     ranked = report["candidate_causes_ranked"]
     assert {row["cause"] for row in ranked} == {
+        "reconciled energy/control audit residuals",
         "curvature generation does not propagate",
         "excess shared-rim/local-shell elastic cost",
         "wrong rim/shell target direction or shell-2 continuation",
@@ -132,3 +134,93 @@ def test_curved_1disk_miss_diagnosis_explains_failure_groups() -> None:
         for row in ranked
     )
     assert report["recommended_next_pr"]["feature_contract_required"] is True
+
+
+def test_curved_1disk_miss_diagnosis_includes_energy_control_audit_evidence() -> None:
+    """Aggregate diagnosis should consume the deeper energy/control audit payload."""
+    energy_control_audit = {
+        "root_causes_ranked": [
+            {
+                "cause": "residual shape propagation weakness",
+                "rank_score": 80,
+                "recommended_stream": "isolate fixed-theta shape propagation",
+            }
+        ],
+        "cases": [
+            {
+                "theta_B": 0.06,
+                "numeric_energy_split": {
+                    "inner_elastic_numeric": 0.546,
+                    "outer_elastic_numeric": 0.276,
+                    "contact_numeric": -1.502,
+                    "total_numeric": -0.680,
+                },
+                "legacy_numeric_energy_split": {
+                    "inner_elastic_numeric": 0.010,
+                    "outer_elastic_numeric": 1.253,
+                    "contact_numeric": -1.502,
+                    "total_numeric": -0.680,
+                },
+                "runtime_energy_reconciliation": {
+                    "elastic_residual": 0.0,
+                    "total_residual": 0.0,
+                },
+                "control_volume": {
+                    "call": "shared-rim support control volume is oversized versus narrow gap annulus",
+                    "ratios": {
+                        "outer_control_over_gap_annulus": 1.1,
+                        "rim_control_over_gap_annulus": 3.0,
+                        "outer_control_over_adjacent_shell": 1.0,
+                        "rim_control_over_adjacent_shell": 1.0,
+                    },
+                },
+                "shell_concentration": {
+                    "support_fraction_of_outer_shell_elastic": 0.18,
+                    "first_two_fraction_of_outer_shell_elastic": 0.18,
+                },
+                "shell_attribution_coverage": {
+                    "unattributed_fraction": 0.0,
+                },
+            }
+        ],
+    }
+    report = run_curved_1disk_miss_diagnosis(
+        benchmark_report=_benchmark_report(),
+        phi_target_audit={
+            "diagnosis": {"call": "target direction outward"},
+            "shell_target_construction": {
+                "target_direction": {
+                    "r_dir_cos_global_radial_median": 0.99,
+                },
+            },
+        },
+        shell2_audit={
+            "first_material_departure": {
+                "call": "no shell-2 tilt-out departure",
+                "shell_radius": 0.524333,
+            },
+        },
+        energy_control_audit=energy_control_audit,
+        include_target_audits=False,
+        include_control_volume=False,
+    )
+
+    shared_rim = next(
+        row
+        for row in report["candidate_causes_ranked"]
+        if row["cause"] == "excess shared-rim/local-shell elastic cost"
+    )
+    control = shared_rim["evidence"]["control_volume"]
+    assert control["rim_control_over_annulus"] == pytest.approx(3.0)
+    assert report["energy_control_volume_audit"] == energy_control_audit
+    assert report["failure_explanations"]["energy_split"]["source"] == (
+        "energy_control_runtime_reconciled"
+    )
+    assert report["failure_explanations"]["energy_split"][
+        "shell_unattributed_outer_fraction"
+    ] == pytest.approx(0.0)
+    assert any(
+        row["cause"] == "reconciled energy/control audit residuals"
+        and row["evidence"]["energy_control_audit"]["available"] is True
+        for row in report["candidate_causes_ranked"]
+    )
