@@ -1877,6 +1877,7 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
     closely as possible before the tilt-only projection runs.
     """
     matching_mode = _resolve_matching_mode(global_params)
+    context = str(_kwargs.get("context") or "").strip().lower()
     if matching_mode not in {
         "physical_edge_staggered_v1",
         "shared_rim_staggered_v1",
@@ -1946,6 +1947,9 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
 
     height_num = np.zeros(len(mesh.vertex_ids), dtype=float)
     height_den = np.zeros(len(mesh.vertex_ids), dtype=float)
+    update_tilt_out = not (
+        matching_mode == "shared_rim_staggered_v1" and context == "minimize"
+    )
     tilt_num = np.zeros(len(mesh.vertex_ids), dtype=float)
     tilt_den = np.zeros(len(mesh.vertex_ids), dtype=float)
 
@@ -2021,13 +2025,15 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
         if abs(w0) > 1.0e-12:
             height_num[row0] += w0 * target_height
             height_den[row0] += abs(w0)
-            tilt_num[row0] += w0 * t_out_target
-            tilt_den[row0] += abs(w0)
+            if update_tilt_out:
+                tilt_num[row0] += w0 * t_out_target
+                tilt_den[row0] += abs(w0)
         if abs(w1) > 1.0e-12:
             height_num[row1] += w1 * target_height
             height_den[row1] += abs(w1)
-            tilt_num[row1] += w1 * t_out_target
-            tilt_den[row1] += abs(w1)
+            if update_tilt_out:
+                tilt_num[row1] += w1 * t_out_target
+                tilt_den[row1] += abs(w1)
 
     moved = False
     for row in np.flatnonzero(height_den > 1.0e-12):
@@ -2065,7 +2071,8 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
 
     if moved:
         mesh.increment_version()
-    mesh.touch_tilts_out()
+    if update_tilt_out:
+        mesh.touch_tilts_out()
 
 
 __all__ = [

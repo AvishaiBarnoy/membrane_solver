@@ -2566,6 +2566,19 @@ STEP SIZE:\t {self.step_size}
             if getattr(self.mesh.vertices[int(vidx)], "fixed", False):
                 grad_arr[row] = 0.0
 
+    def _project_curved_free_disk_shape_dofs(self, grad_arr: np.ndarray) -> None:
+        """Restrict the shared-rim curved free-disk shape solve to height DOFs."""
+        mode = str(self.global_params.get("rim_slope_match_mode") or "").strip().lower()
+        if mode != "shared_rim_staggered_v1":
+            return
+        if not (
+            self.global_params.get("rim_slope_match_group") is not None
+            and self.global_params.get("rim_slope_match_outer_group") is not None
+            and self.global_params.get("rim_slope_match_disk_group") is not None
+        ):
+            return
+        grad_arr[:, :2] = 0.0
+
     def _enforce_constraints(self, mesh: Mesh | None = None):
         """Invoke all constraint modules on the current mesh."""
         if not self._has_enforceable_constraints:
@@ -2958,6 +2971,7 @@ STEP SIZE:\t {self.step_size}
             # Use array-based path for main loop
             E, grad_arr = self.compute_energy_and_gradient_array()
             self.project_constraints_array(grad_arr)
+            self._project_curved_free_disk_shape_dofs(grad_arr)
             last_grad_arr = grad_arr
 
             if logger.isEnabledFor(logging.DEBUG):

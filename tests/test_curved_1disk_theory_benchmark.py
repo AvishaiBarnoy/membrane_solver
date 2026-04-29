@@ -67,7 +67,7 @@ def test_curved_1disk_theory_benchmark_reports_current_tensionless_miss() -> Non
     assert height_fit["window"] == [3.0, 10.0]
 
     curvature = report["outer_curvature"]
-    assert float(curvature["mean_abs_J"]) > 0.05
+    assert 0.01 < float(curvature["mean_abs_J"]) < 0.05
     assert float(curvature["p95_abs_J"]) > 0.15
 
     energies = report["energies"]
