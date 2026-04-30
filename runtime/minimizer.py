@@ -2578,6 +2578,36 @@ STEP SIZE:\t {self.step_size}
         ):
             return
         grad_arr[:, :2] = 0.0
+        self._project_curved_free_disk_transition_shape_metric(grad_arr)
+
+    def _project_curved_free_disk_transition_shape_metric(
+        self, grad_arr: np.ndarray
+    ) -> None:
+        """Remove artificial shared-rim support-transition rows from shape descent."""
+        support_group = str(
+            self.global_params.get("rim_slope_match_outer_group") or ""
+        ).strip()
+        if not support_group:
+            return
+
+        support_rows = np.zeros(len(self.mesh.vertex_ids), dtype=bool)
+        for row, vertex_id in enumerate(self.mesh.vertex_ids):
+            vertex = self.mesh.vertices[int(vertex_id)]
+            if vertex.options.get("rim_slope_match_group") == support_group:
+                support_rows[row] = True
+        if not np.any(support_rows):
+            return
+
+        tri_rows, _ = self.mesh.triangle_row_cache()
+        if tri_rows is None or len(tri_rows) == 0:
+            return
+
+        transition_rows = np.zeros(len(self.mesh.vertex_ids), dtype=bool)
+        transition_tris = np.any(support_rows[np.asarray(tri_rows, dtype=int)], axis=1)
+        transition_rows[np.unique(np.asarray(tri_rows, dtype=int)[transition_tris])] = (
+            True
+        )
+        grad_arr[transition_rows, 2] = 0.0
 
     def _enforce_constraints(self, mesh: Mesh | None = None):
         """Invoke all constraint modules on the current mesh."""
