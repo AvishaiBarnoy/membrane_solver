@@ -68,10 +68,20 @@ profile.out
 # Debug images/plots (keep documentation images under docs/ if needed)
 /*.png
 outputs/*.png
+Figure_1.png
+
+# LaTeX auxiliary files
+*.aux
+*.log
+*.synctex.gz
+docs/tex/*.aux
+docs/tex/*.log
+docs/tex/*.synctex.gz
 
 # Local experiments (not part of the library/benchmarks)
 analyze_folding.py
 meshes/spontaneous_folding.json
+meshes/temp_geometry_output.json
 tests/test_spontaneous_folding.py
 
 # Compiled extension modules (local builds)

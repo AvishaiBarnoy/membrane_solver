@@ -11,6 +11,7 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh
+from geometry.plane_ops import fit_plane_normal
 from modules.energy.contact_mapping import resolve_contact_line_strength
 
 USES_TILT_LEAFLETS = True
@@ -103,15 +104,7 @@ def _normalize(vec: np.ndarray) -> np.ndarray | None:
 
 
 def _fit_plane_normal(points: np.ndarray) -> np.ndarray | None:
-    if points.shape[0] < 3:
-        return None
-    centroid = np.mean(points, axis=0)
-    X = points - centroid
-    try:
-        _, _, vh = np.linalg.svd(X, full_matrices=False)
-    except np.linalg.LinAlgError:
-        return None
-    return _normalize(vh[-1, :])
+    return fit_plane_normal(points)
 
 
 def _pin_to_circle_mode(mesh: Mesh, options: dict | None) -> str:

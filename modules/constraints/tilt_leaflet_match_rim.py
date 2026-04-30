@@ -32,6 +32,7 @@ from __future__ import annotations
 import numpy as np
 
 from geometry.entities import Mesh
+from geometry.plane_ops import fit_plane_normal, orthonormal_basis_from_normal
 
 
 def _resolve_group(global_params) -> str | None:
@@ -57,38 +58,11 @@ def _resolve_mode(global_params) -> str:
 
 
 def _orthonormal_basis(normal: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    trial = np.array([1.0, 0.0, 0.0], dtype=float)
-    if abs(np.dot(trial, normal)) > 0.9:
-        trial = np.array([0.0, 1.0, 0.0], dtype=float)
-    u = trial - np.dot(trial, normal) * normal
-    nrm = float(np.linalg.norm(u))
-    if nrm < 1e-15:
-        u = np.array([1.0, 0.0, 0.0], dtype=float)
-    else:
-        u /= nrm
-    v = np.cross(normal, u)
-    nrm_v = float(np.linalg.norm(v))
-    if nrm_v < 1e-15:
-        v = np.array([0.0, 1.0, 0.0], dtype=float)
-    else:
-        v /= nrm_v
-    return u, v
+    return orthonormal_basis_from_normal(normal)
 
 
 def _fit_plane_normal(points: np.ndarray) -> np.ndarray | None:
-    if points.shape[0] < 3:
-        return None
-    centroid = np.mean(points, axis=0)
-    X = points - centroid
-    try:
-        _, _, vh = np.linalg.svd(X, full_matrices=False)
-    except np.linalg.LinAlgError:
-        return None
-    normal = vh[-1, :]
-    nrm = float(np.linalg.norm(normal))
-    if nrm < 1e-15:
-        return None
-    return normal / nrm
+    return fit_plane_normal(points)
 
 
 def _collect_rows(mesh: Mesh, group: str) -> np.ndarray:

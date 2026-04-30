@@ -3,6 +3,18 @@
 This repository simulates membranes and surfaces using Python. The code is
 organized under `geometry/`, `modules/`, `runtime/` and other directories.
 
+## Large-file guidance
+
+- `runtime/minimizer.py` is the main minimization engine and contains some benchmark/continuation logic. Do not refactor broadly unless explicitly asked.
+- `geometry/entities.py` owns core geometry classes and SoA/cache synchronization. Treat it as fragile.
+- `modules/energy/bending_tilt_leaflet.py` contains multiple physics lanes, including theory-parity/debug paths. Do not remove lane branches unless a task explicitly targets them.
+
+## Context policy
+
+For focused tasks, inspect only the relevant function/class first.
+Do not load or rewrite whole large files unless necessary.
+Do not delete diagnostic/theory-parity code without evidence and tests.
+
 ---
 
 ## Operating Mode (Agentic Development)
