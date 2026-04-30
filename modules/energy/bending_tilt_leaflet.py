@@ -1292,6 +1292,47 @@ def _per_vertex_params_leaflet(
     return kappa, c0
 
 
+def _shared_rim_support_transition_triangle_mask(
+    mesh: Mesh,
+    global_params,
+    tri_rows: np.ndarray,
+    *,
+    keep_physical_outer_edge: bool = False,
+) -> np.ndarray | None:
+    """Mask triangles incident to the artificial shared-rim support row."""
+    if global_params is None:
+        return None
+    mode = str(global_params.get("rim_slope_match_mode") or "").strip()
+    if mode != "shared_rim_staggered_v1":
+        return None
+
+    support_group = str(global_params.get("rim_slope_match_outer_group") or "").strip()
+    rim_group = str(global_params.get("rim_slope_match_group") or "").strip()
+    disk_group = str(global_params.get("rim_slope_match_disk_group") or "").strip()
+    if not support_group or not rim_group or not disk_group:
+        return None
+
+    support_rows = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    true_free_rows = np.ones(len(mesh.vertex_ids), dtype=bool)
+    excluded_groups = {support_group, rim_group, disk_group}
+    for row, vertex_id in enumerate(mesh.vertex_ids):
+        vertex = mesh.vertices[int(vertex_id)]
+        group = vertex.options.get("rim_slope_match_group")
+        if group == support_group:
+            support_rows[row] = True
+        if group in excluded_groups:
+            true_free_rows[row] = False
+
+    if not np.any(support_rows):
+        return None
+    has_support = np.any(support_rows[tri_rows], axis=1)
+    if not keep_physical_outer_edge:
+        return has_support
+    free_corner_count = np.sum(true_free_rows[tri_rows], axis=1)
+    has_physical_outer_edge = has_support & (free_corner_count >= 2)
+    return has_support & ~has_physical_outer_edge
+
+
 def _leaflet_triangle_payload(
     mesh: Mesh,
     global_params,
@@ -1317,6 +1358,18 @@ def _leaflet_triangle_payload(
         int(mesh._vertex_ids_version),
         id(positions),
         absent_key,
+        str(global_params.get("rim_slope_match_mode") or "")
+        if global_params is not None
+        else "",
+        str(global_params.get("rim_slope_match_outer_group") or "")
+        if global_params is not None
+        else "",
+        str(global_params.get("rim_slope_match_group") or "")
+        if global_params is not None
+        else "",
+        str(global_params.get("rim_slope_match_disk_group") or "")
+        if global_params is not None
+        else "",
     )
     if use_cache:
         cached = getattr(mesh, cache_attr, None)
@@ -1359,6 +1412,21 @@ def _leaflet_triangle_payload(
         if tri_keep.size:
             tri_rows = tri_rows_full[tri_keep]
             weights = weights_full[tri_keep]
+
+    transition_mask = _shared_rim_support_transition_triangle_mask(
+        mesh,
+        global_params,
+        tri_rows_full,
+        keep_physical_outer_edge=str(cache_tag) == "out",
+    )
+    if transition_mask is not None:
+        keep_non_transition = ~transition_mask
+        if tri_keep.size:
+            tri_keep = tri_keep & keep_non_transition
+        else:
+            tri_keep = keep_non_transition
+        tri_rows = tri_rows_full[tri_keep]
+        weights = weights_full[tri_keep]
 
     g0_use = None
     g1_use = None
