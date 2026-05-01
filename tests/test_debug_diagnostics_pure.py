@@ -7,6 +7,7 @@ import numpy as np
 sys.path.insert(0, os.getcwd())
 from geometry.geom_io import load_data, parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
+from runtime.diagnostics import audit
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
@@ -61,7 +62,7 @@ def test_debug_diagnostics_restore_state(caplog) -> None:
     tilts_before = mesh.tilts_view().copy()
     params_before = dict(mesh.global_parameters.to_dict())
 
-    minim._log_debug_energy_context(0)
+    audit.log_debug_energy_context(minim, 0)
 
     tilts_after = mesh.tilts_view()
     params_after = dict(mesh.global_parameters.to_dict())
@@ -87,12 +88,12 @@ def test_debug_energy_context_does_not_call_breakdown(caplog, monkeypatch) -> No
 
     called = {"count": 0}
 
-    def _count_calls(self):
+    def _count_calls(minimizer):
         called["count"] += 1
         return {}
 
-    monkeypatch.setattr(Minimizer, "_diagnostic_energy_breakdown", _count_calls)
-    minim._log_debug_energy_context(0)
+    monkeypatch.setattr(audit, "diagnostic_energy_breakdown", _count_calls)
+    audit.log_debug_energy_context(minim, 0)
     assert called["count"] == 1
 
 
@@ -111,8 +112,8 @@ def test_debug_minimize_loop_does_not_probe_diagnostic_energy(monkeypatch) -> No
         quiet=True,
     )
 
-    def _boom(self):
-        raise AssertionError("_diagnostic_energy should not be called in minimize loop")
+    def _boom(minimizer):
+        raise AssertionError("diagnostic_energy should not be called in minimize loop")
 
-    monkeypatch.setattr(Minimizer, "_diagnostic_energy", _boom)
+    monkeypatch.setattr(audit, "diagnostic_energy", _boom)
     minim.minimize(n_steps=1)
