@@ -38,6 +38,7 @@ from runtime.preconditioners import (
     build_leaflet_tilt_cg_preconditioner,
     build_tilt_cg_preconditioner,
 )
+from runtime.projections.curved_disk import project_curved_free_disk_shape_dofs
 from runtime.projections.tilt import (
     build_leaflet_trial_tilts,
     project_leaflet_tilts_with_optional_axisymmetry,
@@ -2208,49 +2209,6 @@ STEP SIZE:\t {self.step_size}
             if getattr(self.mesh.vertices[int(vidx)], "fixed", False):
                 grad_arr[row] = 0.0
 
-    def _project_curved_free_disk_shape_dofs(self, grad_arr: np.ndarray) -> None:
-        """Restrict the shared-rim curved free-disk shape solve to height DOFs."""
-        mode = str(self.global_params.get("rim_slope_match_mode") or "").strip().lower()
-        if mode != "shared_rim_staggered_v1":
-            return
-        if not (
-            self.global_params.get("rim_slope_match_group") is not None
-            and self.global_params.get("rim_slope_match_outer_group") is not None
-            and self.global_params.get("rim_slope_match_disk_group") is not None
-        ):
-            return
-        grad_arr[:, :2] = 0.0
-        self._project_curved_free_disk_transition_shape_metric(grad_arr)
-
-    def _project_curved_free_disk_transition_shape_metric(
-        self, grad_arr: np.ndarray
-    ) -> None:
-        """Remove artificial shared-rim support-transition rows from shape descent."""
-        support_group = str(
-            self.global_params.get("rim_slope_match_outer_group") or ""
-        ).strip()
-        if not support_group:
-            return
-
-        support_rows = np.zeros(len(self.mesh.vertex_ids), dtype=bool)
-        for row, vertex_id in enumerate(self.mesh.vertex_ids):
-            vertex = self.mesh.vertices[int(vertex_id)]
-            if vertex.options.get("rim_slope_match_group") == support_group:
-                support_rows[row] = True
-        if not np.any(support_rows):
-            return
-
-        tri_rows, _ = self.mesh.triangle_row_cache()
-        if tri_rows is None or len(tri_rows) == 0:
-            return
-
-        transition_rows = np.zeros(len(self.mesh.vertex_ids), dtype=bool)
-        transition_tris = np.any(support_rows[np.asarray(tri_rows, dtype=int)], axis=1)
-        transition_rows[np.unique(np.asarray(tri_rows, dtype=int)[transition_tris])] = (
-            True
-        )
-        grad_arr[transition_rows, 2] = 0.0
-
     def _enforce_constraints(self, mesh: Mesh | None = None):
         """Invoke all constraint modules on the current mesh."""
         if not self._has_enforceable_constraints:
@@ -2643,7 +2601,7 @@ STEP SIZE:\t {self.step_size}
             # Use array-based path for main loop
             E, grad_arr = self.compute_energy_and_gradient_array()
             self.project_constraints_array(grad_arr)
-            self._project_curved_free_disk_shape_dofs(grad_arr)
+            project_curved_free_disk_shape_dofs(self.mesh, self.global_params, grad_arr)
             last_grad_arr = grad_arr
 
             if logger.isEnabledFor(logging.DEBUG):
