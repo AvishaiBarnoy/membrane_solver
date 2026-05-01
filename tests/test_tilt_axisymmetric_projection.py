@@ -5,7 +5,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from runtime.minimizer import Minimizer
+from runtime.projections.tilt import project_tilts_axisymmetric_about_center
 
 
 def test_project_tilts_axisymmetric_about_center_keeps_only_radial_component() -> None:
@@ -33,7 +33,7 @@ def test_project_tilts_axisymmetric_about_center_keeps_only_radial_component() -
     )
 
     fixed_mask = np.array([False, True, False], dtype=bool)
-    proj = Minimizer._project_tilts_axisymmetric_about_center(
+    proj = project_tilts_axisymmetric_about_center(
         positions=positions,
         tilts=tilts,
         normals=normals,

@@ -38,13 +38,12 @@ from runtime.preconditioners import (
     build_leaflet_tilt_cg_preconditioner,
     build_tilt_cg_preconditioner,
 )
-from runtime.steppers.base import BaseStepper
-from runtime.tilt_projection import (
+from runtime.projections.tilt import (
     build_leaflet_trial_tilts,
     project_leaflet_tilts_with_optional_axisymmetry,
-    project_tilts_axisymmetric_about_center,
     project_tilts_to_tangent_array,
 )
+from runtime.steppers.base import BaseStepper
 
 logger = logging.getLogger("membrane_solver")
 
@@ -418,41 +417,6 @@ class Minimizer:
         self._tilt_fixed_mask_out_vertex_version = vertex_version
         return mask
 
-    @staticmethod
-    def _project_tilts_to_tangent_array(
-        tilts: np.ndarray, normals: np.ndarray
-    ) -> np.ndarray:
-        """Project a dense tilt array into the vertex tangent planes."""
-        return project_tilts_to_tangent_array(tilts, normals)
-
-    @staticmethod
-    def _project_tilts_axisymmetric_about_center(
-        *,
-        positions: np.ndarray,
-        tilts: np.ndarray,
-        normals: np.ndarray,
-        center: np.ndarray,
-        axis: np.ndarray,
-        fixed_mask: np.ndarray | None = None,
-    ) -> np.ndarray:
-        """Project a tilt field into the axisymmetric (radial) subspace.
-
-        This is a theory-mode helper used to compare against the axisymmetric
-        continuum model in `docs/tex/1_disk_3d.tex`.
-
-        The projection keeps only the tangent-plane radial component about
-        `center`, where the in-plane radial direction is defined by removing
-        the component along `axis`.
-        """
-        return project_tilts_axisymmetric_about_center(
-            positions=positions,
-            tilts=tilts,
-            normals=normals,
-            center=center,
-            axis=axis,
-            fixed_mask=fixed_mask,
-        )
-
     def _uses_leaflet_tilts(self) -> bool:
         """Return True when any loaded module depends on tilt_in/tilt_out."""
         return any(
@@ -622,10 +586,10 @@ class Minimizer:
             def _trial_projected_energy(positions: np.ndarray) -> float:
                 if uses_leaflet_tilts:
                     normals = self.mesh.vertex_normals(positions)
-                    tilts_in = self._project_tilts_to_tangent_array(
+                    tilts_in = project_tilts_to_tangent_array(
                         self.mesh.tilts_in_view(), normals
                     )
-                    tilts_out = self._project_tilts_to_tangent_array(
+                    tilts_out = project_tilts_to_tangent_array(
                         self.mesh.tilts_out_view(), normals
                     )
                     self._set_leaflet_tilts_from_arrays_fast(tilts_in, tilts_out)
@@ -639,7 +603,7 @@ class Minimizer:
 
                 if uses_vertex_tilts:
                     normals = self.mesh.vertex_normals(positions)
-                    tilts = self._project_tilts_to_tangent_array(
+                    tilts = project_tilts_to_tangent_array(
                         self.mesh.tilts_view(), normals
                     )
                     self.mesh.set_tilts_from_array(tilts)
@@ -670,10 +634,10 @@ class Minimizer:
 
             def _trial_projected_leaflet_energy(positions: np.ndarray) -> float:
                 normals = self.mesh.vertex_normals(positions)
-                tilts_in = self._project_tilts_to_tangent_array(
+                tilts_in = project_tilts_to_tangent_array(
                     self.mesh.tilts_in_view(), normals
                 )
-                tilts_out = self._project_tilts_to_tangent_array(
+                tilts_out = project_tilts_to_tangent_array(
                     self.mesh.tilts_out_view(), normals
                 )
                 return float(
@@ -690,9 +654,7 @@ class Minimizer:
 
             def _trial_projected_tilt_energy(positions: np.ndarray) -> float:
                 normals = self.mesh.vertex_normals(positions)
-                tilts = self._project_tilts_to_tangent_array(
-                    self.mesh.tilts_view(), normals
-                )
+                tilts = project_tilts_to_tangent_array(self.mesh.tilts_view(), normals)
                 return float(
                     self._compute_total_energy_array_with_tilts(
                         positions=positions, tilts=tilts
@@ -1348,7 +1310,7 @@ class Minimizer:
         with self.mesh.geometry_freeze(positions):
             tilts = self.mesh.tilts_view().copy(order="F")
             normals = self.mesh.vertex_normals(positions)
-            tilts = self._project_tilts_to_tangent_array(tilts, normals)
+            tilts = project_tilts_to_tangent_array(tilts, normals)
             tilt_fixed_vals = tilts[fixed_mask].copy() if np.any(fixed_mask) else None
 
             tilt_grad = np.zeros_like(tilts)
@@ -1383,7 +1345,7 @@ class Minimizer:
                     accepted = False
                     for _bt in range(12):
                         trial = tilts - step * tilt_grad
-                        trial = self._project_tilts_to_tangent_array(trial, normals)
+                        trial = project_tilts_to_tangent_array(trial, normals)
                         if tilt_fixed_vals is not None:
                             trial[fixed_mask] = tilt_fixed_vals
                         E1 = self._compute_energy_array_with_tilts(
@@ -1439,7 +1401,7 @@ class Minimizer:
                     accepted = False
                     for _bt in range(12):
                         trial = tilts + step * direction
-                        trial = self._project_tilts_to_tangent_array(trial, normals)
+                        trial = project_tilts_to_tangent_array(trial, normals)
                         if tilt_fixed_vals is not None:
                             trial[fixed_mask] = tilt_fixed_vals
                         E1 = self._compute_energy_array_with_tilts(
