@@ -1,6 +1,5 @@
 # runtime/minimizer.py
 
-import copy
 import inspect
 import logging
 from typing import Callable, Dict, List, Optional
@@ -15,6 +14,15 @@ from modules.energy.leaflet_presence import (
     leaflet_present_triangle_mask,
 )
 from runtime.constraint_manager import ConstraintModuleManager
+from runtime.diagnostics.audit import (
+    check_gauss_bonnet,
+    log_accepted_step_stats,
+    log_debug_energy_context,
+    log_energy_consistency,
+    log_energy_phase,
+    log_lagrange_tangency_check,
+    log_step_direction_stats,
+)
 from runtime.diagnostics.gauss_bonnet import GaussBonnetMonitor
 from runtime.energy_context import EnergyContext
 from runtime.energy_manager import EnergyModuleManager
@@ -24,9 +32,7 @@ from runtime.leaflet_validation import validate_leaflet_absence_topology
 from runtime.minimizer_helpers import (
     build_reduced_line_search_energy_fn,
     build_reduced_line_search_trial_energy_fn,
-    capture_diagnostic_state,
     get_cached_tilt_fixed_mask,
-    restore_diagnostic_state,
 )
 from runtime.preconditioners import (
     build_leaflet_tilt_cg_preconditioner,
@@ -366,115 +372,6 @@ class Minimizer:
     def _triangle_rows(self) -> tuple[np.ndarray | None, list[int]]:
         """Return triangle rows/facets via energy context cache."""
         return self.energy_context().geometry.triangle_rows(self.mesh)
-
-    def _log_debug_energy_context(self, iteration: int) -> None:
-        if not logger.isEnabledFor(logging.DEBUG):
-            return
-        breakdown = self._diagnostic_energy_breakdown()
-        thetaB_contact = float(breakdown.get("tilt_thetaB_contact_in", 0.0))
-        thetaB_val = float(self.global_params.get("tilt_thetaB_value") or 0.0)
-        line_search_reduced = bool(
-            self.global_params.get("line_search_reduced_energy", False)
-        )
-        line_search_steps = int(
-            self.global_params.get("line_search_reduced_tilt_inner_steps", 0) or 0
-        )
-        guard_factor = float(
-            self.global_params.get("tilt_relax_energy_guard_factor", 0.0) or 0.0
-        )
-        tilt_enforced = self._last_mesh_op_tilt_constraints_enforced
-        logger.debug(
-            "Debug energy context i=%d: tilt_thetaB_contact_in=%.6g "
-            "tilt_thetaB_value=%.6g line_search_reduced=%s "
-            "line_search_steps=%d tilt_relax_guard=%.6g "
-            "tilt_constraints_enforced=%s",
-            iteration,
-            thetaB_contact,
-            thetaB_val,
-            line_search_reduced,
-            line_search_steps,
-            guard_factor,
-            tilt_enforced,
-        )
-
-    def _diagnostic_snapshot(self) -> dict:
-        """Capture mutable state that must not change in debug diagnostics."""
-        return capture_diagnostic_state(
-            self.mesh,
-            self.global_params,
-            uses_leaflet_tilts=self._uses_leaflet_tilts(),
-        )
-
-    def _diagnostic_restore(self, snapshot: dict) -> None:
-        """Restore mutable state after debug diagnostics."""
-        restore_diagnostic_state(self.mesh, self.global_params, snapshot)
-
-    def _run_debug_diagnostic(self, fn):
-        """Run a diagnostic without mutating the live simulation state.
-
-        Diagnostics are evaluated on a deep-copied mesh/parameters to guarantee
-        observational behavior even when energy modules populate caches.
-        """
-        if not logger.isEnabledFor(logging.DEBUG):
-            return fn()
-
-        # Only handle bound methods on this Minimizer instance. For other
-        # callables, fall back to the snapshot/restore guard.
-        fn_self = getattr(fn, "__self__", None)
-        fn_name = getattr(fn, "__name__", None)
-        if fn_self is not self or not isinstance(fn_name, str):
-            snapshot = self._diagnostic_snapshot()
-            try:
-                return fn()
-            finally:
-                self._diagnostic_restore(snapshot)
-
-        mesh_copy = self.mesh.copy()
-        gp_copy = copy.deepcopy(self.global_params)
-        mesh_copy.global_parameters = gp_copy
-        diag = Minimizer(
-            mesh_copy,
-            gp_copy,
-            self.stepper,
-            self.energy_manager,
-            self.constraint_manager,
-            energy_modules=list(getattr(mesh_copy, "energy_modules", [])),
-            constraint_modules=list(getattr(mesh_copy, "constraint_modules", [])),
-            step_size=float(self.step_size),
-            tol=float(self.tol),
-            quiet=True,
-        )
-
-        if fn_name == "compute_energy":
-            return diag.compute_energy()
-        if fn_name == "compute_energy_breakdown":
-            return diag.compute_energy_breakdown()
-        if fn_name == "compute_energy_and_gradient_array":
-            return diag.compute_energy_and_gradient_array()
-
-        # Fallback: if this is another Minimizer method that takes no args,
-        # prefer calling it on the copied Minimizer instance.
-        target = getattr(diag, fn_name, None)
-        if callable(target):
-            try:
-                return target()
-            except TypeError:
-                pass
-
-        # Last resort: snapshot/restore guard on the live state.
-        snapshot = self._diagnostic_snapshot()
-        try:
-            return fn()
-        finally:
-            self._diagnostic_restore(snapshot)
-
-    def _diagnostic_energy(self) -> float:
-        """Energy computation for diagnostics (debug-safe)."""
-        return float(self._run_debug_diagnostic(self.compute_energy))
-
-    def _diagnostic_energy_breakdown(self) -> Dict[str, float]:
-        """Energy breakdown for diagnostics (debug-safe)."""
-        return self._run_debug_diagnostic(self.compute_energy_breakdown)
 
     def _tilt_fixed_mask(self) -> np.ndarray:
         """Return a boolean mask for vertices whose tilt is clamped.
@@ -2135,27 +2032,6 @@ class Minimizer:
                 self.mesh, global_params=self.global_params
             )
 
-    def _check_gauss_bonnet(self) -> None:
-        """Emit Gauss-Bonnet diagnostics if enabled."""
-        if not bool(self.global_params.get("gauss_bonnet_monitor", False)):
-            return
-
-        if self._gauss_bonnet_monitor is None:
-            eps_angle = float(self.global_params.get("gauss_bonnet_eps_angle", 1e-4))
-            c1 = float(self.global_params.get("gauss_bonnet_c1", 1.0))
-            c2 = float(self.global_params.get("gauss_bonnet_c2", 1.0))
-            self._gauss_bonnet_monitor = GaussBonnetMonitor.from_mesh(
-                self.mesh, eps_angle=eps_angle, c1=c1, c2=c2
-            )
-
-        report = self._gauss_bonnet_monitor.evaluate(self.mesh)
-        if not report["ok"]:
-            logger.warning(
-                "Gauss-Bonnet drift exceeded tolerance: |ΔG|=%.3e (tol %.3e).",
-                report["drift_G"],
-                report["tol_G"],
-            )
-
     def refresh_modules(self):
         """Re-load energy and constraint modules from the current mesh state."""
         # Refresh energy modules
@@ -2261,33 +2137,7 @@ STEP SIZE:\t {self.step_size}
             )
             self._zero_fixed_gradients(grad)
 
-        # Optional DEBUG‑level diagnostic: in Lagrange mode the projected
-        # gradient should be (numerically) tangent to each fixed‑volume
-        # manifold, i.e. ⟨∇E, ∇V_body⟩ ≈ 0.
-        if logger.isEnabledFor(logging.DEBUG):
-            mode = self.global_params.get("volume_constraint_mode", "lagrange")
-            if mode == "lagrange" and self.mesh.bodies:
-                max_abs_dot = 0.0
-                for body in self.mesh.bodies.values():
-                    V_target = body.target_volume
-                    if V_target is None:
-                        V_target = body.options.get("target_volume")
-
-                    if V_target is None:
-                        continue
-
-                    _, vol_grad = body.compute_volume_and_gradient(self.mesh)
-
-                    dot = 0.0
-                    for vidx, gVi in vol_grad.items():
-                        gE = grad.get(vidx)
-                        if gE is not None:
-                            dot += float(np.dot(gE, gVi))
-                    max_abs_dot = max(max_abs_dot, abs(dot))
-                logger.debug(
-                    "Lagrange tangency check: max |<∇E, ∇V>| = %.3e",
-                    max_abs_dot,
-                )
+        log_lagrange_tangency_check(self, grad)
 
         return total_energy, grad
 
@@ -2373,69 +2223,6 @@ STEP SIZE:\t {self.step_size}
         for vidx, vertex in self.mesh.vertices.items():
             if getattr(vertex, "fixed", False):
                 grad[vidx][:] = 0.0
-
-    @staticmethod
-    def _log_energy_phase(iteration: int, phase: str, energy: float) -> None:
-        logger.debug("Iteration %d: %s energy=%.6f", iteration, phase, energy)
-
-    @staticmethod
-    def _log_step_direction_stats(iteration: int, grad_arr: np.ndarray) -> None:
-        norm = float(np.linalg.norm(grad_arr))
-        if norm <= 0.0:
-            logger.debug("Iteration %d: grad_norm=0", iteration)
-            return
-        step_dir = -grad_arr / norm
-        logger.debug(
-            "Iteration %d: grad_norm=%.3e step_dir_norm=%.3e",
-            iteration,
-            norm,
-            float(np.linalg.norm(step_dir)),
-        )
-
-    def _log_energy_consistency(self, label: str) -> None:
-        if not logger.isEnabledFor(logging.DEBUG):
-            return
-        try:
-            energy_scalar = float(self._run_debug_diagnostic(self.compute_energy))
-            energy_array, _ = self._run_debug_diagnostic(
-                self.compute_energy_and_gradient_array
-            )
-            energy_array = float(energy_array)
-        except Exception as exc:
-            logger.debug("Energy consistency check (%s) skipped: %s", label, exc)
-            return
-
-        logger.debug(
-            "Energy consistency (%s): scalar=%.6f array=%.6f",
-            label,
-            energy_scalar,
-            energy_array,
-        )
-
-        diff = abs(energy_scalar - energy_array)
-        tol = 1e-8 * max(1.0, abs(energy_scalar), abs(energy_array))
-        if diff <= tol:
-            return
-
-        try:
-            breakdown = self._diagnostic_energy_breakdown()
-        except Exception as exc:
-            logger.debug("Energy breakdown failed during consistency check: %s", exc)
-            return
-
-        top_terms = sorted(
-            breakdown.items(), key=lambda item: abs(item[1]), reverse=True
-        )[:5]
-        summary = ", ".join(f"{name}={value:.6f}" for name, value in top_terms)
-        logger.warning(
-            "Energy consistency mismatch (%s): |Δ|=%.6e (scalar=%.6f array=%.6f). "
-            "Top terms: %s",
-            label,
-            diff,
-            energy_scalar,
-            energy_array,
-            summary,
-        )
 
     def project_constraints(self, grad: Dict[int, np.ndarray] | np.ndarray) -> None:
         """Project gradients onto the feasible set defined by constraints."""
@@ -2789,7 +2576,7 @@ STEP SIZE:\t {self.step_size}
         if n_steps <= 0:
             E, grad = self.compute_energy_and_gradient()
             self._enforce_constraints()
-            self._log_energy_consistency("no_steps")
+            log_energy_consistency(self, "no_steps")
             E = float(self.compute_energy())
             return {
                 "energy": E,
@@ -2805,7 +2592,7 @@ STEP SIZE:\t {self.step_size}
             self.mesh.project_tilts_to_tangent()
             self.mesh.increment_version()
 
-        self._check_gauss_bonnet()
+        check_gauss_bonnet(self)
         last_grad_arr = None
         last_state_energy: float | None = None
         for i in range(n_steps):
@@ -2813,7 +2600,7 @@ STEP SIZE:\t {self.step_size}
                 callback(self.mesh, i)
 
             self._update_scalar_params()
-            self._log_debug_energy_context(i)
+            log_debug_energy_context(self, i)
 
             # Tilt solve modes are evaluated before the shape convergence check so
             # that fixed-geometry runs can still relax the tilt field.
@@ -2898,15 +2685,15 @@ STEP SIZE:\t {self.step_size}
             last_grad_arr = grad_arr
 
             if logger.isEnabledFor(logging.DEBUG):
-                self._log_energy_phase(i, "pre_step", E)
-                self._log_step_direction_stats(i, grad_arr)
+                log_energy_phase(i, "pre_step", E)
+                log_step_direction_stats(i, grad_arr)
 
             # check convergence by gradient norm
             grad_norm = float(np.linalg.norm(grad_arr))
             if grad_norm < self.tol:
                 logger.debug("Converged: gradient norm below tolerance.")
                 logger.info(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
-                self._log_energy_consistency("converged")
+                log_energy_consistency(self, "converged")
                 return {
                     "energy": E,
                     "gradient": self._grad_arr_to_dict(grad_arr),
@@ -2970,7 +2757,7 @@ STEP SIZE:\t {self.step_size}
                 # Do not probe energy here: additional debug-only energy
                 # evaluations can mutate caches and perturb the optimization
                 # trajectory.
-                self._log_energy_phase(i, "post_step", float(last_state_energy))
+                log_energy_phase(i, "post_step", float(last_state_energy))
             # Keep any stored 3D tilt field tangent to the updated surface.
             self.mesh.project_tilts_to_tangent()
             self.mesh.increment_version()
@@ -2988,14 +2775,14 @@ STEP SIZE:\t {self.step_size}
                 )
             if logger.isEnabledFor(logging.DEBUG):
                 # Keep this phase marker without re-evaluating energy.
-                self._log_energy_phase(i, "post_step_tilt_project", float("nan"))
+                log_energy_phase(i, "post_step_tilt_project", float("nan"))
             if step_mode == "fixed":
                 # Keep the cross-iteration step size constant, but still allow
                 # the line search to backtrack within each iteration for
                 # stability.
                 self.step_size = fixed_step
 
-            self._check_gauss_bonnet()
+            check_gauss_bonnet(self)
             if not step_success:
                 if self.step_size <= self.step_size_floor:
                     zero_step_counter += 1
@@ -3006,7 +2793,7 @@ STEP SIZE:\t {self.step_size}
                             zero_step_counter,
                             self.step_size_floor,
                         )
-                        self._log_energy_consistency("terminated_early")
+                        log_energy_consistency(self, "terminated_early")
                         return {
                             "energy": float(self.compute_energy()),
                             "gradient": self._grad_arr_to_dict(last_grad_arr)
@@ -3025,75 +2812,18 @@ STEP SIZE:\t {self.step_size}
             else:
                 zero_step_counter = 0
 
-                if logger.isEnabledFor(logging.DEBUG):
-                    E_after = self.compute_energy()
-                    accepted = (
-                        float(last_state_energy)
-                        if last_state_energy is not None
-                        else float("nan")
-                    )
-                    diff_acc = abs(float(E_after) - accepted)
-                    tol_acc = 1e-8 * max(1.0, abs(float(E_after)), abs(accepted))
-                    max_rel_violation_dbg = 0.0
-                    vol_msgs: list[str] = []
-                    if self.mesh.bodies:
-                        for body in self.mesh.bodies.values():
-                            target = body.target_volume
-                            if target is None:
-                                target = body.options.get("target_volume")
-                            if target is None:
-                                continue
-                            current = body.compute_volume(self.mesh)
-                            denom = max(abs(target), 1.0)
-                            rel = (current - target) / denom
-                            max_rel_violation_dbg = max(max_rel_violation_dbg, abs(rel))
-                            vol_msgs.append(
-                                "body %d: V=%.6f, V0=%.6f, relΔV=%.3e"
-                                % (body.index, current, target, rel)
-                            )
-                    logger.debug(
-                        "Accepted step %d: E_before=%.6f, E_after=%.6f, "
-                        "E_accepted=%.6f, |E_after-E_accepted|=%.3e (tol %.3e), "
-                        "step_size=%.3e, max_relΔV=%.3e",
-                        i,
-                        E,
-                        E_after,
-                        accepted,
-                        diff_acc,
-                        tol_acc,
-                        self.step_size,
-                        max_rel_violation_dbg,
-                    )
-                    if vol_msgs:
-                        logger.debug("Volume diagnostics: %s", "; ".join(vol_msgs))
-                    if diff_acc > tol_acc:
-                        try:
-                            breakdown = self.compute_energy_breakdown()
-                            top_terms = sorted(
-                                breakdown.items(),
-                                key=lambda item: abs(item[1]),
-                                reverse=True,
-                            )[:5]
-                            summary = ", ".join(
-                                f"{name}={value:.6f}" for name, value in top_terms
-                            )
-                            logger.warning(
-                                "Accepted energy mismatch at step %d: "
-                                "E_accepted=%.6f E_after=%.6f |Δ|=%.6e. Top terms: %s",
-                                i,
-                                accepted,
-                                float(E_after),
-                                diff_acc,
-                                summary,
-                            )
-                        except Exception as exc:
-                            logger.debug(
-                                "Accepted energy breakdown failed at step %d: %s",
-                                i,
-                                exc,
-                            )
+                log_accepted_step_stats(
+                    self,
+                    iteration=i,
+                    E_before=E,
+                    E_accepted=float(last_state_energy)
+                    if last_state_energy is not None
+                    else float("nan"),
+                    step_size=self.step_size,
+                )
 
                 mode = self.global_params.get("volume_constraint_mode", "lagrange")
+
                 proj_flag = self.global_params.get(
                     "volume_projection_during_minimization", True
                 )
@@ -3124,9 +2854,7 @@ STEP SIZE:\t {self.step_size}
                         self.mesh.increment_version()
                         if logger.isEnabledFor(logging.DEBUG):
                             # Avoid debug-only energy probes here as well.
-                            self._log_energy_phase(
-                                i, "post_step_constraints", float("nan")
-                            )
+                            log_energy_phase(i, "post_step_constraints", float("nan"))
                         reset = getattr(self.stepper, "reset", None)
                         if callable(reset):
                             reset()
@@ -3148,7 +2876,7 @@ STEP SIZE:\t {self.step_size}
             # versioned caches from the finalized state.
             self.mesh.increment_version()
 
-        self._log_energy_consistency("finalize")
+        log_energy_consistency(self, "finalize")
         self.mesh._curvature_cache = {}
         self.mesh._curvature_version = -1
         final_energy = float(self.compute_energy())
