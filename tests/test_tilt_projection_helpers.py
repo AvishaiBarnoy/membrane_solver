@@ -5,8 +5,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from runtime.minimizer import Minimizer
-from runtime.tilt_projection import (
+from runtime.projections.tilt import (
     build_leaflet_trial_tilts,
     project_leaflet_tilts_with_optional_axisymmetry,
     project_tilts_axisymmetric_about_center,
@@ -18,7 +17,7 @@ def test_project_tilts_to_tangent_array_matches_minimizer_static():
     tilts = np.array([[1.0, 2.0, 3.0], [-1.0, 4.0, -2.0]], dtype=float, order="F")
     normals = np.array([[0.0, 0.0, 1.0], [0.0, 1.0, 0.0]], dtype=float, order="F")
     got = project_tilts_to_tangent_array(tilts, normals)
-    ref = Minimizer._project_tilts_to_tangent_array(tilts, normals)
+    ref = project_tilts_to_tangent_array(tilts, normals)
     assert np.allclose(got, ref)
 
 
@@ -50,7 +49,7 @@ def test_project_tilts_axisymmetric_about_center_matches_minimizer_static():
         axis=axis,
         fixed_mask=fixed_mask,
     )
-    ref = Minimizer._project_tilts_axisymmetric_about_center(
+    ref = project_tilts_axisymmetric_about_center(
         positions=positions,
         tilts=tilts,
         normals=normals,
