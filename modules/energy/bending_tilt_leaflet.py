@@ -44,7 +44,7 @@ from .bt_params import (
     _use_stage_a_inner_shape_cross_suppression,
     _use_stage_a_outer_grad_linear_transition_operator,
 )
-from .bt_utils import _accumulate_leaflet_tilt_gradient
+from .bt_utils import _accumulate_leaflet_tilt_gradient, _mean_reconstructed_field
 
 _BASE_TERM_BOUNDARY_OPTION_KEYS = (
     # Most configs tag the disk interface ring via the rim-slope match group.
@@ -270,25 +270,6 @@ def _outer_transition_operator_payload(
     }
     setattr(mesh, cache_attr, {"key": cache_key, "value": value})
     return value
-
-
-def _mean_reconstructed_field(
-    field: np.ndarray,
-    endpoint_rows: np.ndarray,
-    recon_idx: np.ndarray,
-    recon_count: np.ndarray,
-) -> np.ndarray:
-    """Return reconstructed edge-side field, falling back to endpoint values."""
-    out = field[endpoint_rows].copy()
-    mask1 = recon_count == 1
-    if np.any(mask1):
-        out[mask1] = field[recon_idx[..., 0][mask1]]
-    mask2 = recon_count >= 2
-    if np.any(mask2):
-        out[mask2] = 0.5 * (
-            field[recon_idx[..., 0][mask2]] + field[recon_idx[..., 1][mask2]]
-        )
-    return out
 
 
 def _apply_edge_reconstructed_beltrami_laplacian(
