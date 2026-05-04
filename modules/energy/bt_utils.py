@@ -30,3 +30,22 @@ def _accumulate_leaflet_tilt_gradient(
     np.add.at(tilt_grad_arr, tri_rows[:, 1], scaled)
     np.multiply(factor, g2, out=scaled)
     np.add.at(tilt_grad_arr, tri_rows[:, 2], scaled)
+
+
+def _mean_reconstructed_field(
+    field: np.ndarray,
+    endpoint_rows: np.ndarray,
+    recon_idx: np.ndarray,
+    recon_count: np.ndarray,
+) -> np.ndarray:
+    """Return reconstructed edge-side field, falling back to endpoint values."""
+    out = field[endpoint_rows].copy()
+    mask1 = recon_count == 1
+    if np.any(mask1):
+        out[mask1] = field[recon_idx[..., 0][mask1]]
+    mask2 = recon_count >= 2
+    if np.any(mask2):
+        out[mask2] = 0.5 * (
+            field[recon_idx[..., 0][mask2]] + field[recon_idx[..., 1][mask2]]
+        )
+    return out
