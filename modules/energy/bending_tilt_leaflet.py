@@ -44,6 +44,7 @@ from .bt_params import (
     _use_stage_a_inner_shape_cross_suppression,
     _use_stage_a_outer_grad_linear_transition_operator,
 )
+from .bt_utils import _accumulate_leaflet_tilt_gradient
 
 _BASE_TERM_BOUNDARY_OPTION_KEYS = (
     # Most configs tag the disk interface ring via the rim-slope match group.
@@ -673,33 +674,6 @@ def _inner_bending_tilt_dE_ddiv(
         + (kappa_tri[:, 1] * (base_tri[:, 1] + div_term) * va1_eff)
         + (kappa_tri[:, 2] * (base_tri[:, 2] + div_term) * va2_eff)
     ), stats
-
-
-def _accumulate_leaflet_tilt_gradient(
-    tilt_grad_arr: np.ndarray,
-    tri_rows: np.ndarray,
-    factor: np.ndarray,
-    g0: np.ndarray,
-    g1: np.ndarray,
-    g2: np.ndarray,
-    *,
-    ctx=None,
-    scratch_tag: str,
-) -> None:
-    """Accumulate tilt gradients while reusing scratch buffers when available."""
-    if ctx is None:
-        np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
-        np.add.at(tilt_grad_arr, tri_rows[:, 1], factor * g1)
-        np.add.at(tilt_grad_arr, tri_rows[:, 2], factor * g2)
-        return
-
-    scaled = ctx.scratch_array(scratch_tag, shape=g0.shape, dtype=g0.dtype)
-    np.multiply(factor, g0, out=scaled)
-    np.add.at(tilt_grad_arr, tri_rows[:, 0], scaled)
-    np.multiply(factor, g1, out=scaled)
-    np.add.at(tilt_grad_arr, tri_rows[:, 1], scaled)
-    np.multiply(factor, g2, out=scaled)
-    np.add.at(tilt_grad_arr, tri_rows[:, 2], scaled)
 
 
 def _inner_recovered_divergence(
