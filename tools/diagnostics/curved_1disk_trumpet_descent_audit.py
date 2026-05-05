@@ -15,6 +15,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from runtime.projections.curved_disk import project_curved_free_disk_shape_dofs
 from tools.diagnostics.curved_1disk_shape_propagation_blocker import (
     _build_minimizer,
     _restore_state,
@@ -149,9 +150,10 @@ def _gradient_alignment(minim, mode: np.ndarray) -> dict[str, object]:
     energy, grad = minim.compute_energy_and_gradient_array()
     raw = np.array(grad, copy=True)
     minim.project_constraints_array(grad)
-    minim._project_curved_free_disk_shape_dofs(grad)
+    project_curved_free_disk_shape_dofs(minim.mesh, minim.global_params, grad)
     projected = np.array(grad, copy=True)
     mode_vec = np.zeros_like(projected)
+
     mode_vec[:, 2] = np.asarray(mode, dtype=float)
     raw_dot = float(np.sum(raw * mode_vec))
     projected_dot = float(np.sum(projected * mode_vec))

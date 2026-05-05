@@ -14,6 +14,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from runtime.projections.curved_disk import project_curved_free_disk_shape_dofs
 from tools.diagnostics.curved_1disk_shape_propagation_blocker import (
     _build_minimizer,
     _restore_state,
@@ -56,7 +57,7 @@ def _prepare_minimizer(theta_b: float):
 def _projected_shape_gradient(minim) -> tuple[float, np.ndarray]:
     energy, grad = minim.compute_energy_and_gradient_array()
     minim.project_constraints_array(grad)
-    minim._project_curved_free_disk_shape_dofs(grad)
+    project_curved_free_disk_shape_dofs(minim.mesh, minim.global_params, grad)
     return float(energy), np.asarray(grad[:, 2], dtype=float).copy()
 
 

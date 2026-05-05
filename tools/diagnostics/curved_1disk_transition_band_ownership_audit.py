@@ -14,6 +14,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from runtime.projections.curved_disk import project_curved_free_disk_shape_dofs
 from tools.diagnostics.curved_1disk_energy_control_volume_audit import (
     _outer_membrane_tilt_shell_energy,
 )
@@ -80,7 +81,7 @@ def _row_masks(mesh) -> dict[str, np.ndarray]:
 def _project_shape_gradient(minim, grad: np.ndarray) -> np.ndarray:
     out = np.asarray(grad, dtype=float).copy()
     minim.project_constraints_array(out)
-    minim._project_curved_free_disk_shape_dofs(out)
+    project_curved_free_disk_shape_dofs(minim.mesh, minim.global_params, out)
     return out
 
 

@@ -15,6 +15,7 @@ from .bt_params import (
     _base_term_boundary_group,
     _base_term_region_mode,
     _base_term_region_radius,
+    _bending_tilt_in_update_mode,
 )
 
 _BASE_TERM_BOUNDARY_OPTION_KEYS = (
@@ -25,6 +26,112 @@ _BASE_TERM_BOUNDARY_OPTION_KEYS = (
     "tilt_thetaB_group_in",
     "tilt_thetaB_group_out",
 )
+
+
+def _apply_inner_divergence_update_mode(
+    mesh: Mesh,
+    global_params,
+    *,
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+    cache_tag: str,
+    div_term: np.ndarray,
+) -> np.ndarray:
+    """Apply benchmark-only inner divergence cap beyond the rim."""
+    stats_attr = "_last_bending_tilt_in_update_mode_stats"
+    mode = _bending_tilt_in_update_mode(global_params)
+    stats = {
+        "enabled": bool(mode != "off"),
+        "mode": str(mode),
+        "candidate_tri_count": 0,
+        "capped_tri_count": 0,
+        "rim_tri_count": 0,
+        "cap_magnitude": 0.0,
+        "cross_term_removed": False,
+    }
+    if str(cache_tag) != "in":
+        return div_term
+    if mode == "off" or tri_rows.size == 0:
+        setattr(mesh, stats_attr, stats)
+        return div_term
+    if mode == "radial_cross_term_off_v1":
+        stats["cross_term_removed"] = True
+        setattr(mesh, stats_attr, stats)
+        return div_term
+
+    radius = float(global_params.get("benchmark_disk_radius") or 0.0)
+    lambda_value = float(global_params.get("benchmark_lambda_value") or 0.0)
+    if radius <= 0.0 or lambda_value <= 0.0:
+        setattr(mesh, stats_attr, stats)
+        return div_term
+
+    center = _assume_J0_center_xy(global_params)
+    tri_xy = np.mean(positions[tri_rows, :2], axis=1)
+    tri_radii = np.linalg.norm(tri_xy - center[None, :], axis=1)
+    rim_w = float(lambda_value)
+    near_w = 4.0 * float(lambda_value)
+    rim_mask = np.abs(tri_radii - radius) <= rim_w
+    outer_near_mask = (tri_radii > (radius + rim_w)) & (tri_radii <= (radius + near_w))
+    stats["candidate_tri_count"] = int(np.sum(outer_near_mask))
+    stats["rim_tri_count"] = int(np.sum(rim_mask))
+    rim_mag = np.abs(div_term[rim_mask])
+    if rim_mag.size == 0:
+        setattr(mesh, stats_attr, stats)
+        return div_term
+
+    cap_magnitude = float(1.05 * np.median(rim_mag))
+    stats["cap_magnitude"] = cap_magnitude
+    if cap_magnitude <= 0.0 or not np.any(outer_near_mask):
+        setattr(mesh, stats_attr, stats)
+        return div_term
+
+    updated = np.array(div_term, copy=True)
+    hit = outer_near_mask & (np.abs(updated) > cap_magnitude)
+    updated[hit] = np.sign(updated[hit]) * cap_magnitude
+    stats["capped_tri_count"] = int(np.sum(hit))
+    setattr(mesh, stats_attr, stats)
+    return updated
+
+
+def _shared_rim_support_transition_triangle_mask(
+    mesh: Mesh,
+    global_params,
+    tri_rows: np.ndarray,
+    *,
+    keep_physical_outer_edge: bool = False,
+) -> np.ndarray | None:
+    """Mask triangles incident to the artificial shared-rim support row."""
+    if global_params is None:
+        return None
+    mode = str(global_params.get("rim_slope_match_mode") or "").strip()
+    if mode != "shared_rim_staggered_v1":
+        return None
+
+    support_group = str(global_params.get("rim_slope_match_outer_group") or "").strip()
+    rim_group = str(global_params.get("rim_slope_match_group") or "").strip()
+    disk_group = str(global_params.get("rim_slope_match_disk_group") or "").strip()
+    if not support_group or not rim_group or not disk_group:
+        return None
+
+    support_rows = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    true_free_rows = np.ones(len(mesh.vertex_ids), dtype=bool)
+    excluded_groups = {support_group, rim_group, disk_group}
+    for row, vertex_id in enumerate(mesh.vertex_ids):
+        vertex = mesh.vertices[int(vertex_id)]
+        group = vertex.options.get("rim_slope_match_group")
+        if group == support_group:
+            support_rows[row] = True
+        if group in excluded_groups:
+            true_free_rows[row] = False
+
+    if not np.any(support_rows):
+        return None
+    has_support = np.any(support_rows[tri_rows], axis=1)
+    if not keep_physical_outer_edge:
+        return has_support
+    free_corner_count = np.sum(true_free_rows[tri_rows], axis=1)
+    has_physical_outer_edge = has_support & (free_corner_count >= 2)
+    return has_support & ~has_physical_outer_edge
 
 
 def _collect_preset_rows(

@@ -18,6 +18,7 @@ import numpy as np
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
+from runtime.projections.curved_disk import project_curved_free_disk_shape_dofs
 from runtime.steppers.gradient_descent import GradientDescent
 from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import THEORY_THETA_B
 from tools.diagnostics.curved_1disk_theory_benchmark import (
@@ -99,7 +100,7 @@ def _line_search_probe(minim: Minimizer, alphas: Sequence[float]) -> dict[str, o
     energy, grad = minim.compute_energy_and_gradient_array()
     raw_grad = np.array(grad, copy=True)
     minim.project_constraints_array(grad)
-    minim._project_curved_free_disk_shape_dofs(grad)
+    project_curved_free_disk_shape_dofs(minim.mesh, minim.global_params, grad)
     projected_grad = np.array(grad, copy=True)
 
     positions0 = mesh.positions_view().copy(order="F")
