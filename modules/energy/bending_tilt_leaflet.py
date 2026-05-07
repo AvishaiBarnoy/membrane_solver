@@ -47,6 +47,7 @@ from .bt_params import (
 from .bt_selection import (
     _apply_inner_divergence_update_mode,
     _base_term_region_zero_rows,
+    _collect_group_rows,
     _collect_preset_rows,
     _interior_mask_leaflet,
     _shared_rim_support_transition_triangle_mask,
@@ -1827,4 +1828,10 @@ def compute_energy_and_gradient_leaflet(
 __all__ = [
     "compute_energy_and_gradient_array_leaflet",
     "compute_energy_and_gradient_leaflet",
+    "_apply_inner_divergence_update_mode",
+    "_base_term_region_zero_rows",
+    "_collect_group_rows",
+    "_collect_preset_rows",
+    "_interior_mask_leaflet",
+    "_shared_rim_support_transition_triangle_mask",
 ]
