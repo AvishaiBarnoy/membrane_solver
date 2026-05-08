@@ -14,6 +14,7 @@ from collections.abc import Iterable
 
 import numpy as np
 
+from modules.energy.bt_selection import _collect_group_rows, _collect_preset_rows
 from tools.diagnostics.curved_1disk_first_two_shell_ingredient_audit import (
     OUTER_RADIUS,
     THEORY_THETA_B,
@@ -29,7 +30,6 @@ from tools.diagnostics.curved_disk_theory import (
     tex_reference_params,
 )
 from tools.diagnostics.free_disk_profile_protocol import (
-    _shared_rim_group_rows,
     _shared_rim_inner_control_volume_audit,
     _triangle_region_masks,
     shared_rim_continuum_annulus_audit,
@@ -68,16 +68,22 @@ def _expected_tex_energy(theta_b: float) -> dict[str, float]:
 
 def _row_regions(mesh) -> list[str]:
     """Return a compact region label for every vertex row."""
+    index_map = mesh.vertex_index_to_row
+    disk_rows = set(
+        _collect_preset_rows(
+            mesh, presets=("disk",), cache_tag="diag_audit_disk", index_map=index_map
+        )
+    )
+    rim_rows = set(_collect_group_rows(mesh, group="rim", index_map=index_map))
+    outer_rows = set(_collect_group_rows(mesh, group="outer", index_map=index_map))
+
     labels: list[str] = []
-    for vid in mesh.vertex_ids:
-        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-        preset = str(opts.get("preset") or "")
-        group = str(opts.get("rim_slope_match_group") or "")
-        if preset == "disk":
+    for row in range(len(mesh.vertex_ids)):
+        if row in disk_rows:
             labels.append("disk")
-        elif group == "rim":
+        elif row in rim_rows:
             labels.append("shared_rim")
-        elif group == "outer":
+        elif row in outer_rows:
             labels.append("outer_support")
         else:
             labels.append("outer_free")
@@ -96,6 +102,7 @@ def _outer_membrane_tilt_shell_energy(
     """Return module-shaped tilt-magnitude energy by row on outer-membrane triangles."""
     leaflet = str(payload["leaflet"])
     gp = mesh.global_parameters
+    index_map = mesh.vertex_index_to_row
     tri_rows = np.asarray(payload["tri_rows"], dtype=np.int32)
     outer_mask = np.asarray(payload["outer_mask"], dtype=bool)
     tri_area = np.asarray(payload["tri_area"], dtype=float)
@@ -111,7 +118,7 @@ def _outer_membrane_tilt_shell_energy(
             gp.get("tilt_out_exclude_shared_rim_outer_rows")
             or gp.get("tilt_out_exclude_shared_rim_rows")
         ):
-            for row in _shared_rim_group_rows(mesh, "outer"):
+            for row in _collect_group_rows(mesh, group="outer", index_map=index_map):
                 tilts[int(row)] = 0.0
     else:
         k_tilt = float(gp.get("tilt_modulus_in") or 0.0)
@@ -121,19 +128,19 @@ def _outer_membrane_tilt_shell_energy(
         outer_weight = gp.get("tilt_in_shared_rim_outer_row_energy_weight")
         if outer_weight is not None:
             scale = float(np.sqrt(float(outer_weight)))
-            for row in _shared_rim_group_rows(mesh, "outer"):
+            for row in _collect_group_rows(mesh, group="outer", index_map=index_map):
                 tilts[int(row)] *= scale
         if bool(
             gp.get("tilt_in_exclude_shared_rim_rows")
             or gp.get("tilt_exclude_shared_rim_rows_in")
         ):
-            for row in _shared_rim_group_rows(mesh, "rim"):
+            for row in _collect_group_rows(mesh, group="rim", index_map=index_map):
                 tilts[int(row)] = 0.0
         if bool(
             gp.get("tilt_in_exclude_shared_rim_outer_rows")
             or gp.get("tilt_exclude_shared_rim_outer_rows_in")
         ):
-            for row in _shared_rim_group_rows(mesh, "outer"):
+            for row in _collect_group_rows(mesh, group="outer", index_map=index_map):
                 tilts[int(row)] = 0.0
 
     mode = mode.strip().lower()

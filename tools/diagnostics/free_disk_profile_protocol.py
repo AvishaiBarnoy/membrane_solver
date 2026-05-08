@@ -10,7 +10,11 @@ import numpy as np
 from geometry.curvature import compute_curvature_data
 from geometry.geom_io import load_data, parse_geometry
 from geometry.tilt_operators import _resolve_transport_model, p1_triangle_divergence
-from modules.energy import bending_tilt_leaflet as _bending_tilt_leaflet
+from modules.energy import bending_tilt_leaflet as _btl
+from modules.energy.bt_selection import (
+    _collect_group_rows,
+    _collect_preset_rows,
+)
 from modules.energy.leaflet_presence import (
     leaflet_absent_vertex_mask,
     leaflet_present_triangle_mask,
@@ -191,11 +195,12 @@ def _tilt_leaflet_region_split(mesh, *, leaflet: str) -> dict[str, float]:
             target_groups.add("outer")
         exclude_shared_rim = bool(target_groups)
     match_mode = str(gp.get("rim_slope_match_mode") or "").strip().lower()
+    index_map = mesh.vertex_index_to_row
     if exclude_shared_rim and match_mode == "shared_rim_staggered_v1":
-        for row, vid in enumerate(mesh.vertex_ids):
-            opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-            if str(opts.get("rim_slope_match_group") or "") in target_groups:
-                tilts[row] = 0.0
+        for group in target_groups:
+            rows = _collect_group_rows(mesh, group=group, index_map=index_map)
+            if rows.size:
+                tilts[rows] = 0.0
     if str(leaflet) == "in" and match_mode == "shared_rim_staggered_v1":
         outer_row_energy_weight = gp.get("tilt_in_shared_rim_outer_row_energy_weight")
         if outer_row_energy_weight is not None:
@@ -207,10 +212,9 @@ def _tilt_leaflet_region_split(mesh, *, leaflet: str) -> dict[str, float]:
                     "tilt_in_shared_rim_outer_row_energy_weight must be a finite nonnegative float."
                 )
             outer_row_scale = float(np.sqrt(outer_row_energy_weight))
-            for row, vid in enumerate(mesh.vertex_ids):
-                opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-                if str(opts.get("rim_slope_match_group") or "") == "outer":
-                    tilts[row] *= outer_row_scale
+            rows = _collect_group_rows(mesh, group="outer", index_map=index_map)
+            if rows.size:
+                tilts[rows] *= outer_row_scale
     tri_tilt_sq_sum = np.sum(
         np.einsum("...i,...i->...", tilts[tri_rows_eff], tilts[tri_rows_eff]),
         axis=1,
@@ -267,16 +271,6 @@ def _tilt_out_region_split(mesh) -> dict[str, float]:
     return _tilt_leaflet_region_split(mesh, leaflet="out")
 
 
-def _shared_rim_group_rows(mesh, group: str) -> np.ndarray:
-    """Return row indices carrying a given shared-rim group tag."""
-    rows: list[int] = []
-    for row, vid in enumerate(mesh.vertex_ids):
-        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-        if str(opts.get("rim_slope_match_group") or "") == str(group):
-            rows.append(int(row))
-    return np.asarray(rows, dtype=int)
-
-
 def _shared_rim_inner_control_volume_audit(mesh) -> dict[str, float]:
     """Return barycentric inner-leaflet area carried by shared-rim support groups."""
     positions = mesh.positions_view()
@@ -319,8 +313,9 @@ def _shared_rim_inner_control_volume_audit(mesh) -> dict[str, float]:
         mask=np.ones(len(tri_rows_eff), dtype=bool),
         cache=False,
     )
-    outer_rows = _shared_rim_group_rows(mesh, "outer")
-    rim_rows = _shared_rim_group_rows(mesh, "rim")
+    index_map = mesh.vertex_index_to_row
+    outer_rows = _collect_group_rows(mesh, group="outer", index_map=index_map)
+    rim_rows = _collect_group_rows(mesh, group="rim", index_map=index_map)
     return {
         "outer_control_area": float(np.sum(vertex_areas[outer_rows]))
         if outer_rows.size
@@ -344,8 +339,9 @@ def shared_rim_continuum_annulus_audit(mesh) -> dict[str, float]:
     """
     positions = mesh.positions_view()
     r = np.linalg.norm(positions[:, :2], axis=1)
-    rim_rows = _shared_rim_group_rows(mesh, "rim")
-    outer_rows = _shared_rim_group_rows(mesh, "outer")
+    index_map = mesh.vertex_index_to_row
+    rim_rows = _collect_group_rows(mesh, group="rim", index_map=index_map)
+    outer_rows = _collect_group_rows(mesh, group="outer", index_map=index_map)
     if rim_rows.size == 0 or outer_rows.size == 0:
         raise AssertionError(
             "Shared-rim annulus audit requires both rim and outer groups"
@@ -377,19 +373,17 @@ def shared_rim_shell_area_audit(mesh) -> dict[str, float]:
     """
     positions = mesh.positions_view()
     r = np.linalg.norm(positions[:, :2], axis=1)
-    rim_rows = _shared_rim_group_rows(mesh, "rim")
-    outer_rows = _shared_rim_group_rows(mesh, "outer")
+    index_map = mesh.vertex_index_to_row
+    rim_rows = _collect_group_rows(mesh, group="rim", index_map=index_map)
+    outer_rows = _collect_group_rows(mesh, group="outer", index_map=index_map)
     if rim_rows.size == 0 or outer_rows.size == 0:
         raise AssertionError(
             "Shared-rim shell audit requires both rim and outer groups"
         )
 
-    disk_rows: list[int] = []
-    for row, vid in enumerate(mesh.vertex_ids):
-        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-        if opts.get("preset") == "disk":
-            disk_rows.append(int(row))
-    disk_rows_arr = np.asarray(disk_rows, dtype=int)
+    disk_rows_arr = _collect_preset_rows(
+        mesh, presets=("disk",), cache_tag="diag_shared_rim_shell", index_map=index_map
+    )
     if disk_rows_arr.size == 0:
         raise AssertionError("Shared-rim shell audit requires disk preset rows")
 
@@ -483,7 +477,7 @@ def _bending_tilt_leaflet_region_split(mesh, *, leaflet: str) -> dict[str, float
         tri_rows=tri_rows,
         transport_model=transport_model,
     )
-    div_term = _bending_tilt_leaflet._apply_inner_divergence_update_mode(
+    div_term = _btl._apply_inner_divergence_update_mode(
         mesh,
         gp,
         positions=positions,
@@ -491,7 +485,7 @@ def _bending_tilt_leaflet_region_split(mesh, *, leaflet: str) -> dict[str, float
         cache_tag=cache_tag,
         div_term=div_tri,
     )
-    _, va0_eff, va1_eff, va2_eff = _bending_tilt_leaflet._compute_effective_areas(
+    _, va0_eff, va1_eff, va2_eff = _btl._compute_effective_areas(
         mesh,
         positions,
         tri_rows,
@@ -500,7 +494,7 @@ def _bending_tilt_leaflet_region_split(mesh, *, leaflet: str) -> dict[str, float
         cache_token=f"diagnostic_bending_tilt_{cache_tag}",
     )
     safe_areas_vor = np.maximum(vertex_areas_vor, 1.0e-12)
-    kappa_arr, c0_arr = _bending_tilt_leaflet._per_vertex_params_leaflet(
+    kappa_arr, c0_arr = _btl._per_vertex_params_leaflet(
         mesh,
         gp,
         model="helfrich",
@@ -509,18 +503,16 @@ def _bending_tilt_leaflet_region_split(mesh, *, leaflet: str) -> dict[str, float
     )
     k_mag = np.linalg.norm(k_vecs, axis=1)
     h_vor = k_mag / (2.0 * safe_areas_vor)
-    is_interior = _bending_tilt_leaflet._interior_mask_leaflet(
+    is_interior = _btl._interior_mask_leaflet(
         mesh, gp, cache_tag=cache_tag, index_map=index_map
     )
     base_term = (2.0 * h_vor) - c0_arr
     base_term[~is_interior] = 0.0
-    presets = _bending_tilt_leaflet._assume_J0_presets(gp, cache_tag=cache_tag)
+    presets = _btl._assume_J0_presets(gp, cache_tag=cache_tag)
     if presets:
-        radius_max = _bending_tilt_leaflet._assume_J0_radius_max(
-            gp, cache_tag=cache_tag
-        )
-        center_xy = _bending_tilt_leaflet._assume_J0_center_xy(gp)
-        rows = _bending_tilt_leaflet._collect_preset_rows(
+        radius_max = _btl._assume_J0_radius_max(gp, cache_tag=cache_tag)
+        center_xy = _btl._assume_J0_center_xy(gp)
+        rows = _collect_preset_rows(
             mesh,
             presets=presets,
             cache_tag=cache_tag,
@@ -530,7 +522,7 @@ def _bending_tilt_leaflet_region_split(mesh, *, leaflet: str) -> dict[str, float
         )
         if rows.size:
             base_term[rows] = 0.0
-    region_rows = _bending_tilt_leaflet._base_term_region_zero_rows(
+    region_rows = _btl._base_term_region_zero_rows(
         mesh,
         gp,
         cache_tag=cache_tag,

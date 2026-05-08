@@ -23,12 +23,14 @@ from geometry.curvature import compute_curvature_data
 from geometry.geom_io import load_data, parse_geometry
 from geometry.tilt_operators import p1_triangle_divergence_from_shape_gradients
 from modules.energy.bending import _compute_effective_areas, _energy_model
-from modules.energy.bending_tilt_leaflet import (
+from modules.energy.bt_params import (
     _assume_J0_presets,
     _base_term_boundary_group,
+    _per_vertex_params_leaflet,
+)
+from modules.energy.bt_selection import (
     _collect_group_rows,
     _collect_preset_rows,
-    _per_vertex_params_leaflet,
 )
 from modules.energy.leaflet_presence import (
     leaflet_absent_vertex_mask,
@@ -169,11 +171,14 @@ def _bending_tilt_energy(
 
 
 def _split_masks(mesh, tri_rows_full: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    vertices = list(mesh.vertices.values())
-    presets = np.array(
-        [str(v.options.get("preset") or "") for v in vertices], dtype=object
+    index_map = mesh.vertex_index_to_row
+    disk_rows = _collect_preset_rows(
+        mesh, presets=("disk",), cache_tag="diag_split_disk", index_map=index_map
     )
-    is_disk = presets == "disk"
+    is_disk = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    if disk_rows.size:
+        is_disk[disk_rows] = True
+
     # Disk patch: any triangle that touches a disk vertex.
     tri_mask_disk = np.any(is_disk[tri_rows_full], axis=1)
 
@@ -203,11 +208,13 @@ def _energy_breakdown(mesh) -> dict[str, float]:
 def _inner_leaflet_vertex_split(
     *, mesh, positions: np.ndarray, tri_rows_full: np.ndarray, weights_full: np.ndarray
 ) -> dict[str, float]:
-    presets = np.array(
-        [str(v.options.get("preset") or "") for v in mesh.vertices.values()],
-        dtype=object,
+    index_map = mesh.vertex_index_to_row
+    disk_rows = _collect_preset_rows(
+        mesh, presets=("disk",), cache_tag="diag_inner_split_disk", index_map=index_map
     )
-    disk_mask = presets == "disk"
+    disk_mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    if disk_rows.size:
+        disk_mask[disk_rows] = True
 
     tri_pos = positions[tri_rows_full]
     v0 = tri_pos[:, 0, :]

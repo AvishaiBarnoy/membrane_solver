@@ -56,7 +56,11 @@ def _find_ring_vertex_ids(vertices: list[list[Any]], radius: float) -> list[int]
 
 
 def _find_group_vertex_ids(vertices: list[list[Any]], group: str) -> list[int]:
-    """Return all vertex ids tagged with one rim-slope match group."""
+    """Return all vertex ids tagged with one rim-slope match group.
+
+    Note: This function operates on raw YAML records (pre-Mesh parsing) and
+    therefore does not use the cached selection helpers in bt_selection.py.
+    """
     tagged_rows: list[int] = []
     for vid, vertex in enumerate(vertices):
         opts = vertex[3] if len(vertex) > 3 and isinstance(vertex[3], dict) else {}

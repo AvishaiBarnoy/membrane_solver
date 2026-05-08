@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from geometry.entities import Mesh
+from modules.energy.bt_selection import _collect_group_rows
 
 
 @dataclass(frozen=True)
@@ -67,17 +68,11 @@ def validate_disk_interface_topology(mesh: Mesh, global_params) -> None:
         )
 
     if rim_group and outer_group:
-
-        def _count_group_rows(target: str) -> int:
-            rows = 0
-            for vid, vertex in mesh.vertices.items():
-                opts = getattr(vertex, "options", None) or {}
-                if opts.get("rim_slope_match_group") == target:
-                    rows += 1
-            return rows
-
-        rim_count = _count_group_rows(rim_group)
-        outer_count = _count_group_rows(outer_group)
+        index_map = mesh.vertex_index_to_row
+        rim_count = _collect_group_rows(mesh, group=rim_group, index_map=index_map).size
+        outer_count = _collect_group_rows(
+            mesh, group=outer_group, index_map=index_map
+        ).size
         if rim_count and outer_count and rim_count != outer_count:
             raise ValueError(
                 "rim_slope_match_group and rim_slope_match_outer_group must have "
@@ -86,14 +81,11 @@ def validate_disk_interface_topology(mesh: Mesh, global_params) -> None:
 
     mesh.build_facet_vertex_loops()
 
-    disk_boundary_vids: list[int] = []
-    for vid, vertex in mesh.vertices.items():
-        opts = getattr(vertex, "options", None) or {}
-        if (
-            opts.get("rim_slope_match_group") == group
-            or opts.get("tilt_thetaB_group") == group
-        ):
-            disk_boundary_vids.append(int(vid))
+    index_map = mesh.vertex_index_to_row
+    # We use _collect_group_rows which already checks both rim_slope_match_group
+    # and tilt_thetaB_group keys via its internal option key list.
+    disk_boundary_rows = _collect_group_rows(mesh, group=group, index_map=index_map)
+    disk_boundary_vids = [int(mesh.vertex_ids[row]) for row in disk_boundary_rows]
 
     if not disk_boundary_vids:
         return

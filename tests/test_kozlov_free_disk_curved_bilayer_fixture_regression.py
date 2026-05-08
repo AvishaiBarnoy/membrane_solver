@@ -6,6 +6,7 @@ import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from modules.energy.bt_selection import _collect_group_rows, _collect_preset_rows
 from runtime.constraint_manager import ConstraintModuleManager  # noqa: E402
 from runtime.energy_manager import EnergyModuleManager  # noqa: E402
 from runtime.minimizer import Minimizer  # noqa: E402
@@ -33,12 +34,12 @@ def _build_minimizer(mesh) -> Minimizer:
 
 
 def _free_disk_rows(mesh) -> np.ndarray:
-    rows: list[int] = []
-    for vid in mesh.vertex_ids:
-        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-        if opts.get("preset") == "disk":
-            rows.append(mesh.vertex_index_to_row[int(vid)])
-    return np.asarray(rows, dtype=int)
+    return _collect_preset_rows(
+        mesh,
+        presets=("disk",),
+        cache_tag="test_free_disk_rows",
+        index_map=mesh.vertex_index_to_row,
+    )
 
 
 def test_curved_bilayer_loader_keeps_shared_rim_and_resolves_first_outer_ring() -> None:
@@ -46,13 +47,10 @@ def test_curved_bilayer_loader_keeps_shared_rim_and_resolves_first_outer_ring() 
     positions = mesh.positions_view()
     r = np.linalg.norm(positions[:, :2], axis=1)
 
-    rim_rows: list[int] = []
-    for vid in mesh.vertex_ids:
-        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-        if opts.get("rim_slope_match_group") == "rim":
-            rim_rows.append(mesh.vertex_index_to_row[int(vid)])
+    rim_rows_arr = _collect_group_rows(
+        mesh, group="rim", index_map=mesh.vertex_index_to_row
+    )
 
-    rim_rows_arr = np.asarray(rim_rows, dtype=int)
     assert rim_rows_arr.size == 24
     assert np.allclose(r[rim_rows_arr], 7.0 / 15.0, atol=1e-12, rtol=0.0)
 
@@ -100,13 +98,16 @@ def test_curved_bilayer_loader_allows_outer_leaflet_tilt_on_disk_patch() -> None
 
 def test_curved_bilayer_loader_uses_sliding_outer_height_gauge() -> None:
     mesh = load_free_disk_curved_bilayer_mesh()
+    index_map = mesh.vertex_index_to_row
 
+    # Note: pin_to_circle_group is not yet in _BASE_TERM_BOUNDARY_OPTION_KEYS
+    # so we keep manual selection for now.
     outer_rows: list[int] = []
     for vid in mesh.vertex_ids:
         opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
         if opts.get("pin_to_circle_group") != "outer":
             continue
-        outer_rows.append(mesh.vertex_index_to_row[int(vid)])
+        outer_rows.append(index_map[int(vid)])
         assert opts.get("pin_to_plane_mode") == "slide"
         assert opts.get("pin_to_plane_group") == "outer_height_gauge"
         assert opts.get("pin_to_circle_mode") == "slide"
