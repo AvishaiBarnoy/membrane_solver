@@ -139,13 +139,18 @@ def _collect_preset_rows(
     *,
     presets: tuple[str, ...],
     cache_tag: str,
-    index_map: Dict[int, int],
+    index_map: Dict[int, int] | None = None,
     radius_max: float | None = None,
     center_xy: np.ndarray | None = None,
 ) -> np.ndarray:
     """Return vertex-row indices whose ``preset`` option is in ``presets``."""
     if not presets:
         return np.zeros(0, dtype=int)
+
+    mesh.build_position_cache()
+    if index_map is None:
+        index_map = mesh.vertex_index_to_row
+
     radius_key = None if radius_max is None else float(radius_max)
     center_key = None
     if center_xy is not None:
@@ -196,9 +201,13 @@ def _collect_preset_rows(
 
 
 def _collect_group_rows(
-    mesh: Mesh, *, group: str, index_map: Dict[int, int]
+    mesh: Mesh, *, group: str, index_map: Dict[int, int] | None = None
 ) -> np.ndarray:
     """Return vertex-row indices whose options tag them as members of ``group``."""
+    mesh.build_position_cache()
+    if index_map is None:
+        index_map = mesh.vertex_index_to_row
+
     cache_key = (mesh._vertex_ids_version, str(group))
     cache_attr = "_bending_tilt_group_rows_cache"
     cached = getattr(mesh, cache_attr, None)
@@ -222,7 +231,7 @@ def _base_term_region_zero_rows(
     global_params,
     *,
     cache_tag: str,
-    index_map: Dict[int, int],
+    index_map: Dict[int, int] | None = None,
 ) -> np.ndarray:
     """Return extra rows zeroed by benchmark-scoped base-term region modes."""
     mode = _base_term_region_mode(global_params)
@@ -234,6 +243,11 @@ def _base_term_region_zero_rows(
             "bending_tilt_base_term_region_radius is required when "
             "bending_tilt_base_term_region_mode is enabled."
         )
+
+    mesh.build_position_cache()
+    if index_map is None:
+        index_map = mesh.vertex_index_to_row
+
     if mode in {"physical_disk_split_v1", "disk_only_base_term_v1"}:
         if mode == "physical_disk_split_v1" and str(cache_tag) != "out":
             return np.zeros(0, dtype=int)
@@ -276,7 +290,7 @@ def _interior_mask_leaflet(
     global_params,
     *,
     cache_tag: str,
-    index_map: Dict[int, int],
+    index_map: Dict[int, int] | None = None,
 ) -> np.ndarray:
     """Return cached interior mask for base-term evaluation.
 
@@ -293,6 +307,10 @@ def _interior_mask_leaflet(
     cached = getattr(mesh, cache_attr, None)
     if cached is not None and cached.get("key") == cache_key:
         return cached["mask"]
+
+    mesh.build_position_cache()
+    if index_map is None:
+        index_map = mesh.vertex_index_to_row
 
     is_interior = np.ones(len(mesh.vertex_ids), dtype=bool)
 

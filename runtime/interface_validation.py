@@ -68,11 +68,8 @@ def validate_disk_interface_topology(mesh: Mesh, global_params) -> None:
         )
 
     if rim_group and outer_group:
-        index_map = mesh.vertex_index_to_row
-        rim_count = _collect_group_rows(mesh, group=rim_group, index_map=index_map).size
-        outer_count = _collect_group_rows(
-            mesh, group=outer_group, index_map=index_map
-        ).size
+        rim_count = _collect_group_rows(mesh, group=rim_group).size
+        outer_count = _collect_group_rows(mesh, group=outer_group).size
         if rim_count and outer_count and rim_count != outer_count:
             raise ValueError(
                 "rim_slope_match_group and rim_slope_match_outer_group must have "
@@ -81,10 +78,9 @@ def validate_disk_interface_topology(mesh: Mesh, global_params) -> None:
 
     mesh.build_facet_vertex_loops()
 
-    index_map = mesh.vertex_index_to_row
     # We use _collect_group_rows which already checks both rim_slope_match_group
     # and tilt_thetaB_group keys via its internal option key list.
-    disk_boundary_rows = _collect_group_rows(mesh, group=group, index_map=index_map)
+    disk_boundary_rows = _collect_group_rows(mesh, group=group)
     disk_boundary_vids = [int(mesh.vertex_ids[row]) for row in disk_boundary_rows]
 
     if not disk_boundary_vids:
