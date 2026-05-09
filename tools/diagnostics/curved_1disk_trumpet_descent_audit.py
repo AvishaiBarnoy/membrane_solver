@@ -15,6 +15,7 @@ from collections.abc import Sequence
 
 import numpy as np
 
+from modules.energy.bt_selection import _collect_group_rows, _collect_preset_rows
 from runtime.projections.curved_disk import project_curved_free_disk_shape_dofs
 from tools.diagnostics.curved_1disk_shape_propagation_blocker import (
     _build_minimizer,
@@ -57,21 +58,34 @@ def _module_deltas(
 
 
 def _row_region(mesh, row: int) -> str:
-    opts = getattr(mesh.vertices[int(mesh.vertex_ids[int(row)])], "options", None) or {}
-    if str(opts.get("preset") or "") == "disk":
+    index_map = mesh.vertex_index_to_row
+    # Use cached selection helpers for consistent and efficient region identification.
+    if row in _collect_preset_rows(
+        mesh, presets=("disk",), cache_tag="diag_audit_disk", index_map=index_map
+    ):
         return "disk"
-    group = str(opts.get("rim_slope_match_group") or "")
-    if group == "rim":
+    if row in _collect_group_rows(mesh, group="rim", index_map=index_map):
         return "shared_rim"
-    if group == "outer":
+    if row in _collect_group_rows(mesh, group="outer", index_map=index_map):
         return "outer_support"
     return "outer_free"
 
 
 def _free_outer_mask(mesh) -> np.ndarray:
-    mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    index_map = mesh.vertex_index_to_row
+    disk_rows = set(
+        _collect_preset_rows(
+            mesh, presets=("disk",), cache_tag="diag_audit_disk", index_map=index_map
+        )
+    )
+    rim_rows = set(_collect_group_rows(mesh, group="rim", index_map=index_map))
+    outer_rows = set(_collect_group_rows(mesh, group="outer", index_map=index_map))
+
+    mask = np.ones(len(mesh.vertex_ids), dtype=bool)
     for row in range(len(mesh.vertex_ids)):
-        mask[row] = _row_region(mesh, row) == "outer_free"
+        if row in disk_rows or row in rim_rows or row in outer_rows:
+            mask[row] = False
+
     if mesh.fixed_mask.shape == mask.shape:
         mask &= ~mesh.fixed_mask
     return mask

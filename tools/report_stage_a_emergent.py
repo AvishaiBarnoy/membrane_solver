@@ -18,6 +18,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from commands.context import CommandContext
 from commands.executor import execute_command_line
 from geometry.geom_io import load_data, parse_geometry
+from modules.energy.bt_selection import _collect_group_rows, _collect_preset_rows
 from tools.build_stage_a_fixtures import (
     BASE_FIXTURE,
     SEEDED_FIXTURE,
@@ -49,23 +50,16 @@ def _load_mesh_from_fixture(path: Path):
 
 
 def _disk_boundary_rows(mesh) -> np.ndarray:
-    rows: list[int] = []
-    for vid in mesh.vertex_ids:
-        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-        if opts.get("rim_slope_match_group") != "disk":
-            continue
-        rows.append(int(mesh.vertex_index_to_row[int(vid)]))
-    return np.asarray(rows, dtype=int)
+    return _collect_group_rows(mesh, group="disk", index_map=mesh.vertex_index_to_row)
 
 
 def _disk_rows(mesh) -> np.ndarray:
-    rows: list[int] = []
-    for vid in mesh.vertex_ids:
-        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-        if str(opts.get("preset") or "") != "disk":
-            continue
-        rows.append(int(mesh.vertex_index_to_row[int(vid)]))
-    return np.asarray(rows, dtype=int)
+    return _collect_preset_rows(
+        mesh,
+        presets=("disk",),
+        cache_tag="diag_report_disk",
+        index_map=mesh.vertex_index_to_row,
+    )
 
 
 def _radial_frame(positions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
