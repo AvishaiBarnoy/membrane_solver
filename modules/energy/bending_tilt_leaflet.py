@@ -12,10 +12,12 @@ from geometry.tilt_operators import (
     compute_divergence_from_basis,
     p1_triangle_divergence,
 )
-from modules.energy.bending import (  # noqa: PLC0415
-    _compute_effective_areas,
+from modules.energy.bending_params import (
     _energy_model,
     _gradient_mode,
+)
+from modules.energy.bending_utils import (
+    _compute_effective_areas,
     _vertex_normals,
 )
 from modules.energy.scatter import scatter_triangle_scalar_to_vertices

@@ -37,14 +37,18 @@ from geometry.tilt_operators import (
 )
 
 # Reuse the validated bending implementation helpers.
-from modules.energy.bending import (  # noqa: PLC0415
+from modules.energy.bending_math import (
     _apply_beltrami_laplacian,
     _cached_cotan_gradients,
-    _compute_effective_areas,
-    _energy_model,
     _grad_cotan,
+)
+from modules.energy.bending_params import (
+    _energy_model,
     _gradient_mode,
     _per_vertex_params,
+)
+from modules.energy.bending_utils import (
+    _compute_effective_areas,
     _vertex_normals,
 )
 from modules.energy.scatter import scatter_triangle_scalar_to_vertices

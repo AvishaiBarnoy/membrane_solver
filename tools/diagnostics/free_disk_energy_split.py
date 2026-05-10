@@ -22,7 +22,8 @@ from core.parameters.resolver import ParameterResolver
 from geometry.curvature import compute_curvature_data
 from geometry.geom_io import load_data, parse_geometry
 from geometry.tilt_operators import p1_triangle_divergence_from_shape_gradients
-from modules.energy.bending import _compute_effective_areas, _energy_model
+from modules.energy.bending_params import _energy_model
+from modules.energy.bending_utils import _compute_effective_areas
 from modules.energy.bt_params import (
     _assume_J0_presets,
     _base_term_boundary_group,

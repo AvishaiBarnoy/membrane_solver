@@ -357,7 +357,7 @@ def _apply_transition_aware_beltrami_laplacian(
     cache_tag: str,
 ) -> tuple[np.ndarray, dict[str, object]]:
     """Apply a patch-local outer grad_linear operator on the transition region."""
-    from modules.energy.bending import _apply_beltrami_laplacian
+    from modules.energy.bending_math import _apply_beltrami_laplacian
 
     payload = _outer_transition_operator_payload(
         mesh, tri_rows_full=tri_rows_full, tri_rows=tri_rows

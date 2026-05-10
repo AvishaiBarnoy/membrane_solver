@@ -8,7 +8,7 @@ import numpy as np
 
 from geometry.curvature import compute_curvature_data
 from geometry.entities import Mesh
-from modules.energy.bending import (
+from modules.energy.bending_params import (
     _energy_model,
     _spontaneous_curvature,
 )

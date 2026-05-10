@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 from geometry.entities import Mesh
-from modules.energy.bending import _spontaneous_curvature
+from modules.energy.bending_params import _spontaneous_curvature
 
 _ASSUME_J0_PRESETS_KEY = "bending_tilt_assume_J0_presets"
 

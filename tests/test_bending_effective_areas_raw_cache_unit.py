@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from geometry.curvature import compute_curvature_data
 from geometry.entities import Edge, Facet, Mesh, Vertex
-from modules.energy.bending import _compute_effective_areas
+from modules.energy.bending_utils import _compute_effective_areas
 
 
 def _closed_tetra_mesh() -> Mesh:
