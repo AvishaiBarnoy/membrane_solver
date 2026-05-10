@@ -144,7 +144,9 @@ def _outer_transition_operator_payload(
     patch_boundary_edge_mask = (
         patch_vertex_mask[unique_edge_u_arr] ^ patch_vertex_mask[unique_edge_v_arr]
     )
-    exterior_edge_mask = ~(patch_internal_edge_mask | patch_boundary_edge_mask)
+    exterior_edge_mask = np.asarray(
+        ~(patch_internal_edge_mask | patch_boundary_edge_mask), dtype=bool
+    )
 
     adjacency: dict[int, list[int]] = {
         int(row): [] for row in np.flatnonzero(patch_vertex_mask)
@@ -373,15 +375,25 @@ def _apply_transition_aware_beltrami_laplacian(
             payload=payload,
         )
 
+    edge_endpoint_a = np.asarray(payload["edge_endpoint_a"], dtype=np.int32)
+    edge_endpoint_b = np.asarray(payload["edge_endpoint_b"], dtype=np.int32)
     edge_unique_idx = np.asarray(payload["edge_unique_idx"], dtype=np.int32)
     unique_edge_u = np.asarray(payload["unique_edge_u"], dtype=np.int32)
     unique_edge_v = np.asarray(payload["unique_edge_v"], dtype=np.int32)
     transition_mask = np.asarray(payload["transition_mask"], dtype=bool)
+    participation = np.asarray(payload["participation"], dtype=float)
     partial_vertex_mask = np.asarray(payload["partial_vertex_mask"], dtype=bool)
     halo_full_vertex_mask = np.asarray(payload["halo_full_vertex_mask"], dtype=bool)
     transition_full_vertex_mask = np.asarray(
         payload["transition_full_vertex_mask"], dtype=bool
     )
+    patch_internal_edge_mask = np.asarray(
+        payload["patch_internal_edge_mask"], dtype=bool
+    )
+    patch_boundary_edge_mask = np.asarray(
+        payload["patch_boundary_edge_mask"], dtype=bool
+    )
+    exterior_edge_mask = np.asarray(payload["exterior_edge_mask"], dtype=bool)
     patch_component_rows = payload["patch_component_rows"]
     patch_boundary_rows = payload["patch_boundary_rows"]
 
@@ -449,19 +461,57 @@ def _apply_transition_aware_beltrami_laplacian(
 
         try:
             solved = np.linalg.solve(lhs, rhs)
+            effective_field[rows] = solved
         except np.linalg.LinAlgError:
             fallback_component_count += 1
             fallback_vertex_mask[rows] = True
-            if boundary_rows.size:
-                fallback_vertex_mask[boundary_rows] = True
-            continue
-        effective_field[rows] = solved
 
     out = _apply_beltrami_laplacian(weights, tri_rows, effective_field)
     if np.any(fallback_vertex_mask):
         out[fallback_vertex_mask] = fallback_out[fallback_vertex_mask]
 
+    eff_a = effective_field[edge_endpoint_a]
+    eff_b = effective_field[edge_endpoint_b]
+    coeff = coeff_scalar[:, :, None]
+    flux = coeff * (eff_a - eff_b)
+    occ_internal_mask = patch_internal_edge_mask[edge_unique_idx]
+    occ_boundary_mask = patch_boundary_edge_mask[edge_unique_idx]
+    occ_exterior_mask = exterior_edge_mask[edge_unique_idx]
+
+    patch_internal_flux = np.where(occ_internal_mask[..., None], flux, 0.0)
+    patch_boundary_flux = np.where(occ_boundary_mask[..., None], flux, 0.0)
+    exterior_flux = np.where(occ_exterior_mask[..., None], flux, 0.0)
+
+    out_patch_internal = np.zeros_like(field)
+    out_patch_boundary = np.zeros_like(field)
+    out_exterior = np.zeros_like(field)
+    for edge_idx in range(3):
+        a = edge_endpoint_a[:, edge_idx]
+        b = edge_endpoint_b[:, edge_idx]
+        fi = patch_internal_flux[:, edge_idx, :]
+        fb = patch_boundary_flux[:, edge_idx, :]
+        fe = exterior_flux[:, edge_idx, :]
+        np.add.at(out_patch_internal, a, fi)
+        np.add.at(out_patch_internal, b, -fi)
+        np.add.at(out_patch_boundary, a, fb)
+        np.add.at(out_patch_boundary, b, -fb)
+        np.add.at(out_exterior, a, fe)
+        np.add.at(out_exterior, b, -fe)
+
     radii = np.linalg.norm(positions[:, :2], axis=1)
+    patch_shell_summary: list[dict[str, float | int]] = []
+    for radius in np.unique(np.round(radii[patch_vertex_mask], 6)):
+        rows = np.where(patch_vertex_mask & np.isclose(radii, radius, atol=1.0e-5))[0]
+        if rows.size == 0:
+            continue
+        patch_shell_summary.append(
+            {
+                "radius": float(np.mean(radii[rows])),
+                "vertex_count": int(rows.size),
+                "participation_mean": float(np.mean(participation[rows])),
+            }
+        )
+
     shell_summary: list[dict[str, float | int]] = []
     for target in _OUTER_TRANSITION_OPERATOR_SHELLS:
         rows = np.where(np.isclose(radii, target, atol=1.0e-5))[0]
@@ -471,10 +521,25 @@ def _apply_transition_aware_beltrami_laplacian(
             {
                 "radius": float(np.mean(radii[rows])),
                 "vertex_count": int(rows.size),
-                "is_fallback": bool(np.any(fallback_vertex_mask[rows])),
+                "patch_internal_z_mean": float(np.mean(out_patch_internal[rows, 2])),
+                "patch_boundary_z_mean": float(np.mean(out_patch_boundary[rows, 2])),
+                "exterior_z_mean": float(np.mean(out_exterior[rows, 2])),
                 "total_z_mean": float(np.mean(out[rows, 2])),
             }
         )
+
+    patch_example = None
+    if patch_component_rows:
+        rows = np.asarray(patch_component_rows[0], dtype=np.int32)
+        boundary_rows = np.asarray(patch_boundary_rows[0], dtype=np.int32)
+        sample_rows = boundary_rows[: min(3, boundary_rows.size)]
+        patch_example = {
+            "component_index": 0,
+            "patch_vertex_count": int(rows.size),
+            "boundary_vertex_count": int(boundary_rows.size),
+            "component_radii": np.unique(np.round(radii[rows], 6)).tolist(),
+            "boundary_factor_K_vec_sample": effective_field[sample_rows].tolist(),
+        }
 
     stats = {
         "enabled": True,
@@ -494,6 +559,8 @@ def _apply_transition_aware_beltrami_laplacian(
         "exterior_uses_raw_state": True,
         "reconstructed_state_variable": "factor_K_vec",
         "reconstruction_rule": "patch-local Dirichlet harmonic solve",
+        "patch_example": patch_example,
+        "patch_shell_summary": patch_shell_summary,
         "shell_summary": shell_summary,
     }
     return out, stats
