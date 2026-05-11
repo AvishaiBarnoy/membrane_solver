@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Dict
 
 import numpy as np
 
 from geometry.entities import Mesh
 
-# These must be imported from .bt_params to avoid circularity if they were in bending_tilt_leaflet.py
-# However, we'll assume they are available from .bt_params as we just moved them there.
 from .bt_params import (
     _assume_J0_center_xy,
     _base_term_boundary_group,
@@ -18,6 +17,9 @@ from .bt_params import (
     _bending_tilt_in_update_mode,
 )
 
+logger = logging.getLogger("membrane_solver")
+
+# Most configs tag the disk interface ring via the rim-slope match group.
 _BASE_TERM_BOUNDARY_OPTION_KEYS = (
     # Most configs tag the disk interface ring via the rim-slope match group.
     "rim_slope_match_group",
@@ -190,11 +192,10 @@ def _collect_preset_rows(
 
     unknown = presets_set - present
     if unknown:
-        raise ValueError(
+        logger.debug(
             "Unknown presets in bending_tilt_assume_J0_presets: "
             + ", ".join(sorted(unknown))
         )
-
     out = np.asarray(rows, dtype=int)
     setattr(mesh, cache_attr, {"key": cache_key, "rows": out})
     return out

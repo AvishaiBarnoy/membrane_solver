@@ -9,7 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.bending_derivatives import grad_cotan
 from geometry.entities import _fast_cross
 from geometry.tilt_operators import p1_triangle_shape_gradients
-from modules.energy.bending import _apply_beltrami_laplacian
+from modules.energy.bending_math import _apply_beltrami_laplacian
 
 
 def _import_optional(module_names: list[str]):

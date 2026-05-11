@@ -1,4 +1,4 @@
-"""Analytic shape-gradient backpropagation for leaflet-specific bending-tilt coupling."""
+"""Analytic shape-gradient backpropagation for Helfrich/Willmore bending energy."""
 
 from __future__ import annotations
 
@@ -6,103 +6,34 @@ import numpy as np
 
 from geometry.bending_derivatives import grad_triangle_area
 from geometry.entities import Mesh
-from modules.energy.bending_math import (
+
+from .bending_math import (
     _apply_beltrami_laplacian,
     _cached_cotan_gradients,
     _grad_cotan,
 )
 
-from .bt_transition import (
-    _apply_transition_aware_beltrami_laplacian,
-)
 
-
-def _backpropagate_bending_tilt_shape_gradient(
+def _backpropagate_bending_shape_gradient(
     mesh: Mesh,
     *,
     positions: np.ndarray,
     tri_rows: np.ndarray,
-    tri_rows_full: np.ndarray,
     weights: np.ndarray,
-    tri_keep: np.ndarray,
     is_interior: np.ndarray,
     fA_eff: np.ndarray,
     fA_vor: np.ndarray,
     factor_K_vec: np.ndarray,
     grad_arr: np.ndarray,
-    cache_tag: str,
-    mode: str = "analytic",
-    ctx=None,
-    transition_operator_enabled: bool = False,
-) -> dict[str, object]:
-    """Propagate energy gradients back to vertex positions.
-
-    This logic handles:
-    1. Beltrami-Laplacian variation (cotans constant).
-    2. Cotangent variation (metric variation).
-    3. Effective area reassignment variation (Voronoi/Barycentric coupling).
-    """
-    if mode == "approx":
-        transition_operator_stats = {
-            "enabled": False,
-            "mode": "off",
-            "cache_tag": str(cache_tag),
-            "lane": str(mesh.global_parameters.get("theory_parity_lane") or ""),
-        }
-        if transition_operator_enabled:
-            grad_linear_raw, transition_operator_stats = (
-                _apply_transition_aware_beltrami_laplacian(
-                    mesh,
-                    positions=positions,
-                    weights=weights,
-                    tri_rows=tri_rows,
-                    tri_rows_full=tri_rows_full,
-                    field=factor_K_vec,
-                    cache_tag=cache_tag,
-                )
-            )
-            grad_arr[:] -= grad_linear_raw
-        else:
-            grad_arr[:] -= _apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
-        grad_arr[~is_interior] = 0.0
-        return transition_operator_stats
-
-    # Analytic path
+) -> None:
+    """Propagate energy gradients back to vertex positions."""
     v0_idxs, v1_idxs, v2_idxs = tri_rows[:, 0], tri_rows[:, 1], tri_rows[:, 2]
     v0, v1, v2 = positions[v0_idxs], positions[v1_idxs], positions[v2_idxs]
     e0, e1, e2 = v2 - v1, v0 - v2, v1 - v0
     c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
 
-    cached = _cached_cotan_gradients(
-        mesh,
-        positions=positions,
-        tri_rows=tri_rows_full if tri_keep.size else tri_rows,
-    )
-    if cached is not None and tri_keep.size:
-        cached = tuple(arr[tri_keep] for arr in cached)
-
     # Term 1: Variation assuming cotans constant (L constant)
-    transition_operator_stats = {
-        "enabled": False,
-        "mode": "off",
-        "cache_tag": str(cache_tag),
-        "lane": str(mesh.global_parameters.get("theory_parity_lane") or ""),
-    }
-    if transition_operator_enabled:
-        grad_linear_raw, transition_operator_stats = (
-            _apply_transition_aware_beltrami_laplacian(
-                mesh,
-                positions=positions,
-                weights=weights,
-                tri_rows=tri_rows,
-                tri_rows_full=tri_rows_full,
-                field=factor_K_vec,
-                cache_tag=cache_tag,
-            )
-        )
-        grad_linear = -grad_linear_raw
-    else:
-        grad_linear = -_apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
+    grad_linear = -_apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
 
     # Term 2: Variation of L (cotangents)
     fK = factor_K_vec
@@ -110,6 +41,7 @@ def _backpropagate_bending_tilt_shape_gradient(
     dE_dc1 = -0.5 * np.einsum("ij,ij->i", fK[v2_idxs] - fK[v0_idxs], v2 - v0)
     dE_dc2 = -0.5 * np.einsum("ij,ij->i", fK[v0_idxs] - fK[v1_idxs], v0 - v1)
 
+    cached = _cached_cotan_gradients(mesh, positions=positions, tri_rows=tri_rows)
     if cached is not None:
         (
             g_c0_u,
@@ -133,14 +65,7 @@ def _backpropagate_bending_tilt_shape_gradient(
         u2, v2_vec = v0 - v2, v1 - v2
         g_c2_u, g_c2_v = _grad_cotan(u2, v2_vec)
 
-    if ctx is not None:
-        grad_cot = ctx.scratch_array(
-            f"btl_{cache_tag}_grad_cot",
-            shape=positions.shape,
-            dtype=positions.dtype,
-        )
-    else:
-        grad_cot = np.zeros_like(positions)
+    grad_cot = np.zeros_like(positions)
     val0, val1, val2 = dE_dc0[:, None], dE_dc1[:, None], dE_dc2[:, None]
     np.add.at(grad_cot, v1_idxs, val0 * g_c0_u)
     np.add.at(grad_cot, v2_idxs, val0 * g_c0_v)
@@ -152,22 +77,14 @@ def _backpropagate_bending_tilt_shape_gradient(
     np.add.at(grad_cot, v1_idxs, val2 * g_c2_v)
     np.add.at(grad_cot, v2_idxs, val2 * -(g_c2_u + g_c2_v))
 
-    # --- Area Gradients (Step 2: Propagate area reassignment) ---
-
+    # redistribution logic applies to fA_eff
     tri_is_int = is_interior[tri_rows]
     interior_counts = np.sum(tri_is_int, axis=1)
 
     tri_fA_eff = fA_eff[tri_rows]
     sum_fA_eff_int = np.sum(tri_fA_eff * tri_is_int, axis=1)
 
-    if ctx is not None:
-        avg_fA_eff = ctx.scratch_array(
-            f"btl_{cache_tag}_avg_fA_eff",
-            shape=(len(tri_rows),),
-            dtype=float,
-        )
-    else:
-        avg_fA_eff = np.zeros(len(tri_rows), dtype=float)
+    avg_fA_eff = np.zeros(len(tri_rows), dtype=float)
     mask_has_int = interior_counts > 0
     avg_fA_eff[mask_has_int] = (
         sum_fA_eff_int[mask_has_int] / interior_counts[mask_has_int]
@@ -177,15 +94,7 @@ def _backpropagate_bending_tilt_shape_gradient(
     tri_fA_vor = fA_vor[tri_rows]
     C = C_eff + tri_fA_vor
 
-    if ctx is not None:
-        grad_area = ctx.scratch_array(
-            f"btl_{cache_tag}_grad_area",
-            shape=positions.shape,
-            dtype=positions.dtype,
-        )
-    else:
-        grad_area = np.zeros_like(positions)
-
+    grad_area = np.zeros_like(positions)
     is_obtuse = (c0 < 0) | (c1 < 0) | (c2 < 0)
     m_std = ~is_obtuse
 
@@ -231,11 +140,7 @@ def _backpropagate_bending_tilt_shape_gradient(
             gc1u, gc1v = gc1u[m_std], gc1v[m_std]
             gc2u, gc2v = gc2u[m_std], gc2v[m_std]
 
-        v_c0, v_c1, v_c2 = (
-            coeff_c0[:, None],
-            coeff_c1[:, None],
-            coeff_c2[:, None],
-        )
+        v_c0, v_c1, v_c2 = coeff_c0[:, None], coeff_c1[:, None], coeff_c2[:, None]
         np.add.at(grad_area, v1s, v_c0 * gc0u)
         np.add.at(grad_area, v2s, v_c0 * gc0v)
         np.add.at(grad_area, v0s, v_c0 * -(gc0u + gc0v))
@@ -252,8 +157,7 @@ def _backpropagate_bending_tilt_shape_gradient(
             if np.any(m_do):
                 v0o, v1o, v2o = v0_idxs[m_do], v1_idxs[m_do], v2_idxs[m_do]
                 gT_u, gT_v = grad_triangle_area(
-                    positions[v1o] - positions[v0o],
-                    positions[v2o] - positions[v0o],
+                    positions[v1o] - positions[v0o], positions[v2o] - positions[v0o]
                 )
 
                 C0o, C1o, C2o = C[m_do, 0], C[m_do, 1], C[m_do, 2]
@@ -268,8 +172,4 @@ def _backpropagate_bending_tilt_shape_gradient(
                 np.add.at(grad_area, v2o, factor * gT_v)
                 np.add.at(grad_area, v0o, factor * -(gT_u + gT_v))
 
-    grad_arr[:] += grad_linear
-    grad_arr[:] += grad_cot
-    grad_arr[:] += grad_area
-
-    return transition_operator_stats
+    grad_arr[:] += grad_linear + grad_cot + grad_area

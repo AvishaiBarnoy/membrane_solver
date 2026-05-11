@@ -12,7 +12,7 @@ from geometry.tilt_operators import (
     compute_divergence_from_basis,
     p1_triangle_divergence,
 )
-from modules.energy.bending import (
+from modules.energy.bending_utils import (
     _compute_effective_areas,
 )
 

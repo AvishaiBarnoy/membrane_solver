@@ -12,10 +12,12 @@ from geometry.tilt_operators import (
     compute_divergence_from_basis,
     p1_triangle_divergence,
 )
-from modules.energy.bending import (  # noqa: PLC0415
-    _compute_effective_areas,
+from modules.energy.bending_params import (
     _energy_model,
     _gradient_mode,
+)
+from modules.energy.bending_utils import (
+    _compute_effective_areas,
     _vertex_normals,
 )
 from modules.energy.scatter import scatter_triangle_scalar_to_vertices
@@ -36,7 +38,9 @@ from .bt_params import (
     _assume_J0_center_xy,
     _assume_J0_presets,
     _assume_J0_radius_max,
+    _base_term_boundary_group,
     _per_vertex_params_leaflet,
+    _resolve_bending_modulus,
     _use_inner_recovered_divergence,
     _use_stage_a_inner_shape_cross_suppression,
     _use_stage_a_outer_grad_linear_transition_operator,
@@ -532,4 +536,13 @@ __all__ = [
     "_total_energy_leaflet",
     "_finite_difference_gradient_shape_leaflet",
     "_backpropagate_bending_tilt_shape_gradient",
+    "_assume_J0_center_xy",
+    "_assume_J0_presets",
+    "_assume_J0_radius_max",
+    "_base_term_boundary_group",
+    "_per_vertex_params_leaflet",
+    "_resolve_bending_modulus",
+    "_use_inner_recovered_divergence",
+    "_use_stage_a_inner_shape_cross_suppression",
+    "_use_stage_a_outer_grad_linear_transition_operator",
 ]

@@ -8,7 +8,7 @@ import numpy as np
 
 from geometry.curvature import compute_curvature_data
 from geometry.entities import Mesh
-from modules.energy.bending import (
+from modules.energy.bending_params import (
     _energy_model,
     _spontaneous_curvature,
 )
@@ -121,6 +121,14 @@ def _leaflet_triangle_payload(
         tri_rows_full,
         keep_physical_outer_edge=str(cache_tag) == "out",
     )
+    if transition_mask is not None:
+        keep_non_transition = ~transition_mask
+        if tri_keep.size:
+            tri_keep = tri_keep & keep_non_transition
+        else:
+            tri_keep = keep_non_transition
+        tri_rows = tri_rows_full[tri_keep]
+        weights = weights_full[tri_keep]
 
     tri_area = None
     g0 = None
