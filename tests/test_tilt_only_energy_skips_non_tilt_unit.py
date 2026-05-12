@@ -77,6 +77,9 @@ def test_tilt_only_energy_skips_non_tilt_modules() -> None:
         quiet=True,
     )
     minim.energy_modules = [_NonTiltModule(), _TiltModule()]
+    minim.energy_module_names = ["non_tilt", "tilt"]
+    minim._evaluation_manager.energy_modules = minim.energy_modules
+    minim._evaluation_manager.energy_module_names = minim.energy_module_names
 
     positions = mesh.positions_view()
     tilts = np.array([[1.0, 2.0, 3.0]], dtype=float)
