@@ -33,24 +33,24 @@ from modules.constraints.rim_slope_match_gradients import (
 from modules.constraints.rim_slope_match_params import (
     _resolve_center,
     _resolve_group,
-    _sanitize_disk_group,
-    _uses_outer_shell_tilt_matching,
-    _uses_scaffold_trace_lane,
     _resolve_matching_mode,
+    _sanitize_disk_group,
     _use_curved_free_disk_shell2_tilt_continuation,
     _use_disk_theta_targeting,
+    _uses_outer_shell_tilt_matching,
+    _uses_scaffold_trace_lane,
 )
 from modules.constraints.rim_slope_match_payload import _build_matching_data
 from modules.constraints.rim_slope_match_utils import (
     _arc_length_params,
     _arc_length_weights,
     _collect_group_rows,
+    _disk_theta_rows_weights_and_direction,
     _fit_plane_normal,
     _interp_ring_positions,
     _order_by_angle,
     _orthonormal_basis,
     _resolve_normal,
-    _disk_theta_rows_weights_and_direction,
     _tilt_target_rows_weights_and_direction,
 )
 
@@ -495,6 +495,25 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
 
 
 __all__ = [
+    "_arc_length_params",
+    "_arc_length_weights",
+    "_build_matching_data",
+    "_collect_group_rows",
+    "_disk_theta_rows_weights_and_direction",
+    "_fit_plane_normal",
+    "_interp_ring_positions",
+    "_order_by_angle",
+    "_orthonormal_basis",
+    "_resolve_center",
+    "_resolve_group",
+    "_resolve_matching_mode",
+    "_resolve_normal",
+    "_sanitize_disk_group",
+    "_tilt_target_rows_weights_and_direction",
+    "_use_curved_free_disk_shell2_tilt_continuation",
+    "_use_disk_theta_targeting",
+    "_uses_outer_shell_tilt_matching",
+    "_uses_scaffold_trace_lane",
     "coarse_rim_family_diagnostics",
     "constraint_gradients_array",
     "constraint_gradients_joint_array",
