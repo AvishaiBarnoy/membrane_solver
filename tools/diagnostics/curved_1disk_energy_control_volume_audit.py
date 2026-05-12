@@ -118,8 +118,9 @@ def _outer_membrane_tilt_shell_energy(
             gp.get("tilt_out_exclude_shared_rim_outer_rows")
             or gp.get("tilt_out_exclude_shared_rim_rows")
         ):
-            for row in _collect_group_rows(mesh, group="outer", index_map=index_map):
-                tilts[int(row)] = 0.0
+            rows = _collect_group_rows(mesh, group="outer", index_map=index_map)
+            if rows.size:
+                tilts[rows] = 0.0
     else:
         k_tilt = float(gp.get("tilt_modulus_in") or 0.0)
         mode = str(gp.get("tilt_mass_mode_in") or gp.get("tilt_mass_mode") or "lumped")
@@ -128,20 +129,23 @@ def _outer_membrane_tilt_shell_energy(
         outer_weight = gp.get("tilt_in_shared_rim_outer_row_energy_weight")
         if outer_weight is not None:
             scale = float(np.sqrt(float(outer_weight)))
-            for row in _collect_group_rows(mesh, group="outer", index_map=index_map):
-                tilts[int(row)] *= scale
+            rows = _collect_group_rows(mesh, group="outer", index_map=index_map)
+            if rows.size:
+                tilts[rows] *= scale
         if bool(
             gp.get("tilt_in_exclude_shared_rim_rows")
             or gp.get("tilt_exclude_shared_rim_rows_in")
         ):
-            for row in _collect_group_rows(mesh, group="rim", index_map=index_map):
-                tilts[int(row)] = 0.0
+            rows = _collect_group_rows(mesh, group="rim", index_map=index_map)
+            if rows.size:
+                tilts[rows] = 0.0
         if bool(
             gp.get("tilt_in_exclude_shared_rim_outer_rows")
             or gp.get("tilt_exclude_shared_rim_outer_rows_in")
         ):
-            for row in _collect_group_rows(mesh, group="outer", index_map=index_map):
-                tilts[int(row)] = 0.0
+            rows = _collect_group_rows(mesh, group="outer", index_map=index_map)
+            if rows.size:
+                tilts[rows] = 0.0
 
     mode = mode.strip().lower()
     shell_mode = None if shell_mode is None else shell_mode.strip().lower()

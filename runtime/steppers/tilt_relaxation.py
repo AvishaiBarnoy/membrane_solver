@@ -862,6 +862,9 @@ class TiltRelaxationManager:
             if projection_cadence == "per_pass":
                 _refresh_tilts_from_constraints_and_project()
 
+            self.last_tilt_projection_stats["projection_apply_count"] = (
+                projection_apply_count
+            )
             self.last_tilt_projection_stats["tilt_projection_norm_loss_outer_far"] = (
                 projection_norm_loss_outer_far
             )
