@@ -106,28 +106,24 @@ def _triangle_region_masks(
     tri_rows_eff: np.ndarray,
 ) -> dict[str, np.ndarray]:
     """Return standard free-disk triangle region masks."""
-    rim_rows: set[int] = set()
-    outer_rows: set[int] = set()
-    disk_rows: set[int] = set()
+    n_vertices = len(mesh.vertex_ids)
+    disk_mask = np.zeros(n_vertices, dtype=bool)
+    rim_mask = np.zeros(n_vertices, dtype=bool)
+    outer_mask = np.zeros(n_vertices, dtype=bool)
+
     for vid in mesh.vertex_ids:
         row = mesh.vertex_index_to_row[int(vid)]
         opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
         if str(opts.get("preset") or "") == "disk":
-            disk_rows.add(row)
+            disk_mask[row] = True
         if str(opts.get("rim_slope_match_group") or "") == "rim":
-            rim_rows.add(row)
+            rim_mask[row] = True
         if str(opts.get("rim_slope_match_group") or "") == "outer":
-            outer_rows.add(row)
+            outer_mask[row] = True
 
-    has_disk = np.array(
-        [any(int(row) in disk_rows for row in tri) for tri in tri_rows_eff], dtype=bool
-    )
-    has_rim = np.array(
-        [any(int(row) in rim_rows for row in tri) for tri in tri_rows_eff], dtype=bool
-    )
-    has_outer = np.array(
-        [any(int(row) in outer_rows for row in tri) for tri in tri_rows_eff], dtype=bool
-    )
+    has_disk = np.any(disk_mask[tri_rows_eff], axis=1)
+    has_rim = np.any(rim_mask[tri_rows_eff], axis=1)
+    has_outer = np.any(outer_mask[tri_rows_eff], axis=1)
 
     return {
         "disk_core": has_disk & (~has_rim) & (~has_outer),

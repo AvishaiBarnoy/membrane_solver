@@ -7,7 +7,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.parameters.global_parameters import GlobalParameters
-from runtime.minimizer import _apply_inner_coupled_update_mode_to_delta
+from runtime.steppers.tilt_relaxation import _apply_inner_coupled_update_mode_to_delta
 
 
 def test_inner_coupled_update_mode_off_is_noop() -> None:
