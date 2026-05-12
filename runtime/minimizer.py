@@ -134,10 +134,7 @@ class Minimizer:
         }
 
         self._tilt_relaxation_manager = TiltRelaxationManager(
-            mesh=self.mesh,
-            global_params=self.global_params,
             param_resolver=self.param_resolver,
-            constraint_manager=self.constraint_manager,
             energy_context_fn=self.energy_context,
             compute_energy_and_tilt_gradient_array_fn=self._compute_energy_and_tilt_gradient_array,
             compute_energy_array_with_tilts_fn=self._compute_energy_array_with_tilts,
@@ -148,7 +145,6 @@ class Minimizer:
             tilt_fixed_mask_fn=self._tilt_fixed_mask,
             tilt_fixed_mask_in_fn=self._tilt_fixed_mask_in,
             tilt_fixed_mask_out_fn=self._tilt_fixed_mask_out,
-            constraint_modules=self.constraint_modules,
         )
 
     def reset_soa_caches(self) -> None:
@@ -1185,7 +1181,12 @@ class Minimizer:
         mode: str,
     ) -> None:
         """Relax vertex tilt vectors according to the configured solve mode."""
-        self._tilt_relaxation_manager.relax_tilts(positions=positions, mode=mode)
+        self._tilt_relaxation_manager.relax_tilts(
+            mesh=self.mesh,
+            global_params=self.global_params,
+            positions=positions,
+            mode=mode,
+        )
 
     def _relax_leaflet_tilts(
         self,
@@ -1195,7 +1196,12 @@ class Minimizer:
     ) -> None:
         """Relax inner/outer leaflet tilt vectors according to solve mode."""
         self._tilt_relaxation_manager.relax_leaflet_tilts(
-            positions=positions, mode=mode
+            mesh=self.mesh,
+            global_params=self.global_params,
+            constraint_manager=self.constraint_manager,
+            constraint_modules=self.constraint_modules,
+            positions=positions,
+            mode=mode,
         )
         self._last_tilt_projection_stats = (
             self._tilt_relaxation_manager.last_tilt_projection_stats
@@ -1203,6 +1209,17 @@ class Minimizer:
         self._last_inner_coupled_update_mode_stats = (
             self._tilt_relaxation_manager.last_inner_coupled_update_mode_stats
         )
+
+    @staticmethod
+    def _tilt_vertex_areas_from_triangles(
+        *, n_vertices: int, tri_rows: np.ndarray, positions: np.ndarray
+    ) -> np.ndarray:
+        """Return barycentric per-vertex areas based on triangle areas."""
+        from runtime.steppers.tilt_relaxation import (
+            _tilt_vertex_areas_from_triangles as _impl,
+        )
+
+        return _impl(n_vertices=n_vertices, tri_rows=tri_rows, positions=positions)
 
     def refresh_modules(self):
         """Re-load energy and constraint modules from the current mesh state."""
@@ -1218,8 +1235,7 @@ class Minimizer:
         self._has_enforceable_constraints = any(
             hasattr(mod, "enforce_constraint") for mod in self.constraint_modules
         )
-        self._tilt_relaxation_manager.mesh = self.mesh
-        self._tilt_relaxation_manager.constraint_modules = self.constraint_modules
+        self.reset_soa_caches()
         logger.info(
             f"Minimizer modules refreshed: {len(self.energy_modules)} energy, {len(self.constraint_modules)} constraint."
         )
