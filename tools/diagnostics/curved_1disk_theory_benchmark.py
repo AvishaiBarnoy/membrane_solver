@@ -55,15 +55,12 @@ def _refine_once(mesh, *, steps: int = REFINE_STEPS):
     return mesh
 
 
-def _positions_radii(mesh) -> np.ndarray:
-    """Return radial distance in the xy plane for every vertex."""
-    return np.linalg.norm(mesh.positions_view()[:, :2], axis=1)
-
-
 def _shell_profile(mesh) -> list[dict[str, float]]:
     """Return ring-median profile rows keyed by rounded radius."""
+    from tools.diagnostics.utils import positions_radii
+
     positions = mesh.positions_view()
-    radii = _positions_radii(mesh)
+    radii = positions_radii(mesh)
     tilts_in = mesh.tilts_in_view()
     tilts_out = mesh.tilts_out_view()
     r_hat = np.zeros_like(positions)

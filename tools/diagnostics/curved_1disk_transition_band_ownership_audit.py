@@ -24,11 +24,10 @@ from tools.diagnostics.curved_1disk_first_two_shell_ingredient_audit import (
 )
 from tools.diagnostics.curved_1disk_shape_direction_audit import (
     _prepare_minimizer,
-    _radius_labels,
 )
 from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import THEORY_THETA_B
 from tools.diagnostics.curved_1disk_theory_benchmark import _run_curved_theta_candidate
-from tools.diagnostics.curved_1disk_trumpet_descent_audit import _row_region
+from tools.diagnostics.utils import radius_labels, row_region
 
 THETA_CANDIDATES = (0.06, 0.12, THEORY_THETA_B)
 ALLOWED_CLASSIFICATIONS = {
@@ -45,7 +44,7 @@ def _transition_rows(mesh) -> np.ndarray:
     support = {
         int(row)
         for row in range(len(mesh.vertex_ids))
-        if _row_region(mesh, int(row)) == "outer_support"
+        if row_region(mesh, int(row)) == "outer_support"
     }
     if not support:
         return np.asarray([], dtype=int)
@@ -64,10 +63,10 @@ def _row_masks(mesh) -> dict[str, np.ndarray]:
     transition = np.zeros(n, dtype=bool)
     transition[_transition_rows(mesh)] = True
     support = np.asarray(
-        [_row_region(mesh, row) == "outer_support" for row in range(n)], dtype=bool
+        [row_region(mesh, row) == "outer_support" for row in range(n)], dtype=bool
     )
-    labels = _radius_labels(mesh)
-    free = np.asarray([_row_region(mesh, row) == "outer_free" for row in range(n)])
+    labels = radius_labels(mesh)
+    free = np.asarray([row_region(mesh, row) == "outer_free" for row in range(n)])
     return {
         "transition_band": transition,
         "outer_support": support,
@@ -226,13 +225,13 @@ def _row_control_area(mesh) -> np.ndarray:
 
 
 def _top_rows(mesh, values: np.ndarray, mask: np.ndarray) -> list[dict[str, object]]:
-    labels = _radius_labels(mesh)
+    labels = radius_labels(mesh)
     rows = []
     for row in np.flatnonzero(mask):
         rows.append(
             {
                 "row": int(row),
-                "region": _row_region(mesh, int(row)),
+                "region": row_region(mesh, int(row)),
                 "radius": float(labels[int(row)]),
                 "value": float(values[int(row)]),
             }
@@ -328,7 +327,7 @@ def run_curved_1disk_transition_band_ownership_audit(
         "transition_band": {
             "row_count": int(_transition_rows(mesh).size),
             "row_regions": sorted(
-                {_row_region(mesh, int(row)) for row in _transition_rows(mesh).tolist()}
+                {row_region(mesh, int(row)) for row in _transition_rows(mesh).tolist()}
             ),
         },
         "module_gradient_reconciliation": {

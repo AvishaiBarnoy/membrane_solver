@@ -17,10 +17,6 @@ from collections.abc import Sequence
 import numpy as np
 
 from modules.energy import bending_tilt_in, bending_tilt_out
-from modules.energy.bt_selection import (
-    _collect_group_rows,
-    _collect_preset_rows,
-)
 from tools.diagnostics.curved_1disk_shape_propagation_blocker import (
     _build_minimizer,
 )
@@ -36,12 +32,17 @@ from tools.diagnostics.curved_1disk_theory_benchmark import (
     _shell_profile,
 )
 from tools.diagnostics.curved_1disk_trumpet_descent_audit import (
-    _breakdown_total,
     _module_deltas,
 )
 from tools.diagnostics.curved_disk_theory import (
     compute_curved_disk_theory,
     tex_reference_params,
+)
+from tools.diagnostics.utils import (
+    abs_by_region,
+    energy_total,
+    radial_thetas,
+    row_region,
 )
 
 RIM_CLASSIFICATIONS = {
@@ -62,37 +63,12 @@ PROFILE_CLASSIFICATIONS = {
 }
 
 
-def _row_region(mesh, row: int) -> str:
-    index_map = mesh.vertex_index_to_row
-    # Use cached selection helpers for consistent and efficient region identification.
-    if row in _collect_preset_rows(
-        mesh, presets=("disk",), cache_tag="diag_audit_disk", index_map=index_map
-    ):
-        return "disk"
-    if row in _collect_group_rows(mesh, group="rim", index_map=index_map):
-        return "shared_rim"
-    if row in _collect_group_rows(mesh, group="outer", index_map=index_map):
-        return "outer_support"
-    return "outer_free"
-
-
-def _radial_thetas(mesh) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    positions = mesh.positions_view()
-    radii = np.linalg.norm(positions[:, :2], axis=1)
-    r_hat = np.zeros_like(positions)
-    good = radii > 1.0e-12
-    r_hat[good, :2] = positions[good, :2] / radii[good, None]
-    theta_in = np.einsum("ij,ij->i", mesh.tilts_in_view(), r_hat)
-    theta_out = np.einsum("ij,ij->i", mesh.tilts_out_view(), r_hat)
-    return radii, theta_in, theta_out, 0.5 * (theta_in + theta_out)
-
-
 def _field_trace(mesh, *, label: str) -> dict[str, object]:
-    radii, theta_in, theta_out, theta_shared = _radial_thetas(mesh)
+    radii, theta_in, theta_out, theta_shared = radial_thetas(mesh)
     rows = []
     for radius in sorted({round(float(r), 8) for r in radii if r > 1.0e-12}):
         mask = np.isclose(np.round(radii, 8), radius, atol=5.0e-9)
-        regions = sorted({_row_region(mesh, int(row)) for row in np.flatnonzero(mask)})
+        regions = sorted({row_region(mesh, int(row)) for row in np.flatnonzero(mask)})
         rows.append(
             {
                 "radius": float(np.median(radii[mask])),
@@ -106,10 +82,10 @@ def _field_trace(mesh, *, label: str) -> dict[str, object]:
             }
         )
     rim_mask = np.array(
-        [_row_region(mesh, row) == "shared_rim" for row in range(len(radii))]
+        [row_region(mesh, row) == "shared_rim" for row in range(len(radii))]
     )
     support_mask = np.array(
-        [_row_region(mesh, row) == "outer_support" for row in range(len(radii))]
+        [row_region(mesh, row) == "outer_support" for row in range(len(radii))]
     )
     return {
         "label": str(label),
@@ -202,19 +178,12 @@ def _module_gradient_probe(minim) -> dict[str, object]:
         out[name] = {
             "energy": float(energy),
             "shape_grad_norm": float(np.linalg.norm(grad)),
-            "shape_grad_z_abs_by_region": _abs_by_region(mesh, grad[:, 2]),
+            "shape_grad_z_abs_by_region": abs_by_region(mesh, grad[:, 2]),
             "tilt_grad_norm": float(np.linalg.norm(tilt_grad)),
-            "tilt_grad_abs_by_region": _abs_by_region(
+            "tilt_grad_abs_by_region": abs_by_region(
                 mesh, np.linalg.norm(tilt_grad, axis=1)
             ),
         }
-    return out
-
-
-def _abs_by_region(mesh, values: np.ndarray) -> dict[str, float]:
-    out = {"disk": 0.0, "shared_rim": 0.0, "outer_support": 0.0, "outer_free": 0.0}
-    for row, value in enumerate(np.asarray(values, dtype=float)):
-        out[_row_region(mesh, row)] += abs(float(value))
     return out
 
 
@@ -224,7 +193,7 @@ def _energy_reconciliation(minim, *, epsilon: float = 1.0e-6) -> dict[str, objec
     baseline = minim.compute_energy_breakdown()
     radii = np.linalg.norm(positions0[:, :2], axis=1)
     free = np.array(
-        [_row_region(mesh, row) == "outer_free" for row in range(len(radii))]
+        [row_region(mesh, row) == "outer_free" for row in range(len(radii))]
     )
     mode = np.zeros(len(radii), dtype=float)
     if np.any(free):
@@ -245,8 +214,8 @@ def _energy_reconciliation(minim, *, epsilon: float = 1.0e-6) -> dict[str, objec
     mesh.increment_version()
     mesh.build_position_cache()
     deltas = _module_deltas(baseline, after)
-    total_delta = _breakdown_total(after) - _breakdown_total(baseline)
-    module_sum = _breakdown_total(deltas)
+    total_delta = energy_total(after) - energy_total(baseline)
+    module_sum = energy_total(deltas)
     return {
         "epsilon": float(epsilon),
         "total_delta": float(total_delta),

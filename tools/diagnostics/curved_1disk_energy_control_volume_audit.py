@@ -14,7 +14,7 @@ from collections.abc import Iterable
 
 import numpy as np
 
-from modules.energy.bt_selection import _collect_group_rows, _collect_preset_rows
+from modules.energy.bt_selection import _collect_group_rows
 from tools.diagnostics.curved_1disk_first_two_shell_ingredient_audit import (
     OUTER_RADIUS,
     THEORY_THETA_B,
@@ -31,9 +31,12 @@ from tools.diagnostics.curved_disk_theory import (
 )
 from tools.diagnostics.free_disk_profile_protocol import (
     _shared_rim_inner_control_volume_audit,
-    _triangle_region_masks,
     shared_rim_continuum_annulus_audit,
     shared_rim_shell_area_audit,
+)
+from tools.diagnostics.utils import (
+    row_labels,
+    triangle_region_masks,
 )
 
 SELECTED_THETA_B_AFTER_SHARED_RIM_FIX = 0.12
@@ -64,30 +67,6 @@ def _expected_tex_energy(theta_b: float) -> dict[str, float]:
         "contact": contact,
         "total": inner + outer + contact,
     }
-
-
-def _row_regions(mesh) -> list[str]:
-    """Return a compact region label for every vertex row."""
-    index_map = mesh.vertex_index_to_row
-    disk_rows = set(
-        _collect_preset_rows(
-            mesh, presets=("disk",), cache_tag="diag_audit_disk", index_map=index_map
-        )
-    )
-    rim_rows = set(_collect_group_rows(mesh, group="rim", index_map=index_map))
-    outer_rows = set(_collect_group_rows(mesh, group="outer", index_map=index_map))
-
-    labels: list[str] = []
-    for row in range(len(mesh.vertex_ids)):
-        if row in disk_rows:
-            labels.append("disk")
-        elif row in rim_rows:
-            labels.append("shared_rim")
-        elif row in outer_rows:
-            labels.append("outer_support")
-        else:
-            labels.append("outer_free")
-    return labels
 
 
 def _shell_index_map(radii: np.ndarray) -> dict[float, int]:
@@ -158,7 +137,7 @@ def _outer_membrane_tilt_shell_energy(
 
     rows_eff = tri_rows[outer_mask]
     area_eff = tri_area[outer_mask]
-    region_masks_full = _triangle_region_masks(mesh, tri_rows)
+    region_masks_full = triangle_region_masks(mesh, tri_rows)
     outer_support_mask = np.asarray(
         region_masks_full["outer_support_band"], dtype=bool
     )[outer_mask]
@@ -212,7 +191,7 @@ def _shell_energy_rows(mesh) -> list[dict[str, object]]:
     radii = np.linalg.norm(positions[:, :2], axis=1)
     radius_labels = np.asarray([round(float(v), 6) for v in radii], dtype=float)
     shell_indices = _shell_index_map(radii)
-    row_regions = _row_regions(mesh)
+    row_regions = row_labels(mesh)
 
     payload_in = _leaflet_runtime_payload(mesh, leaflet="in")
     payload_out = _leaflet_runtime_payload(mesh, leaflet="out")

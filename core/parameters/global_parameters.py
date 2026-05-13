@@ -43,6 +43,16 @@ class GlobalParameters:
             #   "finite_difference" – debugging only (slow).
             "bending_gradient_mode": "analytic",
             "gaussian_modulus": 0.0,
+            # --- Performance & Efficiency Defaults ---
+            # Tilt solver: "cg" (Conjugate Gradient) is faster than "gd" for relaxation.
+            "tilt_solver": "cg",
+            "tilt_cg_preconditioner": "jacobi",
+            # Automated mesh quality repair (equiangulation) maintains stability.
+            "mesh_quality_auto_repair_enabled": True,
+            "mesh_quality_auto_repair_every": 50,
+            "mesh_quality_aspect_threshold": 3.0,
+            "mesh_quality_aspect_percentile": 90.0,
+            "mesh_quality_max_repair_passes": 1,
         }
         # Load initial parameters if provided
         if initial_params:

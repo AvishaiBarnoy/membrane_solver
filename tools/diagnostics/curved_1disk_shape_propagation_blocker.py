@@ -28,6 +28,7 @@ from tools.diagnostics.curved_1disk_theory_benchmark import (
 from tools.diagnostics.free_disk_profile_protocol import (
     configure_free_disk_curved_bilayer_stage2,
 )
+from tools.diagnostics.utils import restore_state
 
 DEFAULT_ALPHAS = (1.0e-3, 1.0e-4, 1.0e-5, 1.0e-6, 1.0e-7)
 
@@ -79,16 +80,6 @@ def _shell_stats(mesh, values: np.ndarray) -> list[dict[str, float | int]]:
     return rows
 
 
-def _restore_state(mesh, positions, tilts, tilts_in, tilts_out) -> None:
-    for row, vid in enumerate(mesh.vertex_ids):
-        mesh.vertices[int(vid)].position[:] = positions[row]
-    mesh.set_tilts_from_array(tilts)
-    mesh.set_tilts_in_from_array(tilts_in)
-    mesh.set_tilts_out_from_array(tilts_out)
-    mesh.increment_version()
-    mesh.build_position_cache()
-
-
 def _line_search_probe(minim: Minimizer, alphas: Sequence[float]) -> dict[str, object]:
     """Return trial-energy deltas along the projected shape descent direction."""
     mesh = minim.mesh
@@ -115,7 +106,7 @@ def _line_search_probe(minim: Minimizer, alphas: Sequence[float]) -> dict[str, o
     alpha0_tilt_out_delta = float(
         np.max(np.linalg.norm(mesh.tilts_out_view() - tilts_out0, axis=1))
     )
-    _restore_state(mesh, positions0, tilts0, tilts_in0, tilts_out0)
+    restore_state(mesh, positions0, tilts0, tilts_in0, tilts_out0)
 
     direction = -projected_grad
     movable = ~mesh.fixed_mask
@@ -140,7 +131,7 @@ def _line_search_probe(minim: Minimizer, alphas: Sequence[float]) -> dict[str, o
                 "accepted_by_decrease": bool(enforced <= baseline),
             }
         )
-        _restore_state(mesh, positions0, tilts0, tilts_in0, tilts_out0)
+        restore_state(mesh, positions0, tilts0, tilts_in0, tilts_out0)
 
     raw_z = raw_grad[:, 2]
     proj_z = projected_grad[:, 2]

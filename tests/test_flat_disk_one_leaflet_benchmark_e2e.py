@@ -49,6 +49,8 @@ def _report_for_mode(mode: str) -> dict:
         theta_min=0.0,
         theta_max=0.0014,
         theta_count=8,
+        tilt_solver="gd",
+        mesh_quality_auto_repair_enabled=False,
     )
 
 
@@ -106,6 +108,8 @@ def _kh_opt_report(
         parameterization="kh_physical",
         optimize_preset=preset,
         tilt_mass_mode_in=str(tilt_mass_mode_in),
+        tilt_solver="gd",
+        mesh_quality_auto_repair_enabled=False,
     )
 
 

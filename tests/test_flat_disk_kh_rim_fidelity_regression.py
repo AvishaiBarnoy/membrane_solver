@@ -20,6 +20,8 @@ def test_flat_disk_kh_rim_fidelity_metrics_are_finite_and_bounded() -> None:
         refine_level=1,
         rim_local_refine_steps=1,
         rim_local_refine_band_lambda=4.0,
+        tilt_solver="gd",
+        mesh_quality_auto_repair_enabled=False,
     )
     assert report["meta"]["mode"] == "flat_disk_kh_rim_fidelity"
     assert report["meta"]["parameterization"] == "kh_physical"

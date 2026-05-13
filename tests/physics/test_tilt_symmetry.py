@@ -162,9 +162,8 @@ def test_bending_tilt_coupling_sign_convention():
         mesh, gp, resolver
     )
 
-    print(f"DEBUG: e_out_base={e_out_base}, e_in_base={e_in_base}")
-
     # If we flip the tilt field (t -> -t), the divergence flips sign.
+
     # So (2H + div)^2 for 'out' should match (2H - (-div))^2 for 'out'? No.
     # (2H + div)^2 with t -> (2H - div)^2.
     # This should match the 'in' energy with the original t.

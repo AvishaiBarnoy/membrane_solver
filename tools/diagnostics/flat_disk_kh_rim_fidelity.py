@@ -31,6 +31,8 @@ def run_flat_disk_kh_rim_fidelity(
     refine_level: int = 1,
     rim_local_refine_steps: int = 1,
     rim_local_refine_band_lambda: float = 4.0,
+    tilt_solver: str | None = "gd",
+    mesh_quality_auto_repair_enabled: bool | None = False,
 ) -> dict[str, Any]:
     """Return strict-KH rim continuity/fidelity metrics from one benchmark run."""
     _ensure_repo_root_on_sys_path()
@@ -55,6 +57,8 @@ def run_flat_disk_kh_rim_fidelity(
         tilt_mass_mode_in="consistent",
         rim_local_refine_steps=int(rim_local_refine_steps),
         rim_local_refine_band_lambda=float(rim_local_refine_band_lambda),
+        tilt_solver=tilt_solver,
+        mesh_quality_auto_repair_enabled=mesh_quality_auto_repair_enabled,
     )
 
     mesh = report["mesh"]

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
+
+logger = logging.getLogger("membrane_solver")
 
 
 def apply_global_parameter_overrides(mesh, overrides: dict[str, object] | None) -> None:
@@ -24,6 +28,11 @@ def positions_radii(mesh, positions: np.ndarray | None = None) -> np.ndarray:
     if positions is None:
         positions = mesh.positions_view()
     return np.linalg.norm(positions[:, :2], axis=1)
+
+
+def radius_labels(mesh, decimals: int = 8) -> np.ndarray:
+    """Return rounded radial labels for all vertices."""
+    return np.round(positions_radii(mesh), decimals=decimals)
 
 
 def triangle_region_masks(
@@ -79,3 +88,106 @@ def row_region(mesh, row: int) -> str:
     if str(opts.get("rim_slope_match_group") or "") == "outer":
         return "outer"
     return "far"
+
+
+def row_labels(mesh) -> list[str]:
+    """Return a list of region labels for all vertex rows."""
+    masks = row_region_mask_dict(mesh)
+    n_vertices = len(mesh.vertex_ids)
+    labels = ["unknown"] * n_vertices
+
+    # Order of assignment matters if masks overlap (they shouldn't here)
+    for row in np.flatnonzero(masks["disk"]):
+        labels[row] = "disk"
+    for row in np.flatnonzero(masks["rim"]):
+        labels[row] = "shared_rim"
+    for row in np.flatnonzero(masks["outer"]):
+        labels[row] = "outer_support"
+    for row in np.flatnonzero(masks["far"]):
+        labels[row] = "outer_free"
+
+    return labels
+
+
+def row_region_mask_dict(mesh) -> dict[str, np.ndarray]:
+    """Return boolean masks for standard regions."""
+    n_vertices = len(mesh.vertex_ids)
+    disk = np.zeros(n_vertices, dtype=bool)
+    rim = np.zeros(n_vertices, dtype=bool)
+    outer = np.zeros(n_vertices, dtype=bool)
+
+    for row, vid in enumerate(mesh.vertex_ids):
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if str(opts.get("preset") or "") == "disk":
+            disk[row] = True
+        if str(opts.get("rim_slope_match_group") or "") == "rim":
+            rim[row] = True
+        if str(opts.get("rim_slope_match_group") or "") == "outer":
+            outer[row] = True
+
+    return {
+        "disk": disk & (~rim),
+        "rim": rim,
+        "outer": outer,
+        "far": (~disk) & (~rim) & (~outer),
+        "outer_free": (~disk) & (~rim) & (~outer),
+        "outer_support": outer,
+        "shared_rim": rim,
+    }
+
+
+def radial_projection(mesh, vectors: np.ndarray) -> np.ndarray:
+    """Project 3D vectors onto local radial directions in XY plane."""
+    positions = mesh.positions_view()
+    radii = positions_radii(mesh, positions)
+    r_hat = np.zeros_like(positions)
+    good = radii > 1.0e-12
+    r_hat[good, :2] = positions[good, :2] / radii[good, None]
+    return np.einsum("ij,ij->i", vectors, r_hat)
+
+
+def radial_thetas(mesh) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return radii, theta_in, theta_out, and common theta mode."""
+    radii = positions_radii(mesh)
+    theta_in = radial_projection(mesh, mesh.tilts_in_view())
+    theta_out = radial_projection(mesh, mesh.tilts_out_view())
+    return radii, theta_in, theta_out, 0.5 * (theta_in + theta_out)
+
+
+def abs_by_region(mesh, values: np.ndarray) -> dict[str, float]:
+    """Return sum of absolute values grouped by region labels."""
+    masks = row_region_mask_dict(mesh)
+    vals = np.abs(np.asarray(values, dtype=float))
+    return {
+        "disk": float(np.sum(vals[masks["disk"]])),
+        "shared_rim": float(np.sum(vals[masks["rim"]])),
+        "outer_support": float(np.sum(vals[masks["outer_support"]])),
+        "outer_free": float(np.sum(vals[masks["outer_free"]])),
+    }
+
+
+def capture_state(mesh) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return a deep copy of mesh positions and all tilt fields."""
+    return (
+        mesh.positions_view().copy(order="F"),
+        mesh.tilts_view().copy(order="F"),
+        mesh.tilts_in_view().copy(order="F"),
+        mesh.tilts_out_view().copy(order="F"),
+    )
+
+
+def restore_state(
+    mesh,
+    positions: np.ndarray,
+    tilts: np.ndarray,
+    tilts_in: np.ndarray,
+    tilts_out: np.ndarray,
+) -> None:
+    """Restore mesh positions and tilt fields from captured state."""
+    for row, vid in enumerate(mesh.vertex_ids):
+        mesh.vertices[int(vid)].position[:] = positions[row]
+    mesh.set_tilts_from_array(tilts)
+    mesh.set_tilts_in_from_array(tilts_in)
+    mesh.set_tilts_out_from_array(tilts_out)
+    mesh.increment_version()
+    mesh.build_position_cache()

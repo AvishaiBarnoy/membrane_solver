@@ -34,12 +34,19 @@ with the `cg` command if needed.
 
 Tilt solve controls:
 - `tilt_solve_mode`: `off`, `nested`, or `coupled`.
-- `tilt_solver`: `gd` (default) or `cg`.
+- `tilt_solver`: `cg` (default) or `gd`.
 - Iteration controls: `tilt_inner_steps`, `tilt_coupled_steps`, `tilt_step_size`, `tilt_tol`.
 - CG-specific controls: `tilt_cg_max_iters`, `tilt_cg_preconditioner`.
 
-If no input file is specified on the command line you will be prompted for the
-path. File names may be given with or without the `.json` suffix.
+## Performance
+
+For optimal simulation speed, especially with large meshes or complex tilt dynamics, it is highly recommended to build the optional Fortran kernels:
+
+```bash
+MEMBRANE_SOLVER_BUILD_EXT=1 pip install -e .
+```
+
+This enables the high-performance assembly paths for surface energy, bending, and tilt.
 
 ## Macros
 

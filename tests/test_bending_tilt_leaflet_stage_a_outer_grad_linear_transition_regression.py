@@ -13,6 +13,8 @@ from tools.reproduce_flat_disk_one_leaflet import _build_minimizer
 
 def _load_stage_a_state(commands: list[str]):
     mesh = parse_geometry(load_data(str(BASE_FIXTURE)))
+    mesh.global_parameters.set("tilt_solver", "gd")
+    mesh.global_parameters.set("mesh_quality_auto_repair_enabled", False)
     minimizer = _build_minimizer(mesh)
     ctx = CommandContext(mesh, minimizer, minimizer.stepper)
     for command in commands:

@@ -23,21 +23,21 @@ We will systematically decompose these files using the same established patterns
 
 ## Implementation Plan
 
-### Phase 1: Decompose `modules/energy/bending.py`
+### Phase 1: Decompose `modules/energy/bending.py` (DONE)
 *   **Goal:** Apply the `bending_tilt` decomposition pattern to the base bending energy.
 *   **Tasks:**
     *   Extract cotangent gradient and area variation math into `modules/energy/bending_gradient.py`.
     *   Extract effective area computation and parameter resolution into `modules/energy/bending_utils.py` or `bending_payload.py`.
     *   Leave `bending.py` as a lean orchestrator for the `compute_energy_and_gradient` loop.
 
-### Phase 2: Extract Tilt Relaxation from `runtime/minimizer.py`
+### Phase 2: Extract Tilt Relaxation from `runtime/minimizer.py` (DONE)
 *   **Goal:** Simplify the `Minimizer` class by moving tilt-specific inner loops to a dedicated manager.
 *   **Tasks:**
     *   Create `runtime/steppers/tilt_relaxation.py` (or similar).
     *   Move `_relax_tilts`, `_relax_leaflet_tilts`, and associated tilt-gradient accumulation loops out of the main minimizer.
     *   Update `minimizer.py` to delegate to this new manager when tilt relaxation is required.
 
-### Phase 3: Decompose `modules/constraints/rim_slope_match_out.py`
+### Phase 3: Decompose `modules/constraints/rim_slope_match_out.py` (DONE)
 *   **Goal:** Break down the massive 2000-line constraint module.
 *   **Tasks:**
     *   Extract geometric fitting (e.g., `_fit_plane_normal`, `_orthonormal_basis`) into `geometry/fitting.py` (or a dedicated utilities file).

@@ -19,10 +19,15 @@ from modules.energy.bt_selection import _collect_group_rows, _collect_preset_row
 from runtime.projections.curved_disk import project_curved_free_disk_shape_dofs
 from tools.diagnostics.curved_1disk_shape_propagation_blocker import (
     _build_minimizer,
-    _restore_state,
     _shell_stats,
 )
 from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import THEORY_THETA_B
+from tools.diagnostics.utils import (
+    capture_state,
+    energy_total,
+    restore_state,
+    row_region,
+)
 
 DEFAULT_EPSILONS = (1.0e-5, 3.0e-5, 1.0e-4)
 ALLOWED_CLASSIFICATIONS = {
@@ -35,19 +40,6 @@ ALLOWED_CLASSIFICATIONS = {
 }
 
 
-def _capture_state(mesh) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    return (
-        mesh.positions_view().copy(order="F"),
-        mesh.tilts_view().copy(order="F"),
-        mesh.tilts_in_view().copy(order="F"),
-        mesh.tilts_out_view().copy(order="F"),
-    )
-
-
-def _breakdown_total(breakdown: dict[str, float]) -> float:
-    return float(sum(float(value) for value in breakdown.values()))
-
-
 def _module_deltas(
     baseline: dict[str, float], perturbed: dict[str, float]
 ) -> dict[str, float]:
@@ -55,20 +47,6 @@ def _module_deltas(
     return {
         key: float(perturbed.get(key, 0.0) - baseline.get(key, 0.0)) for key in keys
     }
-
-
-def _row_region(mesh, row: int) -> str:
-    index_map = mesh.vertex_index_to_row
-    # Use cached selection helpers for consistent and efficient region identification.
-    if row in _collect_preset_rows(
-        mesh, presets=("disk",), cache_tag="diag_audit_disk", index_map=index_map
-    ):
-        return "disk"
-    if row in _collect_group_rows(mesh, group="rim", index_map=index_map):
-        return "shared_rim"
-    if row in _collect_group_rows(mesh, group="outer", index_map=index_map):
-        return "outer_support"
-    return "outer_free"
 
 
 def _free_outer_mask(mesh) -> np.ndarray:
@@ -146,7 +124,7 @@ def _region_delta_by_shell(mesh, mode: np.ndarray) -> list[dict[str, object]]:
         shell_mask = np.isclose(np.round(radii, 8), radius, atol=5.0e-9)
         vals = np.asarray(mode[shell_mask], dtype=float)
         regions = sorted(
-            {_row_region(mesh, int(row)) for row in np.flatnonzero(shell_mask)}
+            {row_region(mesh, int(row)) for row in np.flatnonzero(shell_mask)}
         )
         rows.append(
             {
@@ -184,12 +162,12 @@ def _gradient_alignment(minim, mode: np.ndarray) -> dict[str, object]:
 
 def _enforcement_probe(minim, mode: np.ndarray, epsilon: float) -> dict[str, float]:
     mesh = minim.mesh
-    state = _capture_state(mesh)
+    state = capture_state(mesh)
     _apply_z_mode(mesh, mode, float(epsilon))
     before = mesh.positions_view().copy(order="F")
     minim._enforce_constraints()
     after = mesh.positions_view().copy(order="F")
-    _restore_state(mesh, *state)
+    restore_state(mesh, *state)
     dz_before = before[:, 2] - state[0][:, 2]
     dz_after = after[:, 2] - state[0][:, 2]
     dxy_after = np.linalg.norm(after[:, :2] - state[0][:, :2], axis=1)
@@ -211,7 +189,7 @@ def _evaluate_case(
     relax_tilts: bool,
 ) -> dict[str, object]:
     mesh = minim.mesh
-    state = _capture_state(mesh)
+    state = capture_state(mesh)
     _apply_z_mode(mesh, mode, float(epsilon))
     if relax_tilts:
         minim._relax_leaflet_tilts(
@@ -219,11 +197,11 @@ def _evaluate_case(
             mode=mesh.global_parameters.get("tilt_solve_mode", "fixed"),
         )
     perturbed = minim.compute_energy_breakdown()
-    _restore_state(mesh, *state)
+    restore_state(mesh, *state)
 
     module_deltas = _module_deltas(baseline, perturbed)
-    total_delta = _breakdown_total(perturbed) - _breakdown_total(baseline)
-    module_delta_sum = _breakdown_total(module_deltas)
+    total_delta = energy_total(perturbed) - energy_total(baseline)
+    module_delta_sum = energy_total(module_deltas)
     ranked = sorted(module_deltas.items(), key=lambda item: abs(item[1]), reverse=True)
     return {
         "epsilon": float(epsilon),
@@ -415,7 +393,7 @@ def run_curved_1disk_trumpet_descent_audit(
         "theta_B": float(theta_b),
         "epsilons": [float(eps) for eps in epsilons],
         "baseline_energy": {
-            "total": _breakdown_total(baseline),
+            "total": energy_total(baseline),
             "modules": baseline,
         },
         "mode_construction": {
