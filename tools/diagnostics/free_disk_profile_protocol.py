@@ -24,6 +24,16 @@ from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.refinement import refine_triangle_mesh
 from runtime.steppers.gradient_descent import GradientDescent
+from tools.diagnostics.utils import (
+    apply_global_parameter_overrides,
+    energy_total,
+    triangle_region_masks,
+)
+
+# Re-exports for backward compatibility
+_apply_global_parameter_overrides = apply_global_parameter_overrides
+_energy_total = energy_total
+_triangle_region_masks = triangle_region_masks
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_FREE_DISK_FIXTURE = (
@@ -35,17 +45,6 @@ DEFAULT_FREE_DISK_CURVED_BILAYER_SOURCE = (
     / "caveolin"
     / "kozlov_1disk_3d_tensionless_single_leaflet_profile_hard_rim_R12_free_disk.yaml"
 )
-
-
-def _apply_global_parameter_overrides(
-    mesh, overrides: dict[str, object] | None
-) -> None:
-    """Apply optional global-parameter overrides to ``mesh`` in place."""
-    if not overrides:
-        return
-    gp = mesh.global_parameters
-    for key, value in overrides.items():
-        gp.set(str(key), value)
 
 
 def _configure_theta_scan(mesh) -> Minimizer:
@@ -94,45 +93,6 @@ def _configure_shape_relax(mesh, *, theta_b: float) -> Minimizer:
         quiet=True,
         tol=1e-6,
     )
-
-
-def _energy_total(breakdown: dict[str, float]) -> float:
-    """Return total energy from an energy-breakdown mapping."""
-    return float(sum(float(v) for v in breakdown.values()))
-
-
-def _triangle_region_masks(
-    mesh,
-    tri_rows_eff: np.ndarray,
-) -> dict[str, np.ndarray]:
-    """Return standard free-disk triangle region masks."""
-    n_vertices = len(mesh.vertex_ids)
-    disk_mask = np.zeros(n_vertices, dtype=bool)
-    rim_mask = np.zeros(n_vertices, dtype=bool)
-    outer_mask = np.zeros(n_vertices, dtype=bool)
-
-    for vid in mesh.vertex_ids:
-        row = mesh.vertex_index_to_row[int(vid)]
-        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-        if str(opts.get("preset") or "") == "disk":
-            disk_mask[row] = True
-        if str(opts.get("rim_slope_match_group") or "") == "rim":
-            rim_mask[row] = True
-        if str(opts.get("rim_slope_match_group") or "") == "outer":
-            outer_mask[row] = True
-
-    has_disk = np.any(disk_mask[tri_rows_eff], axis=1)
-    has_rim = np.any(rim_mask[tri_rows_eff], axis=1)
-    has_outer = np.any(outer_mask[tri_rows_eff], axis=1)
-
-    return {
-        "disk_core": has_disk & (~has_rim) & (~has_outer),
-        "disk_rim": has_disk & has_rim & (~has_outer),
-        "rim_outer": has_rim & has_outer & (~has_disk),
-        "outer_support_band": has_outer & (~has_rim) & (~has_disk),
-        "outer_far": (~has_disk) & (~has_rim) & (~has_outer),
-        "outer_membrane": (~has_disk) & (~has_rim),
-    }
 
 
 def _tilt_leaflet_region_split(mesh, *, leaflet: str) -> dict[str, float]:
@@ -243,7 +203,7 @@ def _tilt_leaflet_region_split(mesh, *, leaflet: str) -> dict[str, float]:
         + np.einsum("ij,ij->i", tilts[tri_rows_eff[:, 1]], tilts[tri_rows_eff[:, 2]])
         + np.einsum("ij,ij->i", tilts[tri_rows_eff[:, 2]], tilts[tri_rows_eff[:, 0]])
     )
-    region_masks = _triangle_region_masks(mesh, tri_rows_eff)
+    region_masks = triangle_region_masks(mesh, tri_rows_eff)
     outer_support_mask = region_masks["outer_support_band"]
     use_consistent = np.full(len(tri_rows_eff), mode == "consistent", dtype=bool)
     if str(leaflet) == "in" and shell_mode is not None:
@@ -535,7 +495,7 @@ def _bending_tilt_leaflet_region_split(mesh, *, leaflet: str) -> dict[str, float
         + (kappa_tri[:, 1] * term_tri[:, 1] ** 2 * va1_eff)
         + (kappa_tri[:, 2] * term_tri[:, 2] ** 2 * va2_eff)
     )
-    region_masks = _triangle_region_masks(mesh, tri_rows)
+    region_masks = triangle_region_masks(mesh, tri_rows)
     return {key: float(np.sum(tri_energy[mask])) for key, mask in region_masks.items()}
 
 
@@ -741,7 +701,7 @@ def run_free_disk_curved_bilayer_protocol(
         raise ValueError(f"Unsupported theta_mode={theta_mode!r}")
 
     mesh = load_free_disk_curved_bilayer_mesh(curved_path)
-    _apply_global_parameter_overrides(mesh, global_parameter_overrides)
+    apply_global_parameter_overrides(mesh, global_parameter_overrides)
     configure_free_disk_curved_bilayer_stage2(mesh, theta_b=theta_b, z_bump=z_bump)
     minim = _configure_shape_relax(mesh, theta_b=theta_b)
     minim.minimize(n_steps=int(shape_steps))
@@ -828,7 +788,7 @@ def run_free_disk_curved_bilayer_theta_sweep(
     rows: list[dict[str, float]] = []
     for theta_b in np.asarray(theta_values, dtype=float):
         mesh = load_free_disk_curved_bilayer_mesh(curved_path)
-        _apply_global_parameter_overrides(mesh, global_parameter_overrides)
+        apply_global_parameter_overrides(mesh, global_parameter_overrides)
         configure_free_disk_curved_bilayer_stage2(
             mesh,
             theta_b=float(theta_b),
@@ -854,7 +814,7 @@ def run_free_disk_curved_bilayer_energy_sweep(
     rows: list[dict[str, float]] = []
     for theta_b in np.asarray(theta_values, dtype=float):
         mesh = load_free_disk_curved_bilayer_mesh(curved_path)
-        _apply_global_parameter_overrides(mesh, global_parameter_overrides)
+        apply_global_parameter_overrides(mesh, global_parameter_overrides)
         configure_free_disk_curved_bilayer_stage2(
             mesh,
             theta_b=float(theta_b),
@@ -875,7 +835,7 @@ def run_free_disk_curved_bilayer_energy_sweep(
             + bending_tilt_in_energy
             + bending_tilt_out_energy
         )
-        row["total_energy"] = _energy_total(breakdown)
+        row["total_energy"] = energy_total(breakdown)
         row["contact_energy"] = contact_energy
         row["elastic_energy"] = elastic_energy
         row["tilt_in_energy"] = tilt_in_energy
@@ -940,7 +900,7 @@ def run_free_disk_curved_bilayer_refinement_sweep(
         mesh = load_free_disk_curved_bilayer_mesh(curved_path)
         for _ in range(int(refine_steps)):
             mesh = refine_triangle_mesh(mesh)
-        _apply_global_parameter_overrides(mesh, global_parameter_overrides)
+        apply_global_parameter_overrides(mesh, global_parameter_overrides)
         configure_free_disk_curved_bilayer_stage2(
             mesh,
             theta_b=float(theta_b),
@@ -950,7 +910,7 @@ def run_free_disk_curved_bilayer_refinement_sweep(
         minim.minimize(n_steps=int(shape_steps))
         breakdown = minim.compute_energy_breakdown()
         row = measure_free_disk_curved_bilayer_near_rim(mesh, theta_b=float(theta_b))
-        row["total_energy"] = _energy_total(breakdown)
+        row["total_energy"] = energy_total(breakdown)
         row["tilt_in_energy"] = float(breakdown.get("tilt_in") or 0.0)
         row.update({f"tilt_in_{k}": v for k, v in _tilt_in_region_split(mesh).items()})
         row.update(_shared_rim_inner_control_volume_audit(mesh))
