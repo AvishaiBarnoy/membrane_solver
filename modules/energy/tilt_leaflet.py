@@ -17,6 +17,8 @@ from modules.energy.tilt_params import (
 )
 from modules.energy.tilt_utils import (
     _active_row_weights,
+    _resolve_shared_rim_outer_shell_mass_mode,
+    _shared_rim_outer_support_triangle_mask,
     _triangle_geometry,
 )
 
@@ -40,6 +42,7 @@ def compute_energy_and_gradient_array_leaflet(
     if k_tilt == 0.0:
         return 0.0
     mode = _resolve_tilt_mass_mode(param_resolver, leaflet)
+    shell_mode = _resolve_shared_rim_outer_shell_mass_mode(param_resolver, leaflet)
 
     tri_rows, _ = mesh.triangle_row_cache()
     if tri_rows is None or len(tri_rows) == 0:
@@ -82,50 +85,73 @@ def compute_energy_and_gradient_array_leaflet(
     t1 = tilts_eff[tri_rows_m[:, 1]]
     t2 = tilts_eff[tri_rows_m[:, 2]]
 
-    if mode == "lumped":
-        tri_tilt_sq_sum = (
-            np.einsum("ij,ij->i", t0, t0)
-            + np.einsum("ij,ij->i", t1, t1)
-            + np.einsum("ij,ij->i", t2, t2)
-        )
-        coeff = 0.5 * k_tilt * (tri_tilt_sq_sum / 3.0)
-        energy = float(np.dot(coeff, areas))
+    tri_tilt_sq_sum = (
+        np.einsum("ij,ij->i", t0, t0)
+        + np.einsum("ij,ij->i", t1, t1)
+        + np.einsum("ij,ij->i", t2, t2)
+    )
+    consistent_s = (
+        tri_tilt_sq_sum
+        + np.einsum("ij,ij->i", t0, t1)
+        + np.einsum("ij,ij->i", t1, t2)
+        + np.einsum("ij,ij->i", t2, t0)
+    )
 
-        if tilt_grad_arr is not None:
-            # Re-use existing mass matrix logic or barycentric areas
-            cache_ok = tri_keep.size == 0 or np.all(tri_keep)
-            vertex_areas = mesh.barycentric_vertex_areas(
-                positions,
-                tri_rows=tri_rows_eff,
-                areas=areas,
-                mask=mask,
-                cache=cache_ok,
+    outer_support_mask = _shared_rim_outer_support_triangle_mask(
+        mesh, tri_rows_eff, leaflet
+    )
+    if outer_support_mask is not None:
+        outer_support_mask = outer_support_mask[mask]
+
+    use_consistent = np.full(len(tri_rows_m), mode == "consistent", dtype=bool)
+    if shell_mode is not None and outer_support_mask is not None:
+        use_consistent[outer_support_mask] = shell_mode == "consistent"
+    use_lumped = ~use_consistent
+
+    coeff = np.empty(len(tri_rows_m), dtype=float)
+    coeff[use_lumped] = 0.5 * k_tilt * (tri_tilt_sq_sum[use_lumped] / 3.0)
+    coeff[use_consistent] = (k_tilt / 12.0) * consistent_s[use_consistent]
+    energy = float(np.dot(coeff, areas))
+
+    if tilt_grad_arr is not None:
+        grad_local = np.zeros_like(tilts)
+        if np.any(use_lumped):
+            tri_factor = (k_tilt * areas[use_lumped] / 3.0)[:, None]
+            rows_l = tri_rows_m[use_lumped]
+            np.add.at(grad_local, rows_l[:, 0], tri_factor * t0[use_lumped])
+            np.add.at(grad_local, rows_l[:, 1], tri_factor * t1[use_lumped])
+            np.add.at(grad_local, rows_l[:, 2], tri_factor * t2[use_lumped])
+        if np.any(use_consistent):
+            tri_factor = (k_tilt * areas[use_consistent] / 12.0)[:, None]
+            rows_c = tri_rows_m[use_consistent]
+            np.add.at(
+                grad_local,
+                rows_c[:, 0],
+                tri_factor
+                * (
+                    (2.0 * t0[use_consistent]) + t1[use_consistent] + t2[use_consistent]
+                ),
             )
-            grad_local = k_tilt * tilts_eff * vertex_areas[:, None]
-            if active_row_weights is not None:
-                grad_local *= active_row_weights[:, None]
-            tilt_grad_arr += grad_local
-    else:
-        s = (
-            np.einsum("ij,ij->i", t0, t0)
-            + np.einsum("ij,ij->i", t1, t1)
-            + np.einsum("ij,ij->i", t2, t2)
-            + np.einsum("ij,ij->i", t0, t1)
-            + np.einsum("ij,ij->i", t1, t2)
-            + np.einsum("ij,ij->i", t2, t0)
-        )
-        coeff = (k_tilt / 12.0) * s
-        energy = float(np.dot(coeff, areas))
+            np.add.at(
+                grad_local,
+                rows_c[:, 1],
+                tri_factor
+                * (
+                    (2.0 * t1[use_consistent]) + t2[use_consistent] + t0[use_consistent]
+                ),
+            )
+            np.add.at(
+                grad_local,
+                rows_c[:, 2],
+                tri_factor
+                * (
+                    (2.0 * t2[use_consistent]) + t0[use_consistent] + t1[use_consistent]
+                ),
+            )
 
-        if tilt_grad_arr is not None:
-            grad_local = np.zeros_like(tilts)
-            tri_factor = (k_tilt * areas / 12.0)[:, None]
-            np.add.at(grad_local, tri_rows_m[:, 0], tri_factor * ((2.0 * t0) + t1 + t2))
-            np.add.at(grad_local, tri_rows_m[:, 1], tri_factor * ((2.0 * t1) + t2 + t0))
-            np.add.at(grad_local, tri_rows_m[:, 2], tri_factor * ((2.0 * t2) + t0 + t1))
-            if active_row_weights is not None:
-                grad_local *= active_row_weights[:, None]
-            tilt_grad_arr += grad_local
+        if active_row_weights is not None:
+            grad_local *= active_row_weights[:, None]
+        tilt_grad_arr += grad_local
 
     if grad_arr is not None:
         from geometry.facet import _fast_cross

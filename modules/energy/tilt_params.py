@@ -25,14 +25,18 @@ def _resolve_tilt_mass_mode(param_resolver, leaflet: str) -> str:
 
 def _resolve_exclude_shared_rim_outer_rows(param_resolver, leaflet: str) -> bool:
     """Resolve whether to exclude shared-rim outer rows for the specified leaflet."""
+    # 1. Try explicit leaflet-prefixed key (e.g. tilt_in_exclude_shared_rim_outer_rows)
     raw = param_resolver.get(None, f"tilt_{leaflet}_exclude_shared_rim_outer_rows")
+
+    # 2. Try legacy leaflet-suffixed key (e.g. tilt_exclude_shared_rim_outer_rows_in)
     if raw is None:
-        if leaflet == "out":
-            raw = param_resolver.get(None, "tilt_out_exclude_shared_rim_rows")
-        else:
-            raw = param_resolver.get(None, "tilt_in_exclude_shared_rim_outer_rows")
-    if raw is None:
-        raw = param_resolver.get(None, f"tilt_exclude_shared_rim_rows_{leaflet}")
+        raw = param_resolver.get(None, f"tilt_exclude_shared_rim_outer_rows_{leaflet}")
+
+    # 3. Try leaflet-specific aliases (out-side had some keys without 'outer' prefix)
+    if raw is None and leaflet == "out":
+        raw = param_resolver.get(None, "tilt_out_exclude_shared_rim_rows")
+        if raw is None:
+            raw = param_resolver.get(None, "tilt_exclude_shared_rim_rows_out")
 
     if raw is None:
         return False
