@@ -524,27 +524,31 @@ class TiltRelaxationManager:
             if tri_rows is None or len(tri_rows) == 0:
                 return
 
-            tilt_vertex_areas_in = _tilt_vertex_areas_from_triangles(
-                n_vertices=len(mesh.vertex_ids),
-                tri_rows=tri_rows,
-                positions=positions,
-            )
+            # OPTIMIZATION: Use the mesh's cached barycentric areas for the inner leaflet.
+            # This is mathematically equivalent to the previous local calculation but avoids redundant O(N) work.
+            tilt_vertex_areas_in = mesh.barycentric_vertex_areas(positions=positions)
+
             absent_mask_out = leaflet_absent_vertex_mask(
                 mesh, global_params, leaflet="out"
             )
-            tri_keep_out = leaflet_present_triangle_mask(
-                mesh, tri_rows, absent_vertex_mask=absent_mask_out
-            )
-            tri_rows_out = tri_rows[tri_keep_out] if tri_keep_out.size else tri_rows
-            tilt_vertex_areas_out = (
-                np.zeros(len(mesh.vertex_ids), dtype=float)
-                if tri_rows_out.size == 0
-                else _tilt_vertex_areas_from_triangles(
-                    n_vertices=len(mesh.vertex_ids),
-                    tri_rows=tri_rows_out,
-                    positions=positions,
+
+            # OPTIMIZATION: If no vertices are absent, the outer leaflet has the same vertex areas as the inner.
+            if not np.any(absent_mask_out):
+                tilt_vertex_areas_out = tilt_vertex_areas_in
+            else:
+                tri_keep_out = leaflet_present_triangle_mask(
+                    mesh, tri_rows, absent_vertex_mask=absent_mask_out
                 )
-            )
+                tri_rows_out = tri_rows[tri_keep_out] if tri_keep_out.size else tri_rows
+                tilt_vertex_areas_out = (
+                    np.zeros(len(mesh.vertex_ids), dtype=float)
+                    if tri_rows_out.size == 0
+                    else _tilt_vertex_areas_from_triangles(
+                        n_vertices=len(mesh.vertex_ids),
+                        tri_rows=tri_rows_out,
+                        positions=positions,
+                    )
+                )
             tilt_fixed_vals_in = (
                 tilts_in[fixed_mask_in].copy() if np.any(fixed_mask_in) else None
             )
