@@ -31,7 +31,19 @@ should extend this manual before they are merged.
 - KH-pure refinement stability tests cover tilt benchmarks under mesh refinement (`tests/test_kh_pure_benchmarks.py`).
 - Pre-commit includes a feature-branch guard; set `ALLOW_MAIN_BRANCH=1` to bypass if you must commit on `main`.
 
-### 1.1 Development tooling (optional)
+### 1.1 High-performance kernels (Recommended)
+
+For large meshes or intensive tilt-relaxation simulations, it is highly recommended to build and use the optional compiled Fortran kernels. These kernels provide 10x–100x speedups for energy and gradient assembly.
+
+To build the kernels, ensure you have a Fortran compiler (e.g., `gfortran`) installed, then run:
+
+```bash
+MEMBRANE_SOLVER_BUILD_EXT=1 pip install -e .
+```
+
+The runtime will automatically detect and load these kernels if they are available. You can verify kernel activation by checking the startup logs or running the provided diagnostic commands.
+
+### 1.2 Development tooling (optional)
 
 - Lint:
 
@@ -997,8 +1009,8 @@ For `nested` and `coupled`, the following iteration controls apply:
 Tilt optimizer selection:
 
 - `tilt_solver`
-  - `"gd"` (default): gradient descent tilt relaxation.
-  - `"cg"`: conjugate gradient tilt relaxation (opt-in).
+  - `"cg"` (default): conjugate gradient tilt relaxation.
+  - `"gd"`: gradient descent tilt relaxation.
 
 - `tilt_cg_max_iters`
   Maximum CG iterations per tilt relaxation call. Defaults to the active
@@ -1009,7 +1021,20 @@ Tilt optimizer selection:
     and smoothness weights.
   - `"none"`: disable preconditioning.
 
-## 7.2 Macros
+### 7.2 Mesh quality auto-repair
+
+To maintain numerical stability and prevent convergence stalls due to distorted triangles, the minimizer can optionally perform automated "equiangulation" passes. This feature is enabled by default.
+
+- `mesh_quality_auto_repair_enabled` (default: `true`)
+  Enable or disable automated repair.
+- `mesh_quality_auto_repair_every` (default: `50`)
+  Frequency of repair checks (in minimization steps).
+- `mesh_quality_aspect_threshold` (default: `3.0`)
+  Triggers repair when the aspect ratio (max edge / min edge) of the worst triangles exceeds this value.
+- `mesh_quality_max_repair_passes` (default: `1`)
+  Number of equiangulation passes to perform during each repair event.
+
+## 7.3 Macros
 
 Input files can define macros (Evolver-style command sequences). A macro is a
 named list of command lines; in interactive mode, typing the macro name runs
@@ -1024,7 +1049,7 @@ instructions:
   - gogo
 ```
 
-## 7.3 Explicit IDs (Optional)
+## 7.4 Explicit IDs (Optional)
 
 The input format supports an optional “explicit ID” mapping form for
 `vertices`, `edges`, `faces`, and `bodies`. This is useful when defining bodies

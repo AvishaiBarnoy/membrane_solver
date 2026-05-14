@@ -17,14 +17,11 @@ from scipy.special import k1
 
 from modules.energy import bending_tilt_in, bending_tilt_out
 from tools.diagnostics.curved_1disk_rim_inner_tilt_profile_audit import (
-    _abs_by_region,
     _field_trace,
     _profile_source_probe,
-    _row_region,
 )
 from tools.diagnostics.curved_1disk_shape_propagation_blocker import (
     _build_minimizer,
-    _restore_state,
 )
 from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import THEORY_THETA_B
 from tools.diagnostics.curved_1disk_theory_benchmark import (
@@ -37,7 +34,6 @@ from tools.diagnostics.curved_1disk_theory_benchmark import (
     _window_rows,
 )
 from tools.diagnostics.curved_1disk_trumpet_descent_audit import (
-    _breakdown_total,
     _module_deltas,
 )
 from tools.diagnostics.curved_disk_theory import (
@@ -45,6 +41,15 @@ from tools.diagnostics.curved_disk_theory import (
     tex_reference_params,
 )
 from tools.diagnostics.free_disk_profile_fits import _fit_k1, _fit_log
+from tools.diagnostics.utils import (
+    abs_by_region,
+    capture_state,
+    energy_total,
+    radial_projection,
+    radius_labels,
+    restore_state,
+    row_region,
+)
 
 ALLOWED_CLASSIFICATIONS = {
     "leaflet_relaxation_drives_antisymmetric_state",
@@ -62,26 +67,13 @@ SIGN_CONVENTION_CLASSIFICATIONS = {
 }
 
 
-def _capture_state(mesh) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    return (
-        mesh.positions_view().copy(order="F"),
-        mesh.tilts_view().copy(order="F"),
-        mesh.tilts_in_view().copy(order="F"),
-        mesh.tilts_out_view().copy(order="F"),
-    )
-
-
-def _radius_labels(mesh) -> np.ndarray:
-    return np.round(np.linalg.norm(mesh.positions_view()[:, :2], axis=1), decimals=8)
-
-
 def _window_masks(mesh) -> dict[str, np.ndarray]:
     params = tex_reference_params()
     radius = float(params.radius)
-    labels = _radius_labels(mesh)
+    labels = radius_labels(mesh)
     max_radius = float(np.max(labels))
     free_outer = np.array(
-        [_row_region(mesh, row) == "outer_free" for row in range(len(labels))],
+        [row_region(mesh, row) == "outer_free" for row in range(len(labels))],
         dtype=bool,
     )
     free_radii = sorted(
@@ -97,7 +89,7 @@ def _window_masks(mesh) -> dict[str, np.ndarray]:
     )
     return {
         "outer_support": np.array(
-            [_row_region(mesh, row) == "outer_support" for row in range(len(labels))],
+            [row_region(mesh, row) == "outer_support" for row in range(len(labels))],
             dtype=bool,
         ),
         "first_free": free_outer & np.isin(labels, list(first_free)),
@@ -127,7 +119,7 @@ def _shell_trace(mesh, *, label: str) -> dict[str, object]:
         row["leaflet_gap_median"] = float(abs(theta_in - theta_out))
         row["symmetric_sum_abs"] = float(abs(theta_in + theta_out))
         row["antisymmetric_gap_abs"] = float(abs(theta_in - theta_out))
-        shell_mask = np.isclose(_radius_labels(mesh), radius_key, atol=5.0e-9)
+        shell_mask = np.isclose(radius_labels(mesh), radius_key, atol=5.0e-9)
         row["windows"] = sorted(
             name for name, mask in masks.items() if np.any(mask & shell_mask)
         )
@@ -167,11 +159,11 @@ def _module_tilt_gradient_probe(minim) -> dict[str, object]:
         tilt_grad = tin_grad if tilt_key == "tilt_in" else tout_grad
         _, theta_in, theta_out, _ = _radial_components(mesh)
         theta = theta_in if tilt_key == "tilt_in" else theta_out
-        radial_grad = _radial_projection(mesh, tilt_grad)
+        radial_grad = radial_projection(mesh, tilt_grad)
         out[name] = {
             "energy": float(energy),
             "tilt_grad_norm": float(np.linalg.norm(tilt_grad)),
-            "tilt_grad_abs_by_region": _abs_by_region(
+            "tilt_grad_abs_by_region": abs_by_region(
                 mesh, np.linalg.norm(tilt_grad, axis=1)
             ),
             "radial_grad_dot_theta_by_window": _window_dot_summary(
@@ -204,15 +196,6 @@ def theta_outer_common_physical(
     return 0.5 * (
         np.asarray(theta_in, dtype=float) - np.asarray(theta_out, dtype=float)
     )
-
-
-def _radial_projection(mesh, values: np.ndarray) -> np.ndarray:
-    positions = mesh.positions_view()
-    radii = np.linalg.norm(positions[:, :2], axis=1)
-    r_hat = np.zeros_like(positions)
-    good = radii > 1.0e-12
-    r_hat[good, :2] = positions[good, :2] / radii[good, None]
-    return np.einsum("ij,ij->i", values, r_hat)
 
 
 def _window_dot_summary(mesh, lhs: np.ndarray, rhs: np.ndarray) -> dict[str, float]:
@@ -266,7 +249,7 @@ def _apply_shape_log_mode(mesh, epsilon: float) -> None:
 def _perturbation_probes(minim, *, epsilon: float = 1.0e-6) -> list[dict[str, object]]:
     mesh = minim.mesh
     baseline = minim.compute_energy_breakdown()
-    state = _capture_state(mesh)
+    state = capture_state(mesh)
     rows = []
     for name in ("symmetric_leaflet", "antisymmetric_leaflet", "shape_log"):
         if name == "shape_log":
@@ -275,8 +258,8 @@ def _perturbation_probes(minim, *, epsilon: float = 1.0e-6) -> list[dict[str, ob
             _apply_tilt_mode(mesh, name, epsilon)
         perturbed = minim.compute_energy_breakdown()
         deltas = _module_deltas(baseline, perturbed)
-        total_delta = _breakdown_total(perturbed) - _breakdown_total(baseline)
-        module_sum = _breakdown_total(deltas)
+        total_delta = energy_total(perturbed) - energy_total(baseline)
+        module_sum = energy_total(deltas)
         rows.append(
             {
                 "name": name,
@@ -293,7 +276,7 @@ def _perturbation_probes(minim, *, epsilon: float = 1.0e-6) -> list[dict[str, ob
                 ],
             }
         )
-        _restore_state(mesh, *state)
+        restore_state(mesh, *state)
     return rows
 
 

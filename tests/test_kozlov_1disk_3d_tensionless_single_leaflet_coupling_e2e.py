@@ -231,6 +231,8 @@ def test_kozlov_1disk_3d_tensionless_single_leaflet_hard_source_couples_leaflets
 ):
     """Hard inner-leaflet drive should induce tilt in the opposite leaflet via curvature."""
     mesh = parse_geometry(_annulus_single_leaflet_drive_data(drive="hard"))
+    mesh.global_parameters.set("tilt_solver", "gd")
+    mesh.global_parameters.set("mesh_quality_auto_repair_enabled", False)
     minim = _build_minimizer(mesh)
     minim.minimize(n_steps=15)
 

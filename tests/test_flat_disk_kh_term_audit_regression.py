@@ -58,6 +58,8 @@ def _strict_mesh_report() -> dict:
         tilt_mass_mode_in="consistent",
         rim_local_refine_steps=2,
         rim_local_refine_band_lambda=8.0,
+        tilt_solver="gd",
+        mesh_quality_auto_repair_enabled=False,
     )
 
 
@@ -69,6 +71,8 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
         smoothness_model="splay_twist",
         theta_values=(0.0, 6.366e-4, 0.004),
         tilt_mass_mode_in="lumped",
+        tilt_solver="gd",
+        mesh_quality_auto_repair_enabled=False,
     )
 
     assert report["meta"]["parameterization"] == "kh_physical"

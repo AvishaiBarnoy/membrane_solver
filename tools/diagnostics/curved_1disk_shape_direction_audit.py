@@ -17,18 +17,21 @@ import numpy as np
 from runtime.projections.curved_disk import project_curved_free_disk_shape_dofs
 from tools.diagnostics.curved_1disk_shape_propagation_blocker import (
     _build_minimizer,
-    _restore_state,
     _shell_stats,
 )
 from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import THEORY_THETA_B
 from tools.diagnostics.curved_1disk_trumpet_descent_audit import (
     _apply_z_mode,
-    _breakdown_total,
-    _capture_state,
     _free_outer_mask,
     _module_deltas,
     _outer_modes,
-    _row_region,
+)
+from tools.diagnostics.utils import (
+    capture_state,
+    energy_total,
+    radius_labels,
+    restore_state,
+    row_region,
 )
 
 DEFAULT_EPSILON = 1.0e-5
@@ -71,14 +74,8 @@ def _unit_l2(values: np.ndarray, *, mask: np.ndarray | None = None) -> np.ndarra
     return out / norm
 
 
-def _radius_labels(mesh) -> np.ndarray:
-    positions = mesh.positions_view()
-    radii = np.linalg.norm(positions[:, :2], axis=1)
-    return np.round(radii, decimals=8)
-
-
 def _shell_median_smooth(mesh, values: np.ndarray) -> np.ndarray:
-    labels = _radius_labels(mesh)
+    labels = radius_labels(mesh)
     smooth = np.zeros_like(values, dtype=float)
     for radius in sorted(set(float(v) for v in labels)):
         mask = np.isclose(labels, radius, atol=5.0e-9)
@@ -87,10 +84,10 @@ def _shell_median_smooth(mesh, values: np.ndarray) -> np.ndarray:
 
 
 def _near_support_mask(mesh) -> np.ndarray:
-    labels = _radius_labels(mesh)
+    labels = radius_labels(mesh)
     free_mask = _free_outer_mask(mesh)
     support = np.array(
-        [_row_region(mesh, row) == "outer_support" for row in range(len(labels))]
+        [row_region(mesh, row) == "outer_support" for row in range(len(labels))]
     )
     free_radii = sorted({float(v) for v in labels[free_mask]})
     near_radii = set(free_radii[:4])
@@ -99,7 +96,7 @@ def _near_support_mask(mesh) -> np.ndarray:
 
 
 def _far_field_mask(mesh) -> np.ndarray:
-    labels = _radius_labels(mesh)
+    labels = radius_labels(mesh)
     free_mask = _free_outer_mask(mesh)
     free_radii = sorted({float(v) for v in labels[free_mask]})
     if not free_radii:
@@ -134,7 +131,7 @@ def _direction_catalog(mesh, grad_z: np.ndarray) -> dict[str, np.ndarray]:
     smooth = _shell_median_smooth(mesh, descent)
     high_frequency = descent - smooth
     area_weights = _row_area_weights(mesh)
-    shell_labels = _radius_labels(mesh)
+    shell_labels = radius_labels(mesh)
     shell_counts = np.ones_like(descent)
     for radius in sorted(set(float(v) for v in shell_labels)):
         mask = np.isclose(shell_labels, radius, atol=5.0e-9)
@@ -158,7 +155,7 @@ def _direction_catalog(mesh, grad_z: np.ndarray) -> dict[str, np.ndarray]:
 
 
 def _profile_summary(mesh) -> dict[str, float]:
-    labels = _radius_labels(mesh)
+    labels = radius_labels(mesh)
     free_mask = _free_outer_mask(mesh)
     if not np.any(free_mask):
         return {"outer_log_slope": 0.0, "outer_z_span": 0.0, "outer_shell_count": 0}
@@ -194,7 +191,7 @@ def _probe_direction(
     relax_tilts: bool,
 ) -> dict[str, object]:
     mesh = minim.mesh
-    state = _capture_state(mesh)
+    state = capture_state(mesh)
     _apply_z_mode(mesh, direction, float(epsilon))
     minim._enforce_constraints()
     if relax_tilts:
@@ -204,11 +201,11 @@ def _probe_direction(
         )
     profile_after = _profile_summary(mesh)
     perturbed = minim.compute_energy_breakdown()
-    _restore_state(mesh, *state)
+    restore_state(mesh, *state)
 
     module_deltas = _module_deltas(baseline, perturbed)
-    total_delta = _breakdown_total(perturbed) - _breakdown_total(baseline)
-    module_delta_sum = _breakdown_total(module_deltas)
+    total_delta = energy_total(perturbed) - energy_total(baseline)
+    module_delta_sum = energy_total(module_deltas)
     directional_derivative = float(np.dot(grad_z, direction))
     armijo_rhs = 1.0e-4 * float(epsilon) * directional_derivative
     return {
@@ -384,7 +381,7 @@ def run_curved_1disk_shape_direction_audit(
         "theta_B": float(theta_b),
         "epsilon": float(epsilon),
         "baseline_energy": {
-            "total": _breakdown_total(baseline),
+            "total": energy_total(baseline),
             "modules": baseline,
             "gradient_energy": float(gradient_energy),
         },

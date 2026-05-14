@@ -22,22 +22,17 @@ from geometry.tilt_operators import (
 from modules.energy import bending_tilt_leaflet as _btl
 from tools.diagnostics.curved_1disk_theory_benchmark import _run_curved_theta_candidate
 from tools.diagnostics.free_disk_profile_protocol import (
-    _triangle_region_masks,
     measure_free_disk_curved_bilayer_near_rim,
 )
+from tools.diagnostics.utils import positions_radii, triangle_region_masks
 
 THEORY_THETA_B = 0.1845693593
 OUTER_RADIUS = 7.0 / 15.0
 
 
-def _positions_radii(mesh) -> np.ndarray:
-    """Return xy radii for all rows."""
-    return np.linalg.norm(mesh.positions_view()[:, :2], axis=1)
-
-
 def _row_shell_radius_map(mesh) -> np.ndarray:
     """Return rounded shell radius label for every row."""
-    radii = _positions_radii(mesh)
+    radii = positions_radii(mesh)
     return np.asarray([round(float(v), 6) for v in radii], dtype=float)
 
 
@@ -66,7 +61,7 @@ def _active_group_labels(mesh, row: int) -> list[str]:
 def _rowwise_radial_tilt(mesh, tilts: np.ndarray) -> np.ndarray:
     """Return radial tilt scalar per row."""
     positions = mesh.positions_view()
-    radii = _positions_radii(mesh)
+    radii = positions_radii(mesh)
     r_hat = np.zeros_like(positions)
     good = radii > 1.0e-12
     r_hat[good, 0] = positions[good, 0] / radii[good]
@@ -259,7 +254,7 @@ def _leaflet_runtime_payload(mesh, *, leaflet: str) -> dict[str, object]:
     term_tri = base_tri + np.asarray(div_eval, dtype=float)[:, None]
     energy_vertex = 0.5 * kappa_tri * term_tri**2 * va_eff
     outer_mask = np.asarray(
-        _triangle_region_masks(mesh, tri_rows)["outer_membrane"], dtype=bool
+        triangle_region_masks(mesh, tri_rows)["outer_membrane"], dtype=bool
     )
     row_meta = _base_term_vertex(
         mesh,
@@ -290,7 +285,7 @@ def _leaflet_runtime_payload(mesh, *, leaflet: str) -> dict[str, object]:
         "vertex_areas_eff": np.asarray(vertex_areas_eff, dtype=float),
         "vertex_areas_vor": np.asarray(vertex_areas_vor, dtype=float),
         "row_shell_radius": _row_shell_radius_map(mesh),
-        "row_radii": _positions_radii(mesh),
+        "row_radii": positions_radii(mesh),
     }
 
 

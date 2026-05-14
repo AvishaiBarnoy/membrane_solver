@@ -861,11 +861,13 @@ def _configure_benchmark_mesh(
     tilt_mass_mode_out: str = "lumped",
     tilt_transport_model: str = "ambient_v1",
     tilt_divergence_mode_in: str = "native",
+    tilt_solver: str | None = "gd",
     tilt_projection_cadence: str = "per_step",
     tilt_projection_interval: int = 1,
     tilt_post_relax_inner_steps: int = 0,
     tilt_post_relax_step_size: float = 0.0,
     tilt_post_relax_passes: int = 1,
+    mesh_quality_auto_repair_enabled: bool | None = False,
     inner_coupled_update_mode: str = "off",
     benchmark_geometry_lane: str = "flat_pinned",
     curved_theta_objective_ablation_mode: str = "off",
@@ -879,6 +881,13 @@ def _configure_benchmark_mesh(
     )
 
     gp = mesh.global_parameters
+    if tilt_solver is not None:
+        gp.set("tilt_solver", str(tilt_solver))
+    if mesh_quality_auto_repair_enabled is not None:
+        gp.set(
+            "mesh_quality_auto_repair_enabled", bool(mesh_quality_auto_repair_enabled)
+        )
+
     mapping = solver_mapping_from_theory(
         theory_params, parameterization=str(parameterization)
     )
@@ -1586,11 +1595,13 @@ def run_flat_disk_one_leaflet_benchmark(
     outer_local_vertex_average_steps: int = 0,
     outer_local_vertex_average_rmin_lambda: float = 0.0,
     outer_local_vertex_average_rmax_lambda: float = 0.0,
+    tilt_solver: str | None = "gd",
     tilt_projection_cadence: str = "per_step",
     tilt_projection_interval: int = 1,
     tilt_post_relax_inner_steps: int = 0,
     tilt_post_relax_step_size: float = 0.0,
     tilt_post_relax_passes: int = 1,
+    mesh_quality_auto_repair_enabled: bool | None = False,
     inner_coupled_update_mode: str = "off",
     curved_theta_calibration_mode: str = "off",
     curved_theta_calibration_inner_scale: float = 1.0,
@@ -2156,11 +2167,13 @@ def run_flat_disk_one_leaflet_benchmark(
         tilt_mass_mode_out=mass_mode_out,
         tilt_transport_model=transport_model_raw,
         tilt_divergence_mode_in=div_mode_raw,
+        tilt_solver=tilt_solver,
         tilt_projection_cadence=projection_cadence,
         tilt_projection_interval=projection_interval,
         tilt_post_relax_inner_steps=post_relax_inner_steps,
         tilt_post_relax_step_size=post_relax_step_size,
         tilt_post_relax_passes=post_relax_passes,
+        mesh_quality_auto_repair_enabled=mesh_quality_auto_repair_enabled,
         inner_coupled_update_mode=inner_coupled_update_mode_value,
         benchmark_geometry_lane=geometry_lane_requested,
         curved_theta_objective_ablation_mode=(

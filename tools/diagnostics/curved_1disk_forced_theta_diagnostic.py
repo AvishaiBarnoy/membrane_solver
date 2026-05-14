@@ -24,14 +24,10 @@ from tools.diagnostics.curved_disk_theory import (
     compute_curved_disk_theory,
     tex_reference_params,
 )
+from tools.diagnostics.utils import positions_radii
 
 FORCED_THETA_VALUES = (0.06, 0.12, 0.1845693593)
 SCATTER_JUDGMENT_THRESHOLD = 0.10
-
-
-def _positions_radii(mesh) -> np.ndarray:
-    """Return radial distance in the xy plane for every vertex."""
-    return np.linalg.norm(mesh.positions_view()[:, :2], axis=1)
 
 
 def _window_rows(
@@ -56,7 +52,7 @@ def _relative_rmse(y: np.ndarray, yhat: np.ndarray) -> float:
 def _shell_vertex_samples(mesh) -> dict[float, dict[str, np.ndarray | float | int]]:
     """Return per-shell raw vertex samples for scatter diagnostics."""
     positions = mesh.positions_view()
-    radii = _positions_radii(mesh)
+    radii = positions_radii(mesh)
     tilts_in = mesh.tilts_in_view()
     tilts_out = mesh.tilts_out_view()
     r_hat = np.zeros_like(positions)

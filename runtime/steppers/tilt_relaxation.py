@@ -192,7 +192,7 @@ class TiltRelaxationManager:
         if n_inner <= 0:
             return
 
-        solver = str(global_params.get("tilt_solver", "gd") or "gd").strip().lower()
+        solver = str(global_params.get("tilt_solver", "cg") or "cg").strip().lower()
         if solver not in ("gd", "cg"):
             logger.warning("Unknown tilt_solver=%r; using gradient descent.", solver)
             solver = "gd"
@@ -402,7 +402,7 @@ class TiltRelaxationManager:
         if n_inner <= 0:
             return
 
-        solver = str(global_params.get("tilt_solver", "gd") or "gd").strip().lower()
+        solver = str(global_params.get("tilt_solver", "cg") or "cg").strip().lower()
         if solver not in ("gd", "cg"):
             logger.warning("Unknown tilt_solver=%r; using gradient descent.", solver)
             solver = "gd"
