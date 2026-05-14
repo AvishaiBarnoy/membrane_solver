@@ -39,7 +39,7 @@ def build_extensions(
     *,
     source_dir: Path,
     target_dir: Path,
-    kernels: Sequence[str] = ("surface_energy", "bending_kernels"),
+    kernels: Sequence[str] = ("surface_energy", "bending_kernels", "tilt_kernels"),
 ) -> list[BuildResult]:
     """Build selected f2py kernels into `target_dir`.
 
@@ -62,7 +62,7 @@ def build_extensions(
 
     results: list[BuildResult] = []
     for kernel in kernels:
-        source_path = source_dir / f"{kernel}.f90"
+        source_path = (source_dir / f"{kernel}.f90").resolve()
         if not source_path.exists():
             raise FileNotFoundError(f"Missing Fortran source: {source_path}")
 
@@ -117,8 +117,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--kernels",
         nargs="*",
-        default=["surface_energy", "bending_kernels"],
-        help="Kernels to build (default: surface_energy bending_kernels).",
+        default=["surface_energy", "bending_kernels", "tilt_kernels"],
+        help="Kernels to build (default: surface_energy bending_kernels tilt_kernels).",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 

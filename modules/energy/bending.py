@@ -157,7 +157,7 @@ def compute_energy_and_gradient_array(
     K_dir[mask_k] = k_vecs[mask_k] / k_mag[mask_k][:, None]
     K_dir[~mask_k] = normals[~mask_k]
 
-    factor_K_vec = np.empty_like(K_dir, order="F")
+    factor_K_vec = np.empty_like(K_dir, order="C")
     np.multiply(K_dir, scale_K[:, None], out=factor_K_vec)
 
     if mode == "approx":

@@ -376,7 +376,7 @@ def compute_energy_and_gradient_array_leaflet(
             f"btl_{cache_tag}_factor_K_vec", shape=K_dir.shape, dtype=K_dir.dtype
         )
     else:
-        factor_K_vec = np.empty_like(K_dir, order="F")
+        factor_K_vec = np.empty_like(K_dir, order="C")
     np.multiply(K_dir, scale_K[:, None], out=factor_K_vec)
 
     transition_operator_enabled = _use_stage_a_outer_grad_linear_transition_operator(
