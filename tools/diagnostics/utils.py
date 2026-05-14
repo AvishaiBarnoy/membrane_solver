@@ -8,6 +8,14 @@ import numpy as np
 
 logger = logging.getLogger("membrane_solver")
 
+_BOUNDARY_KEYS = (
+    "rim_slope_match_group",
+    "rim_slope_match_outer_group",
+    "rim_slope_match_disk_group",
+    "tilt_thetaB_group",
+    "tilt_thetaB_group_in",
+)
+
 
 def apply_global_parameter_overrides(mesh, overrides: dict[str, object] | None) -> None:
     """Apply optional global-parameter overrides to ``mesh`` in place."""
@@ -50,9 +58,9 @@ def triangle_region_masks(
         opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
         if str(opts.get("preset") or "") == "disk":
             disk_mask[row] = True
-        if str(opts.get("rim_slope_match_group") or "") == "rim":
+        if any(opts.get(k) == "rim" for k in _BOUNDARY_KEYS):
             rim_mask[row] = True
-        if str(opts.get("rim_slope_match_group") or "") == "outer":
+        if any(opts.get(k) == "outer" for k in _BOUNDARY_KEYS):
             outer_mask[row] = True
 
     has_disk = np.any(disk_mask[tri_rows_eff], axis=1)
@@ -82,10 +90,10 @@ def row_region(mesh, row: int) -> str:
     vertex = mesh.vertices[vid]
     opts = getattr(vertex, "options", None) or {}
     if str(opts.get("preset") or "") == "disk":
-        if str(opts.get("rim_slope_match_group") or "") == "rim":
+        if any(opts.get(k) == "rim" for k in _BOUNDARY_KEYS):
             return "shared_rim"
         return "disk"
-    if str(opts.get("rim_slope_match_group") or "") == "outer":
+    if any(opts.get(k) == "outer" for k in _BOUNDARY_KEYS):
         return "outer_support"
     return "outer_free"
 
@@ -120,9 +128,9 @@ def row_region_mask_dict(mesh) -> dict[str, np.ndarray]:
         opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
         if str(opts.get("preset") or "") == "disk":
             disk[row] = True
-        if str(opts.get("rim_slope_match_group") or "") == "rim":
+        if any(opts.get(k) == "rim" for k in _BOUNDARY_KEYS):
             rim[row] = True
-        if str(opts.get("rim_slope_match_group") or "") == "outer":
+        if any(opts.get(k) == "outer" for k in _BOUNDARY_KEYS):
             outer[row] = True
 
     return {
