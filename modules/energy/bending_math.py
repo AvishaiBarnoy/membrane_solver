@@ -52,18 +52,6 @@ def _apply_beltrami_laplacian(
                 )
             if not ok:
                 if strict:
-                    print(
-                        f"DEBUG: weights C_CONTIG: {weights.flags['C_CONTIGUOUS']}, shape: {weights.shape}"
-                    )
-                    print(
-                        f"DEBUG: tri_rows C_CONTIG: {tri_rows.flags['C_CONTIGUOUS']}, shape: {tri_rows.shape}"
-                    )
-                    print(
-                        f"DEBUG: field C_CONTIG: {field.flags['C_CONTIGUOUS']}, shape: {field.shape}"
-                    )
-                    print(
-                        f"DEBUG: weights.T F_CONTIG: {weights.T.flags['F_CONTIGUOUS']}, tri_rows.T F_CONTIG: {tri_rows.T.flags['F_CONTIGUOUS']}, field.T F_CONTIG: {field.T.flags['F_CONTIGUOUS']}"
-                    )
                     raise ValueError(
                         "Fortran bending kernels require F-contiguous weights/tri_rows/field (to avoid hidden copies)."
                     )
@@ -116,15 +104,6 @@ def _grad_cotan(u: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
     if not ok:
         if strict:
-            print(
-                f"DEBUG: u C_CONTIG={u.flags['C_CONTIGUOUS']} F_CONTIG={u.flags['F_CONTIGUOUS']} shape={u.shape}"
-            )
-            print(
-                f"DEBUG: v C_CONTIG={v.flags['C_CONTIGUOUS']} F_CONTIG={v.flags['F_CONTIGUOUS']} shape={v.shape}"
-            )
-            print(
-                f"DEBUG: u.T F_CONTIG={u.T.flags['F_CONTIGUOUS']} v.T F_CONTIG={v.T.flags['F_CONTIGUOUS']}"
-            )
             raise ValueError(
                 "Fortran bending kernels require F-contiguous u/v (to avoid hidden copies)."
             )

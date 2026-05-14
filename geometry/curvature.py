@@ -168,13 +168,6 @@ def compute_curvature_data(
                 ok = positions.flags["F_CONTIGUOUS"] and tri_rows.flags["F_CONTIGUOUS"]
             if not ok:
                 if strict:
-                    print(f"DEBUG: expects_transpose={kernel_spec.expects_transpose}")
-                    print(
-                        f"DEBUG: positions C_CONTIG={positions.flags['C_CONTIGUOUS']} F_CONTIG={positions.flags['F_CONTIGUOUS']} shape={positions.shape}"
-                    )
-                    print(
-                        f"DEBUG: tri_rows C_CONTIG={tri_rows.flags['C_CONTIGUOUS']} F_CONTIG={tri_rows.flags['F_CONTIGUOUS']} shape={tri_rows.shape}"
-                    )
                     raise ValueError(
                         "Fortran tilt kernels require F-contiguous positions/tri_rows (to avoid hidden copies)."
                     )
