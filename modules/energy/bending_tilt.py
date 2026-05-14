@@ -271,7 +271,7 @@ def compute_energy_and_gradient_array(
     K_dir[~mask_k] = normals[~mask_k]
 
     scale_K = (kappa_arr * term * ratio).astype(float, copy=False)
-    factor_K_vec = np.empty_like(K_dir, order="F")
+    factor_K_vec = np.empty_like(K_dir, order="C")
     np.multiply(K_dir, scale_K[:, None], out=factor_K_vec)
 
     fA_eff = 0.5 * kappa_arr * term**2

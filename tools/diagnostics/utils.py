@@ -83,11 +83,11 @@ def row_region(mesh, row: int) -> str:
     opts = getattr(vertex, "options", None) or {}
     if str(opts.get("preset") or "") == "disk":
         if str(opts.get("rim_slope_match_group") or "") == "rim":
-            return "rim"
+            return "shared_rim"
         return "disk"
     if str(opts.get("rim_slope_match_group") or "") == "outer":
-        return "outer"
-    return "far"
+        return "outer_support"
+    return "outer_free"
 
 
 def row_labels(mesh) -> list[str]:
@@ -99,11 +99,11 @@ def row_labels(mesh) -> list[str]:
     # Order of assignment matters if masks overlap (they shouldn't here)
     for row in np.flatnonzero(masks["disk"]):
         labels[row] = "disk"
-    for row in np.flatnonzero(masks["rim"]):
+    for row in np.flatnonzero(masks["shared_rim"]):
         labels[row] = "shared_rim"
-    for row in np.flatnonzero(masks["outer"]):
+    for row in np.flatnonzero(masks["outer_support"]):
         labels[row] = "outer_support"
-    for row in np.flatnonzero(masks["far"]):
+    for row in np.flatnonzero(masks["outer_free"]):
         labels[row] = "outer_free"
 
     return labels
@@ -127,12 +127,9 @@ def row_region_mask_dict(mesh) -> dict[str, np.ndarray]:
 
     return {
         "disk": disk & (~rim),
-        "rim": rim,
-        "outer": outer,
-        "far": (~disk) & (~rim) & (~outer),
-        "outer_free": (~disk) & (~rim) & (~outer),
-        "outer_support": outer,
         "shared_rim": rim,
+        "outer_support": outer,
+        "outer_free": (~disk) & (~rim) & (~outer),
     }
 
 
@@ -160,7 +157,7 @@ def abs_by_region(mesh, values: np.ndarray) -> dict[str, float]:
     vals = np.abs(np.asarray(values, dtype=float))
     return {
         "disk": float(np.sum(vals[masks["disk"]])),
-        "shared_rim": float(np.sum(vals[masks["rim"]])),
+        "shared_rim": float(np.sum(vals[masks["shared_rim"]])),
         "outer_support": float(np.sum(vals[masks["outer_support"]])),
         "outer_free": float(np.sum(vals[masks["outer_free"]])),
     }

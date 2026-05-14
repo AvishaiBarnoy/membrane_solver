@@ -37,16 +37,37 @@ def _apply_beltrami_laplacian(
                     "Fortran bending kernels require float64 weights/field and int32 tri_rows."
                 )
             kernel_spec = None
-        elif not (
-            weights.flags["F_CONTIGUOUS"]
-            and tri_rows.flags["F_CONTIGUOUS"]
-            and field.flags["F_CONTIGUOUS"]
-        ):
-            if strict:
-                raise ValueError(
-                    "Fortran bending kernels require F-contiguous weights/tri_rows/field (to avoid hidden copies)."
+        else:
+            if kernel_spec.expects_transpose:
+                ok = (
+                    weights.T.flags["F_CONTIGUOUS"]
+                    and tri_rows.T.flags["F_CONTIGUOUS"]
+                    and field.T.flags["F_CONTIGUOUS"]
                 )
-            kernel_spec = None
+            else:
+                ok = (
+                    weights.flags["F_CONTIGUOUS"]
+                    and tri_rows.flags["F_CONTIGUOUS"]
+                    and field.flags["F_CONTIGUOUS"]
+                )
+            if not ok:
+                if strict:
+                    print(
+                        f"DEBUG: weights C_CONTIG: {weights.flags['C_CONTIGUOUS']}, shape: {weights.shape}"
+                    )
+                    print(
+                        f"DEBUG: tri_rows C_CONTIG: {tri_rows.flags['C_CONTIGUOUS']}, shape: {tri_rows.shape}"
+                    )
+                    print(
+                        f"DEBUG: field C_CONTIG: {field.flags['C_CONTIGUOUS']}, shape: {field.shape}"
+                    )
+                    print(
+                        f"DEBUG: weights.T F_CONTIG: {weights.T.flags['F_CONTIGUOUS']}, tri_rows.T F_CONTIG: {tri_rows.T.flags['F_CONTIGUOUS']}, field.T F_CONTIG: {field.T.flags['F_CONTIGUOUS']}"
+                    )
+                    raise ValueError(
+                        "Fortran bending kernels require F-contiguous weights/tri_rows/field (to avoid hidden copies)."
+                    )
+                kernel_spec = None
 
     if kernel_spec is not None:
         if kernel_spec.expects_transpose:
@@ -87,8 +108,23 @@ def _grad_cotan(u: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         if strict:
             raise TypeError("Fortran bending kernels require float64 u/v.")
         return _grad_cotan_numpy(u, v)
-    if not (u.flags["F_CONTIGUOUS"] and v.flags["F_CONTIGUOUS"]):
+
+    if kernel_spec.expects_transpose:
+        ok = u.T.flags["F_CONTIGUOUS"] and v.T.flags["F_CONTIGUOUS"]
+    else:
+        ok = u.flags["F_CONTIGUOUS"] and v.flags["F_CONTIGUOUS"]
+
+    if not ok:
         if strict:
+            print(
+                f"DEBUG: u C_CONTIG={u.flags['C_CONTIGUOUS']} F_CONTIG={u.flags['F_CONTIGUOUS']} shape={u.shape}"
+            )
+            print(
+                f"DEBUG: v C_CONTIG={v.flags['C_CONTIGUOUS']} F_CONTIG={v.flags['F_CONTIGUOUS']} shape={v.shape}"
+            )
+            print(
+                f"DEBUG: u.T F_CONTIG={u.T.flags['F_CONTIGUOUS']} v.T F_CONTIG={v.T.flags['F_CONTIGUOUS']}"
+            )
             raise ValueError(
                 "Fortran bending kernels require F-contiguous u/v (to avoid hidden copies)."
             )
@@ -152,27 +188,27 @@ def _cached_cotan_gradients(
     v1 = positions[tri_rows[:, 1]]
     v2 = positions[tri_rows[:, 2]]
 
-    u0 = np.asfortranarray(v1 - v0)
-    v0_vec = np.asfortranarray(v2 - v0)
+    u0 = np.ascontiguousarray(v1 - v0)
+    v0_vec = np.ascontiguousarray(v2 - v0)
     g_c0_u, g_c0_v = _grad_cotan(u0, v0_vec)
 
-    u1 = np.asfortranarray(v2 - v1)
-    v1_vec = np.asfortranarray(0 - v1)  # Error in original? v0-v1?
+    u1 = np.ascontiguousarray(v2 - v1)
+    v1_vec = np.ascontiguousarray(0 - v1)  # Error in original? v0-v1?
     # Wait, let me check original bending.py
     # ... u1 = v2 - v1, v1_vec = v0 - v1. Correct.
     # Let me re-read bending.py line 497.
-    # "u1 = np.asfortranarray(v2 - v1); v1_vec = np.asfortranarray(v0 - v1)"
+    # "u1 = np.ascontiguousarray(v2 - v1); v1_vec = np.ascontiguousarray(v0 - v1)"
     # My thought buffer had a typo.
-    v1_vec = np.asfortranarray(v0 - v1)
+    v1_vec = np.ascontiguousarray(v0 - v1)
     g_c1_u, g_c1_v = _grad_cotan(u1, v1_vec)
 
-    u2 = np.asfortranarray(v0 - v2)
-    v2_vec = np.asfortranarray(v1 - v2)
+    u2 = np.ascontiguousarray(v0 - v2)
+    v2_vec = np.ascontiguousarray(v1 - v2)
     g_c2_u, g_c2_v = _grad_cotan(u2, v2_vec)
 
-    e0 = np.asfortranarray(v2 - v1)
-    e1 = np.asfortranarray(v0 - v2)
-    e2 = np.asfortranarray(v1 - v0)
+    e0 = np.ascontiguousarray(v2 - v1)
+    e1 = np.ascontiguousarray(v0 - v2)
+    e2 = np.ascontiguousarray(v1 - v0)
     gc0u, gc0v = _grad_cotan(e2, -e1)
     gc1u, gc1v = _grad_cotan(e0, -e2)
     gc2u, gc2v = _grad_cotan(e1, -e0)

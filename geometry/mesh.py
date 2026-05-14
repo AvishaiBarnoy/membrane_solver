@@ -712,7 +712,7 @@ class Mesh:
                 n_verts,
                 3,
             ):
-                self._positions_cache = np.empty((n_verts, 3), dtype=float, order="F")
+                self._positions_cache = np.empty((n_verts, 3), dtype=float, order="C")
             for i, vid in enumerate(self.vertex_ids):
                 self._positions_cache[i] = self.vertices[vid].position
             self._positions_cache_version = self._version
@@ -940,10 +940,13 @@ class Mesh:
             self._triangle_row_facets = []
             self._triangle_rows_cache_version = self._facet_loops_version
             return None, []
-        tri_rows = triangle_rows_from_loops(
-            tri_facets=tri_facets,
-            facet_vertex_loops=self.facet_vertex_loops,
-            vertex_index_to_row=self.vertex_index_to_row,
+        tri_rows = np.ascontiguousarray(
+            triangle_rows_from_loops(
+                tri_facets=tri_facets,
+                facet_vertex_loops=self.facet_vertex_loops,
+                vertex_index_to_row=self.vertex_index_to_row,
+            ),
+            dtype=np.int32,
         )
         self._triangle_rows_cache = tri_rows
         self._triangle_row_facets = tri_facets

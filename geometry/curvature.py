@@ -64,6 +64,23 @@ def _call_fortran_curvature_kernel(
             vertex_areas,
             weights,
             zero_based,
+            va0_out=va0,
+            va1_out=va1,
+            va2_out=va2,
+        )
+        return True
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        # Legacy positional binding
+        kernel(
+            positions,
+            tri_rows,
+            k_vecs,
+            vertex_areas,
+            weights,
+            zero_based,
             va0,
             va1,
             va2,
@@ -141,12 +158,27 @@ def compute_curvature_data(
                     "Fortran tilt kernels require float64 positions and int32 tri_rows."
                 )
             kernel_spec = None
-        elif not (positions.flags["F_CONTIGUOUS"] and tri_rows.flags["F_CONTIGUOUS"]):
-            if strict:
-                raise ValueError(
-                    "Fortran tilt kernels require F-contiguous positions/tri_rows (to avoid hidden copies)."
+        else:
+            if kernel_spec.expects_transpose:
+                ok = (
+                    positions.T.flags["F_CONTIGUOUS"]
+                    and tri_rows.T.flags["F_CONTIGUOUS"]
                 )
-            kernel_spec = None
+            else:
+                ok = positions.flags["F_CONTIGUOUS"] and tri_rows.flags["F_CONTIGUOUS"]
+            if not ok:
+                if strict:
+                    print(f"DEBUG: expects_transpose={kernel_spec.expects_transpose}")
+                    print(
+                        f"DEBUG: positions C_CONTIG={positions.flags['C_CONTIGUOUS']} F_CONTIG={positions.flags['F_CONTIGUOUS']} shape={positions.shape}"
+                    )
+                    print(
+                        f"DEBUG: tri_rows C_CONTIG={tri_rows.flags['C_CONTIGUOUS']} F_CONTIG={tri_rows.flags['F_CONTIGUOUS']} shape={tri_rows.shape}"
+                    )
+                    raise ValueError(
+                        "Fortran tilt kernels require F-contiguous positions/tri_rows (to avoid hidden copies)."
+                    )
+                kernel_spec = None
 
     if kernel_spec is not None:
         nf = tri_rows.shape[0]
