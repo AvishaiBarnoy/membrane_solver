@@ -25,6 +25,61 @@ def _single_vertex_mesh() -> Mesh:
     return mesh
 
 
+class _SingleTiltEnergyModule:
+    USES_TILT = True
+
+    def compute_energy_and_gradient_array(
+        self,
+        mesh,
+        global_params,
+        param_resolver,
+        *,
+        positions,
+        index_map,
+        grad_arr,
+        tilts=None,
+    ) -> float:
+        _ = mesh, global_params, param_resolver, positions, index_map, grad_arr
+        return float(np.sum(np.asarray(tilts, dtype=float)))
+
+
+class _SingleTiltGradientModule:
+    USES_TILT = True
+
+    def compute_energy_and_gradient_array(
+        self,
+        mesh,
+        global_params,
+        param_resolver,
+        *,
+        positions,
+        index_map,
+        grad_arr,
+        tilts=None,
+        tilt_grad_arr=None,
+    ) -> float:
+        _ = mesh, global_params, param_resolver, positions, index_map, grad_arr
+        tilts = np.asarray(tilts, dtype=float)
+        if tilt_grad_arr is not None:
+            tilt_grad_arr += tilts
+        return float(np.sum(tilts))
+
+
+class _NonTiltEnergyModule:
+    def compute_energy_and_gradient_array(
+        self,
+        mesh,
+        global_params,
+        param_resolver,
+        *,
+        positions,
+        index_map,
+        grad_arr,
+    ) -> float:
+        _ = mesh, global_params, param_resolver, positions, index_map, grad_arr
+        return 100.0
+
+
 def test_tilt_front_modules_keep_legacy_helper_shims(monkeypatch) -> None:
     tilt_in = importlib.import_module("modules.energy.tilt_in")
     tilt_out = importlib.import_module("modules.energy.tilt_out")
@@ -104,3 +159,53 @@ def test_minimizer_evaluation_manager_bridge_syncs_mutable_state() -> None:
     assert minim._evaluation_manager.param_resolver is minim.param_resolver
     assert minim._evaluation_manager.energy_modules is modules
     assert minim._evaluation_manager.energy_module_names is names
+
+
+def test_minimizer_delegates_single_tilt_energy_path_with_sync() -> None:
+    mesh = _single_vertex_mesh()
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager([]),
+        ConstraintModuleManager([]),
+        quiet=True,
+    )
+    minim.energy_modules = [_NonTiltEnergyModule(), _SingleTiltEnergyModule()]
+    minim.energy_module_names = ["non_tilt", "tilt"]
+
+    tilts = np.asarray([[1.0, 2.0, 3.0]], dtype=float)
+    energy = minim._compute_energy_array_with_tilts(
+        positions=mesh.positions_view(),
+        tilts=tilts,
+    )
+
+    assert energy == pytest.approx(6.0)
+    assert minim._evaluation_manager.energy_modules is minim.energy_modules
+    assert minim._evaluation_manager.energy_module_names is minim.energy_module_names
+
+
+def test_minimizer_delegates_single_tilt_gradient_path_with_sync() -> None:
+    mesh = _single_vertex_mesh()
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager([]),
+        ConstraintModuleManager([]),
+        quiet=True,
+    )
+    minim.energy_modules = [_NonTiltEnergyModule(), _SingleTiltGradientModule()]
+    minim.energy_module_names = ["non_tilt", "tilt"]
+
+    tilts = np.asarray([[1.0, 2.0, 3.0]], dtype=float)
+    tilt_grad = np.zeros_like(tilts)
+    energy = minim._compute_energy_and_tilt_gradient_array(
+        positions=mesh.positions_view(),
+        tilts=tilts,
+        tilt_grad_arr=tilt_grad,
+    )
+
+    assert energy == pytest.approx(6.0)
+    np.testing.assert_allclose(tilt_grad, tilts)
+    assert minim._evaluation_manager.energy_modules is minim.energy_modules
