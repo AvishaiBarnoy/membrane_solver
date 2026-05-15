@@ -127,6 +127,83 @@ class _ShapeEnergyGradientModule:
         return 2.0
 
 
+class _LeafletEnergyArrayModule:
+    USES_TILT_LEAFLETS = True
+
+    def compute_energy_array(
+        self,
+        mesh,
+        global_params,
+        param_resolver,
+        *,
+        positions,
+        index_map,
+        tilts_in=None,
+        tilts_out=None,
+    ) -> float:
+        _ = mesh, global_params, param_resolver, positions, index_map
+        return float(np.sum(tilts_in) + 2.0 * np.sum(tilts_out))
+
+
+class _LeafletGradientEnergyModule:
+    USES_TILT_LEAFLETS = True
+
+    def compute_energy_and_gradient_array(
+        self,
+        mesh,
+        global_params,
+        param_resolver,
+        *,
+        positions,
+        index_map,
+        grad_arr,
+        tilts_in=None,
+        tilts_out=None,
+        tilt_in_grad_arr=None,
+        tilt_out_grad_arr=None,
+    ) -> float:
+        _ = (
+            mesh,
+            global_params,
+            param_resolver,
+            positions,
+            index_map,
+            grad_arr,
+            tilt_in_grad_arr,
+            tilt_out_grad_arr,
+        )
+        return float(3.0 * np.sum(tilts_in) + 5.0 * np.sum(tilts_out))
+
+
+class _LeafletRejectsTrialTiltsModule:
+    USES_TILT_LEAFLETS = True
+
+    def compute_energy_array(
+        self,
+        mesh,
+        global_params,
+        param_resolver,
+        *,
+        positions,
+        index_map,
+        **kwargs,
+    ) -> float:
+        _ = mesh, global_params, param_resolver, positions, index_map
+        if "tilts_in" in kwargs or "tilts_out" in kwargs:
+            raise TypeError("legacy module reads tilts from mesh")
+        return 7.0
+
+
+class _LeafletMarkerModule:
+    USES_TILT_LEAFLETS = True
+
+
+class _NonLeafletExplodingModule:
+    def compute_energy_array(self, *args, **kwargs) -> float:
+        _ = args, kwargs
+        raise AssertionError("non-leaflet module should be skipped")
+
+
 def test_tilt_front_modules_keep_legacy_helper_shims(monkeypatch) -> None:
     tilt_in = importlib.import_module("modules.energy.tilt_in")
     tilt_out = importlib.import_module("modules.energy.tilt_out")
@@ -279,6 +356,95 @@ def test_minimizer_delegates_total_energy_with_projected_tilts_path() -> None:
     )
 
     assert energy == pytest.approx(52.0)
+    assert minim._evaluation_manager.energy_modules is minim.energy_modules
+
+
+def test_minimizer_delegates_leaflet_energy_path_with_legacy_fallback() -> None:
+    mesh = _single_vertex_mesh()
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager([]),
+        ConstraintModuleManager([]),
+        quiet=True,
+    )
+    minim.energy_modules = [
+        _LeafletRejectsTrialTiltsModule(),
+        _LeafletEnergyArrayModule(),
+        _LeafletGradientEnergyModule(),
+    ]
+    minim.energy_module_names = ["legacy_leaflet", "leaflet_array", "leaflet_gradient"]
+
+    tilts_in = np.asarray([[1.0, 2.0, 3.0]], dtype=float)
+    tilts_out = np.asarray([[4.0, 5.0, 6.0]], dtype=float)
+    energy = minim._compute_energy_array_with_leaflet_tilts(
+        positions=mesh.positions_view(),
+        tilts_in=tilts_in,
+        tilts_out=tilts_out,
+    )
+
+    assert energy == pytest.approx(7.0 + 36.0 + 93.0)
+    assert minim._evaluation_manager.energy_modules is minim.energy_modules
+    assert minim._evaluation_manager.energy_module_names is minim.energy_module_names
+
+
+def test_minimizer_delegates_leaflet_tilt_dependent_fast_paths() -> None:
+    mesh = _single_vertex_mesh()
+    mesh.global_parameters.set("tilt_modulus_in", 2.0)
+    mesh.global_parameters.set("tilt_modulus_out", 3.0)
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager([]),
+        ConstraintModuleManager([]),
+        quiet=True,
+    )
+    minim.energy_modules = [
+        _NonLeafletExplodingModule(),
+        _LeafletMarkerModule(),
+        _LeafletMarkerModule(),
+    ]
+    minim.energy_module_names = ["shape", "tilt_in", "tilt_out"]
+
+    tilts_in = np.asarray([[1.0, 2.0, 2.0]], dtype=float)
+    tilts_out = np.asarray([[2.0, 0.0, 1.0]], dtype=float)
+    energy = minim._compute_tilt_dependent_energy_with_leaflet_tilts(
+        positions=mesh.positions_view(),
+        tilts_in=tilts_in,
+        tilts_out=tilts_out,
+        tilt_vertex_areas_in=np.asarray([0.5], dtype=float),
+        tilt_vertex_areas_out=np.asarray([2.0], dtype=float),
+    )
+
+    assert energy == pytest.approx(19.5)
+    assert minim._evaluation_manager.energy_modules is minim.energy_modules
+
+
+def test_minimizer_delegates_leaflet_tilt_dependent_legacy_fallback() -> None:
+    mesh = _single_vertex_mesh()
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager([]),
+        ConstraintModuleManager([]),
+        quiet=True,
+    )
+    minim.energy_modules = [
+        _NonLeafletExplodingModule(),
+        _LeafletRejectsTrialTiltsModule(),
+    ]
+    minim.energy_module_names = ["shape", "legacy_leaflet"]
+
+    energy = minim._compute_tilt_dependent_energy_with_leaflet_tilts(
+        positions=mesh.positions_view(),
+        tilts_in=np.asarray([[1.0, 2.0, 3.0]], dtype=float),
+        tilts_out=np.asarray([[4.0, 5.0, 6.0]], dtype=float),
+    )
+
+    assert energy == pytest.approx(7.0)
     assert minim._evaluation_manager.energy_modules is minim.energy_modules
 
 

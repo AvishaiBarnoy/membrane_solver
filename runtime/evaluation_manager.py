@@ -430,25 +430,42 @@ class EvaluationManager:
         for name, module in zip(self.energy_module_names, self.energy_modules):
             scale = self.experimental_energy_scale_fn(str(name))
             if hasattr(module, "compute_energy_array"):
-                E_mod = self._call_module_energy_array(
-                    module,
-                    positions=positions,
-                    index_map=index_map,
-                    tilts_in=tilts_in,
-                    tilts_out=tilts_out,
-                )
+                try:
+                    E_mod = self._call_module_energy_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                    )
+                except TypeError:
+                    E_mod = self._call_module_energy_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                    )
                 total_energy += float(scale) * float(E_mod)
                 continue
 
             if hasattr(module, "compute_energy_and_gradient_array"):
-                E_mod = self._call_module_array(
-                    module,
-                    positions=positions,
-                    index_map=index_map,
-                    grad_arr=grad_dummy,
-                    tilts_in=tilts_in,
-                    tilts_out=tilts_out,
-                )
+                try:
+                    E_mod = self._call_module_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                        tilt_in_grad_arr=None,
+                        tilt_out_grad_arr=None,
+                    )
+                except TypeError:
+                    E_mod = self._call_module_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                    )
                 total_energy += float(scale) * float(E_mod)
                 continue
 
@@ -490,23 +507,63 @@ class EvaluationManager:
             if not getattr(module, "USES_TILT_LEAFLETS", False):
                 continue
 
-            kwargs = {
-                "positions": positions,
-                "index_map": index_map,
-                "tilts_in": tilts_in,
-                "tilts_out": tilts_out,
-                "tilt_vertex_areas_in": tilt_vertex_areas_in,
-                "tilt_vertex_areas_out": tilt_vertex_areas_out,
-            }
+            # Fast path for pure tilt magnitude penalties.
+            if name == "tilt_in" and tilt_vertex_areas_in is not None:
+                k_tilt = float(self.param_resolver.get(None, "tilt_modulus_in") or 0.0)
+                if k_tilt != 0.0:
+                    sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
+                    total_energy += float(
+                        float(scale) * 0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_in)
+                    )
+                continue
+            if name == "tilt_out" and tilt_vertex_areas_out is not None:
+                k_tilt = float(self.param_resolver.get(None, "tilt_modulus_out") or 0.0)
+                if k_tilt != 0.0:
+                    sq = np.einsum("ij,ij->i", tilts_out, tilts_out)
+                    total_energy += float(
+                        float(scale) * 0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_out)
+                    )
+                continue
 
             if hasattr(module, "compute_energy_array"):
-                E_mod = self._call_module_energy_array(module, **kwargs)
+                try:
+                    E_mod = self._call_module_energy_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                    )
+                except TypeError:
+                    # Some tilt modules ignore passed tilts and read from mesh.
+                    E_mod = self._call_module_energy_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                    )
                 total_energy += float(scale) * float(E_mod)
                 continue
 
             if hasattr(module, "compute_energy_and_gradient_array"):
-                kwargs["grad_arr"] = None
-                E_mod = self._call_module_array(module, **kwargs)
+                try:
+                    E_mod = self._call_module_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=None,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                        tilt_in_grad_arr=None,
+                        tilt_out_grad_arr=None,
+                    )
+                except TypeError:
+                    # Some tilt modules ignore passed tilts and read from mesh.
+                    E_mod = self._call_module_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=None,
+                    )
                 total_energy += float(scale) * float(E_mod)
                 continue
 

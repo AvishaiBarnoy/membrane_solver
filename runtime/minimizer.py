@@ -682,73 +682,13 @@ class Minimizer:
         grad_dummy: np.ndarray | None = None,
     ) -> float:
         """Compute total energy for fixed positions and leaflet tilt arrays."""
-        index_map = self.mesh.vertex_index_to_row
-        if grad_dummy is None:
-            grad_dummy = np.zeros_like(positions)
-        else:
-            grad_dummy.fill(0.0)
-        total_energy = 0.0
-
-        for name, module in zip(self.energy_module_names, self.energy_modules):
-            scale = self._experimental_energy_scale_for_module(str(name))
-            if hasattr(module, "compute_energy_array"):
-                try:
-                    E_mod = module.compute_energy_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
-                        positions=positions,
-                        index_map=index_map,
-                        tilts_in=tilts_in,
-                        tilts_out=tilts_out,
-                    )
-                except TypeError:
-                    E_mod = module.compute_energy_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
-                        positions=positions,
-                        index_map=index_map,
-                    )
-                total_energy += float(scale) * float(E_mod)
-                continue
-
-            if hasattr(module, "compute_energy_and_gradient_array"):
-                try:
-                    E_mod = self._call_module_array(
-                        module,
-                        positions=positions,
-                        index_map=index_map,
-                        grad_arr=grad_dummy,
-                        tilts_in=tilts_in,
-                        tilts_out=tilts_out,
-                        tilt_in_grad_arr=None,
-                        tilt_out_grad_arr=None,
-                    )
-                except TypeError:
-                    E_mod = self._call_module_array(
-                        module,
-                        positions=positions,
-                        index_map=index_map,
-                        grad_arr=grad_dummy,
-                    )
-                total_energy += float(scale) * float(E_mod)
-                continue
-
-            try:
-                E_mod, _ = module.compute_energy_and_gradient(
-                    self.mesh,
-                    self.global_params,
-                    self.param_resolver,
-                    compute_gradient=False,
-                )
-            except TypeError:
-                E_mod, _ = module.compute_energy_and_gradient(
-                    self.mesh, self.global_params, self.param_resolver
-                )
-            total_energy += float(scale) * float(E_mod)
-
-        return float(total_energy)
+        self._sync_evaluation_manager()
+        return self._evaluation_manager.compute_energy_array_with_leaflet_tilts(
+            positions=positions,
+            tilts_in=tilts_in,
+            tilts_out=tilts_out,
+            grad_dummy=grad_dummy,
+        )
 
     def _compute_tilt_dependent_energy_with_leaflet_tilts(
         self,
@@ -766,89 +706,17 @@ class Minimizer:
         are constant when positions are frozen, so dropping them preserves
         backtracking accept/reject decisions while avoiding extra work.
         """
-        index_map = self.mesh.vertex_index_to_row
-        if grad_dummy is None:
-            grad_dummy = np.zeros_like(positions)
-        else:
-            grad_dummy.fill(0.0)
-        total_energy = 0.0
-
-        for name, module in zip(self.energy_module_names, self.energy_modules):
-            scale = self._experimental_energy_scale_for_module(str(name))
-            if not getattr(module, "USES_TILT_LEAFLETS", False):
-                continue
-
-            # Fast path for pure tilt magnitude penalties.
-            if name == "tilt_in" and tilt_vertex_areas_in is not None:
-                k_tilt = float(self.param_resolver.get(None, "tilt_modulus_in") or 0.0)
-                if k_tilt != 0.0:
-                    sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
-                    total_energy += float(
-                        float(scale) * 0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_in)
-                    )
-                continue
-            if name == "tilt_out" and tilt_vertex_areas_out is not None:
-                k_tilt = float(self.param_resolver.get(None, "tilt_modulus_out") or 0.0)
-                if k_tilt != 0.0:
-                    sq = np.einsum("ij,ij->i", tilts_out, tilts_out)
-                    total_energy += float(
-                        float(scale) * 0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_out)
-                    )
-                continue
-
-            if hasattr(module, "compute_energy_array"):
-                try:
-                    E_mod = self._call_module_energy_array(
-                        module,
-                        positions=positions,
-                        index_map=index_map,
-                        tilts_in=tilts_in,
-                        tilts_out=tilts_out,
-                    )
-                except TypeError:
-                    # Some tilt modules ignore passed tilts and read from mesh.
-                    E_mod = self._call_module_energy_array(
-                        module,
-                        positions=positions,
-                        index_map=index_map,
-                    )
-                total_energy += float(scale) * float(E_mod)
-                continue
-
-            if hasattr(module, "compute_energy_and_gradient_array"):
-                try:
-                    E_mod = self._call_module_array(
-                        module,
-                        positions=positions,
-                        index_map=index_map,
-                        grad_arr=None,
-                        tilts_in=tilts_in,
-                        tilts_out=tilts_out,
-                        tilt_in_grad_arr=None,
-                        tilt_out_grad_arr=None,
-                    )
-                except TypeError:
-                    # Some tilt modules ignore passed tilts and read from mesh.
-                    E_mod = self._call_module_array(
-                        module,
-                        positions=positions,
-                        index_map=index_map,
-                        grad_arr=None,
-                    )
-                total_energy += float(scale) * float(E_mod)
-                continue
-
-            # Legacy dict modules are rare here; fall back to full energy.
-            # (Inner-loop performance comes from the array modules.)
-            E_full = self._compute_energy_array_with_leaflet_tilts(
+        self._sync_evaluation_manager()
+        return (
+            self._evaluation_manager.compute_tilt_dependent_energy_with_leaflet_tilts(
                 positions=positions,
                 tilts_in=tilts_in,
                 tilts_out=tilts_out,
                 grad_dummy=grad_dummy,
+                tilt_vertex_areas_in=tilt_vertex_areas_in,
+                tilt_vertex_areas_out=tilt_vertex_areas_out,
             )
-            return float(E_full)
-
-        return float(total_energy)
+        )
 
     def _compute_energy_and_leaflet_tilt_gradients_array(
         self,
