@@ -45,7 +45,7 @@ def _maybe_auto_mesh_quality_repair(minimizer, *, iteration: int) -> bool:
     if max_passes <= 0:
         return False
 
-    aspect_p = minimizer._triangle_aspect_percentile(percentile=perc)
+    aspect_p = _triangle_aspect_percentile(minimizer, percentile=perc)
     if not np.isfinite(aspect_p) or aspect_p <= threshold:
         return False
 
@@ -59,7 +59,7 @@ def _maybe_auto_mesh_quality_repair(minimizer, *, iteration: int) -> bool:
         minimizer.mesh.project_tilts_to_tangent()
         minimizer.mesh.increment_version()
         changed_any = True
-        aspect_p = minimizer._triangle_aspect_percentile(percentile=perc)
+        aspect_p = _triangle_aspect_percentile(minimizer, percentile=perc)
         if not np.isfinite(aspect_p) or aspect_p <= threshold:
             break
     if changed_any:
