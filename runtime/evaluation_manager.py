@@ -150,6 +150,37 @@ class EvaluationManager:
 
         return total_energy, grad_arr
 
+    def compute_energy_breakdown(self, *, positions: np.ndarray) -> dict[str, float]:
+        """Return per-module energy contributions for fixed positions."""
+        index_map = self.mesh.vertex_index_to_row
+        grad_dummy = self.energy_context_fn().scratch_array(
+            "energy_breakdown_grad_dummy",
+            shape=positions.shape,
+            dtype=positions.dtype,
+        )
+        breakdown: dict[str, float] = {}
+
+        for name, module in zip(self.energy_module_names, self.energy_modules):
+            scale = self.experimental_energy_scale_fn(str(name))
+            if hasattr(module, "compute_energy_and_gradient_array"):
+                grad_dummy.fill(0.0)
+                E_mod = self._call_module_array(
+                    module,
+                    positions=positions,
+                    index_map=index_map,
+                    grad_arr=grad_dummy,
+                )
+            else:
+                E_mod, _ = module.compute_energy_and_gradient(
+                    self.mesh,
+                    self.global_params,
+                    self.param_resolver,
+                    compute_gradient=False,
+                )
+            breakdown[name] = float(scale) * float(E_mod)
+
+        return breakdown
+
     def compute_energy_array_total(self, *, positions: np.ndarray) -> float:
         """Compute total energy for fixed positions and current mesh tilts."""
         index_map = self.mesh.vertex_index_to_row

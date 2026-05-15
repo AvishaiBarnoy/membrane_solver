@@ -112,10 +112,6 @@ class Minimizer:
         self._soa_grad_dummy: np.ndarray | None = None
         self._last_mesh_op_tilt_constraints_enforced: bool = False
         self._energy_context: EnergyContext | None = None
-        self._module_accepts_ctx: dict[int, bool] = {}
-        self._module_energy_array_spec: dict[
-            int, tuple[bool, bool, frozenset[str] | None]
-        ] = {}
         self._stepper_accepts_trial_energy_fn: bool | None = None
         self._last_tilt_projection_stats: dict[str, float | int | str] = {
             "projection_cadence": "per_step",
@@ -175,8 +171,6 @@ class Minimizer:
         self._tilt_fixed_mask_out_version = -1
         self._tilt_fixed_mask_out_vertex_version = -1
         self._energy_context = None
-        self._module_energy_array_spec = {}
-        self._module_accepts_ctx = {}
         self._stepper_accepts_trial_energy_fn = None
 
     def _sync_evaluation_manager(self) -> None:
@@ -222,98 +216,6 @@ class Minimizer:
                     accepts = False
             self._stepper_accepts_trial_energy_fn = accepts
         return bool(self._stepper_accepts_trial_energy_fn)
-
-    def _call_module_array(self, module, **kwargs):
-        """Call module array API with explicit ctx and graceful fallback."""
-        key = id(module)
-        accepts_ctx = self._module_accepts_ctx.get(key)
-        if accepts_ctx is None:
-            accepts_ctx = False
-            fn = getattr(module, "compute_energy_and_gradient_array", None)
-            if fn is not None:
-                try:
-                    sig = inspect.signature(fn)
-                    if "ctx" in sig.parameters:
-                        accepts_ctx = True
-                    else:
-                        accepts_ctx = any(
-                            p.kind is inspect.Parameter.VAR_KEYWORD
-                            for p in sig.parameters.values()
-                        )
-                except (TypeError, ValueError):
-                    accepts_ctx = False
-            self._module_accepts_ctx[key] = accepts_ctx
-
-        if accepts_ctx:
-            return module.compute_energy_and_gradient_array(
-                self.mesh,
-                self.global_params,
-                self.param_resolver,
-                ctx=self.energy_context(),
-                **kwargs,
-            )
-        return module.compute_energy_and_gradient_array(
-            self.mesh,
-            self.global_params,
-            self.param_resolver,
-            **kwargs,
-        )
-
-    def _call_module_energy_array(self, module, **kwargs):
-        """Call energy-only array API while honoring per-module signatures."""
-        fn = getattr(module, "compute_energy_array")
-        key = id(module)
-        spec = self._module_energy_array_spec.get(key)
-        if spec is None:
-            accepts_resolver = False
-            accepts_ctx = False
-            accepted_kwargs: frozenset[str] | None = frozenset()
-            try:
-                sig = inspect.signature(fn)
-                params = sig.parameters
-                accepts_resolver = "param_resolver" in params
-                accepts_var_kwargs = any(
-                    p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
-                )
-                accepts_ctx = "ctx" in params or accepts_var_kwargs
-                if accepts_var_kwargs:
-                    accepted_kwargs = None
-                else:
-                    accepted_kwargs = frozenset(
-                        name
-                        for name, param in params.items()
-                        if param.kind
-                        in (
-                            inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                            inspect.Parameter.KEYWORD_ONLY,
-                        )
-                    )
-            except (TypeError, ValueError):
-                accepted_kwargs = None
-            spec = (accepts_resolver, accepts_ctx, accepted_kwargs)
-            self._module_energy_array_spec[key] = spec
-
-        accepts_resolver, accepts_ctx, accepted_kwargs = spec
-        call_kwargs = kwargs
-        if accepted_kwargs is not None:
-            call_kwargs = {
-                name: value for name, value in kwargs.items() if name in accepted_kwargs
-            }
-        if accepts_ctx:
-            call_kwargs = dict(call_kwargs)
-            call_kwargs["ctx"] = self.energy_context()
-
-        if accepts_resolver:
-            return fn(self.mesh, self.global_params, self.param_resolver, **call_kwargs)
-        return fn(self.mesh, self.global_params, **call_kwargs)
-
-    @staticmethod
-    def _coerce_energy_value(energy_value) -> float:
-        """Normalize scalar- or array-valued module energies to a float total."""
-        energy_arr = np.asarray(energy_value, dtype=float)
-        if energy_arr.ndim == 0:
-            return float(energy_arr)
-        return float(np.sum(energy_arr))
 
     def _soa_views(self) -> tuple[np.ndarray, Dict[int, int], np.ndarray]:
         """Return cached SoA views for positions, index map, and a scratch buffer."""
@@ -944,28 +846,9 @@ STEP SIZE:\t {self.step_size}
         # minimization iterations into report-only code paths.
         self.mesh._curvature_cache = {}
         self.mesh._curvature_version = -1
-        positions, index_map, grad_dummy = self._soa_views()
-        breakdown: Dict[str, float] = {}
-
-        for name, module in zip(self.energy_module_names, self.energy_modules):
-            scale = self._experimental_energy_scale_for_module(str(name))
-            if hasattr(module, "compute_energy_and_gradient_array"):
-                grad_dummy.fill(0.0)
-                E_mod = self._call_module_array(
-                    module,
-                    positions=positions,
-                    index_map=index_map,
-                    grad_arr=grad_dummy,
-                )
-            else:
-                E_mod, _ = module.compute_energy_and_gradient(
-                    self.mesh,
-                    self.global_params,
-                    self.param_resolver,
-                    compute_gradient=False,
-                )
-            breakdown[name] = float(scale) * float(E_mod)
-        return breakdown
+        positions, _, _ = self._soa_views()
+        self._sync_evaluation_manager()
+        return self._evaluation_manager.compute_energy_breakdown(positions=positions)
 
     def _grad_arr_to_dict(self, grad_arr: np.ndarray) -> Dict[int, np.ndarray]:
         """Convert a dense gradient array into a sparse dict keyed by vertex id."""
