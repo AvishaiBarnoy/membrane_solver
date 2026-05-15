@@ -96,3 +96,28 @@ def test_curvature_kernel_legacy_signature_still_supported(
     assert "va0_raw" not in mesh._curvature_cache
     assert "va1_raw" not in mesh._curvature_cache
     assert "va2_raw" not in mesh._curvature_cache
+
+
+def test_curvature_kernel_strict_nocopy_rejects_non_fortran_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mesh = _single_triangle_mesh()
+    pos = mesh.positions_view()
+    idx = mesh.vertex_index_to_row
+    called = False
+
+    def _kernel(pos_in, tri_in, k_vecs, vertex_areas, weights, zero_based):
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(
+        loader,
+        "get_tilt_curvature_kernel",
+        lambda: SimpleNamespace(func=_kernel, expects_transpose=False),
+    )
+    monkeypatch.setenv("MEMBRANE_FORTRAN_STRICT_NOCOPY", "1")
+
+    assert not pos.flags["F_CONTIGUOUS"]
+    with pytest.raises(ValueError, match="F-contiguous positions/tri_rows"):
+        compute_curvature_data(mesh, pos, idx)
+    assert called is False

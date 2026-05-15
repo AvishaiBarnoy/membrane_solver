@@ -36,43 +36,76 @@ def _apply_beltrami_laplacian(
                 raise TypeError(
                     "Fortran bending kernels require float64 weights/field and int32 tri_rows."
                 )
-            kernel_spec = None
-        else:
+        if kernel_spec is not None:
             if kernel_spec.expects_transpose:
                 ok = (
-                    weights.T.flags["F_CONTIGUOUS"]
+                    weights.dtype == np.float64
+                    and tri_rows.dtype == np.int32
+                    and field.dtype == np.float64
+                    and weights.T.flags["F_CONTIGUOUS"]
                     and tri_rows.T.flags["F_CONTIGUOUS"]
                     and field.T.flags["F_CONTIGUOUS"]
                 )
             else:
                 ok = (
-                    weights.flags["F_CONTIGUOUS"]
+                    weights.dtype == np.float64
+                    and tri_rows.dtype == np.int32
+                    and field.dtype == np.float64
+                    and weights.flags["F_CONTIGUOUS"]
                     and tri_rows.flags["F_CONTIGUOUS"]
                     and field.flags["F_CONTIGUOUS"]
                 )
-            if not ok:
-                if strict:
-                    raise ValueError(
-                        "Fortran bending kernels require F-contiguous weights/tri_rows/field (to avoid hidden copies)."
-                    )
-                kernel_spec = None
+            if strict and not ok:
+                raise ValueError(
+                    "Fortran bending kernels require F-contiguous weights/tri_rows/field (to avoid hidden copies)."
+                )
 
     if kernel_spec is not None:
         if kernel_spec.expects_transpose:
+            weights_t = (
+                weights.T
+                if weights.dtype == np.float64 and weights.T.flags["F_CONTIGUOUS"]
+                else np.asfortranarray(weights.T, dtype=np.float64)
+            )
+            tri_t = (
+                tri_rows.T
+                if tri_rows.dtype == np.int32 and tri_rows.T.flags["F_CONTIGUOUS"]
+                else np.asfortranarray(tri_rows.T, dtype=np.int32)
+            )
+            field_t = (
+                field.T
+                if field.dtype == np.float64 and field.T.flags["F_CONTIGUOUS"]
+                else np.asfortranarray(field.T, dtype=np.float64)
+            )
             try:
-                out_t = np.empty_like(field.T, order="F")
-                kernel_spec.func(weights.T, tri_rows.T, field.T, out_t, 1)
+                out_t = np.empty_like(field_t, order="F")
+                kernel_spec.func(weights_t, tri_t, field_t, out_t, 1)
                 return out_t.T
             except TypeError:
-                out_t = kernel_spec.func(weights.T, tri_rows.T, field.T, 1)
+                out_t = kernel_spec.func(weights_t, tri_t, field_t, 1)
                 return np.asarray(out_t).T
 
+        weights_arg = (
+            weights
+            if weights.dtype == np.float64 and weights.flags["F_CONTIGUOUS"]
+            else np.asfortranarray(weights, dtype=np.float64)
+        )
+        tri_arg = (
+            tri_rows
+            if tri_rows.dtype == np.int32 and tri_rows.flags["F_CONTIGUOUS"]
+            else np.asfortranarray(tri_rows, dtype=np.int32)
+        )
+        field_arg = (
+            field
+            if field.dtype == np.float64 and field.flags["F_CONTIGUOUS"]
+            else np.asfortranarray(field, dtype=np.float64)
+        )
         try:
-            out = np.empty_like(field, order="F")
-            kernel_spec.func(weights, tri_rows, field, out, 1)
+            out = np.empty_like(field_arg, order="F")
+            kernel_spec.func(weights_arg, tri_arg, field_arg, out, 1)
             return out
         except Exception:
-            out = kernel_spec.func(weights, tri_rows, field, 1)
+            out = kernel_spec.func(weights_arg, tri_arg, field_arg, 1)
             return np.asarray(out)
 
     c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
@@ -95,37 +128,60 @@ def _grad_cotan(u: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     if u.dtype != np.float64 or v.dtype != np.float64:
         if strict:
             raise TypeError("Fortran bending kernels require float64 u/v.")
-        return _grad_cotan_numpy(u, v)
+        u_arg = np.asfortranarray(u, dtype=np.float64)
+        v_arg = np.asfortranarray(v, dtype=np.float64)
+    else:
+        u_arg = u
+        v_arg = v
 
     if kernel_spec.expects_transpose:
-        ok = u.T.flags["F_CONTIGUOUS"] and v.T.flags["F_CONTIGUOUS"]
+        ok = u_arg.T.flags["F_CONTIGUOUS"] and v_arg.T.flags["F_CONTIGUOUS"]
     else:
-        ok = u.flags["F_CONTIGUOUS"] and v.flags["F_CONTIGUOUS"]
+        ok = u_arg.flags["F_CONTIGUOUS"] and v_arg.flags["F_CONTIGUOUS"]
 
     if not ok:
         if strict:
             raise ValueError(
                 "Fortran bending kernels require F-contiguous u/v (to avoid hidden copies)."
             )
-        return _grad_cotan_numpy(u, v)
+        if kernel_spec.expects_transpose:
+            u_arg = np.asfortranarray(u_arg.T).T
+            v_arg = np.asfortranarray(v_arg.T).T
+        else:
+            u_arg = np.asfortranarray(u_arg)
+            v_arg = np.asfortranarray(v_arg)
 
     if kernel_spec.expects_transpose:
+        u_t = (
+            u_arg.T
+            if u_arg.T.flags["F_CONTIGUOUS"]
+            else np.asfortranarray(u_arg.T, dtype=np.float64)
+        )
+        v_t = (
+            v_arg.T
+            if v_arg.T.flags["F_CONTIGUOUS"]
+            else np.asfortranarray(v_arg.T, dtype=np.float64)
+        )
         try:
-            gu_t = np.zeros_like(u.T, order="F")
-            gv_t = np.zeros_like(v.T, order="F")
-            kernel_spec.func(u.T, v.T, gu_t, gv_t)
+            gu_t = np.zeros_like(u_t, order="F")
+            gv_t = np.zeros_like(v_t, order="F")
+            kernel_spec.func(u_t, v_t, gu_t, gv_t)
             return gu_t.T, gv_t.T
         except Exception:
-            gu_t, gv_t = kernel_spec.func(u.T, v.T)
+            gu_t, gv_t = kernel_spec.func(u_t, v_t)
             return np.asarray(gu_t).T, np.asarray(gv_t).T
 
+    if not u_arg.flags["F_CONTIGUOUS"]:
+        u_arg = np.asfortranarray(u_arg, dtype=np.float64)
+    if not v_arg.flags["F_CONTIGUOUS"]:
+        v_arg = np.asfortranarray(v_arg, dtype=np.float64)
     try:
-        gu = np.zeros_like(u, order="F")
-        gv = np.zeros_like(v, order="F")
-        kernel_spec.func(u, v, gu, gv)
+        gu = np.zeros_like(u_arg, order="F")
+        gv = np.zeros_like(v_arg, order="F")
+        kernel_spec.func(u_arg, v_arg, gu, gv)
         return gu, gv
     except Exception:
-        gu, gv = kernel_spec.func(u, v)
+        gu, gv = kernel_spec.func(u_arg, v_arg)
         return np.asarray(gu), np.asarray(gv)
 
 
