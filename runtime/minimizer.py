@@ -1288,3 +1288,14 @@ STEP SIZE:\t {self.step_size}
             "iterations": n_steps,
             "terminated_early": False,
         }
+
+    def _optimize_thetaB_scalar(self, *, tilt_mode: str, iteration: int) -> None:
+        _optimize_thetaB_scalar(self, tilt_mode=tilt_mode, iteration=iteration)
+
+    def _triangle_aspect_percentile(self, percentile: float = 90.0) -> float:
+        from .mesh_quality_repair import _triangle_aspect_percentile
+
+        return _triangle_aspect_percentile(self, percentile=percentile)
+
+    def _maybe_auto_mesh_quality_repair(self, *, iteration: int) -> bool:
+        return _maybe_auto_mesh_quality_repair(self, iteration=iteration)
