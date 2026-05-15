@@ -15,12 +15,9 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh
+from modules.constraints.local_interface_shells import build_local_interface_shell_data
 from modules.energy import tilt_leaflet
-from modules.energy.tilt_utils import (
-    _active_row_weights,
-    _resolve_exclude_shared_rim_rows,
-    _resolve_shared_rim_outer_shell_mass_mode,
-)
+from modules.energy import tilt_utils as _tilt_utils
 
 USES_TILT_LEAFLETS = True
 
@@ -86,11 +83,48 @@ def compute_energy_array(
     )
 
 
+def _active_row_weights(mesh: Mesh, param_resolver) -> np.ndarray | None:
+    return _tilt_utils._active_row_weights(mesh, param_resolver, "in")
+
+
+def _resolve_exclude_shared_rim_rows(param_resolver) -> bool:
+    return _tilt_utils._resolve_exclude_shared_rim_rows(param_resolver)
+
+
+def _shared_rim_outer_shell_rows(mesh: Mesh) -> np.ndarray:
+    return _tilt_utils._shared_rim_outer_shell_rows(mesh, "in")
+
+
+def _resolve_shared_rim_outer_row_energy_weight(param_resolver) -> float | None:
+    return _tilt_utils._resolve_shared_rim_outer_row_energy_weight(param_resolver, "in")
+
+
+def _resolve_shared_rim_outer_shell_mass_mode(param_resolver) -> str | None:
+    return _tilt_utils._resolve_shared_rim_outer_shell_mass_mode(param_resolver, "in")
+
+
+def _explicit_trace_layer_active_row_weights(
+    mesh: Mesh, param_resolver
+) -> np.ndarray | None:
+    return _tilt_utils._explicit_trace_layer_active_row_weights(
+        mesh, param_resolver, "in"
+    )
+
+
+def _shared_rim_active_row_weights(mesh: Mesh, param_resolver) -> np.ndarray | None:
+    return _tilt_utils._shared_rim_active_row_weights(mesh, param_resolver, "in")
+
+
 __all__ = [
     "compute_energy_and_gradient",
     "compute_energy_and_gradient_array",
     "compute_energy_array",
     "_active_row_weights",
     "_resolve_exclude_shared_rim_rows",
+    "_shared_rim_outer_shell_rows",
+    "_resolve_shared_rim_outer_row_energy_weight",
     "_resolve_shared_rim_outer_shell_mass_mode",
+    "_explicit_trace_layer_active_row_weights",
+    "_shared_rim_active_row_weights",
+    "build_local_interface_shell_data",
 ]

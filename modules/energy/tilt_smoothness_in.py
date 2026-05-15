@@ -16,6 +16,7 @@ import numpy as np
 
 from geometry.entities import Mesh
 from modules.energy import tilt_smoothness_leaflet as _leaflet
+from modules.energy import tilt_smoothness_utils as _utils
 
 USES_TILT_LEAFLETS = True
 
@@ -90,8 +91,18 @@ def compute_energy_array(
     )
 
 
+def _masked_weights_and_tris(mesh: Mesh, global_params, **kwargs):
+    return _utils._masked_weights_and_tris(mesh, global_params, leaflet="in", **kwargs)
+
+
+def _resolve_smoothness_rigidity(param_resolver) -> float:
+    return _utils._resolve_smoothness_rigidity(param_resolver, "in")
+
+
 __all__ = [
     "compute_energy_and_gradient",
     "compute_energy_and_gradient_array",
     "compute_energy_array",
+    "_masked_weights_and_tris",
+    "_resolve_smoothness_rigidity",
 ]

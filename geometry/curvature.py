@@ -157,21 +157,25 @@ def compute_curvature_data(
                 raise TypeError(
                     "Fortran tilt kernels require float64 positions and int32 tri_rows."
                 )
-            kernel_spec = None
-        else:
+        if kernel_spec is not None:
             if kernel_spec.expects_transpose:
                 ok = (
-                    positions.T.flags["F_CONTIGUOUS"]
+                    positions.dtype == np.float64
+                    and tri_rows.dtype == np.int32
+                    and positions.T.flags["F_CONTIGUOUS"]
                     and tri_rows.T.flags["F_CONTIGUOUS"]
                 )
             else:
-                ok = positions.flags["F_CONTIGUOUS"] and tri_rows.flags["F_CONTIGUOUS"]
-            if not ok:
-                if strict:
-                    raise ValueError(
-                        "Fortran tilt kernels require F-contiguous positions/tri_rows (to avoid hidden copies)."
-                    )
-                kernel_spec = None
+                ok = (
+                    positions.dtype == np.float64
+                    and tri_rows.dtype == np.int32
+                    and positions.flags["F_CONTIGUOUS"]
+                    and tri_rows.flags["F_CONTIGUOUS"]
+                )
+            if strict and not ok:
+                raise ValueError(
+                    "Fortran tilt kernels require F-contiguous positions/tri_rows (to avoid hidden copies)."
+                )
 
     if kernel_spec is not None:
         nf = tri_rows.shape[0]
@@ -179,8 +183,16 @@ def compute_curvature_data(
         va1 = np.zeros(nf, dtype=np.float64, order="F")
         va2 = np.zeros(nf, dtype=np.float64, order="F")
         if kernel_spec.expects_transpose:
-            pos_t = positions.T
-            tri_t = tri_rows.T
+            pos_t = (
+                positions.T
+                if positions.dtype == np.float64 and positions.T.flags["F_CONTIGUOUS"]
+                else np.asfortranarray(positions.T, dtype=np.float64)
+            )
+            tri_t = (
+                tri_rows.T
+                if tri_rows.dtype == np.int32 and tri_rows.T.flags["F_CONTIGUOUS"]
+                else np.asfortranarray(tri_rows.T, dtype=np.int32)
+            )
             k_vecs = np.zeros((3, n_verts), dtype=np.float64, order="F")
             vertex_areas = np.zeros(n_verts, dtype=np.float64, order="F")
             weights = np.zeros((3, nf), dtype=np.float64, order="F")
@@ -200,13 +212,23 @@ def compute_curvature_data(
             vertex_areas = np.asarray(vertex_areas)
             weights = np.asarray(weights).T
         else:
+            pos_arg = (
+                positions
+                if positions.dtype == np.float64 and positions.flags["F_CONTIGUOUS"]
+                else np.asfortranarray(positions, dtype=np.float64)
+            )
+            tri_arg = (
+                tri_rows
+                if tri_rows.dtype == np.int32 and tri_rows.flags["F_CONTIGUOUS"]
+                else np.asfortranarray(tri_rows, dtype=np.int32)
+            )
             k_vecs = np.zeros((n_verts, 3), dtype=np.float64, order="F")
             vertex_areas = np.zeros(n_verts, dtype=np.float64, order="F")
             weights = np.zeros((nf, 3), dtype=np.float64, order="F")
             has_optional_areas = _call_fortran_curvature_kernel(
                 kernel_spec.func,
-                positions=positions,
-                tri_rows=tri_rows,
+                positions=pos_arg,
+                tri_rows=tri_arg,
                 k_vecs=k_vecs,
                 vertex_areas=vertex_areas,
                 weights=weights,
