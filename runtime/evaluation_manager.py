@@ -602,7 +602,42 @@ class EvaluationManager:
 
         for name, module in zip(self.energy_module_names, self.energy_modules):
             scale = self.experimental_energy_scale_fn(str(name))
-            if not getattr(module, "USES_TILT_LEAFLETS", False):
+            # Fast path for the pure tilt magnitude penalties: when positions
+            # are frozen (tilt relaxation inner loop), precomputed vertex areas
+            # avoid repeated triangle cross-products.
+            if (
+                name == "tilt_in"
+                and tilt_vertex_areas_in is not None
+                and getattr(module, "USES_TILT_LEAFLETS", False)
+            ):
+                k_tilt = float(self.param_resolver.get(None, "tilt_modulus_in") or 0.0)
+                if k_tilt != 0.0:
+                    sq = np.einsum("ij,ij->i", tilts_in, tilts_in)
+                    total_energy += float(
+                        float(scale) * 0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_in)
+                    )
+                    tilt_in_grad_arr += (
+                        float(scale) * k_tilt * tilts_in * tilt_vertex_areas_in[:, None]
+                    )
+                continue
+
+            if (
+                name == "tilt_out"
+                and tilt_vertex_areas_out is not None
+                and getattr(module, "USES_TILT_LEAFLETS", False)
+            ):
+                k_tilt = float(self.param_resolver.get(None, "tilt_modulus_out") or 0.0)
+                if k_tilt != 0.0:
+                    sq = np.einsum("ij,ij->i", tilts_out, tilts_out)
+                    total_energy += float(
+                        float(scale) * 0.5 * k_tilt * np.sum(sq * tilt_vertex_areas_out)
+                    )
+                    tilt_out_grad_arr += (
+                        float(scale)
+                        * k_tilt
+                        * tilts_out
+                        * tilt_vertex_areas_out[:, None]
+                    )
                 continue
 
             if hasattr(module, "compute_energy_and_gradient_array"):
@@ -617,18 +652,24 @@ class EvaluationManager:
                     gin_before = tilt_in_grad_arr.copy()
                     gout_before = tilt_out_grad_arr.copy()
 
-                E_mod = self._call_module_array(
-                    module,
-                    positions=positions,
-                    index_map=index_map,
-                    grad_arr=grad_arg,
-                    tilts_in=tilts_in,
-                    tilts_out=tilts_out,
-                    tilt_in_grad_arr=tilt_in_grad_arr,
-                    tilt_out_grad_arr=tilt_out_grad_arr,
-                    tilt_vertex_areas_in=tilt_vertex_areas_in,
-                    tilt_vertex_areas_out=tilt_vertex_areas_out,
-                )
+                try:
+                    E_mod = self._call_module_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_arg,
+                        tilts_in=tilts_in,
+                        tilts_out=tilts_out,
+                        tilt_in_grad_arr=tilt_in_grad_arr,
+                        tilt_out_grad_arr=tilt_out_grad_arr,
+                    )
+                except TypeError:
+                    E_mod = self._call_module_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_arg,
+                    )
 
                 if gin_before is not None:
                     delta_in = tilt_in_grad_arr - gin_before
@@ -642,18 +683,10 @@ class EvaluationManager:
             res = module.compute_energy_and_gradient(
                 self.mesh, self.global_params, self.param_resolver
             )
+            if not isinstance(res, tuple) or len(res) < 2:
+                raise ValueError(
+                    f"Unexpected return from energy module {module}: {res!r}"
+                )
             total_energy += float(scale) * float(res[0])
-            if len(res) >= 4:
-                gin, gout = res[2], res[3]
-                if gin is not None:
-                    for vid, gvec in gin.items():
-                        row = index_map.get(int(vid))
-                        if row is not None:
-                            tilt_in_grad_arr[row] += float(scale) * gvec
-                if gout is not None:
-                    for vid, gvec in gout.items():
-                        row = index_map.get(int(vid))
-                        if row is not None:
-                            tilt_out_grad_arr[row] += float(scale) * gvec
 
         return float(total_energy)
