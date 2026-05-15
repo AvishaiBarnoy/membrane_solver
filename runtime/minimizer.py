@@ -745,86 +745,11 @@ class Minimizer:
         Uses the array API when available and passes ``tilts`` opportunistically
         (falling back when a module does not accept tilt arguments).
         """
-        index_map = self.mesh.vertex_index_to_row
-        grad_dummy = np.zeros_like(positions)
-        total_energy = 0.0
-
-        module_names = self.energy_module_names
-        if len(module_names) != len(self.energy_modules):
-            module_names = [
-                getattr(module, "__name__", module.__class__.__name__)
-                for module in self.energy_modules
-            ]
-
-        for name, module in zip(module_names, self.energy_modules):
-            scale = self._experimental_energy_scale_for_module(str(name))
-            if not getattr(module, "USES_TILT", False):
-                continue
-            if hasattr(module, "compute_energy_array"):
-                try:
-                    E_mod = module.compute_energy_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
-                        positions=positions,
-                        index_map=index_map,
-                        tilts=tilts,
-                    )
-                except TypeError:
-                    E_mod = module.compute_energy_array(
-                        self.mesh,
-                        self.global_params,
-                        self.param_resolver,
-                        positions=positions,
-                        index_map=index_map,
-                    )
-                total_energy += float(scale) * float(E_mod)
-                continue
-
-            if hasattr(module, "compute_energy_and_gradient_array"):
-                try:
-                    E_mod = self._call_module_array(
-                        module,
-                        positions=positions,
-                        index_map=index_map,
-                        grad_arr=grad_dummy,
-                        tilts=tilts,
-                        tilt_grad_arr=None,
-                    )
-                except TypeError:
-                    try:
-                        E_mod = self._call_module_array(
-                            module,
-                            positions=positions,
-                            index_map=index_map,
-                            grad_arr=grad_dummy,
-                            tilts=tilts,
-                        )
-                    except TypeError:
-                        E_mod = self._call_module_array(
-                            module,
-                            positions=positions,
-                            index_map=index_map,
-                            grad_arr=grad_dummy,
-                        )
-                total_energy += float(scale) * float(E_mod)
-                continue
-
-            # Legacy dict modules (typically tilt-independent): energy-only path.
-            try:
-                E_mod, _ = module.compute_energy_and_gradient(
-                    self.mesh,
-                    self.global_params,
-                    self.param_resolver,
-                    compute_gradient=False,
-                )
-            except TypeError:
-                E_mod, _ = module.compute_energy_and_gradient(
-                    self.mesh, self.global_params, self.param_resolver
-                )
-            total_energy += float(scale) * float(E_mod)
-
-        return float(total_energy)
+        self._sync_evaluation_manager()
+        return self._evaluation_manager.compute_energy_array_with_tilts(
+            positions=positions,
+            tilts=tilts,
+        )
 
     def _compute_energy_and_tilt_gradient_array(
         self,
@@ -834,76 +759,12 @@ class Minimizer:
         tilt_grad_arr: np.ndarray,
     ) -> float:
         """Compute tilt-dependent energy and accumulate dense tilt gradient."""
-        index_map = self.mesh.vertex_index_to_row
-        grad_dummy = np.zeros_like(positions)
-        tilt_grad_arr.fill(0.0)
-        total_energy = 0.0
-
-        module_names = self.energy_module_names
-        if len(module_names) != len(self.energy_modules):
-            module_names = [
-                getattr(module, "__name__", module.__class__.__name__)
-                for module in self.energy_modules
-            ]
-
-        for name, module in zip(module_names, self.energy_modules):
-            scale = self._experimental_energy_scale_for_module(str(name))
-            if not getattr(module, "USES_TILT", False):
-                continue
-            if hasattr(module, "compute_energy_and_gradient_array"):
-                grad_before = None
-                if abs(float(scale) - 1.0) > 1.0e-15:
-                    grad_before = tilt_grad_arr.copy()
-                try:
-                    E_mod = self._call_module_array(
-                        module,
-                        positions=positions,
-                        index_map=index_map,
-                        grad_arr=grad_dummy,
-                        tilts=tilts,
-                        tilt_grad_arr=tilt_grad_arr,
-                    )
-                except TypeError:
-                    try:
-                        E_mod = self._call_module_array(
-                            module,
-                            positions=positions,
-                            index_map=index_map,
-                            grad_arr=grad_dummy,
-                            tilts=tilts,
-                        )
-                    except TypeError:
-                        E_mod = self._call_module_array(
-                            module,
-                            positions=positions,
-                            index_map=index_map,
-                            grad_arr=grad_dummy,
-                        )
-                if grad_before is not None:
-                    grad_delta = tilt_grad_arr - grad_before
-                    tilt_grad_arr[:] = grad_before + (float(scale) * grad_delta)
-                total_energy += float(scale) * float(E_mod)
-                continue
-
-            # Dict fallback: accept modules that optionally return a tilt gradient.
-            res = module.compute_energy_and_gradient(
-                self.mesh, self.global_params, self.param_resolver
-            )
-
-            if not isinstance(res, tuple) or len(res) < 2:
-                raise ValueError(
-                    f"Unexpected return from energy module {module}: {res!r}"
-                )
-
-            total_energy += float(scale) * float(res[0])
-            if len(res) >= 3 and res[2] is not None:
-                g_tilt = res[2]
-                for vidx, gvec in g_tilt.items():
-                    row = index_map.get(int(vidx))
-                    if row is not None:
-                        tilt_grad_arr[row] += float(scale) * gvec
-
-        return float(total_energy)
+        self._sync_evaluation_manager()
+        return self._evaluation_manager.compute_energy_and_tilt_gradient_array(
+            positions=positions,
+            tilts=tilts,
+            tilt_grad_arr=tilt_grad_arr,
+        )
 
     def _compute_energy_array_with_leaflet_tilts(
         self,

@@ -234,25 +234,60 @@ class EvaluationManager:
         grad_dummy = np.zeros_like(positions)
         total_energy = 0.0
 
-        for name, module in zip(self.energy_module_names, self.energy_modules):
+        module_names = self.energy_module_names
+        if len(module_names) != len(self.energy_modules):
+            module_names = [
+                getattr(module, "__name__", module.__class__.__name__)
+                for module in self.energy_modules
+            ]
+
+        for name, module in zip(module_names, self.energy_modules):
             scale = self.experimental_energy_scale_fn(str(name))
             if not getattr(module, "USES_TILT", False):
                 continue
             if hasattr(module, "compute_energy_array"):
-                E_mod = self._call_module_energy_array(
-                    module, positions=positions, index_map=index_map, tilts=tilts
-                )
+                try:
+                    E_mod = self._call_module_energy_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        tilts=tilts,
+                    )
+                except TypeError:
+                    E_mod = self._call_module_energy_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                    )
                 total_energy += float(scale) * float(E_mod)
                 continue
 
             if hasattr(module, "compute_energy_and_gradient_array"):
-                E_mod = self._call_module_array(
-                    module,
-                    positions=positions,
-                    index_map=index_map,
-                    grad_arr=grad_dummy,
-                    tilts=tilts,
-                )
+                try:
+                    E_mod = self._call_module_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                        tilts=tilts,
+                        tilt_grad_arr=None,
+                    )
+                except TypeError:
+                    try:
+                        E_mod = self._call_module_array(
+                            module,
+                            positions=positions,
+                            index_map=index_map,
+                            grad_arr=grad_dummy,
+                            tilts=tilts,
+                        )
+                    except TypeError:
+                        E_mod = self._call_module_array(
+                            module,
+                            positions=positions,
+                            index_map=index_map,
+                            grad_arr=grad_dummy,
+                        )
                 total_energy += float(scale) * float(E_mod)
                 continue
 
@@ -284,7 +319,14 @@ class EvaluationManager:
         tilt_grad_arr.fill(0.0)
         total_energy = 0.0
 
-        for name, module in zip(self.energy_module_names, self.energy_modules):
+        module_names = self.energy_module_names
+        if len(module_names) != len(self.energy_modules):
+            module_names = [
+                getattr(module, "__name__", module.__class__.__name__)
+                for module in self.energy_modules
+            ]
+
+        for name, module in zip(module_names, self.energy_modules):
             scale = self.experimental_energy_scale_fn(str(name))
             if not getattr(module, "USES_TILT", False):
                 continue
@@ -293,14 +335,31 @@ class EvaluationManager:
                 if abs(float(scale) - 1.0) > 1.0e-15:
                     grad_before = tilt_grad_arr.copy()
 
-                E_mod = self._call_module_array(
-                    module,
-                    positions=positions,
-                    index_map=index_map,
-                    grad_arr=grad_dummy,
-                    tilts=tilts,
-                    tilt_grad_arr=tilt_grad_arr,
-                )
+                try:
+                    E_mod = self._call_module_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                        tilts=tilts,
+                        tilt_grad_arr=tilt_grad_arr,
+                    )
+                except TypeError:
+                    try:
+                        E_mod = self._call_module_array(
+                            module,
+                            positions=positions,
+                            index_map=index_map,
+                            grad_arr=grad_dummy,
+                            tilts=tilts,
+                        )
+                    except TypeError:
+                        E_mod = self._call_module_array(
+                            module,
+                            positions=positions,
+                            index_map=index_map,
+                            grad_arr=grad_dummy,
+                        )
 
                 if grad_before is not None:
                     grad_delta = tilt_grad_arr - grad_before
@@ -311,6 +370,10 @@ class EvaluationManager:
             res = module.compute_energy_and_gradient(
                 self.mesh, self.global_params, self.param_resolver
             )
+            if not isinstance(res, tuple) or len(res) < 2:
+                raise ValueError(
+                    f"Unexpected return from energy module {module}: {res!r}"
+                )
             total_energy += float(scale) * float(res[0])
             if len(res) >= 3 and res[2] is not None:
                 g_tilt = res[2]
