@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
+import pytest
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -322,6 +323,30 @@ def test_compute_energy_falls_back_to_gradient_array_when_needed() -> None:
     assert fallback_mod.grad_calls == 1
 
 
+def test_compute_energy_and_gradient_array_zeroes_fixed_vertices_after_delegation():
+    mesh = build_min_mesh()
+    mesh.constraint_modules = []
+    mesh.vertices[0].fixed = True
+    mesh._touch_fixed_flags()
+    gp = GlobalParameters()
+    energy = DummyEnergyModule(energy=2.0, grad_value=1.0)
+    minim = Minimizer(
+        mesh,
+        gp,
+        MagicMock(),
+        DummyEnergyManager(energy),
+        ConstraintModuleManager([]),
+        constraint_modules=[],
+        quiet=True,
+    )
+
+    total_energy, grad_arr = minim.compute_energy_and_gradient_array()
+
+    assert total_energy == pytest.approx(2.0)
+    np.testing.assert_allclose(grad_arr[0], np.zeros(3))
+    np.testing.assert_allclose(grad_arr[1:, 0], np.ones(2))
+
+
 def test_minimizer_passes_trial_energy_fn_for_unconstrained_array_steps() -> None:
     mesh = build_min_mesh()
     mesh.constraint_modules = []
@@ -522,6 +547,21 @@ def test_minimize_volume_drift_triggers_enforcement():
     minim.minimize(n_steps=1)
     assert "mesh_operation" in cm.calls
     assert stepper.reset_calls >= 1
+
+
+def test_minimize_successful_run_preserves_final_constraint_projection_context():
+    mesh = build_min_mesh()
+    gp = GlobalParameters({"max_zero_steps": 1})
+    energy = DummyEnergyModule(energy=2.0, grad_value=1.0)
+    cm = DummyConstraintManager()
+    stepper = DummyStepper(results=[(True, 1e-3, 2.0)])
+    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
+
+    out = minim.minimize(n_steps=1)
+
+    assert out["terminated_early"] is False
+    assert cm.calls[0] == "mesh_operation"
+    assert cm.calls[-1] == "finalize"
 
 
 def test_minimize_energy_consistency_logs_debug(caplog, monkeypatch):
