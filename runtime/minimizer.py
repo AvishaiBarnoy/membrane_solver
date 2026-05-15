@@ -824,19 +824,13 @@ STEP SIZE:\t {self.step_size}
 
     def compute_energy_and_gradient_array(self):
         """Return total energy and dense gradient array for the current mesh."""
-        positions, index_map, _ = self._soa_views()
-        grad_arr = np.zeros_like(positions)
-
-        total_energy = 0.0
-        for module in self.energy_modules:
-            # Use fast array path
-            E_mod = self._call_module_array(
-                module,
-                positions=positions,
-                index_map=index_map,
-                grad_arr=grad_arr,
+        positions, _, _ = self._soa_views()
+        self._sync_evaluation_manager()
+        total_energy, grad_arr = (
+            self._evaluation_manager.compute_energy_and_gradient_array(
+                positions=positions
             )
-            total_energy += E_mod
+        )
 
         # Apply constraint modifications to the shape gradient. When leaflet
         # tilts are active, joint shape+tilt constraints should project the

@@ -131,6 +131,25 @@ class EvaluationManager:
         fn = getattr(module, "compute_energy_array")
         return self._call_fn(fn, **kwargs)
 
+    def compute_energy_and_gradient_array(
+        self, *, positions: np.ndarray
+    ) -> tuple[float, np.ndarray]:
+        """Return raw module energy and dense shape gradient for positions."""
+        index_map = self.mesh.vertex_index_to_row
+        grad_arr = np.zeros_like(positions)
+
+        total_energy = 0.0
+        for module in self.energy_modules:
+            E_mod = self._call_module_array(
+                module,
+                positions=positions,
+                index_map=index_map,
+                grad_arr=grad_arr,
+            )
+            total_energy += E_mod
+
+        return total_energy, grad_arr
+
     def compute_energy_array_total(self, *, positions: np.ndarray) -> float:
         """Compute total energy for fixed positions and current mesh tilts."""
         index_map = self.mesh.vertex_index_to_row

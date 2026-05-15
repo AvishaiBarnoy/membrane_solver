@@ -383,6 +383,27 @@ def test_minimizer_delegates_total_energy_path_with_sync() -> None:
     assert minim._evaluation_manager.energy_module_names is minim.energy_module_names
 
 
+def test_minimizer_delegates_shape_gradient_assembly_with_sync() -> None:
+    mesh = _single_vertex_mesh()
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager([]),
+        ConstraintModuleManager([]),
+        quiet=True,
+    )
+    minim.energy_modules = [_ShapeEnergyGradientModule()]
+    minim.energy_module_names = ["shape"]
+
+    energy, grad_arr = minim.compute_energy_and_gradient_array()
+
+    assert energy == pytest.approx(2.0)
+    np.testing.assert_allclose(grad_arr, np.ones_like(mesh.positions_view()))
+    assert minim._evaluation_manager.energy_modules is minim.energy_modules
+    assert minim._evaluation_manager.energy_module_names is minim.energy_module_names
+
+
 def test_minimizer_delegates_total_energy_with_projected_tilts_path() -> None:
     mesh = _single_vertex_mesh()
     minim = Minimizer(

@@ -673,10 +673,10 @@ def test_compute_energy_and_gradient_array_uses_joint_projection_for_stage_a() -
         np.zeros_like(mesh.positions_view()),
     )
 
-    def _call_module_array(module, **kwargs):
-        _ = module
-        kwargs["grad_arr"][:] = np.asarray([[1.0, 2.0, 0.0], [0.0, -1.0, 1.0]])
-        return 3.25
+    class RawEvaluationManager:
+        def compute_energy_and_gradient_array(self, *, positions):
+            _ = positions
+            return 3.25, np.asarray([[1.0, 2.0, 0.0], [0.0, -1.0, 1.0]])
 
     def _tilt_gradients(**kwargs):
         kwargs["tilt_in_grad_arr"][:] = np.asarray([[0.25, 0.0, 0.0], [0.0, 0.5, 0.0]])
@@ -685,7 +685,8 @@ def test_compute_energy_and_gradient_array_uses_joint_projection_for_stage_a() -
         )
         return 0.0
 
-    minim._call_module_array = _call_module_array
+    minim._sync_evaluation_manager = lambda: None
+    minim._evaluation_manager = RawEvaluationManager()
     minim._compute_energy_and_leaflet_tilts_array = lambda *args, **kwargs: None
     minim._compute_energy_and_leaflet_tilt_gradients_array = _tilt_gradients
     minim.constraint_manager = cm
@@ -729,12 +730,13 @@ def test_compute_energy_and_gradient_array_uses_legacy_projection_outside_stage_
         np.zeros_like(mesh.positions_view()),
     )
 
-    def _call_module_array(module, **kwargs):
-        _ = module
-        kwargs["grad_arr"][:] = np.asarray([[1.0, 2.0, 0.0], [0.0, -1.0, 1.0]])
-        return 3.25
+    class RawEvaluationManager:
+        def compute_energy_and_gradient_array(self, *, positions):
+            _ = positions
+            return 3.25, np.asarray([[1.0, 2.0, 0.0], [0.0, -1.0, 1.0]])
 
-    minim._call_module_array = _call_module_array
+    minim._sync_evaluation_manager = lambda: None
+    minim._evaluation_manager = RawEvaluationManager()
     minim.constraint_manager = cm
 
     energy, grad_arr = Minimizer.compute_energy_and_gradient_array(minim)
