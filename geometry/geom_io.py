@@ -11,6 +11,8 @@ from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from runtime.refinement import refine_polygonal_facets
 
+from .io_writers import save_geometry
+
 logger = logging.getLogger("membrane_solver")
 
 _CONSTRAINT_NAME_ALIASES = {
@@ -943,3 +945,6 @@ def parse_geometry(data: dict) -> Mesh:
         raise
 
     return mesh
+
+
+__all__ = ["load_data", "parse_geometry", "save_geometry"]
