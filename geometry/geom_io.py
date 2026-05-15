@@ -11,7 +11,7 @@ from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from runtime.refinement import refine_polygonal_facets
 
-from .io_writers import save_geometry
+from .io_writers import save_geometry as save_geometry
 
 logger = logging.getLogger("membrane_solver")
 
