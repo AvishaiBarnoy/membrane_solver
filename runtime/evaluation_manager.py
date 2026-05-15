@@ -190,21 +190,48 @@ class EvaluationManager:
         for name, module in zip(self.energy_module_names, self.energy_modules):
             scale = self.experimental_energy_scale_fn(str(name))
             if hasattr(module, "compute_energy_array"):
-                E_mod = self._call_module_energy_array(
-                    module, positions=positions, index_map=index_map, tilts=tilts
-                )
+                kwargs = {"positions": positions, "index_map": index_map}
+                if getattr(module, "USES_TILT", False):
+                    kwargs["tilts"] = tilts
+                E_mod = self._call_module_energy_array(module, **kwargs)
                 total_energy += float(scale) * self._coerce_energy_value(E_mod)
                 continue
 
             if hasattr(module, "compute_energy_and_gradient_array"):
                 grad_dummy.fill(0.0)
-                E_mod = self._call_module_array(
-                    module,
-                    positions=positions,
-                    index_map=index_map,
-                    grad_arr=grad_dummy,
-                    tilts=tilts,
-                )
+                if getattr(module, "USES_TILT", False):
+                    try:
+                        E_mod = self._call_module_array(
+                            module,
+                            positions=positions,
+                            index_map=index_map,
+                            grad_arr=grad_dummy,
+                            tilts=tilts,
+                            tilt_grad_arr=None,
+                        )
+                    except TypeError:
+                        try:
+                            E_mod = self._call_module_array(
+                                module,
+                                positions=positions,
+                                index_map=index_map,
+                                grad_arr=grad_dummy,
+                                tilts=tilts,
+                            )
+                        except TypeError:
+                            E_mod = self._call_module_array(
+                                module,
+                                positions=positions,
+                                index_map=index_map,
+                                grad_arr=grad_dummy,
+                            )
+                else:
+                    E_mod = self._call_module_array(
+                        module,
+                        positions=positions,
+                        index_map=index_map,
+                        grad_arr=grad_dummy,
+                    )
                 total_energy += float(scale) * self._coerce_energy_value(E_mod)
                 continue
 

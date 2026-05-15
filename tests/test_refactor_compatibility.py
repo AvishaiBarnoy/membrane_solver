@@ -65,6 +65,23 @@ class _SingleTiltGradientModule:
         return float(np.sum(tilts))
 
 
+class _SingleTiltEnergyArrayModule:
+    USES_TILT = True
+
+    def compute_energy_array(
+        self,
+        mesh,
+        global_params,
+        param_resolver,
+        *,
+        positions,
+        index_map,
+        tilts=None,
+    ) -> float:
+        _ = mesh, global_params, param_resolver, positions, index_map
+        return float(np.sum(np.asarray(tilts, dtype=float)))
+
+
 class _NonTiltEnergyModule:
     def compute_energy_and_gradient_array(
         self,
@@ -78,6 +95,36 @@ class _NonTiltEnergyModule:
     ) -> float:
         _ = mesh, global_params, param_resolver, positions, index_map, grad_arr
         return 100.0
+
+
+class _NonTiltEnergyArrayRejectsTiltsModule:
+    def compute_energy_array(
+        self,
+        mesh,
+        global_params,
+        param_resolver,
+        *,
+        positions,
+        index_map,
+    ) -> float:
+        _ = mesh, global_params, param_resolver, positions, index_map
+        return 40.0
+
+
+class _ShapeEnergyGradientModule:
+    def compute_energy_and_gradient_array(
+        self,
+        mesh,
+        global_params,
+        param_resolver,
+        *,
+        positions,
+        index_map,
+        grad_arr,
+    ) -> float:
+        _ = mesh, global_params, param_resolver, positions, index_map
+        grad_arr += 1.0
+        return 2.0
 
 
 def test_tilt_front_modules_keep_legacy_helper_shims(monkeypatch) -> None:
@@ -183,6 +230,56 @@ def test_minimizer_delegates_single_tilt_energy_path_with_sync() -> None:
     assert energy == pytest.approx(6.0)
     assert minim._evaluation_manager.energy_modules is minim.energy_modules
     assert minim._evaluation_manager.energy_module_names is minim.energy_module_names
+
+
+def test_minimizer_delegates_total_energy_path_with_sync() -> None:
+    mesh = _single_vertex_mesh()
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager([]),
+        ConstraintModuleManager([]),
+        quiet=True,
+    )
+    minim.energy_modules = [
+        _NonTiltEnergyArrayRejectsTiltsModule(),
+        _ShapeEnergyGradientModule(),
+    ]
+    minim.energy_module_names = ["array", "gradient"]
+
+    energy = minim._compute_energy_array_total(positions=mesh.positions_view())
+
+    assert energy == pytest.approx(42.0)
+    assert minim._evaluation_manager.energy_modules is minim.energy_modules
+    assert minim._evaluation_manager.energy_module_names is minim.energy_module_names
+
+
+def test_minimizer_delegates_total_energy_with_projected_tilts_path() -> None:
+    mesh = _single_vertex_mesh()
+    minim = Minimizer(
+        mesh,
+        mesh.global_parameters,
+        GradientDescent(),
+        EnergyModuleManager([]),
+        ConstraintModuleManager([]),
+        quiet=True,
+    )
+    minim.energy_modules = [
+        _NonTiltEnergyArrayRejectsTiltsModule(),
+        _SingleTiltEnergyArrayModule(),
+        _SingleTiltGradientModule(),
+    ]
+    minim.energy_module_names = ["non_tilt", "tilt_array", "tilt_gradient"]
+
+    tilts = np.asarray([[1.0, 2.0, 3.0]], dtype=float)
+    energy = minim._compute_total_energy_array_with_tilts(
+        positions=mesh.positions_view(),
+        tilts=tilts,
+    )
+
+    assert energy == pytest.approx(52.0)
+    assert minim._evaluation_manager.energy_modules is minim.energy_modules
 
 
 def test_minimizer_delegates_single_tilt_gradient_path_with_sync() -> None:
