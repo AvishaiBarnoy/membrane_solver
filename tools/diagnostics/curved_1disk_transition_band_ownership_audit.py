@@ -87,10 +87,12 @@ def _project_shape_gradient(minim, grad: np.ndarray) -> np.ndarray:
 def _module_projected_gradients(minim) -> tuple[dict[str, dict[str, object]], float]:
     """Return projected shape-gradient rows by runtime module."""
     positions, index_map, grad_dummy = minim._soa_views()
+    minim._sync_evaluation_manager()
+    evaluator = minim._evaluation_manager
     module_rows: dict[str, dict[str, object]] = {}
     for name, module in zip(minim.energy_module_names, minim.energy_modules):
         grad = np.zeros_like(positions)
-        energy = minim._call_module_array(
+        energy = evaluator._call_module_array(
             module,
             positions=positions,
             index_map=index_map,
