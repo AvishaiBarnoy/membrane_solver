@@ -52,6 +52,7 @@ GHOST_BAD_BRANCH_BASELINE = {
     "free_inner_vs_free_outer_director_gap": 0.008275776127628786,
     "thetaB_value": 0.21000000000000005,
 }
+FIXED_THETA_SWEEP_VALUES = (0.18, 0.20, 0.21, 0.24, 0.30)
 
 
 def _get_path(dct: dict[str, Any], path: str, default: Any = None) -> Any:
@@ -160,6 +161,47 @@ def _interface_summary(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _runtime_breakdown_summary(report: dict[str, Any]) -> dict[str, float]:
+    breakdown = report.get("metrics", {}).get("breakdown", {})
+    if not isinstance(breakdown, dict):
+        return {}
+    return {str(key): _as_float(value) for key, value in breakdown.items()}
+
+
+def _reduced_terms_summary(report: dict[str, Any]) -> dict[str, float]:
+    reduced = report.get("metrics", {}).get("reduced_terms", {})
+    if not isinstance(reduced, dict):
+        return {}
+    return {str(key): _as_float(value) for key, value in reduced.items()}
+
+
+def _run_fixed_theta_sweep(
+    *, base_fixture: Path, label: str, tmpdir: Path
+) -> dict[str, Any]:
+    base_doc = yaml.safe_load(base_fixture.read_text(encoding="utf-8")) or {}
+    results: dict[str, Any] = {}
+    for theta in FIXED_THETA_SWEEP_VALUES:
+        doc = copy.deepcopy(base_doc)
+        gp = doc.setdefault("global_parameters", {})
+        gp["tilt_thetaB_value"] = float(theta)
+        gp["tilt_thetaB_optimize"] = False
+
+        path = _write_temp_fixture(doc, tmpdir, f"{label}_sweep_{theta}")
+        report = _run_report(path)
+        base_term = _base_term_summary_for_fixture(path, f"{label}_sweep_{theta}")
+
+        results[f"{theta:.2f}"] = {
+            "thetaB_value": float(theta),
+            "thetaB_optimization_bypassed": True,
+            "final_energy": _as_float(report["metrics"].get("final_energy")),
+            "energy_breakdown": _runtime_breakdown_summary(report),
+            "reduced_terms": _reduced_terms_summary(report),
+            "interface_summary": _interface_summary(report),
+            "base_term_summary": base_term,
+        }
+    return results
+
+
 def _schema_only() -> dict[str, Any]:
     cases = [
         "ghost_shell_direct_interface",
@@ -215,33 +257,13 @@ def run_triage(*, mode: str = "run") -> dict[str, Any]:
             family[label] = _run_report(path)
             family_base_terms[label] = _base_term_summary_for_fixture(path, label)
 
-        def _run_fixed_theta_sweep(base_fixture: Path, label: str) -> dict[str, Any]:
-            base_doc = yaml.safe_load(base_fixture.read_text(encoding="utf-8")) or {}
-            results = {}
-            for theta in [0.18, 0.20, 0.21, 0.24, 0.30]:
-                doc = copy.deepcopy(base_doc)
-                gp = doc.setdefault("global_parameters", {})
-                gp["tilt_thetaB_value"] = theta
-                gp["tilt_thetaB_optimize"] = False
-
-                path = _write_temp_fixture(doc, tmpdir, f"{label}_sweep_{theta}")
-                report = _run_report(path)
-                base_term = _base_term_summary_for_fixture(
-                    path, f"{label}_sweep_{theta}"
-                )
-
-                results[f"{theta:.2f}"] = {
-                    "thetaB_value": theta,
-                    "thetaB_optimization_bypassed": True,
-                    "final_energy": _as_float(report["metrics"].get("energy")),
-                    "energy_breakdown": base_term,
-                    "interface_summary": _interface_summary(report),
-                }
-            return results
-
         fixed_theta_sweep = {
-            "ghost": _run_fixed_theta_sweep(GHOST_FIXTURE, "ghost"),
-            "default": _run_fixed_theta_sweep(DEFAULT_FIXTURE, "default"),
+            "ghost": _run_fixed_theta_sweep(
+                base_fixture=GHOST_FIXTURE, label="ghost", tmpdir=tmpdir
+            ),
+            "default": _run_fixed_theta_sweep(
+                base_fixture=DEFAULT_FIXTURE, label="default", tmpdir=tmpdir
+            ),
         }
 
     assertions: list[dict[str, Any]] = []
