@@ -89,6 +89,7 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
             positions=minimizer.mesh.positions_view(), mode=tilt_mode
         )
         e = float(minimizer.compute_energy())
+        b = minimizer.compute_energy_breakdown()
         # If the candidate's energy is much worse than the baseline,
         # discard it to prevent tilt divergence from corrupting
         # the selection.
@@ -106,6 +107,11 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
                         "thetaB": float(thetaB_val),
                         "energy": float(e),
                         "discarded": True,
+                        "bending_tilt_in": b.get("bending_tilt_in", 0.0),
+                        "bending_tilt_out": b.get("bending_tilt_out", 0.0),
+                        "tilt_in": b.get("tilt_in", 0.0),
+                        "tilt_out": b.get("tilt_out", 0.0),
+                        "tilt_thetaB_contact_in": b.get("tilt_thetaB_contact_in", 0.0),
                     }
                 )
                 if logger.isEnabledFor(logging.DEBUG):
@@ -120,7 +126,16 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
                 minimizer._set_leaflet_tilts_from_arrays_fast(base_tin, base_tout)
                 return (float("inf"), base_tin, base_tout)
         scan_record["candidate_energies"].append(
-            {"thetaB": float(thetaB_val), "energy": float(e), "discarded": False}
+            {
+                "thetaB": float(thetaB_val),
+                "energy": float(e),
+                "discarded": False,
+                "bending_tilt_in": b.get("bending_tilt_in", 0.0),
+                "bending_tilt_out": b.get("bending_tilt_out", 0.0),
+                "tilt_in": b.get("tilt_in", 0.0),
+                "tilt_out": b.get("tilt_out", 0.0),
+                "tilt_thetaB_contact_in": b.get("tilt_thetaB_contact_in", 0.0),
+            }
         )
         return (
             e,
@@ -130,8 +145,18 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
 
     try:
         e0 = float(minimizer.compute_energy())
+        b0 = minimizer.compute_energy_breakdown()
         scan_record["candidate_energies"].append(
-            {"thetaB": float(base_thetaB), "energy": float(e0), "discarded": False}
+            {
+                "thetaB": float(base_thetaB),
+                "energy": float(e0),
+                "discarded": False,
+                "bending_tilt_in": b0.get("bending_tilt_in", 0.0),
+                "bending_tilt_out": b0.get("bending_tilt_out", 0.0),
+                "tilt_in": b0.get("tilt_in", 0.0),
+                "tilt_out": b0.get("tilt_out", 0.0),
+                "tilt_thetaB_contact_in": b0.get("tilt_thetaB_contact_in", 0.0),
+            }
         )
         e_minus, tin_minus, tout_minus = eval_candidate(base_thetaB - delta)
         e_plus, tin_plus, tout_plus = eval_candidate(base_thetaB + delta)

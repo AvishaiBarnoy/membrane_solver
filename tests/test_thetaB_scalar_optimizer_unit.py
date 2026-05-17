@@ -65,7 +65,7 @@ def _minimizer_with_dummy_energy(
     energy_manager = _DummyEnergyManager(energy)
     constraint_manager = _DummyConstraintManager()
     stepper = _DummyStepper()
-    return Minimizer(
+    minimizer = Minimizer(
         mesh,
         global_params,
         stepper,
@@ -75,6 +75,14 @@ def _minimizer_with_dummy_energy(
         constraint_modules=[],
         quiet=True,
     )
+    minimizer.compute_energy_breakdown = lambda: {
+        "bending_tilt_in": 1.0,
+        "bending_tilt_out": 2.0,
+        "tilt_in": 3.0,
+        "tilt_out": 4.0,
+        "tilt_thetaB_contact_in": 5.0,
+    }
+    return minimizer
 
 
 @pytest.mark.unit
@@ -99,6 +107,17 @@ def test_thetaB_scalar_optimizer_moves_thetaB_toward_lower_energy():
     trace = getattr(minimizer.mesh, "_thetaB_scan_trace")
     assert trace[-1]["status"] == "evaluated"
     assert len(trace[-1]["candidate_energies"]) == 3
+    for cand in trace[-1]["candidate_energies"]:
+        assert "bending_tilt_in" in cand
+        assert cand["bending_tilt_in"] == 1.0
+        assert "bending_tilt_out" in cand
+        assert cand["bending_tilt_out"] == 2.0
+        assert "tilt_in" in cand
+        assert cand["tilt_in"] == 3.0
+        assert "tilt_out" in cand
+        assert cand["tilt_out"] == 4.0
+        assert "tilt_thetaB_contact_in" in cand
+        assert cand["tilt_thetaB_contact_in"] == 5.0
 
 
 @pytest.mark.unit
