@@ -44,6 +44,7 @@ def test_scaffold_energy_imbalance_audit_emits_core_sections() -> None:
         "mesh_topology",
         "refinement_trace",
         "module_energy_audit",
+        "interface_target_audit",
         "constraint_audit",
         "coupled_stationarity_audit",
         "elastic_magnitude_audit",
@@ -79,6 +80,15 @@ def test_scaffold_energy_imbalance_audit_emits_core_sections() -> None:
     assert float(constraint["outer_residual_abs_after"]) <= (
         float(constraint["outer_residual_abs_before"]) + 1.0e-8
     )
+
+    interface = audit["interface_target_audit"]
+    assert bool(interface["available"])
+    assert interface["target_source"] == "scaffold_trace_shell"
+    assert interface["row_summaries"]["outer_rows"]["count"] == 12
+    assert interface["row_summaries"]["tilt_rows"]["count"] == 12
+    assert interface["state_delta_after_audit"]["positions_max_abs"] == 0.0
+    assert interface["state_delta_after_audit"]["tilts_in_max_abs"] == 0.0
+    assert interface["state_delta_after_audit"]["tilts_out_max_abs"] == 0.0
 
 
 def test_scaffold_elastic_and_constrained_diagnostics_are_finite() -> None:

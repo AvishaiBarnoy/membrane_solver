@@ -27,7 +27,10 @@ from modules.constraints.local_interface_shells import (
     build_local_interface_shell_data,
     radial_unit_vectors,
 )
-from modules.constraints.rim_slope_match_out import matching_residual_diagnostics
+from modules.constraints.rim_slope_match_out import (
+    _build_matching_data,
+    matching_residual_diagnostics,
+)
 from modules.energy import tilt_thetaB_contact_in as thetaB_contact_in
 from modules.energy.bending_utils import _compute_effective_areas
 from modules.energy.bt_divergence import _inner_recovered_divergence
@@ -1216,6 +1219,66 @@ def _constraint_audit(ctx) -> dict[str, Any]:
     }
 
 
+def _row_position_summary(positions: np.ndarray, rows) -> dict[str, Any]:
+    row_arr = np.asarray(rows if rows is not None else [], dtype=int)
+    if row_arr.size == 0:
+        return {
+            "count": 0,
+            "radius_mean": 0.0,
+            "radius_median": 0.0,
+            "height_mean": 0.0,
+            "height_median": 0.0,
+        }
+    pos = positions[row_arr]
+    radii = np.linalg.norm(pos[:, :2], axis=1)
+    return {
+        "count": int(row_arr.size),
+        "radius_mean": float(np.mean(radii)),
+        "radius_median": float(np.median(radii)),
+        "height_mean": float(np.mean(pos[:, 2])),
+        "height_median": float(np.median(pos[:, 2])),
+    }
+
+
+def _interface_target_audit(ctx) -> dict[str, Any]:
+    mesh = ctx.mesh
+    state = _snapshot_state(ctx)
+    positions = mesh.positions_view()
+    data = _build_matching_data(mesh, mesh.global_parameters, positions)
+    before = matching_residual_diagnostics(mesh, mesh.global_parameters, positions)
+    if data is None:
+        return {
+            "available": False,
+            "reason": "missing_matching_data",
+            "diagnostics_before": before,
+            "state_delta_after_audit": _state_delta(ctx, state),
+        }
+    row_summaries = {
+        "disk_rows": _row_position_summary(positions, data.get("disk_rows")),
+        "rim_rows": _row_position_summary(positions, data.get("rim_rows")),
+        "outer_rows": _row_position_summary(positions, data.get("outer_rows")),
+        "tilt_rows": _row_position_summary(positions, data.get("tilt_rows")),
+    }
+
+    ctx.minimizer._enforce_constraints()
+    after = matching_residual_diagnostics(
+        mesh, mesh.global_parameters, mesh.positions_view()
+    )
+    projection_delta = _state_delta(ctx, state)
+    _restore_state(ctx, state)
+
+    return {
+        "available": True,
+        "matching_mode": str(before.get("matching_mode", "")),
+        "target_source": str(data.get("target_source", "unknown")),
+        "row_summaries": row_summaries,
+        "projection_delta": projection_delta,
+        "diagnostics_before": before,
+        "diagnostics_after": after,
+        "state_delta_after_audit": _state_delta(ctx, state),
+    }
+
+
 def _position_direction_for_role(ctx, role: str, mode: str) -> np.ndarray:
     mesh = ctx.mesh
     positions = mesh.positions_view()
@@ -1811,6 +1874,7 @@ def run_audit(
         },
         "refinement_trace": _refinement_trace(Path(mesh_path), protocol),
         "module_energy_audit": _module_energy_audit(ctx),
+        "interface_target_audit": _interface_target_audit(ctx),
         "constraint_audit": _constraint_audit(ctx),
         "coupled_stationarity_audit": _coupled_stationarity_audit(ctx),
         "elastic_magnitude_audit": _elastic_magnitude_audit(ctx),

@@ -424,12 +424,7 @@ class TiltRelaxationManager:
                 str(global_params.get("rim_slope_match_mode") or "").strip().lower()
             )
             trace_radius = global_params.get("parity_trace_layer_radius")
-            outer_shells = int(global_params.get("parity_outer_shells", 0) or 0)
-            if (
-                mode_match != "physical_edge_staggered_v1"
-                or trace_radius is None
-                or outer_shells <= 0
-            ):
+            if mode_match != "physical_edge_staggered_v1" or trace_radius is None:
                 return
             residual_threshold = 0.1
             for mod in constraint_modules:

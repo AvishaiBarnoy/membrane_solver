@@ -303,17 +303,12 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
     }:
         return
     if matching_mode == "physical_edge_staggered_v1":
-        scaffold_outer_shells = (
-            0
-            if global_params is None
-            else int(global_params.get("parity_outer_shells") or 0)
-        )
         trace_layer_radius = (
             None
             if global_params is None
             else global_params.get("parity_trace_layer_radius")
         )
-        if scaffold_outer_shells <= 0 or trace_layer_radius is None:
+        if trace_layer_radius is None:
             return
     elif not _use_curved_free_disk_shell2_tilt_continuation(global_params):
         return
