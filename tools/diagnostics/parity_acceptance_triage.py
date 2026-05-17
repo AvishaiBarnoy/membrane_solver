@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import os
 import sys
 import tempfile
@@ -214,6 +215,35 @@ def run_triage(*, mode: str = "run") -> dict[str, Any]:
             family[label] = _run_report(path)
             family_base_terms[label] = _base_term_summary_for_fixture(path, label)
 
+        def _run_fixed_theta_sweep(base_fixture: Path, label: str) -> dict[str, Any]:
+            base_doc = yaml.safe_load(base_fixture.read_text(encoding="utf-8")) or {}
+            results = {}
+            for theta in [0.18, 0.20, 0.21, 0.24, 0.30]:
+                doc = copy.deepcopy(base_doc)
+                gp = doc.setdefault("global_parameters", {})
+                gp["tilt_thetaB_value"] = theta
+                gp["tilt_thetaB_optimize"] = False
+
+                path = _write_temp_fixture(doc, tmpdir, f"{label}_sweep_{theta}")
+                report = _run_report(path)
+                base_term = _base_term_summary_for_fixture(
+                    path, f"{label}_sweep_{theta}"
+                )
+
+                results[f"{theta:.2f}"] = {
+                    "thetaB_value": theta,
+                    "thetaB_optimization_bypassed": True,
+                    "final_energy": _as_float(report["metrics"].get("energy")),
+                    "energy_breakdown": base_term,
+                    "interface_summary": _interface_summary(report),
+                }
+            return results
+
+        fixed_theta_sweep = {
+            "ghost": _run_fixed_theta_sweep(GHOST_FIXTURE, "ghost"),
+            "default": _run_fixed_theta_sweep(DEFAULT_FIXTURE, "default"),
+        }
+
     assertions: list[dict[str, Any]] = []
     shell = ghost["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
     assertions.append(
@@ -308,6 +338,7 @@ def run_triage(*, mode: str = "run") -> dict[str, Any]:
                 "base_term_summary": default_base_term,
             },
         ],
+        "fixed_theta_sweep": fixed_theta_sweep,
         "assertions": assertions,
     }
 
