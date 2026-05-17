@@ -22,6 +22,21 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
         and trace_radius is not None
         and outer_shells > 0
     ):
+        _record_thetaB_scan(
+            minimizer,
+            {
+                "iteration": int(iteration),
+                "status": "skipped_physical_edge_scaffold_trace_lane",
+                "base_thetaB": float(
+                    minimizer.global_params.get("tilt_thetaB_value") or 0.0
+                ),
+                "selected_thetaB": float(
+                    minimizer.global_params.get("tilt_thetaB_value") or 0.0
+                ),
+                "trace_radius": float(trace_radius),
+                "candidate_energies": [],
+            },
+        )
         return
     if not bool(minimizer.global_params.get("tilt_thetaB_optimize", False)):
         return
@@ -42,6 +57,14 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
     base_thetaB = float(minimizer.global_params.get("tilt_thetaB_value") or 0.0)
     base_tin = minimizer.mesh.tilts_in_view().copy(order="F")
     base_tout = minimizer.mesh.tilts_out_view().copy(order="F")
+    scan_record: dict[str, object] = {
+        "iteration": int(iteration),
+        "status": "evaluated",
+        "base_thetaB": float(base_thetaB),
+        "selected_thetaB": float(base_thetaB),
+        "trace_radius": None if trace_radius is None else float(trace_radius),
+        "candidate_energies": [],
+    }
 
     # Use a smaller inner relaxation budget for the thetaB scan to keep the
     # optimization cheap, but still responsive.
@@ -78,6 +101,13 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
                 abs(e0) * scan_guard_factor,
             )
             if e > scan_threshold:
+                scan_record["candidate_energies"].append(
+                    {
+                        "thetaB": float(thetaB_val),
+                        "energy": float(e),
+                        "discarded": True,
+                    }
+                )
                 if logger.isEnabledFor(logging.DEBUG):
                     logger.debug(
                         "thetaB scan: thetaB=%.6g candidate E=%.6g "
@@ -89,6 +119,9 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
                 # Return sentinel: restore base tilts and flag as bad.
                 minimizer._set_leaflet_tilts_from_arrays_fast(base_tin, base_tout)
                 return (float("inf"), base_tin, base_tout)
+        scan_record["candidate_energies"].append(
+            {"thetaB": float(thetaB_val), "energy": float(e), "discarded": False}
+        )
         return (
             e,
             minimizer.mesh.tilts_in_view().copy(order="F"),
@@ -97,6 +130,9 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
 
     try:
         e0 = float(minimizer.compute_energy())
+        scan_record["candidate_energies"].append(
+            {"thetaB": float(base_thetaB), "energy": float(e0), "discarded": False}
+        )
         e_minus, tin_minus, tout_minus = eval_candidate(base_thetaB - delta)
         e_plus, tin_plus, tout_plus = eval_candidate(base_thetaB + delta)
     finally:
@@ -125,6 +161,8 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
     if best_e > e0:
         minimizer.global_params.set("tilt_thetaB_value", float(base_thetaB))
         minimizer._set_leaflet_tilts_from_arrays_fast(base_tin, base_tout)
+        scan_record["status"] = "rollback"
+        scan_record["selected_thetaB"] = float(base_thetaB)
         if logger.isEnabledFor(logging.WARNING):
             logger.warning(
                 "thetaB optimize: i=%d rollback (best E %.6g > base E %.6g); "
@@ -137,6 +175,8 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
     else:
         minimizer.global_params.set("tilt_thetaB_value", float(best_thetaB))
         minimizer._set_leaflet_tilts_from_arrays_fast(best_tin, best_tout)
+        scan_record["selected_thetaB"] = float(best_thetaB)
+    _record_thetaB_scan(minimizer, scan_record)
 
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
@@ -147,3 +187,11 @@ def _optimize_thetaB_scalar(minimizer, *, tilt_mode: str, iteration: int) -> Non
             e0,
             best_e,
         )
+
+
+def _record_thetaB_scan(minimizer, record: dict[str, object]) -> None:
+    traces = getattr(minimizer.mesh, "_thetaB_scan_trace", None)
+    if traces is None:
+        traces = []
+        setattr(minimizer.mesh, "_thetaB_scan_trace", traces)
+    traces.append(record)

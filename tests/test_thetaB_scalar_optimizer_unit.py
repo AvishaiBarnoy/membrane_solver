@@ -96,6 +96,9 @@ def test_thetaB_scalar_optimizer_moves_thetaB_toward_lower_energy():
 
     assert e1 < e0
     assert float(gp.get("tilt_thetaB_value")) != 0.0
+    trace = getattr(minimizer.mesh, "_thetaB_scan_trace")
+    assert trace[-1]["status"] == "evaluated"
+    assert len(trace[-1]["candidate_energies"]) == 3
 
 
 @pytest.mark.unit

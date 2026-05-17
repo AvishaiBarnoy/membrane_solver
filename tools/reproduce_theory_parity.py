@@ -1256,6 +1256,7 @@ def _collect_report_from_context(
             "diagnostics": {
                 "outer_split": {
                     "available": bool(split_diag.get("available", False)),
+                    "target_source": str(split_diag.get("target_source", "")),
                     "phi_mean": phi_mean,
                     "t_in_mean": t_in_mean,
                     "t_out_mean": t_out_mean,
@@ -1275,6 +1276,9 @@ def _collect_report_from_context(
                 "outer_profile_parity": outer_profile,
                 "trace_error_split": trace_error_split,
                 "scaffold_boundary_driver": scaffold_boundary_driver,
+                "thetaB_scan_trace": list(
+                    getattr(ctx.mesh, "_thetaB_scan_trace", []) or []
+                ),
             },
             "theory": legacy_anchor,
             "legacy_anchor": legacy_anchor,

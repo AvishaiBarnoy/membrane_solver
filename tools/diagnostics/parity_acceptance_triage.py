@@ -127,6 +127,38 @@ def _assertion(
     }
 
 
+def _interface_summary(report: dict[str, Any]) -> dict[str, Any]:
+    diagnostics = report["metrics"]["diagnostics"]
+    split = diagnostics.get("outer_split", {})
+    traces = diagnostics.get("interface_traces_at_R", {})
+    shell = diagnostics.get("interface_shell_at_R_plus_epsilon", {})
+    primary = diagnostics.get("interface_primary_readout", {})
+    directors = diagnostics.get("interface_directors", {})
+    geometry = diagnostics.get("outer_shell_geometry", {})
+    scans = diagnostics.get("thetaB_scan_trace", [])
+    return {
+        "delta_r": _as_float(geometry.get("delta_r")),
+        "target_source": str(split.get("target_source", "")),
+        "primary_source": str(primary.get("source", "")),
+        "phi_mean": _as_float(split.get("phi_mean")),
+        "t_in_mean": _as_float(split.get("t_in_mean")),
+        "t_out_mean": _as_float(split.get("t_out_mean")),
+        "trace_t_in": _as_float(traces.get("outer_t_in_trace_at_R_plus")),
+        "trace_t_out": _as_float(traces.get("outer_t_out_trace_at_R_plus")),
+        "direct_t_in": _as_float(shell.get("t_in_at_R_plus_epsilon")),
+        "direct_t_out": _as_float(shell.get("t_out_at_R_plus_epsilon")),
+        "direct_phi": _as_float(shell.get("phi_secant_at_R_plus_epsilon")),
+        "disk_vs_free_inner_director_gap": _as_float(
+            directors.get("disk_vs_free_inner_director_gap")
+        ),
+        "free_inner_vs_free_outer_director_gap": _as_float(
+            directors.get("free_inner_vs_free_outer_director_gap")
+        ),
+        "thetaB_scan_count": len(scans) if isinstance(scans, list) else 0,
+        "thetaB_scan_tail": scans[-5:] if isinstance(scans, list) else [],
+    }
+
+
 def _schema_only() -> dict[str, Any]:
     cases = [
         "ghost_shell_direct_interface",
@@ -242,6 +274,7 @@ def run_triage(*, mode: str = "run") -> dict[str, Any]:
                 "tex_total_ratio": _as_float(
                     ghost["metrics"]["tex_benchmark"]["ratios"].get("total_ratio")
                 ),
+                "interface_summary": _interface_summary(ghost),
                 "base_term_summary": ghost_base_term,
             },
             {
@@ -256,6 +289,7 @@ def run_triage(*, mode: str = "run") -> dict[str, Any]:
                                 "total_ratio"
                             )
                         ),
+                        "interface_summary": _interface_summary(report),
                         "base_term_summary": family_base_terms.get(label, {}),
                     }
                     for label, report in family.items()
@@ -264,11 +298,13 @@ def run_triage(*, mode: str = "run") -> dict[str, Any]:
             {
                 "case": "default_free_side_trace_continuation",
                 "thetaB_value": _as_float(default["metrics"].get("thetaB_value")),
+                "interface_summary": _interface_summary(default),
                 "base_term_summary": default_base_term,
             },
             {
                 "case": "default_director_profile_parity",
                 "thetaB_value": _as_float(default["metrics"].get("thetaB_value")),
+                "interface_summary": _interface_summary(default),
                 "base_term_summary": default_base_term,
             },
         ],
