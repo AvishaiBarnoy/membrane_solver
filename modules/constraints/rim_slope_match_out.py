@@ -337,6 +337,13 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
     rim_rows = np.asarray(data["rim_rows"], dtype=int)
     inv_dr = np.asarray(data["inv_dr"], dtype=float)
     theta_scalar = data["theta_scalar"]
+    scaffold_projector_mode = ""
+    if global_params is not None:
+        scaffold_projector_mode = (
+            str(global_params.get("rim_slope_match_scaffold_projector_mode") or "")
+            .strip()
+            .lower()
+        )
 
     tilts_in = mesh.tilts_in_view().copy(order="F")
     tilts_out = mesh.tilts_out_view().copy(order="F")
@@ -430,15 +437,23 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
                 else float(theta_disk[i])
             )
             continuity_target = theta_val - float(t_in_rad)
-            # Joint local proximal solve with equal weights on:
-            # - staying near the current shell secant phi_current
-            # - staying near the current outer radial tilt t_out_rad
-            # - satisfying t_out = phi
-            # - satisfying t_in = theta_disk - phi
-            phi_target = (
-                2.0 * phi_current + float(t_out_rad) + 2.0 * continuity_target
-            ) / 5.0
-            t_out_target = 0.5 * (phi_target + float(t_out_rad))
+            if (
+                matching_mode == "physical_edge_staggered_v1"
+                and scaffold_projector_mode == "continuity_v2"
+            ):
+                half_split_target = 0.5 * theta_val
+                phi_target = half_split_target
+                t_out_target = phi_target
+            else:
+                # Joint local proximal solve with equal weights on:
+                # - staying near the current shell secant phi_current
+                # - staying near the current outer radial tilt t_out_rad
+                # - satisfying t_out = phi
+                # - satisfying t_in = theta_disk - phi
+                phi_target = (
+                    2.0 * phi_current + float(t_out_rad) + 2.0 * continuity_target
+                ) / 5.0
+                t_out_target = 0.5 * (phi_target + float(t_out_rad))
 
         target_height = current_rim_height + phi_target * dr
         if abs(w0) > 1.0e-12:

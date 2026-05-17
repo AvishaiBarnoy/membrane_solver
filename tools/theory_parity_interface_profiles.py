@@ -231,6 +231,7 @@ def build_scaled_fixture(
     _scale_ring(doc["vertices"], SOURCE_OUTER_RADIUS, float(outer_radius))
     gp = dict(doc.get("global_parameters") or {})
     gp["theory_parity_lane"] = str(label)
+    gp["bending_tilt_base_term_reference_mode"] = "flat_reference_zero_J0"
     doc["global_parameters"] = gp
     return doc
 
@@ -248,6 +249,7 @@ def build_profiled_fixture(
         doc = copy.deepcopy(base_doc)
         gp = dict(doc.get("global_parameters") or {})
         gp["theory_parity_lane"] = label
+        gp["bending_tilt_base_term_reference_mode"] = "flat_reference_zero_J0"
         doc["global_parameters"] = gp
         return doc
     inner_radius, outer_radius = radii
@@ -539,6 +541,7 @@ def _build_outer_shell_scaffold_fixture_with_radii(
 
     gp = dict(doc.get("global_parameters") or {})
     gp["theory_parity_lane"] = str(label)
+    gp["bending_tilt_base_term_reference_mode"] = "flat_reference_zero_J0"
     gp["parity_trace_layer_radius"] = float(trace_radius)
     gp["parity_outer_shells"] = int(outer_shells)
     gp["parity_outer_shells_d"] = float(outer_shells_d)

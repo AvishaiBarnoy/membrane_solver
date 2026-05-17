@@ -70,6 +70,26 @@ def _expected_contact_energy(mesh, *, group: str, gamma: float, thetaB: float) -
     return float(-2.0 * np.pi * R_eff * gamma * thetaB)
 
 
+def _ordered_boundary_payload(mesh, *, group: str) -> tuple[np.ndarray, np.ndarray]:
+    positions = mesh.positions_view()
+    rows = _disk_rows(mesh, group)
+    assert rows.size > 0
+
+    center = np.array([0.0, 0.0, 0.0], dtype=float)
+    normal = np.array([0.0, 0.0, 1.0], dtype=float)
+    pts = positions[rows]
+    order = _order_by_angle(pts, center=center, normal=normal)
+    rows = rows[order]
+    pts = pts[order]
+
+    r_vec = pts - center[None, :]
+    r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
+    r_len = np.linalg.norm(r_vec, axis=1)
+    assert bool(np.all(r_len > 1.0e-12))
+    r_hat = r_vec / r_len[:, None]
+    return rows, r_hat
+
+
 def _make_circle_ring_mesh(*, n: int, radius: float, group: str) -> Mesh:
     """Create a minimal mesh with only a tagged circular boundary ring."""
     mesh = Mesh()
@@ -288,6 +308,113 @@ def test_tilt_thetaB_contact_in_contact_energy_independent_of_penalty_strength()
     expected = _expected_contact_energy(mesh, group="disk", gamma=gamma, thetaB=0.05)
     assert abs(float(E1 - expected)) < 1e-10
     assert abs(float(E2 - expected)) < 1e-10
+
+
+def test_tilt_thetaB_contact_in_field_linear_matches_scalar_for_uniform_boundary() -> (
+    None
+):
+    group = "disk"
+    radius = 0.4666666666666667
+    theta = 0.06
+    gamma = 4.286
+    mesh = _make_circle_ring_mesh(n=16, radius=radius, group=group)
+    gp = mesh.global_parameters
+    gp.set("tilt_thetaB_group_in", group)
+    gp.set("tilt_thetaB_center", [0.0, 0.0, 0.0])
+    gp.set("tilt_thetaB_normal", [0.0, 0.0, 1.0])
+    gp.set("tilt_thetaB_value", -0.5)
+    gp.set("tilt_thetaB_contact_strength_in", gamma)
+    gp.set("tilt_thetaB_contact_penalty_mode", "off")
+    gp.set("tilt_thetaB_contact_work_mode", "field_linear")
+    resolver = ParameterResolver(gp)
+
+    positions = mesh.positions_view()
+    tilts_in = np.zeros_like(positions)
+    rows, r_hat = _ordered_boundary_payload(mesh, group=group)
+    tilts_in[rows] = theta * r_hat
+
+    idx_map = mesh.vertex_index_to_row
+    grad_arr = np.zeros_like(positions)
+    tilt_grad = np.zeros_like(positions)
+    energy = tilt_thetaB_contact_in.compute_energy_and_gradient_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=idx_map,
+        grad_arr=grad_arr,
+        tilts_in=tilts_in,
+        tilt_in_grad_arr=tilt_grad,
+    )
+
+    expected = float(-2.0 * np.pi * radius * gamma * theta)
+    assert float(energy) == pytest.approx(expected, rel=1e-12, abs=1e-12)
+    assert float(np.max(np.abs(tilt_grad))) > 0.0
+
+
+def test_tilt_thetaB_contact_in_field_linear_gradient_matches_fd() -> None:
+    group = "disk"
+    radius = 0.4666666666666667
+    gamma = 4.286
+    mesh = _make_circle_ring_mesh(n=12, radius=radius, group=group)
+    gp = mesh.global_parameters
+    gp.set("tilt_thetaB_group_in", group)
+    gp.set("tilt_thetaB_center", [0.0, 0.0, 0.0])
+    gp.set("tilt_thetaB_normal", [0.0, 0.0, 1.0])
+    gp.set("tilt_thetaB_value", 0.0)
+    gp.set("tilt_thetaB_contact_strength_in", gamma)
+    gp.set("tilt_thetaB_contact_penalty_mode", "off")
+    gp.set("tilt_thetaB_contact_work_mode", "field_linear")
+    resolver = ParameterResolver(gp)
+
+    positions = mesh.positions_view()
+    rows, r_hat = _ordered_boundary_payload(mesh, group=group)
+    tilts_in = np.zeros_like(positions)
+    radial_values = np.linspace(-0.02, 0.05, rows.size)
+    tilts_in[rows] = radial_values[:, None] * r_hat
+
+    idx_map = mesh.vertex_index_to_row
+    grad_arr = np.zeros_like(positions)
+    tilt_grad = np.zeros_like(positions)
+    base_energy = tilt_thetaB_contact_in.compute_energy_and_gradient_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=idx_map,
+        grad_arr=grad_arr,
+        tilts_in=tilts_in,
+        tilt_in_grad_arr=tilt_grad,
+    )
+    assert np.isfinite(float(base_energy))
+
+    row = int(rows[3])
+    component = 0
+    eps = 1.0e-6
+    plus = tilts_in.copy()
+    minus = tilts_in.copy()
+    plus[row, component] += eps
+    minus[row, component] -= eps
+
+    e_plus = tilt_thetaB_contact_in.compute_energy_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=idx_map,
+        tilts_in=plus,
+    )
+    e_minus = tilt_thetaB_contact_in.compute_energy_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=idx_map,
+        tilts_in=minus,
+    )
+    fd = float((e_plus - e_minus) / (2.0 * eps))
+
+    assert float(tilt_grad[row, component]) == pytest.approx(fd, rel=1.0e-8, abs=1.0e-8)
 
 
 def test_tilt_thetaB_contact_in_legacy_mode_includes_penalty_and_gradient() -> None:

@@ -39,6 +39,7 @@ from .bt_params import (
     _assume_J0_presets,
     _assume_J0_radius_max,
     _base_term_boundary_group,
+    _base_term_reference_mode,
     _per_vertex_params_leaflet,
     _resolve_bending_modulus,
     _use_inner_recovered_divergence,
@@ -264,6 +265,8 @@ def compute_energy_and_gradient_array_leaflet(
     )
 
     base_term = (2.0 * H_vor) - c0_arr
+    if _base_term_reference_mode(global_params) == "flat_reference_zero_j0":
+        base_term[:] = 0.0
     base_term[~is_interior] = 0.0
     presets = _assume_J0_presets(global_params, cache_tag=cache_tag)
     if presets:
@@ -351,9 +354,11 @@ def compute_energy_and_gradient_array_leaflet(
         {
             "enabled": bool(suppress_shape_cross),
             "cache_tag": str(cache_tag),
-            "lane": str(global_params.get("theory_parity_lane") or "")
-            if global_params is not None
-            else "",
+            "lane": (
+                str(global_params.get("theory_parity_lane") or "")
+                if global_params is not None
+                else ""
+            ),
         },
     )
 
@@ -386,9 +391,11 @@ def compute_energy_and_gradient_array_leaflet(
         "enabled": False,
         "mode": "off",
         "cache_tag": str(cache_tag),
-        "lane": str(global_params.get("theory_parity_lane") or "")
-        if global_params is not None
-        else "",
+        "lane": (
+            str(global_params.get("theory_parity_lane") or "")
+            if global_params is not None
+            else ""
+        ),
     }
 
     if suppress_shape_cross:

@@ -203,23 +203,26 @@ def _build_physical_edge_ghost_shell_fixture(
 
 
 def _run_fixture_report(
-    doc: dict[str, Any], *, label: str, tmp_path: Path
+    doc: dict[str, Any],
+    *,
+    label: str,
+    tmp_path: Path,
+    protocol: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     fixture_path = _write_temp_fixture(doc, label=label)
     out_yaml = tmp_path / f"{label}.yaml"
+    cmd = [
+        sys.executable,
+        str(SCRIPT),
+        "--mesh",
+        str(fixture_path),
+        "--out",
+        str(out_yaml),
+    ]
+    if protocol is not None:
+        cmd.extend(["--protocol", *protocol])
     try:
-        subprocess.run(
-            [
-                sys.executable,
-                str(SCRIPT),
-                "--mesh",
-                str(fixture_path),
-                "--out",
-                str(out_yaml),
-            ],
-            check=True,
-            cwd=str(ROOT),
-        )
+        subprocess.run(cmd, check=True, cwd=str(ROOT))
     finally:
         if fixture_path.exists():
             fixture_path.unlink()
@@ -348,42 +351,25 @@ def test_physical_edge_ghost_shell_improves_direct_interface_behavior_over_bad_b
 
 
 @pytest.mark.acceptance
-def test_scaffold_long_interface_schedule_stays_on_inner_leaflet_only_branch() -> None:
+def test_scaffold_fixed_d_long_interface_schedule_stays_on_inner_leaflet_only_branch() -> (
+    None
+):
     fixed = _run_context_report(
         SCAFFOLD_FIXED_D_FIXTURE,
         protocol=LONG_INTERFACE_PROTOCOL,
     )
-    gapfill = _run_context_report(
-        SCAFFOLD_GAPFILL_RELEASE_FIXTURE,
-        protocol=LONG_INTERFACE_PROTOCOL,
-    )
 
-    for report in (fixed, gapfill):
-        breakdown = report["metrics"]["breakdown"]
-        shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
-        ratios = report["metrics"]["theory"]["ratios"]
+    breakdown = fixed["metrics"]["breakdown"]
+    shell = fixed["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
+    ratios = fixed["metrics"]["theory"]["ratios"]
 
-        assert float(report["metrics"]["thetaB_value"]) == pytest.approx(
-            0.2, abs=1.0e-9
-        )
-        assert abs(float(breakdown["bending_tilt_out"])) < 1.0e-12
-        assert abs(float(breakdown["tilt_out"])) < 1.0e-12
-        assert abs(float(shell["t_out_at_R_plus_epsilon"])) < 1.0e-12
-        assert abs(float(shell["phi_secant_at_R_plus_epsilon"])) < 1.0e-12
-        assert float(ratios["elastic_ratio"]) > 2.0
-        assert float(ratios["total_ratio"]) > 2.0
-
-    fixed_shell = fixed["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
-    gapfill_shell = gapfill["metrics"]["diagnostics"][
-        "interface_shell_at_R_plus_epsilon"
-    ]
-    assert (
-        abs(
-            float(fixed_shell["t_in_at_R_plus_epsilon"])
-            - float(gapfill_shell["t_in_at_R_plus_epsilon"])
-        )
-        < 2.0e-3
-    )
+    assert abs(float(fixed["metrics"]["thetaB_value"])) < 5.0e-8
+    assert abs(float(breakdown["bending_tilt_out"])) < 1.0e-12
+    assert abs(float(breakdown["tilt_out"])) < 1.0e-12
+    assert abs(float(shell["t_out_at_R_plus_epsilon"])) < 1.0e-12
+    assert abs(float(shell["phi_secant_at_R_plus_epsilon"])) < 1.0e-12
+    assert abs(float(ratios["elastic_ratio"])) < 1.0e-8
+    assert abs(float(ratios["total_ratio"])) < 1.0e-8
 
 
 @pytest.mark.acceptance
@@ -429,9 +415,119 @@ def test_scaffold_gapfill_reports_measured_thetaB_from_disk_boundary() -> None:
 
 
 @pytest.mark.acceptance
-def test_scaffold_long_interface_repair_turns_on_outer_leaflet_only_by_blowing_up_elastic_energy() -> (
-    None
-):
+def test_scaffold_gapfill_boundary_driver_reports_stationarity_diagnostics() -> None:
+    report = _run_context_report(
+        SCAFFOLD_GAPFILL_RELEASE_FIXTURE,
+        protocol=LONG_INTERFACE_PROTOCOL,
+    )
+
+    driver = report["metrics"]["diagnostics"]["scaffold_boundary_driver"]
+    theta = float(report["metrics"]["thetaB_value"])
+    expected_contact_slope = (
+        -2.0 * 3.141592653589793 * float(driver["R_eff"]) * float(driver["gamma"])
+    )
+
+    assert bool(driver["available"])
+    assert driver["contact_work_mode"] == "field_linear"
+    assert driver["projector_mode"] == "continuity_v2"
+    assert float(driver["theta_contact_mean"]) == pytest.approx(theta, abs=1.0e-6)
+    assert float(driver["contact_slope_analytic"]) == pytest.approx(
+        expected_contact_slope, rel=1.0e-12, abs=1.0e-12
+    )
+    for key in (
+        "elastic_slope_fd",
+        "total_slope_fd",
+        "stationarity_residual",
+        "half_split_t_in_residual",
+        "half_split_t_out_residual",
+        "half_split_phi_residual",
+    ):
+        assert abs(float(driver[key])) < 1.0e6
+
+
+@pytest.mark.acceptance
+def test_scaffold_gapfill_ablation_matrix_reports_finite_diagnostics(tmp_path) -> None:
+    base_doc = yaml.safe_load(
+        SCAFFOLD_GAPFILL_RELEASE_FIXTURE.read_text(encoding="utf-8")
+    )
+    variants = {
+        "current": {
+            "tilt_thetaB_contact_work_mode": "field_linear",
+            "rim_slope_match_scaffold_projector_mode": "continuity_v2",
+        },
+        "contact_only": {
+            "tilt_thetaB_contact_work_mode": "field_linear",
+            "rim_slope_match_scaffold_projector_mode": None,
+        },
+        "projector_only": {
+            "tilt_thetaB_contact_work_mode": None,
+            "rim_slope_match_scaffold_projector_mode": "continuity_v2",
+        },
+        "legacy_control": {
+            "tilt_thetaB_contact_work_mode": None,
+            "rim_slope_match_scaffold_projector_mode": None,
+        },
+    }
+
+    reports: dict[str, Any] = {}
+    for label, overrides in variants.items():
+        doc = yaml.safe_load(yaml.safe_dump(base_doc, sort_keys=False))
+        gp = dict(doc.get("global_parameters") or {})
+        for key, value in overrides.items():
+            if value is None:
+                gp.pop(key, None)
+            else:
+                gp[key] = value
+        gp["theory_parity_lane"] = f"scaffold_gapfill_ablation_{label}"
+        doc["global_parameters"] = gp
+        reports[label] = _run_fixture_report(
+            doc,
+            label=f"scaffold_gapfill_ablation_{label}",
+            tmp_path=tmp_path,
+            protocol=LONG_INTERFACE_PROTOCOL,
+        )
+
+    for label, report in reports.items():
+        driver = report["metrics"]["diagnostics"]["scaffold_boundary_driver"]
+        ratios = report["metrics"]["theory"]["ratios"]
+        assert bool(driver["available"]), label
+        assert abs(float(report["metrics"]["final_energy"])) < 1.0e6
+        for key in ("theta_ratio", "elastic_ratio", "contact_ratio", "total_ratio"):
+            assert abs(float(ratios[key])) < 1.0e6, label
+        for key in (
+            "R_eff",
+            "theta_contact_mean",
+            "elastic_slope_fd",
+            "contact_slope_analytic",
+            "total_slope_fd",
+        ):
+            assert abs(float(driver[key])) < 1.0e6, label
+
+    current = reports["current"]
+    current_breakdown = current["metrics"]["breakdown"]
+    current_shell = current["metrics"]["diagnostics"][
+        "interface_shell_at_R_plus_epsilon"
+    ]
+    current_ratios = current["metrics"]["theory"]["ratios"]
+    assert float(current_breakdown["bending_tilt_out"]) > 1.0e-3
+    assert float(current_breakdown["tilt_out"]) > 1.0e-3
+    assert abs(float(current_shell["phi_secant_at_R_plus_epsilon"])) > 1.0e-4
+    assert float(current_ratios["total_ratio"]) < 2.0
+
+    fixed = _run_context_report(
+        SCAFFOLD_FIXED_D_FIXTURE,
+        protocol=LONG_INTERFACE_PROTOCOL,
+    )
+    fixed_driver = fixed["metrics"]["diagnostics"]["scaffold_boundary_driver"]
+    fixed_breakdown = fixed["metrics"]["breakdown"]
+    assert bool(fixed_driver["available"])
+    assert abs(float(fixed["metrics"]["thetaB_value"])) < 5.0e-8
+    assert abs(float(fixed_breakdown["bending_tilt_out"])) < 1.0e-12
+    assert abs(float(fixed_breakdown["tilt_out"])) < 1.0e-12
+
+
+@pytest.mark.acceptance
+def test_scaffold_repair_suffix_keeps_fixed_dead_and_gapfill_bounded() -> None:
     fixed = _run_context_report(
         SCAFFOLD_FIXED_D_FIXTURE,
         protocol=LONG_INTERFACE_PROTOCOL + LONG_INTERFACE_REPAIR_SUFFIX,
@@ -441,22 +537,27 @@ def test_scaffold_long_interface_repair_turns_on_outer_leaflet_only_by_blowing_u
         protocol=LONG_INTERFACE_PROTOCOL + LONG_INTERFACE_REPAIR_SUFFIX,
     )
 
-    for report in (fixed, gapfill):
-        breakdown = report["metrics"]["breakdown"]
-        shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
-        ratios = report["metrics"]["theory"]["ratios"]
+    fixed_breakdown = fixed["metrics"]["breakdown"]
+    fixed_shell = fixed["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
+    assert abs(float(fixed["metrics"]["thetaB_value"])) < 5.0e-8
+    assert abs(float(fixed_breakdown["bending_tilt_out"])) < 1.0e-12
+    assert abs(float(fixed_breakdown["tilt_out"])) < 1.0e-12
+    assert abs(float(fixed_shell["t_out_at_R_plus_epsilon"])) < 1.0e-12
+    assert abs(float(fixed_shell["phi_secant_at_R_plus_epsilon"])) < 1.0e-12
 
-        assert float(report["metrics"]["final_energy"]) > 0.0
-        assert float(breakdown["bending_tilt_out"]) > 1.0
-        assert float(breakdown["tilt_out"]) > 0.01
-        assert float(shell["t_out_at_R_plus_epsilon"]) > 0.01
-        assert float(shell["phi_secant_at_R_plus_epsilon"]) > 0.05
-        assert float(ratios["elastic_ratio"]) > 10.0
-        assert float(ratios["total_ratio"]) < 0.0
+    gapfill_breakdown = gapfill["metrics"]["breakdown"]
+    gapfill_shell = gapfill["metrics"]["diagnostics"][
+        "interface_shell_at_R_plus_epsilon"
+    ]
+    gapfill_ratios = gapfill["metrics"]["theory"]["ratios"]
 
-    assert float(fixed["metrics"]["breakdown"]["bending_tilt_out"]) > float(
-        gapfill["metrics"]["breakdown"]["bending_tilt_out"]
-    )
+    assert float(gapfill["metrics"]["final_energy"]) < 0.0
+    assert float(gapfill_breakdown["bending_tilt_out"]) > 1.0e-3
+    assert float(gapfill_breakdown["tilt_out"]) > 1.0e-3
+    assert float(gapfill_shell["t_out_at_R_plus_epsilon"]) > 1.0e-3
+    assert abs(float(gapfill_shell["phi_secant_at_R_plus_epsilon"])) > 1.0e-4
+    assert float(gapfill_ratios["elastic_ratio"]) < 2.0
+    assert float(gapfill_ratios["total_ratio"]) < 2.0
 
 
 @pytest.mark.acceptance

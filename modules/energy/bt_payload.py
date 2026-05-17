@@ -22,6 +22,7 @@ from .bt_params import (
     _assume_J0_presets,
     _assume_J0_radius_max,
     _base_term_boundary_group,
+    _base_term_reference_mode,
     _base_term_region_mode,
     _base_term_region_radius,
     _per_vertex_params_leaflet,
@@ -60,18 +61,26 @@ def _leaflet_triangle_payload(
         int(mesh._vertex_ids_version),
         id(positions),
         absent_key,
-        str(global_params.get("rim_slope_match_mode") or "")
-        if global_params is not None
-        else "",
-        str(global_params.get("rim_slope_match_outer_group") or "")
-        if global_params is not None
-        else "",
-        str(global_params.get("rim_slope_match_group") or "")
-        if global_params is not None
-        else "",
-        str(global_params.get("rim_slope_match_disk_group") or "")
-        if global_params is not None
-        else "",
+        (
+            str(global_params.get("rim_slope_match_mode") or "")
+            if global_params is not None
+            else ""
+        ),
+        (
+            str(global_params.get("rim_slope_match_outer_group") or "")
+            if global_params is not None
+            else ""
+        ),
+        (
+            str(global_params.get("rim_slope_match_group") or "")
+            if global_params is not None
+            else ""
+        ),
+        (
+            str(global_params.get("rim_slope_match_disk_group") or "")
+            if global_params is not None
+            else ""
+        ),
     )
     if use_cache:
         cached = getattr(mesh, cache_attr, None)
@@ -206,6 +215,7 @@ def _leaflet_static_tilt_payload(
     region_mode = _base_term_region_mode(global_params)
     region_radius = _base_term_region_radius(global_params)
     boundary_group = _base_term_boundary_group(global_params, cache_tag=cache_tag)
+    reference_mode = _base_term_reference_mode(global_params)
 
     use_cache = mesh._geometry_cache_active(positions)
     cache_attr = f"_bending_tilt_leaflet_static_cache_{cache_tag}"
@@ -225,6 +235,7 @@ def _leaflet_static_tilt_payload(
         presets,
         None if radius_max is None else float(radius_max),
         center_key,
+        str(reference_mode),
         str(region_mode),
         None if region_radius is None else float(region_radius),
     )
@@ -244,6 +255,8 @@ def _leaflet_static_tilt_payload(
     )
 
     base_term = (2.0 * h_vor) - c0_arr
+    if reference_mode == "flat_reference_zero_j0":
+        base_term[:] = 0.0
     base_term[~is_interior] = 0.0
     if presets:
         rows = _collect_preset_rows(

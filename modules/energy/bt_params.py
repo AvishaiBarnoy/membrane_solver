@@ -86,6 +86,20 @@ def _base_term_region_mode(global_params) -> str:
     return mode
 
 
+def _base_term_reference_mode(global_params) -> str:
+    """Return the reference mode used for the Helfrich base curvature term."""
+    if global_params is None:
+        return "current_geometry"
+    raw = global_params.get("bending_tilt_base_term_reference_mode")
+    mode = str(raw or "current_geometry").strip().lower()
+    if mode not in {"current_geometry", "flat_reference_zero_j0"}:
+        raise ValueError(
+            "bending_tilt_base_term_reference_mode must be "
+            "'current_geometry' or 'flat_reference_zero_J0'."
+        )
+    return mode
+
+
 def _base_term_region_radius(global_params) -> float | None:
     """Return physical disk radius used by base-term region modes."""
     if global_params is None:

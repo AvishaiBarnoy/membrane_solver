@@ -158,6 +158,20 @@ def _penalty_mode(global_params) -> str:
     return "off"
 
 
+def _contact_work_mode(global_params) -> str:
+    raw = (
+        None
+        if global_params is None
+        else global_params.get("tilt_thetaB_contact_work_mode")
+    )
+    if raw is None:
+        return "scalar"
+    mode = str(raw).strip().lower()
+    if mode == "field_linear":
+        return "field_linear"
+    return "scalar"
+
+
 def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
     cache_key = (mesh._vertex_ids_version, str(group))
     cache_attr = "_tilt_thetaB_contact_group_rows_cache"
@@ -352,9 +366,21 @@ def compute_energy_and_gradient_array(
 
     R_eff = float(np.sum(weights * r_len) / wsum)
     energy = 0.0
+    contact_work_mode = _contact_work_mode(global_params)
     if gamma != 0.0:
-        # Pure contact work (theory-aligned default).
-        energy += float(-2.0 * np.pi * R_eff * gamma * theta_B)
+        if contact_work_mode == "field_linear":
+            theta_contact = float(np.sum(weights * theta_vals) / wsum)
+        else:
+            # Pure scalar contact work (theory-aligned default).
+            theta_contact = theta_B
+        energy += float(-2.0 * np.pi * R_eff * gamma * theta_contact)
+
+        if contact_work_mode == "field_linear" and tilt_in_grad_arr is not None:
+            tilt_in_grad_arr = np.asarray(tilt_in_grad_arr, dtype=float)
+            if tilt_in_grad_arr.shape != (len(mesh.vertex_ids), 3):
+                raise ValueError("tilt_in_grad_arr must have shape (N_vertices, 3)")
+            coeff = (-(2.0 * np.pi * R_eff * gamma / wsum) * weights)[:, None]
+            np.add.at(tilt_in_grad_arr, rows, coeff * r_hat)
 
     if _penalty_mode(global_params) == "legacy" and k != 0.0:
         diff = theta_vals - theta_B
@@ -418,7 +444,11 @@ def compute_energy_array(
     R_eff = float(np.sum(weights * r_len) / wsum)
     energy = 0.0
     if gamma != 0.0:
-        energy += float(-2.0 * np.pi * R_eff * gamma * theta_B)
+        if _contact_work_mode(global_params) == "field_linear":
+            theta_contact = float(np.sum(weights * theta_vals) / wsum)
+        else:
+            theta_contact = theta_B
+        energy += float(-2.0 * np.pi * R_eff * gamma * theta_contact)
 
     if _penalty_mode(global_params) == "legacy" and k != 0.0:
         diff = theta_vals - theta_B

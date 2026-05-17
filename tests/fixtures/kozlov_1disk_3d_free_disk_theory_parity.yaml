@@ -12,6 +12,7 @@ global_parameters:
   tilt_modulus_out: 225.0
   # Theory-mode: assume the geometric curvature contribution J vanishes on the disk.
   bending_tilt_assume_J0_presets_in: ["disk"]
+  bending_tilt_base_term_reference_mode: flat_reference_zero_J0
   tilt_thetaB_group_in: disk
   # Theory-aligned thetaB modeling:
   # - boundary condition t_in · r_hat = thetaB is enforced by constraint (no penalty energy)
