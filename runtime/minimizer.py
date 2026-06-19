@@ -35,12 +35,34 @@ from runtime.projections.tilt import (
     project_tilts_to_tangent_array,
 )
 from runtime.steppers.base import BaseStepper
+from runtime.steppers.line_search import backtracking_line_search_array
 from runtime.steppers.tilt_relaxation import TiltRelaxationManager
 
-from .mesh_quality_repair import _maybe_auto_mesh_quality_repair
+from . import mesh_quality_repair as _mesh_quality_repair
+from .equiangulation import equiangulate_iteration
 from .tilt_optimization import _optimize_thetaB_scalar
 
 logger = logging.getLogger("membrane_solver")
+
+
+def _maybe_auto_mesh_quality_repair(minimizer, *, iteration: int) -> bool:
+    previous = _mesh_quality_repair.equiangulate_iteration
+    _mesh_quality_repair.equiangulate_iteration = equiangulate_iteration
+    try:
+        return _mesh_quality_repair._maybe_auto_mesh_quality_repair(
+            minimizer, iteration=iteration
+        )
+    finally:
+        _mesh_quality_repair.equiangulate_iteration = previous
+
+
+def _scaffold_trace_rows(mesh: Mesh) -> np.ndarray:
+    rows: list[int] = []
+    for row, vid in enumerate(mesh.vertex_ids):
+        opts = getattr(mesh.vertices[int(vid)], "options", {}) or {}
+        if str(opts.get("pin_to_circle_group") or "") == "trace_layer":
+            rows.append(int(row))
+    return np.asarray(rows, dtype=int)
 
 
 class Minimizer:
@@ -131,6 +153,33 @@ class Minimizer:
             "rim_row_count": 0,
             "cap_magnitude": 0.0,
         }
+        self._last_leaflet_relaxation_stats: dict[str, float | int | str | bool] = {
+            "mode": "fixed",
+            "solver": "cg",
+            "max_iters": 0,
+            "accepted_steps": 0,
+            "rejected_steps": 0,
+            "backtracking_steps": 0,
+            "stop_reason": "not_run",
+            "initial_energy": 0.0,
+            "final_energy": 0.0,
+            "initial_gradient_norm": 0.0,
+            "final_gradient_norm": 0.0,
+            "free_rows_in": 0,
+            "free_rows_out": 0,
+            "fixed_rows_in": 0,
+            "fixed_rows_out": 0,
+            "active_outer_area_rows": 0,
+            "outer_shell_row_count": 0,
+        }
+        self._last_shape_scaffold_rejected_step_fallback_stats: dict[str, object] = {
+            "mode": "off",
+            "attempted": False,
+            "accepted": False,
+            "attempted_count": 0,
+            "accepted_count": 0,
+            "reason": "not_run",
+        }
 
         self._evaluation_manager = EvaluationManager(
             mesh=self.mesh,
@@ -218,6 +267,165 @@ class Minimizer:
                     accepts = False
             self._stepper_accepts_trial_energy_fn = accepts
         return bool(self._stepper_accepts_trial_energy_fn)
+
+    def _shape_scaffold_rejected_step_fallback_mode(self) -> str:
+        raw = self.global_params.get("shape_scaffold_rejected_step_fallback", "off")
+        mode = str(raw or "off").strip().lower()
+        allowed = {"off", "trace_z"}
+        if mode not in allowed:
+            raise ValueError(
+                "Unknown shape_scaffold_rejected_step_fallback "
+                f"{raw!r}; expected one of {sorted(allowed)}"
+            )
+        return mode
+
+    def _shape_scaffold_rejected_step_fallback_enabled(self) -> bool:
+        if self._shape_scaffold_rejected_step_fallback_mode() != "trace_z":
+            return False
+        mesh_op_mode = str(
+            self.global_params.get("rim_slope_match_scaffold_mesh_operation_mode", "")
+            or ""
+        ).strip()
+        preserve_groups = self.global_params.get(
+            "pin_to_circle_mesh_operation_preserve_normal_groups", []
+        )
+        if isinstance(preserve_groups, str):
+            preserve_groups = [preserve_groups]
+        return mesh_op_mode == "preserve_trace_v1" and "trace_layer" in set(
+            preserve_groups or []
+        )
+
+    def _try_shape_scaffold_trace_z_fallback(
+        self,
+        grad_arr: np.ndarray,
+        step_size_in: float,
+        energy_fn: Callable[[], float],
+        *,
+        reduced_flag: bool,
+        accept_rule: str | None,
+    ) -> tuple[bool, float, float]:
+        stats: dict[str, object] = {
+            "mode": self._shape_scaffold_rejected_step_fallback_mode(),
+            "attempted": False,
+            "accepted": False,
+            "attempted_count": int(
+                getattr(
+                    self,
+                    "_shape_scaffold_rejected_step_fallback_attempted_count",
+                    0,
+                )
+            ),
+            "accepted_count": int(
+                getattr(
+                    self,
+                    "_shape_scaffold_rejected_step_fallback_accepted_count",
+                    0,
+                )
+            ),
+            "reason": "",
+            "trace_count": 0,
+            "trace_descent_z_mean": 0.0,
+            "trace_dz_mean": 0.0,
+            "trace_dz_max": 0.0,
+            "energy_before": float("nan"),
+            "energy_after": float("nan"),
+            "step_size_in": float(step_size_in),
+            "step_size_out": float(step_size_in),
+        }
+        self._last_shape_scaffold_rejected_step_fallback_stats = stats
+        if not self._shape_scaffold_rejected_step_fallback_enabled():
+            stats["reason"] = "disabled"
+            return False, step_size_in, float("nan")
+
+        trace_rows = _scaffold_trace_rows(self.mesh)
+        stats["trace_count"] = int(trace_rows.size)
+        if trace_rows.size == 0:
+            stats["reason"] = "no_trace_rows"
+            return False, step_size_in, float("nan")
+
+        direction = np.zeros_like(grad_arr)
+        direction[trace_rows, 2] = -np.asarray(grad_arr[trace_rows, 2], dtype=float)
+        trace_descent_z = direction[trace_rows, 2]
+        trace_descent_z_mean = float(np.mean(trace_descent_z))
+        stats["trace_descent_z_mean"] = trace_descent_z_mean
+        if not np.isfinite(trace_descent_z_mean) or trace_descent_z_mean <= 0.0:
+            stats["reason"] = "non_positive_trace_z_descent"
+            return False, step_size_in, float("nan")
+
+        before_positions = self.mesh.positions_view().copy(order="F")
+        energy_before = float(energy_fn())
+        stats["energy_before"] = energy_before
+        stats["attempted"] = True
+        self._shape_scaffold_rejected_step_fallback_attempted_count = (
+            int(
+                getattr(
+                    self,
+                    "_shape_scaffold_rejected_step_fallback_attempted_count",
+                    0,
+                )
+            )
+            + 1
+        )
+        stats["attempted_count"] = int(
+            self._shape_scaffold_rejected_step_fallback_attempted_count
+        )
+        setattr(self.mesh, "_line_search_reduced_energy", bool(reduced_flag))
+        if reduced_flag and accept_rule is not None:
+            setattr(self.mesh, "_line_search_reduced_accept_rule", str(accept_rule))
+        try:
+            success, new_step, accepted_energy = backtracking_line_search_array(
+                self.mesh,
+                direction,
+                grad_arr,
+                step_size_in,
+                energy_fn,
+                self.mesh.vertex_ids,
+                max_iter=getattr(self.stepper, "max_iter", 10),
+                beta=getattr(self.stepper, "beta", 0.7),
+                c=getattr(self.stepper, "c", 1e-4),
+                gamma=getattr(self.stepper, "gamma", 1.5),
+                alpha_max_factor=getattr(self.stepper, "alpha_max_factor", 10.0),
+                constraint_enforcer=self._enforce_constraints
+                if self._has_enforceable_constraints
+                else None,
+            )
+        finally:
+            if hasattr(self.mesh, "_line_search_reduced_energy"):
+                delattr(self.mesh, "_line_search_reduced_energy")
+            if hasattr(self.mesh, "_line_search_reduced_accept_rule"):
+                delattr(self.mesh, "_line_search_reduced_accept_rule")
+
+        after_positions = self.mesh.positions_view()
+        trace_dz = after_positions[trace_rows, 2] - before_positions[trace_rows, 2]
+        stats.update(
+            {
+                "accepted": bool(success),
+                "reason": "accepted" if success else "line_search_rejected",
+                "step_size_out": float(new_step),
+                "energy_after": float(accepted_energy),
+                "trace_dz_mean": float(np.mean(trace_dz)) if trace_dz.size else 0.0,
+                "trace_dz_max": float(np.max(trace_dz)) if trace_dz.size else 0.0,
+            }
+        )
+        if success:
+            self._shape_scaffold_rejected_step_fallback_accepted_count = (
+                int(
+                    getattr(
+                        self,
+                        "_shape_scaffold_rejected_step_fallback_accepted_count",
+                        0,
+                    )
+                )
+                + 1
+            )
+        stats["accepted_count"] = int(
+            getattr(
+                self,
+                "_shape_scaffold_rejected_step_fallback_accepted_count",
+                0,
+            )
+        )
+        return bool(success), float(new_step), float(accepted_energy)
 
     def _soa_views(self) -> tuple[np.ndarray, Dict[int, int], np.ndarray]:
         """Return cached SoA views for positions, index map, and a scratch buffer."""
@@ -684,6 +892,9 @@ class Minimizer:
         self._last_inner_coupled_update_mode_stats = (
             self._tilt_relaxation_manager.last_inner_coupled_update_mode_stats
         )
+        self._last_leaflet_relaxation_stats = (
+            self._tilt_relaxation_manager.last_leaflet_relaxation_stats
+        )
 
     @staticmethod
     def _tilt_vertex_areas_from_triangles(
@@ -970,6 +1181,16 @@ STEP SIZE:\t {self.step_size}
         validate_disk_interface_topology(self.mesh, self.global_params)
         zero_step_counter = 0
         step_success = True
+        self._shape_scaffold_rejected_step_fallback_attempted_count = 0
+        self._shape_scaffold_rejected_step_fallback_accepted_count = 0
+        self._last_shape_scaffold_rejected_step_fallback_stats = {
+            "mode": self._shape_scaffold_rejected_step_fallback_mode(),
+            "attempted": False,
+            "accepted": False,
+            "attempted_count": 0,
+            "accepted_count": 0,
+            "reason": "not_attempted",
+        }
 
         if n_steps <= 0:
             E, grad = self.compute_energy_and_gradient()
@@ -1124,6 +1345,7 @@ STEP SIZE:\t {self.step_size}
             # switch to an accept/reject rule that uses post-relax reduced
             # energies (rather than Armijo using the partial gradient).
             setattr(self.mesh, "_line_search_reduced_energy", reduced_flag)
+            accept_rule = None
             if reduced_flag:
                 accept_rule = str(
                     self.global_params.get("line_search_reduced_accept_rule", "armijo")
@@ -1150,6 +1372,25 @@ STEP SIZE:\t {self.step_size}
                     delattr(self.mesh, "_line_search_reduced_energy")
                 if hasattr(self.mesh, "_line_search_reduced_accept_rule"):
                     delattr(self.mesh, "_line_search_reduced_accept_rule")
+            if not step_success:
+                (
+                    fallback_success,
+                    fallback_step_size,
+                    fallback_energy,
+                ) = self._try_shape_scaffold_trace_z_fallback(
+                    grad_arr,
+                    step_size_in,
+                    energy_fn,
+                    reduced_flag=reduced_flag,
+                    accept_rule=accept_rule,
+                )
+                if fallback_success:
+                    step_success = True
+                    self.step_size = fallback_step_size
+                    accepted_energy = fallback_energy
+                    reset = getattr(self.stepper, "reset", None)
+                    if callable(reset):
+                        reset()
             last_state_energy = float(accepted_energy)
             if logger.isEnabledFor(logging.DEBUG):
                 # Do not probe energy here: additional debug-only energy

@@ -2,6 +2,7 @@ import os
 import sys
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -129,6 +130,21 @@ def test_leaflet_cg_reduces_energy() -> None:
     e1 = minim.compute_energy()
 
     assert e1 <= e0
+    stats = getattr(minim, "_last_leaflet_relaxation_stats")
+    assert stats["cg_rejection_fallback"] == "off"
+    assert stats["cg_fallback_attempted_count"] == 0
+    assert stats["cg_fallback_accepted_count"] == 0
+
+
+def test_leaflet_cg_rejection_fallback_rejects_unknown_mode() -> None:
+    mesh = parse_geometry(_tilt_leaflet_patch_input(solve_mode="nested"))
+    mesh.global_parameters.set("tilt_solver", "cg")
+    mesh.global_parameters.set("tilt_cg_max_iters", 12)
+    mesh.global_parameters.set("tilt_cg_rejection_fallback", "unknown")
+    minim = _build_minimizer(mesh)
+
+    with pytest.raises(ValueError, match="tilt_cg_rejection_fallback"):
+        minim.minimize(n_steps=1)
 
 
 def test_leaflet_cg_respects_fixed_tilts() -> None:

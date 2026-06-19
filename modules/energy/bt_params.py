@@ -86,16 +86,56 @@ def _base_term_region_mode(global_params) -> str:
     return mode
 
 
-def _base_term_reference_mode(global_params) -> str:
+def _base_term_reference_mode(global_params, *, cache_tag: str | None = None) -> str:
     """Return the reference mode used for the Helfrich base curvature term."""
     if global_params is None:
         return "current_geometry"
-    raw = global_params.get("bending_tilt_base_term_reference_mode")
+    raw = None
+    if cache_tag is not None:
+        raw = global_params.get(f"bending_tilt_base_term_reference_mode_{cache_tag}")
+    if raw is None:
+        raw = global_params.get("bending_tilt_base_term_reference_mode")
     mode = str(raw or "current_geometry").strip().lower()
     if mode not in {"current_geometry", "flat_reference_zero_j0"}:
         raise ValueError(
             "bending_tilt_base_term_reference_mode must be "
             "'current_geometry' or 'flat_reference_zero_J0'."
+        )
+    return mode
+
+
+def _bending_tilt_interface_divergence_mode(
+    global_params, *, cache_tag: str | None = None
+) -> str:
+    """Return optional scaffold-interface divergence reconstruction mode."""
+    if global_params is None:
+        return "p1_triangle"
+    raw = None
+    if cache_tag is not None:
+        raw = global_params.get(f"bending_tilt_interface_divergence_mode_{cache_tag}")
+    if raw is None and cache_tag == "out":
+        raw = global_params.get("bending_tilt_out_interface_divergence_mode")
+    if raw is None:
+        raw = global_params.get("bending_tilt_interface_divergence_mode")
+    mode = str(raw or "p1_triangle").strip().lower()
+    if mode not in {"p1_triangle", "trace_reconstructed_v1"}:
+        raise ValueError(
+            "bending_tilt_out_interface_divergence_mode must be "
+            "'p1_triangle' or 'trace_reconstructed_v1'."
+        )
+    return mode
+
+
+def _bending_tilt_in_scaffold_shape_stencil_mode(global_params) -> str:
+    """Return opt-in scaffold trace treatment for inner shape gradients."""
+    if global_params is None:
+        return "off"
+    raw = global_params.get("bending_tilt_in_scaffold_shape_stencil_mode")
+    mode = str(raw or "off").strip().lower()
+    if mode not in {"off", "trace_boundary_v1"}:
+        raise ValueError(
+            "bending_tilt_in_scaffold_shape_stencil_mode must be "
+            "'off' or 'trace_boundary_v1'."
         )
     return mode
 

@@ -602,6 +602,114 @@ def test_physical_edge_scaffold_shape_projection_moves_trace_shell_height() -> N
     assert tilt_change > 1.0e-6
 
 
+def test_physical_edge_scaffold_mesh_operation_can_preserve_trace_height() -> None:
+    root = Path(__file__).resolve().parent.parent
+    base_doc = yaml.safe_load(
+        (
+            root
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    scaffold = build_gap_filled_outer_shell_scaffold_fixture(
+        base_doc=base_doc,
+        label="trace_layer_scaffold_preserve_mesh_op_unit",
+        trace_radius=(7.0 / 15.0) + 0.005,
+        outer_shells=1,
+        planar_geometry=False,
+    )
+    scaffold["global_parameters"]["rim_slope_match_scaffold_mesh_operation_mode"] = (
+        "preserve_trace_v1"
+    )
+    fixture_path = (
+        root
+        / "tests"
+        / "fixtures"
+        / "_tmp_trace_layer_scaffold_preserve_mesh_op_unit.yaml"
+    )
+    fixture_path.write_text(yaml.safe_dump(scaffold, sort_keys=False), encoding="utf-8")
+    try:
+        mesh = parse_geometry(load_data(str(fixture_path)))
+    finally:
+        fixture_path.unlink(missing_ok=True)
+
+    from modules.constraints import rim_slope_match_out as constraint
+
+    data = constraint._build_matching_data(
+        mesh, mesh.global_parameters, mesh.positions_view()
+    )
+    trace_rows = np.asarray(data["outer_rows"], dtype=int)
+    target_z = 0.123
+    for row in trace_rows:
+        mesh.vertices[int(mesh.vertex_ids[int(row)])].position[2] = target_z
+    mesh.increment_version()
+
+    before = mesh.positions_view()[trace_rows, 2].copy()
+    for context in ("mesh_operation", "finalize"):
+        constraint.enforce_constraint(
+            mesh, global_params=mesh.global_parameters, context=context
+        )
+        after = mesh.positions_view()[trace_rows, 2]
+
+        assert np.max(np.abs(after - before)) == pytest.approx(0.0, abs=1.0e-12)
+        stats = getattr(mesh, "_last_rim_slope_match_scaffold_mesh_operation_stats", {})
+        assert stats["mode"] == "preserve_trace_v1"
+        assert stats["skipped"] is True
+        assert stats["context"] == context
+
+
+def test_pin_to_circle_mesh_operation_can_preserve_trace_normal_coordinate() -> None:
+    root = Path(__file__).resolve().parent.parent
+    base_doc = yaml.safe_load(
+        (
+            root
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    scaffold = build_gap_filled_outer_shell_scaffold_fixture(
+        base_doc=base_doc,
+        label="trace_layer_pin_circle_preserve_normal_unit",
+        trace_radius=(7.0 / 15.0) + 0.005,
+        outer_shells=1,
+        planar_geometry=False,
+    )
+    scaffold["global_parameters"][
+        "pin_to_circle_mesh_operation_preserve_normal_groups"
+    ] = ["trace_layer"]
+    fixture_path = (
+        root
+        / "tests"
+        / "fixtures"
+        / "_tmp_trace_layer_pin_circle_preserve_normal_unit.yaml"
+    )
+    fixture_path.write_text(yaml.safe_dump(scaffold, sort_keys=False), encoding="utf-8")
+    try:
+        mesh = parse_geometry(load_data(str(fixture_path)))
+    finally:
+        fixture_path.unlink(missing_ok=True)
+
+    from modules.constraints import pin_to_circle
+    from modules.constraints import rim_slope_match_out as constraint
+
+    data = constraint._build_matching_data(
+        mesh, mesh.global_parameters, mesh.positions_view()
+    )
+    trace_rows = np.asarray(data["outer_rows"], dtype=int)
+    for row in trace_rows:
+        mesh.vertices[int(mesh.vertex_ids[int(row)])].position[2] = 0.123
+    mesh.increment_version()
+
+    before = mesh.positions_view()[trace_rows, 2].copy()
+    for context in ("mesh_operation", "finalize"):
+        pin_to_circle.enforce_constraint(mesh, context=context)
+        after = mesh.positions_view()[trace_rows, 2]
+
+        assert np.max(np.abs(after - before)) == pytest.approx(0.0, abs=1.0e-12)
+
+
 def test_physical_edge_explicit_trace_shape_projection_moves_trace_shell() -> None:
     root = Path(__file__).resolve().parent.parent
     base_doc = yaml.safe_load(

@@ -40,6 +40,8 @@ from .bt_params import (
     _assume_J0_radius_max,
     _base_term_boundary_group,
     _base_term_reference_mode,
+    _bending_tilt_in_scaffold_shape_stencil_mode,
+    _bending_tilt_interface_divergence_mode,
     _per_vertex_params_leaflet,
     _resolve_bending_modulus,
     _use_inner_recovered_divergence,
@@ -59,6 +61,167 @@ from .bt_selection import (
     _shared_rim_support_transition_triangle_mask,
 )
 from .bt_utils import _accumulate_leaflet_tilt_gradient
+
+
+def _row_option_mask(mesh: Mesh, predicate) -> np.ndarray:
+    mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    for row, vid in enumerate(mesh.vertex_ids):
+        opts = getattr(mesh.vertices[int(vid)], "options", {}) or {}
+        if predicate(opts):
+            mask[row] = True
+    return mask
+
+
+def _outer_trace_reconstructed_divergence(
+    mesh: Mesh,
+    global_params,
+    *,
+    cache_tag: str,
+    tri_rows: np.ndarray,
+    div_term: np.ndarray,
+) -> tuple[np.ndarray, dict[str, object] | None]:
+    mode = _bending_tilt_interface_divergence_mode(global_params, cache_tag=cache_tag)
+    if mode == "p1_triangle":
+        return div_term, None
+    if str(cache_tag) != "out" or tri_rows.size == 0:
+        return div_term, None
+
+    trace_rows = _row_option_mask(
+        mesh, lambda opts: str(opts.get("pin_to_circle_group") or "") == "trace_layer"
+    )
+    support_rows = _row_option_mask(
+        mesh, lambda opts: opts.get("outer_shell_scaffold_index") is not None
+    )
+    release_rows = _row_option_mask(
+        mesh, lambda opts: bool(opts.get("outer_shell_release_ring", False))
+    )
+    if not np.any(trace_rows) or not (np.any(support_rows) or np.any(release_rows)):
+        return div_term, {
+            "mode": mode,
+            "enabled": False,
+            "reason": "requires_trace_and_scaffold_rows",
+        }
+
+    trace_touch = np.any(trace_rows[tri_rows], axis=1)
+    support_touch = np.any(support_rows[tri_rows], axis=1)
+    release_touch = np.any(release_rows[tri_rows], axis=1)
+    scaffold_touch = trace_touch | support_touch | release_touch
+    source_mask = ~scaffold_touch
+    source_name = "far_or_other"
+    if not np.any(source_mask):
+        source_mask = support_touch & ~trace_touch
+        source_name = "support_touching"
+    if not np.any(trace_touch) or not np.any(source_mask):
+        return div_term, {
+            "mode": mode,
+            "enabled": False,
+            "reason": "missing_trace_or_source_triangles",
+            "trace_triangle_count": int(np.sum(trace_touch)),
+            "source_triangle_count": int(np.sum(source_mask)),
+        }
+
+    div_eval = np.asarray(div_term, dtype=float).copy()
+    source_mean = float(np.mean(div_eval[source_mask]))
+    div_eval[trace_touch] = source_mean
+    return div_eval, {
+        "mode": mode,
+        "enabled": True,
+        "source": source_name,
+        "source_mean": source_mean,
+        "trace_triangle_count": int(np.sum(trace_touch)),
+        "source_triangle_count": int(np.sum(source_mask)),
+        "trace_mask": trace_touch,
+        "source_mask": source_mask,
+    }
+
+
+def _apply_trace_reconstruction_pullback(
+    coeff: np.ndarray,
+    reconstruction: dict[str, object] | None,
+) -> np.ndarray:
+    if not reconstruction or not bool(reconstruction.get("enabled", False)):
+        return coeff
+    trace_mask = np.asarray(reconstruction.get("trace_mask"), dtype=bool)
+    source_mask = np.asarray(reconstruction.get("source_mask"), dtype=bool)
+    if trace_mask.size != coeff.size or source_mask.size != coeff.size:
+        return coeff
+    source_count = int(np.sum(source_mask))
+    if source_count <= 0:
+        return coeff
+    out = np.asarray(coeff, dtype=float).copy()
+    trace_coeff = float(np.sum(out[trace_mask]))
+    out[trace_mask] = 0.0
+    out[source_mask] += trace_coeff / float(source_count)
+    return out
+
+
+def _public_reconstruction_stats(
+    reconstruction: dict[str, object] | None,
+) -> dict[str, object]:
+    if not reconstruction:
+        return {"mode": "p1_triangle", "enabled": False}
+    return {
+        key: value
+        for key, value in reconstruction.items()
+        if key not in {"trace_mask", "source_mask"}
+    }
+
+
+def _inner_scaffold_trace_rows(mesh: Mesh) -> tuple[np.ndarray, dict[str, object]]:
+    trace_rows = _row_option_mask(
+        mesh, lambda opts: str(opts.get("pin_to_circle_group") or "") == "trace_layer"
+    )
+    support_rows = _row_option_mask(
+        mesh, lambda opts: opts.get("outer_shell_scaffold_index") is not None
+    )
+    release_rows = _row_option_mask(
+        mesh, lambda opts: bool(opts.get("outer_shell_release_ring", False))
+    )
+    trace_idx = np.flatnonzero(trace_rows)
+    scaffold_count = int(np.sum(support_rows) + np.sum(release_rows))
+    return trace_idx, {
+        "trace_row_count": int(trace_idx.size),
+        "support_row_count": int(np.sum(support_rows)),
+        "release_row_count": int(np.sum(release_rows)),
+        "has_scaffold_rows": bool(scaffold_count > 0),
+    }
+
+
+def _maybe_neutralize_inner_scaffold_trace_shape_gradient(
+    mesh: Mesh,
+    global_params,
+    *,
+    cache_tag: str,
+    grad_arr: np.ndarray,
+    before: np.ndarray | None,
+) -> dict[str, object]:
+    mode = _bending_tilt_in_scaffold_shape_stencil_mode(global_params)
+    stats: dict[str, object] = {
+        "mode": mode,
+        "enabled": False,
+        "cache_tag": str(cache_tag),
+        "trace_row_count": 0,
+        "support_row_count": 0,
+        "release_row_count": 0,
+        "neutralized_z_descent_mean": 0.0,
+        "neutralized_z_norm": 0.0,
+    }
+    if mode == "off" or str(cache_tag) != "in" or before is None:
+        return stats
+    trace_rows, row_stats = _inner_scaffold_trace_rows(mesh)
+    stats.update(row_stats)
+    if trace_rows.size == 0 or not bool(row_stats.get("has_scaffold_rows", False)):
+        return stats
+    delta_z = np.asarray(grad_arr[trace_rows, 2] - before[:, 2], dtype=float)
+    grad_arr[trace_rows, 2] = before[:, 2]
+    stats.update(
+        {
+            "enabled": True,
+            "neutralized_z_descent_mean": float(np.mean(-delta_z)),
+            "neutralized_z_norm": float(np.linalg.norm(delta_z)),
+        }
+    )
+    return stats
 
 
 def compute_energy_and_gradient_array_leaflet(
@@ -161,6 +324,20 @@ def compute_energy_and_gradient_array_leaflet(
     else:
         div_eval_tri = div_term
         div_eval_vertex_area = None
+    reconstruction_stats = None
+    if not use_recovered_div:
+        div_eval_tri, reconstruction_stats = _outer_trace_reconstructed_divergence(
+            mesh,
+            global_params,
+            cache_tag=cache_tag,
+            tri_rows=tri_rows,
+            div_term=div_eval_tri,
+        )
+    setattr(
+        mesh,
+        f"_last_bending_tilt_{cache_tag}_interface_divergence_stats",
+        _public_reconstruction_stats(reconstruction_stats),
+    )
 
     vertex_areas_eff, va0_eff, va1_eff, va2_eff = _compute_effective_areas(
         mesh,
@@ -234,7 +411,9 @@ def compute_energy_and_gradient_array_leaflet(
                     scratch_tag=f"btl_{cache_tag}",
                 )
             else:
-                dE_ddiv = float(div_sign) * dE_ddiv_base
+                dE_ddiv = float(div_sign) * _apply_trace_reconstruction_pullback(
+                    dE_ddiv_base, reconstruction_stats
+                )
             factor = dE_ddiv[:, None]
             _accumulate_leaflet_tilt_gradient(
                 tilt_grad_arr,
@@ -265,7 +444,10 @@ def compute_energy_and_gradient_array_leaflet(
     )
 
     base_term = (2.0 * H_vor) - c0_arr
-    if _base_term_reference_mode(global_params) == "flat_reference_zero_j0":
+    if (
+        _base_term_reference_mode(global_params, cache_tag=cache_tag)
+        == "flat_reference_zero_j0"
+    ):
         base_term[:] = 0.0
     base_term[~is_interior] = 0.0
     presets = _assume_J0_presets(global_params, cache_tag=cache_tag)
@@ -323,6 +505,8 @@ def compute_energy_and_gradient_array_leaflet(
     else:
         div_eff_num = np.zeros_like(base_term)
     div_eff_source = div_eval_tri if use_recovered_div else div_term
+    if reconstruction_stats is not None:
+        div_eff_source = div_eval_tri
     div_eff_num = scatter_triangle_scalar_to_vertices(
         tri_rows=tri_rows,
         w0=va0_eff * div_eff_source,
@@ -405,6 +589,14 @@ def compute_energy_and_gradient_array_leaflet(
         fA_eff = 0.5 * kappa_arr * term**2
         fA_vor = -2.0 * kappa_arr * term * ratio * H_vor
 
+    scaffold_shape_trace_rows: np.ndarray | None = None
+    scaffold_shape_before: np.ndarray | None = None
+    scaffold_shape_mode = _bending_tilt_in_scaffold_shape_stencil_mode(global_params)
+    if scaffold_shape_mode != "off" and str(cache_tag) == "in":
+        scaffold_shape_trace_rows, _ = _inner_scaffold_trace_rows(mesh)
+        if scaffold_shape_trace_rows.size:
+            scaffold_shape_before = grad_arr[scaffold_shape_trace_rows].copy()
+
     if mode == "finite_difference":  # pragma: no cover - slow debugging path
         eps = float(global_params.get("bending_fd_eps", 1e-6))
         grad_arr[:] += _finite_difference_gradient_shape_leaflet(
@@ -436,6 +628,27 @@ def compute_energy_and_gradient_array_leaflet(
             ctx=ctx,
             transition_operator_enabled=transition_operator_enabled,
         )
+
+    if scaffold_shape_trace_rows is not None and scaffold_shape_trace_rows.size:
+        stats = _maybe_neutralize_inner_scaffold_trace_shape_gradient(
+            mesh,
+            global_params,
+            cache_tag=cache_tag,
+            grad_arr=grad_arr,
+            before=scaffold_shape_before,
+        )
+    else:
+        stats = {
+            "mode": scaffold_shape_mode,
+            "enabled": False,
+            "cache_tag": str(cache_tag),
+            "trace_row_count": 0,
+            "support_row_count": 0,
+            "release_row_count": 0,
+            "neutralized_z_descent_mean": 0.0,
+            "neutralized_z_norm": 0.0,
+        }
+    setattr(mesh, f"_last_bending_tilt_{cache_tag}_scaffold_shape_stencil_stats", stats)
 
     setattr(
         mesh,
@@ -473,7 +686,9 @@ def compute_energy_and_gradient_array_leaflet(
                 scratch_tag=f"btl_{cache_tag}",
             )
         else:
-            dE_ddiv = float(div_sign) * dE_ddiv_base
+            dE_ddiv = float(div_sign) * _apply_trace_reconstruction_pullback(
+                dE_ddiv_base, reconstruction_stats
+            )
         factor = dE_ddiv[:, None]
 
         np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)
@@ -547,6 +762,7 @@ __all__ = [
     "_assume_J0_presets",
     "_assume_J0_radius_max",
     "_base_term_boundary_group",
+    "_bending_tilt_in_scaffold_shape_stencil_mode",
     "_per_vertex_params_leaflet",
     "_resolve_bending_modulus",
     "_use_inner_recovered_divergence",

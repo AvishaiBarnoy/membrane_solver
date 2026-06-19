@@ -10,6 +10,7 @@ from __future__ import annotations
 import numpy as np
 
 from geometry.entities import Mesh
+from modules.constraints.local_interface_shells import build_local_interface_shell_data
 
 
 def _normalize_preset_list(raw) -> list[str]:
@@ -62,6 +63,12 @@ def leaflet_absent_vertex_mask(
     key = f"leaflet_{leaflet_norm}_absent_presets"
     absent_presets = set(_normalize_preset_list(global_params.get(key)))
     absent_token = tuple(sorted(absent_presets))
+    mode_token = (
+        str(global_params.get("rim_slope_match_mode") or "").strip().lower(),
+        str(global_params.get(f"leaflet_{leaflet_norm}_absence_mode") or "")
+        .strip()
+        .lower(),
+    )
 
     cache = getattr(mesh, "_leaflet_absent_mask_cache", None)
     if cache is None:
@@ -74,6 +81,7 @@ def leaflet_absent_vertex_mask(
         and entry.get("mesh_version") == int(mesh._version)
         and entry.get("vertex_ids_version") == int(mesh._vertex_ids_version)
         and entry.get("absent_token") == absent_token
+        and entry.get("mode_token") == mode_token
         and entry.get("vertex_count") == len(mesh.vertex_ids)
     ):
         return entry["mask"]
@@ -84,6 +92,7 @@ def leaflet_absent_vertex_mask(
             "mesh_version": int(mesh._version),
             "vertex_ids_version": int(mesh._vertex_ids_version),
             "absent_token": absent_token,
+            "mode_token": mode_token,
             "vertex_count": len(mesh.vertex_ids),
             "mask": mask,
         }
@@ -95,14 +104,55 @@ def leaflet_absent_vertex_mask(
         preset = opts.get("preset")
         if preset in absent_presets:
             mask[row] = True
+    _restore_physical_edge_outer_trace_rows(
+        mesh,
+        mask,
+        absent_presets=absent_presets,
+        leaflet=leaflet_norm,
+        mode_token=mode_token,
+    )
     cache[leaflet_norm] = {
         "mesh_version": int(mesh._version),
         "vertex_ids_version": int(mesh._vertex_ids_version),
         "absent_token": absent_token,
+        "mode_token": mode_token,
         "vertex_count": len(mesh.vertex_ids),
         "mask": mask,
     }
     return mask
+
+
+def _restore_physical_edge_outer_trace_rows(
+    mesh: Mesh,
+    mask: np.ndarray,
+    *,
+    absent_presets: set[str],
+    leaflet: str,
+    mode_token: tuple[str, str],
+) -> None:
+    """Keep physical-edge continuation shell rows present for the outer leaflet."""
+    if leaflet != "out" or "disk" not in absent_presets:
+        return
+    rim_mode, absence_mode = mode_token
+    if rim_mode != "physical_edge_staggered_v1":
+        return
+    if absence_mode not in {"triangles", "triangle", "facets", "facet"}:
+        return
+    try:
+        shell_data = build_local_interface_shell_data(
+            mesh, positions=mesh.positions_view()
+        )
+    except AssertionError:
+        return
+    rows = np.concatenate(
+        [
+            np.asarray(shell_data.disk_rows, dtype=int),
+            np.asarray(shell_data.rim_rows, dtype=int),
+            np.asarray(shell_data.outer_rows, dtype=int),
+        ]
+    )
+    if rows.size:
+        mask[rows] = False
 
 
 def leaflet_present_triangle_mask(

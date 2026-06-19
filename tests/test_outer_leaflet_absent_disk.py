@@ -7,6 +7,9 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry
+from modules.constraints.local_interface_shells import build_local_interface_shell_data
+from modules.energy import bending_tilt_leaflet
+from modules.energy.leaflet_presence import leaflet_absent_vertex_mask
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
@@ -126,3 +129,54 @@ def test_outer_leaflet_absent_on_disk_masks_out_energies() -> None:
     mesh.set_tilts_out_from_array(tout3)
     masked_rim = minim.compute_energy_breakdown()
     assert masked_rim["tilt_out"] != masked_baseline["tilt_out"]
+
+
+def test_physical_edge_outer_trace_shell_remains_present_when_disk_is_absent() -> None:
+    mesh = parse_geometry(
+        load_data(
+            os.path.join(
+                os.path.dirname(__file__),
+                "fixtures",
+                "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml",
+            )
+        )
+    )
+    mesh.build_position_cache()
+    shell_data = build_local_interface_shell_data(mesh, positions=mesh.positions_view())
+
+    absent = leaflet_absent_vertex_mask(mesh, mesh.global_parameters, leaflet="out")
+
+    # Under staggered physical-edge mode, the disk-side boundary ring (disk_rows)
+    # acts as a valid outer-leaflet trace DOF for splay-tilt gradient matching,
+    # so they are restored (present / not absent).
+    assert not absent[np.asarray(shell_data.disk_rows, dtype=int)].any()
+    assert not absent[np.asarray(shell_data.rim_rows, dtype=int)].any()
+    assert not absent[np.asarray(shell_data.outer_rows, dtype=int)].any()
+
+
+def test_physical_edge_outer_trace_shell_triangles_survive_bending_tilt_payload() -> (
+    None
+):
+    mesh = parse_geometry(
+        load_data(
+            os.path.join(
+                os.path.dirname(__file__),
+                "fixtures",
+                "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml",
+            )
+        )
+    )
+    mesh.build_position_cache()
+    shell_data = build_local_interface_shell_data(mesh, positions=mesh.positions_view())
+    payload = bending_tilt_leaflet._leaflet_triangle_payload(
+        mesh,
+        mesh.global_parameters,
+        positions=mesh.positions_view(),
+        index_map=mesh.vertex_index_to_row,
+        cache_tag="out",
+    )
+    tri_rows = np.asarray(payload["tri_rows"], dtype=np.int32)
+    shell_rows = np.asarray(shell_data.outer_rows, dtype=int)
+
+    assert tri_rows.size > 0
+    assert int(np.sum(np.any(np.isin(tri_rows, shell_rows), axis=1))) > 0

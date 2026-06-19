@@ -32,6 +32,7 @@ from modules.constraints.rim_slope_match_out import (
     matching_residual_diagnostics,
     matching_ring_diagnostics,
 )
+from modules.energy.bt_params import _base_term_reference_mode
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
@@ -76,6 +77,13 @@ def _parity_lane_name(mesh_path: Path, mesh) -> str:
     if configured:
         return configured
     return Path(mesh_path).stem
+
+
+def _model_intent(mesh) -> str:
+    lane = str(mesh.global_parameters.get("theory_parity_lane") or "").strip().lower()
+    if lane.startswith("physical_edge_full_coupling"):
+        return "full_physics_candidate"
+    return "analytical_parity"
 
 
 def _build_context(mesh_path: Path) -> CommandContext:
@@ -1283,6 +1291,8 @@ def _collect_report_from_context(
             "theory": legacy_anchor,
             "legacy_anchor": legacy_anchor,
             "tex_benchmark": tex_benchmark,
+            "model_intent": _model_intent(ctx.mesh),
+            "reference_mode": _base_term_reference_mode(ctx.mesh.global_parameters),
         },
     }
     return report

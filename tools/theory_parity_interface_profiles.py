@@ -223,7 +223,12 @@ def _copy_scaled_ring(
 
 
 def build_scaled_fixture(
-    *, base_doc: dict[str, Any], label: str, inner_radius: float, outer_radius: float
+    *,
+    base_doc: dict[str, Any],
+    label: str,
+    inner_radius: float,
+    outer_radius: float,
+    base_term_reference_mode: str = "flat_reference_zero_J0",
 ) -> dict[str, Any]:
     """Return a fixture copy with the interface rings moved inward."""
     doc = copy.deepcopy(base_doc)
@@ -231,13 +236,17 @@ def build_scaled_fixture(
     _scale_ring(doc["vertices"], SOURCE_OUTER_RADIUS, float(outer_radius))
     gp = dict(doc.get("global_parameters") or {})
     gp["theory_parity_lane"] = str(label)
-    gp["bending_tilt_base_term_reference_mode"] = "flat_reference_zero_J0"
+    gp["bending_tilt_base_term_reference_mode"] = str(base_term_reference_mode)
     doc["global_parameters"] = gp
     return doc
 
 
 def build_profiled_fixture(
-    *, base_doc: dict[str, Any], profile: str, lane: str | None = None
+    *,
+    base_doc: dict[str, Any],
+    profile: str,
+    lane: str | None = None,
+    base_term_reference_mode: str = "flat_reference_zero_J0",
 ) -> dict[str, Any]:
     """Return a fixture copy for one named near-edge interface profile."""
     key = str(profile).strip()
@@ -249,7 +258,7 @@ def build_profiled_fixture(
         doc = copy.deepcopy(base_doc)
         gp = dict(doc.get("global_parameters") or {})
         gp["theory_parity_lane"] = label
-        gp["bending_tilt_base_term_reference_mode"] = "flat_reference_zero_J0"
+        gp["bending_tilt_base_term_reference_mode"] = str(base_term_reference_mode)
         doc["global_parameters"] = gp
         return doc
     inner_radius, outer_radius = radii
@@ -258,7 +267,41 @@ def build_profiled_fixture(
         label=label,
         inner_radius=float(inner_radius),
         outer_radius=float(outer_radius),
+        base_term_reference_mode=base_term_reference_mode,
     )
+
+
+def build_full_physics_fixture(
+    *, base_doc: dict[str, Any], lane: str
+) -> dict[str, Any]:
+    """Return a physical-edge fixture copy configured for current-geometry coupling."""
+    doc = copy.deepcopy(base_doc)
+    gp = dict(doc.get("global_parameters") or {})
+    gp["theory_parity_lane"] = str(lane)
+    gp["bending_tilt_base_term_reference_mode"] = "current_geometry"
+    doc["global_parameters"] = gp
+    return doc
+
+
+def build_full_physics_trace_fixture(
+    *,
+    base_doc: dict[str, Any],
+    lane: str,
+    trace_radius: float,
+    planar_geometry: bool = False,
+) -> dict[str, Any]:
+    """Return a current-geometry fixture with an explicit trace ring at ``R + eps``."""
+    doc = build_trace_ring_fixture(
+        base_doc=base_doc,
+        label=str(lane),
+        trace_radius=float(trace_radius),
+        planar_geometry=bool(planar_geometry),
+    )
+    gp = dict(doc.get("global_parameters") or {})
+    gp["theory_parity_lane"] = str(lane)
+    gp["bending_tilt_base_term_reference_mode"] = "current_geometry"
+    doc["global_parameters"] = gp
+    return doc
 
 
 def build_trace_ring_fixture(
@@ -556,9 +599,11 @@ __all__ = [
     "INTERFACE_PROFILES",
     "SOURCE_INNER_RADIUS",
     "SOURCE_OUTER_RADIUS",
+    "build_full_physics_trace_fixture",
     "build_gap_filled_outer_shell_scaffold_fixture",
     "build_outer_shell_scaffold_fixture",
     "build_trace_ring_fixture",
+    "build_full_physics_fixture",
     "build_profiled_fixture",
     "build_scaled_fixture",
 ]

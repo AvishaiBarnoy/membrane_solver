@@ -215,7 +215,7 @@ def _leaflet_static_tilt_payload(
     region_mode = _base_term_region_mode(global_params)
     region_radius = _base_term_region_radius(global_params)
     boundary_group = _base_term_boundary_group(global_params, cache_tag=cache_tag)
-    reference_mode = _base_term_reference_mode(global_params)
+    reference_mode = _base_term_reference_mode(global_params, cache_tag=cache_tag)
 
     use_cache = mesh._geometry_cache_active(positions)
     cache_attr = f"_bending_tilt_leaflet_static_cache_{cache_tag}"

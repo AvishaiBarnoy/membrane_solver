@@ -35,6 +35,7 @@ from modules.constraints.rim_slope_match_params import (
     _resolve_group,
     _resolve_matching_mode,
     _sanitize_disk_group,
+    _scaffold_mesh_operation_projection_mode,
     _use_curved_free_disk_shell2_tilt_continuation,
     _use_disk_theta_targeting,
     _uses_outer_shell_tilt_matching,
@@ -297,6 +298,32 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
     """Project interface-shell heights onto the current rim law."""
     matching_mode = _resolve_matching_mode(global_params)
     context = str(_kwargs.get("context") or "").strip().lower()
+    if (
+        context in {"mesh_operation", "finalize"}
+        and matching_mode == "physical_edge_staggered_v1"
+        and _uses_scaffold_trace_lane(global_params, matching_mode)
+        and _scaffold_mesh_operation_projection_mode(global_params)
+        == "preserve_trace_v1"
+    ):
+        setattr(
+            mesh,
+            "_last_rim_slope_match_scaffold_mesh_operation_stats",
+            {
+                "mode": "preserve_trace_v1",
+                "skipped": True,
+                "context": context,
+            },
+        )
+        return
+    setattr(
+        mesh,
+        "_last_rim_slope_match_scaffold_mesh_operation_stats",
+        {
+            "mode": _scaffold_mesh_operation_projection_mode(global_params),
+            "skipped": False,
+            "context": context,
+        },
+    )
     if matching_mode not in {
         "physical_edge_staggered_v1",
         "shared_rim_staggered_v1",
@@ -519,6 +546,7 @@ __all__ = [
     "_resolve_matching_mode",
     "_resolve_normal",
     "_sanitize_disk_group",
+    "_scaffold_mesh_operation_projection_mode",
     "_tilt_target_rows_weights_and_direction",
     "_use_curved_free_disk_shell2_tilt_continuation",
     "_use_disk_theta_targeting",

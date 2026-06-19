@@ -128,3 +128,35 @@ def test_build_leaflet_tilt_cg_preconditioner_with_rigidity():
     mask = M_inv_in > 1.0
     assert np.any(mask), f"M_inv_in was {M_inv_in}"
     np.testing.assert_array_less(M_inv_out[mask], M_inv_in[mask])
+
+
+def test_build_leaflet_tilt_cg_preconditioner_uses_provided_leaflet_areas():
+    mesh = _build_simple_mesh()
+    params = GlobalParameters()
+    params.set("tilt_modulus_in", 1.0)
+    params.set("tilt_modulus_out", 1.0)
+    resolver = ParameterResolver(params)
+    context = EnergyContext()
+    context.ensure_for_mesh(mesh)
+
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    fixed_mask_in = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    fixed_mask_out = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    custom_in = np.asarray([1.0, 2.0, 3.0, 4.0], dtype=float)
+    custom_out = np.asarray([4.0, 3.0, 2.0, 1.0], dtype=float)
+
+    M_inv_in, M_inv_out = build_leaflet_tilt_cg_preconditioner(
+        mesh,
+        resolver,
+        context,
+        positions=positions,
+        index_map=index_map,
+        fixed_mask_in=fixed_mask_in,
+        fixed_mask_out=fixed_mask_out,
+        tilt_vertex_areas_in=custom_in,
+        tilt_vertex_areas_out=custom_out,
+    )
+
+    np.testing.assert_allclose(M_inv_in, 1.0 / custom_in)
+    np.testing.assert_allclose(M_inv_out, 1.0 / custom_out)
