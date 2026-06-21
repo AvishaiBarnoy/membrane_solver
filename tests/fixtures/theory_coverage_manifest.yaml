@@ -19,9 +19,9 @@ items:
     tex_markers: ["F_{\\rm in}", "F_{\\rm out}"]
     code_refs:
       - path: modules/energy/tilt_in.py
-        contains: tilt_modulus_in
+        contains: "Inner-leaflet tilt magnitude energy module."
       - path: modules/energy/tilt_out.py
-        contains: tilt_modulus_out
+        contains: "Outer-leaflet tilt magnitude energy module."
       - path: modules/energy/bending_tilt_in.py
         contains: bending_modulus_in
       - path: modules/energy/bending_tilt_out.py
@@ -63,7 +63,7 @@ items:
     tex_markers: ["F_{\\rm cont}=-2\\pi R"]
     code_refs:
       - path: modules/energy/tilt_thetaB_contact_in.py
-        contains: "-2.0 * np.pi * R_eff * gamma * theta_B"
+        contains: "-2.0 * np.pi * R_eff * gamma * theta_contact"
     yaml_checks:
       - kind: list_contains
         path: energy_modules

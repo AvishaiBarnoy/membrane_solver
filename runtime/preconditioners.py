@@ -68,6 +68,8 @@ def build_leaflet_tilt_cg_preconditioner(
     index_map: Dict[int, int],
     fixed_mask_in: np.ndarray,
     fixed_mask_out: np.ndarray,
+    tilt_vertex_areas_in: np.ndarray | None = None,
+    tilt_vertex_areas_out: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return Jacobi preconditioners for leaflet tilt CG solves."""
     n_vertices = len(mesh.vertex_ids)
@@ -77,19 +79,34 @@ def build_leaflet_tilt_cg_preconditioner(
     k_in = float(param_resolver.get(None, "tilt_modulus_in") or 0.0)
     k_out = float(param_resolver.get(None, "tilt_modulus_out") or 0.0)
     if k_in != 0.0 or k_out != 0.0:
-        tri_rows, _ = energy_context.geometry.triangle_rows(mesh)
-        if tri_rows is not None and len(tri_rows) > 0:
-            areas = energy_context.geometry.triangle_areas(mesh, positions)
-            if areas is not None and len(areas) == len(tri_rows):
-                vertex_areas = np.zeros(n_vertices, dtype=float)
-                area_thirds = areas / 3.0
-                np.add.at(vertex_areas, tri_rows[:, 0], area_thirds)
-                np.add.at(vertex_areas, tri_rows[:, 1], area_thirds)
-                np.add.at(vertex_areas, tri_rows[:, 2], area_thirds)
-                if k_in != 0.0:
-                    diag_in += k_in * vertex_areas
-                if k_out != 0.0:
-                    diag_out += k_out * vertex_areas
+        vertex_areas_in = (
+            np.asarray(tilt_vertex_areas_in, dtype=float)
+            if tilt_vertex_areas_in is not None
+            else None
+        )
+        vertex_areas_out = (
+            np.asarray(tilt_vertex_areas_out, dtype=float)
+            if tilt_vertex_areas_out is not None
+            else None
+        )
+        if vertex_areas_in is None or vertex_areas_out is None:
+            tri_rows, _ = energy_context.geometry.triangle_rows(mesh)
+            if tri_rows is not None and len(tri_rows) > 0:
+                areas = energy_context.geometry.triangle_areas(mesh, positions)
+                if areas is not None and len(areas) == len(tri_rows):
+                    vertex_areas = np.zeros(n_vertices, dtype=float)
+                    area_thirds = areas / 3.0
+                    np.add.at(vertex_areas, tri_rows[:, 0], area_thirds)
+                    np.add.at(vertex_areas, tri_rows[:, 1], area_thirds)
+                    np.add.at(vertex_areas, tri_rows[:, 2], area_thirds)
+                    if vertex_areas_in is None:
+                        vertex_areas_in = vertex_areas
+                    if vertex_areas_out is None:
+                        vertex_areas_out = vertex_areas
+        if vertex_areas_in is not None and k_in != 0.0:
+            diag_in += k_in * vertex_areas_in
+        if vertex_areas_out is not None and k_out != 0.0:
+            diag_out += k_out * vertex_areas_out
 
     k_smooth_in = float(
         param_resolver.get(None, "bending_modulus_in")

@@ -67,3 +67,14 @@ def test_leaflet_tilt_relaxation_enforces_thetaB_boundary_before_gradient_eval()
     assert int(np.sum(mask)) > 0
     norms = np.linalg.norm(mesh.tilts_in_view()[mask], axis=1)
     assert float(np.median(norms)) > 1e-6
+    stats = getattr(minim, "_last_leaflet_relaxation_stats")
+    assert int(stats["free_rows_in"]) > 0
+    assert int(stats["active_outer_area_rows"]) >= 0
+    assert str(stats["stop_reason"]) != "not_run"
+    assert "initial_gradient_norms_before_constraints" in stats
+    assert "initial_gradient_norms_after_constraints" in stats
+    assert "gradient_norms_after_constraints" in stats
+    assert "final_gradient_norms_before_constraints" in stats
+    assert "final_gradient_norms_after_constraints" in stats
+    assert "initial_update_norms_in" in stats
+    assert "accepted_update_norms_in" in stats

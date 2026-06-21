@@ -315,6 +315,7 @@ def matching_residual_diagnostics(
             "disk_count": 0 if disk_rows is None else int(disk_rows.size),
             "local_disk": bool(local_disk),
             "theta_param_used": bool(theta_scalar is not None),
+            "target_source": str(data.get("target_source", "unknown")),
         }
     )
     if not np.any(valid):

@@ -92,6 +92,19 @@ class GradientFallbackModule:
         return self.energy
 
 
+class TraceZLinearEnergyModule:
+    def compute_energy_array(self, mesh, global_params, positions, index_map):
+        row = index_map[0]
+        return -float(positions[row, 2])
+
+    def compute_energy_and_gradient_array(
+        self, mesh, global_params, resolver, positions, index_map, grad_arr
+    ):
+        row = index_map[0]
+        grad_arr[row, 2] += -1.0
+        return -float(positions[row, 2])
+
+
 class DummyEnergyManager:
     def __init__(self, mod):
         self.mod = mod
@@ -482,6 +495,53 @@ def test_minimize_resets_stepper_on_failed_step():
 
     minim.minimize(n_steps=2)
     assert stepper.reset_calls == 1
+
+
+def test_minimize_trace_z_fallback_accepts_opt_in_scaffold_rejected_step():
+    mesh = build_min_mesh()
+    mesh.vertices[0].options["pin_to_circle_group"] = "trace_layer"
+    gp = GlobalParameters(
+        {
+            "shape_scaffold_rejected_step_fallback": "trace_z",
+            "rim_slope_match_scaffold_mesh_operation_mode": "preserve_trace_v1",
+            "pin_to_circle_mesh_operation_preserve_normal_groups": ["trace_layer"],
+            "max_zero_steps": 10,
+            "step_size_floor": 1e-12,
+        }
+    )
+    energy = TraceZLinearEnergyModule()
+    cm = DummyConstraintManager()
+    stepper = DummyStepper(results=[(False, 1e-3, 0.0)])
+    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
+
+    out = minim.minimize(n_steps=1)
+
+    stats = minim._last_shape_scaffold_rejected_step_fallback_stats
+    assert out["step_success"] is True
+    assert stats["attempted_count"] == 1
+    assert stats["accepted_count"] == 1
+    assert stats["accepted"] is True
+    assert mesh.vertices[0].position[2] > 0.0
+    assert stepper.reset_calls == 1
+
+
+def test_minimize_trace_z_fallback_default_off_preserves_rejected_step():
+    mesh = build_min_mesh()
+    mesh.vertices[0].options["pin_to_circle_group"] = "trace_layer"
+    gp = GlobalParameters({"max_zero_steps": 1, "step_size_floor": 1e-3})
+    energy = TraceZLinearEnergyModule()
+    cm = DummyConstraintManager()
+    stepper = DummyStepper(results=[(False, 1e-4, 0.0)])
+    minim = Minimizer(mesh, gp, stepper, DummyEnergyManager(energy), cm, quiet=True)
+
+    out = minim.minimize(n_steps=1)
+
+    stats = minim._last_shape_scaffold_rejected_step_fallback_stats
+    assert out["step_success"] is False
+    assert stats["attempted_count"] == 0
+    assert stats["accepted_count"] == 0
+    assert stats["reason"] == "disabled"
+    assert mesh.vertices[0].position[2] == 0.0
 
 
 def test_minimize_auto_mesh_quality_repair_runs_when_enabled(monkeypatch):

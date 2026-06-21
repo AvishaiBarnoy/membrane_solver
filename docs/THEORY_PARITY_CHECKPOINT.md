@@ -676,6 +676,136 @@ These are the latest useful numbers for the main scaffold lane:
 - Any future runtime cadence change must still be benchmarked on the exact
   parity path, because this is a performance-sensitive solver path.
 
+## Field-Linear Scaffold Boundary Driver
+
+- Implemented an opt-in scaffold boundary driver:
+  - `tilt_thetaB_contact_work_mode: field_linear`
+  - active only on the gap-filled release scaffold fixture
+  - contact work now uses the measured boundary field
+    `theta_mean = Σ(w_i t_in_i·r_hat_i) / Σw_i`
+  - the module adds the exact matching `tilt_in` gradient for that linear work
+- Implemented a scaffold-only projector mode:
+  - `rim_slope_match_scaffold_projector_mode: continuity_v2`
+  - active only on the gap-filled release scaffold fixture
+  - uses the measured disk boundary value and projects the explicit trace shell
+    to the TeX half-split target
+- Latest measured gap-filled scaffold result under `LONG_INTERFACE_PROTOCOL`:
+  - `thetaB ≈ 0.13616`
+  - `t_in(R+ε) ≈ 0.06808`
+  - `t_out(R+ε) ≈ 0.06808`
+  - `phi(R+ε) ≈ 0.06808`
+  - `bending_tilt_out ≈ 0.03315`
+  - `tilt_out ≈ 0.02245`
+  - internal energy `≈ 0.75963`
+  - external work `≈ -1.71110`
+  - total energy `≈ -0.95147`
+  - TeX ratios:
+    - `theta_ratio ≈ 1.47539`
+    - `elastic_ratio ≈ 1.30998`
+    - `contact_ratio ≈ 1.47539`
+    - `total_ratio ≈ 1.64080`
+- Interpretation:
+  - the scaffold lane no longer collapses to the zero branch
+  - the outer channel is active without the high-elastic repair branch
+  - direct trace-shell `t_in`, `t_out`, and `phi` now satisfy the expected
+    half-split interface relation at the explicit trace shell
+  - remaining parity mismatch is now global magnitude/energy ratio, not local
+    trace-shell activation
+
+## Scaffold Diagnostic Baseline
+
+- Added tracked scaffold baseline:
+  - [tests/fixtures/theory_parity_scaffold_gapfill_baseline.yaml](/Users/User/github/membrane_solver/tests/fixtures/theory_parity_scaffold_gapfill_baseline.yaml)
+  - this freezes the activated gapfill lane under `LONG_INTERFACE_PROTOCOL`
+  - it records `thetaB`, breakdown terms, direct trace-shell values, split
+    residuals, and theory ratios
+- Added report diagnostics under:
+  - `metrics.diagnostics.scaffold_boundary_driver`
+- Latest diagnostic values:
+  - `R_eff = 0.466666666666667`
+  - `gamma = 4.286`
+  - `theta_contact_mean = 0.136155761034079`
+  - `half_split_t_in_residual ≈ -1.13e-8`
+  - `half_split_t_out_residual ≈ -2.58e-8`
+  - `half_split_phi_residual ≈ -4.54e-12`
+  - fixed-state `elastic_slope_fd ≈ 8.69889`
+  - analytic `contact_slope ≈ -12.56721`
+  - fixed-state `total_slope_fd ≈ -3.86832`
+  - fixed-state `stationarity_residual ≈ -3.86832`
+- Interpretation:
+  - local half-split enforcement is now numerically tight
+  - the remaining mismatch is visible as an unbalanced fixed-state slope and
+    global energy ratio, not a missing local trace-shell activation
+  - this is intentionally diagnostic only; it is not a theory-fitting correction
+
+## Controlled Scaffold Ablations
+
+- Added an ablation matrix in
+  [tests/test_theory_parity_against_tex_acceptance.py](/Users/User/github/membrane_solver/tests/test_theory_parity_against_tex_acceptance.py):
+  - current gapfill: `field_linear` contact plus `continuity_v2` projector
+  - contact-only: `field_linear` contact plus default projector
+  - projector-only: scalar contact plus `continuity_v2` projector
+  - legacy-control: scalar contact plus default projector
+  - fixed-`d` scaffold remains the dead-branch control
+- The ablation test asserts finite reports and populated diagnostics for each
+  variant, while preserving strict behavioral assertions only for the current
+  gapfill lane and the fixed-`d` control.
+
+## Known Non-Scaffold Acceptance Drift
+
+- Broader default/ghost/reproducer acceptance drift remains separate from this
+  scaffold diagnostic work.
+- Do not mark these failures as scaffold regressions unless they reproduce on
+  the scaffold baseline test:
+  - ghost direct-interface improvement expectations
+  - default-lane free-side trace continuation improvement over baseline
+  - default-lane director/profile improvement over baseline
+  - reproduce-baseline drift in default and primary reports
+- These should stay visible as independent parity work. They were not loosened,
+  hidden, or rerouted through the scaffold fixture.
+
+## Energy/Magnitude Imbalance Audit Harness
+
+- Added diagnostics-only audit script:
+  - [tools/diagnostics/scaffold_energy_imbalance_audit.py](/Users/User/github/membrane_solver/tools/diagnostics/scaffold_energy_imbalance_audit.py)
+  - default target is the gap-filled scaffold release fixture
+  - no solver formulas, fixture physics, KH/TeX ratios, or projector behavior are
+    changed by this harness
+- The audit emits:
+  - `mesh_topology`
+  - `refinement_trace`
+  - `module_energy_audit`
+  - `constraint_audit`
+  - `bulk_boundary_split`
+  - `resolution_matrix`
+  - `advanced_flags`
+  - `parity_summary`
+- Quick-mode audit on the gap-filled scaffold fixture after `g1` currently shows:
+  - topology remains stable: `169` vertices, `492` edges, `324` facets,
+    `324` triangle rows
+  - role counts are present for disk, trace shell, three support shells,
+    release ring, outer bulk, and outer boundary
+  - module energy-only paths match breakdown paths for the active scaffold
+    modules within numerical tolerance
+  - boundary radial-tilt slope by module:
+    - `bending_tilt_in ≈ +3.45`
+    - `bending_tilt_out ≈ 0`
+    - `tilt_in ≈ +4.31`
+    - `tilt_out ≈ 0`
+    - `tilt_thetaB_contact_in ≈ -12.57`
+    - summed fixed-state slope `≈ -4.81`
+  - constraint enforcement reduces the local outer residual to near zero, but
+    changes energy substantially in quick mode; this is a diagnostic signal to
+    compare against long-protocol states, not a correction
+  - quick resolution matrix for `n=1` vs `n=3` gap-filled variants is not
+    monotonic in total-ratio improvement, so the imbalance is not yet proven to
+    be a simple shell-count resolution problem
+- New coverage:
+  - [tests/test_scaffold_energy_imbalance_audit.py](/Users/User/github/membrane_solver/tests/test_scaffold_energy_imbalance_audit.py)
+  - verifies mesh row/cache consistency, core audit sections, finite module
+    slopes, constraint residual reporting, quick resolution variants, and CLI
+    YAML output
+
 ### Minimal command/test set to resume work
 
 When a future agent resumes this stream, the minimal useful set is:

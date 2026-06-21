@@ -97,21 +97,20 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
             if global_params is None
             else int(global_params.get("parity_outer_shells") or 0)
         )
-        scaffold_trace_tilt = (
-            trace_layer_radius is not None and scaffold_outer_shells > 0
-        )
         if trace_layer_radius is None:
             rim_rows = np.asarray(local_shells.disk_rows, dtype=int)
             outer_rows = np.asarray(local_shells.rim_rows_for_disk, dtype=int)
             tilt_rows = outer_rows.copy()
+            target_source = "first_outer_shell"
         else:
             rim_rows = np.asarray(local_shells.disk_rows, dtype=int)
-            if scaffold_trace_tilt:
-                outer_rows = np.asarray(local_shells.rim_rows_for_disk, dtype=int)
-                tilt_rows = outer_rows.copy()
-            else:
-                outer_rows = np.asarray(local_shells.outer_rows_for_disk, dtype=int)
-                tilt_rows = outer_rows.copy()
+            outer_rows = np.asarray(local_shells.rim_rows_for_disk, dtype=int)
+            tilt_rows = outer_rows.copy()
+            target_source = (
+                "scaffold_trace_shell"
+                if scaffold_outer_shells > 0
+                else "explicit_trace_shell"
+            )
         if rim_rows.size == 0 or outer_rows.size == 0:
             return None
         if normal is None:
@@ -122,6 +121,7 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
         outer_pos = positions[outer_rows]
         tilt_pos = positions[tilt_rows]
     else:
+        target_source = "tagged_outer_shell"
         rim_rows = _collect_group_rows(mesh, group)
         outer_rows = _collect_group_rows(mesh, outer_group)
         if rim_rows.size == 0 or outer_rows.size == 0:
@@ -286,6 +286,7 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
             if matching_mode == "physical_edge_staggered_v1"
             else "legacy_tagged_rim_shell"
         ),
+        "target_source": target_source,
     }
     if mesh._geometry_cache_active(positions):
         cached = getattr(mesh, cache_attr, None)

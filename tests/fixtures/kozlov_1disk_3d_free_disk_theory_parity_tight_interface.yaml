@@ -10,6 +10,7 @@ global_parameters:
   tilt_modulus_in: 225.0
   tilt_modulus_out: 225.0
   bending_tilt_assume_J0_presets_in: ["disk"]
+  bending_tilt_base_term_reference_mode: flat_reference_zero_J0
   tilt_thetaB_group_in: disk
   tilt_thetaB_contact_penalty_mode: "off"
   tilt_thetaB_strength_in: 1.0e8

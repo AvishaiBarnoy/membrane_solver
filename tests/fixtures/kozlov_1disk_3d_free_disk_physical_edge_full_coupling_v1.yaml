@@ -11,7 +11,7 @@ global_parameters:
   tilt_modulus_out: 225.0
   bending_tilt_assume_J0_presets_in:
   - disk
-  bending_tilt_base_term_reference_mode: flat_reference_zero_J0
+  bending_tilt_base_term_reference_mode: current_geometry
   tilt_thetaB_group_in: disk
   tilt_thetaB_contact_penalty_mode: 'off'
   tilt_thetaB_strength_in: 1.0e8
@@ -58,14 +58,11 @@ global_parameters:
   - 0.0
   - 0.0
   - 0.0
-  theory_parity_lane: physical_edge_ghost_eps005
+  theory_parity_lane: physical_edge_full_coupling_v1
   rim_slope_match_mode: physical_edge_staggered_v1
   tilt_solver: cg
   tilt_cg_max_iters: 120
   tilt_mass_mode_in: consistent
-  parity_trace_layer_radius: 0.4716666666666667
-  parity_outer_shells: 0
-  parity_outer_shells_d: 0.0
 constraint_modules:
 - pin_to_plane
 - pin_to_circle
@@ -279,51 +276,51 @@ vertices:
 - - 0.772
   - 0.0
   - 0.0
-  - {}
+  - preset: rim
 - - 0.6685716117215867
   - 0.38599999999999995
   - 0.0
-  - {}
+  - preset: rim
 - - 0.3860000000000001
   - 0.6685716117215866
   - 0.0
-  - {}
+  - preset: rim
 - - 4.7271366447087834e-17
   - 0.772
   - 0.0
-  - {}
+  - preset: rim
 - - -0.3859999999999999
   - 0.6685716117215867
   - 0.0
-  - {}
+  - preset: rim
 - - -0.6685716117215867
   - 0.38599999999999995
   - 0.0
-  - {}
+  - preset: rim
 - - -0.772
   - 9.454273289417567e-17
   - 0.0
-  - {}
+  - preset: rim
 - - -0.6685716117215867
   - -0.38599999999999984
   - 0.0
-  - {}
+  - preset: rim
 - - -0.38600000000000034
   - -0.6685716117215864
   - 0.0
-  - {}
+  - preset: rim
 - - -1.4181409934126348e-16
   - -0.772
   - 0.0
-  - {}
+  - preset: rim
 - - 0.3860000000000001
   - -0.6685716117215866
   - 0.0
-  - {}
+  - preset: rim
 - - 0.6685716117215864
   - -0.38600000000000034
   - 0.0
-  - {}
+  - preset: rim
 - - 2.833333333333334
   - 0.0
   - 0.0
@@ -624,210 +621,6 @@ vertices:
     tilt_out:
     - 0.0
     - 0.0
-- - 0.4716666666666667
-  - 0.0
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
-- - 0.40847531545166027
-  - 0.2358333333333333
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
-- - 0.2358333333333334
-  - 0.4084753154516602
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
-- - 2.8881253679891746e-17
-  - 0.4716666666666667
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
-- - -0.23583333333333326
-  - 0.40847531545166027
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
-- - -0.40847531545166027
-  - 0.2358333333333333
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
-- - -0.4716666666666667
-  - 5.776250735978349e-17
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
-- - -0.40847531545166027
-  - -0.23583333333333323
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
-- - -0.23583333333333353
-  - -0.4084753154516601
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
-- - -8.664376103967523e-17
-  - -0.4716666666666667
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
-- - 0.2358333333333334
-  - -0.4084753154516602
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
-- - 0.4084753154516601
-  - -0.23583333333333353
-  - 0.0
-  - preset: rim
-    rim_slope_match_group: rim
-    pin_to_circle_group: trace_layer
-    pin_to_circle_radius: 0.4716666666666667
-    pin_to_circle_normal:
-    - 0.0
-    - 0.0
-    - 1.0
-    pin_to_circle_point:
-    - 0.0
-    - 0.0
-    - 0.0
-    constraints:
-    - pin_to_circle
 edges:
 - - 0
   - 13
@@ -1453,126 +1246,6 @@ edges:
   - 108
 - - 97
   - 108
-- - 109
-  - 110
-- - 110
-  - 111
-- - 111
-  - 112
-- - 112
-  - 113
-- - 113
-  - 114
-- - 114
-  - 115
-- - 115
-  - 116
-- - 116
-  - 117
-- - 117
-  - 118
-- - 118
-  - 119
-- - 119
-  - 120
-- - 120
-  - 109
-- - 2
-  - 109
-- - 1
-  - 109
-- - 3
-  - 110
-- - 2
-  - 110
-- - 4
-  - 111
-- - 3
-  - 111
-- - 5
-  - 112
-- - 4
-  - 112
-- - 6
-  - 113
-- - 5
-  - 113
-- - 7
-  - 114
-- - 6
-  - 114
-- - 8
-  - 115
-- - 7
-  - 115
-- - 9
-  - 116
-- - 8
-  - 116
-- - 10
-  - 117
-- - 9
-  - 117
-- - 11
-  - 118
-- - 10
-  - 118
-- - 12
-  - 119
-- - 11
-  - 119
-- - 1
-  - 120
-- - 12
-  - 120
-- - 110
-  - 25
-- - 109
-  - 25
-- - 111
-  - 26
-- - 110
-  - 26
-- - 112
-  - 27
-- - 111
-  - 27
-- - 113
-  - 28
-- - 112
-  - 28
-- - 114
-  - 29
-- - 113
-  - 29
-- - 115
-  - 30
-- - 114
-  - 30
-- - 116
-  - 31
-- - 115
-  - 31
-- - 117
-  - 32
-- - 116
-  - 32
-- - 118
-  - 33
-- - 117
-  - 33
-- - 119
-  - 34
-- - 118
-  - 34
-- - 120
-  - 35
-- - 119
-  - 35
-- - 109
-  - 36
-- - 120
-  - 36
 faces:
 - - 0
   - 1
@@ -1683,148 +1356,76 @@ faces:
   - r25
   - 59
 - - 27
-  - 324
-  - r325
-- - r324
-  - 327
-  - r312
-- - 30
-  - 326
-  - r327
-- - r326
-  - 329
-  - r313
-- - 33
-  - 328
-  - r329
-- - r328
-  - 331
-  - r314
-- - 36
-  - 330
-  - r331
-- - r330
-  - 333
-  - r315
-- - 39
-  - 332
-  - r333
-- - r332
-  - 335
-  - r316
-- - 42
-  - 334
-  - r335
-- - r334
-  - 337
-  - r317
-- - 45
-  - 336
-  - r337
-- - r336
-  - 339
-  - r318
-- - 48
-  - 338
-  - r339
-- - r338
-  - 341
-  - r319
-- - 51
-  - 340
-  - r341
-- - r340
-  - 343
-  - r320
-- - 54
-  - 342
-  - r343
-- - r342
-  - 345
-  - r321
-- - 57
-  - 344
-  - r345
-- - r344
-  - 347
-  - r322
-- - r59
-  - 346
-  - r347
-- - r346
-  - 325
-  - r323
-- - 312
-  - 348
-  - r349
-- - r348
-  - 351
+  - 60
+  - r61
+- - r60
+  - 62
   - r63
-- - 313
-  - 350
-  - r351
-- - r350
-  - 353
+- - 30
+  - 64
+  - r62
+- - r64
+  - 65
   - r66
-- - 314
-  - 352
-  - r353
-- - r352
-  - 355
+- - 33
+  - 67
+  - r65
+- - r67
+  - 68
   - r69
-- - 315
-  - 354
-  - r355
-- - r354
-  - 357
+- - 36
+  - 70
+  - r68
+- - r70
+  - 71
   - r72
-- - 316
-  - 356
-  - r357
-- - r356
-  - 359
+- - 39
+  - 73
+  - r71
+- - r73
+  - 74
   - r75
-- - 317
-  - 358
-  - r359
-- - r358
-  - 361
+- - 42
+  - 76
+  - r74
+- - r76
+  - 77
   - r78
-- - 318
-  - 360
-  - r361
-- - r360
-  - 363
+- - 45
+  - 79
+  - r77
+- - r79
+  - 80
   - r81
-- - 319
-  - 362
-  - r363
-- - r362
-  - 365
+- - 48
+  - 82
+  - r80
+- - r82
+  - 83
   - r84
-- - 320
-  - 364
-  - r365
-- - r364
-  - 367
+- - 51
+  - 85
+  - r83
+- - r85
+  - 86
   - r87
-- - 321
-  - 366
-  - r367
-- - r366
-  - 369
+- - 54
+  - 88
+  - r86
+- - r88
+  - 89
   - r90
-- - 322
-  - 368
-  - r369
-- - r368
-  - 371
+- - 57
+  - 91
+  - r89
+- - r91
+  - 92
   - r93
-- - 323
-  - 370
-  - r371
-- - r370
-  - 349
+- - r59
+  - 94
+  - r92
+- - r94
+  - 61
   - 95
 - - 63
   - 96

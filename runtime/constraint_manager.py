@@ -17,12 +17,22 @@ from .constraint_projection import (
     _project_mixed_gradient_against_constraints,
     _row_constraints_payload_token,
     _solve_kkt_system,
+    _solve_leaflet_sparse_kkt,
 )
 
 logger = logging.getLogger("ConstraintManager")
 
 
 class ConstraintModuleManager:
+    _solve_kkt_system = staticmethod(_solve_kkt_system)
+    _build_leaflet_sparse_projection_operator = staticmethod(
+        _build_leaflet_sparse_projection_operator
+    )
+    _solve_leaflet_sparse_kkt = staticmethod(_solve_leaflet_sparse_kkt)
+    _build_joint_sparse_projection_operator = staticmethod(
+        _build_joint_sparse_projection_operator
+    )
+
     def __init__(self, module_names):
         self.modules = {}
         self._warned_no_grad = set()
@@ -565,7 +575,7 @@ class ConstraintModuleManager:
                 if cached is not None and cached.get("key") == cache_key:
                     operator_cache = cached.get("operator")
                 else:
-                    operator_cache = _build_joint_sparse_projection_operator(
+                    operator_cache = self._build_joint_sparse_projection_operator(
                         row_constraints=row_constraints,
                         n_single=int(grad_arr.size),
                     )
@@ -753,7 +763,7 @@ class ConstraintModuleManager:
                 if cached is not None and cached.get("key") == cache_key:
                     operator_cache = cached.get("operator")
                 else:
-                    operator_cache = _build_leaflet_sparse_projection_operator(
+                    operator_cache = self._build_leaflet_sparse_projection_operator(
                         row_constraints=row_constraints,
                         n_single=int(tilt_in_grad_arr.size),
                     )

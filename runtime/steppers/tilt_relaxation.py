@@ -114,6 +114,84 @@ def _apply_inner_coupled_update_mode_to_delta(
     return out, stats
 
 
+def _leaflet_row_region_masks(mesh: Mesh) -> dict[str, np.ndarray]:
+    n_vertices = len(mesh.vertex_ids)
+    disk = np.zeros(n_vertices, dtype=bool)
+    shared_rim = np.zeros(n_vertices, dtype=bool)
+    outer_support = np.zeros(n_vertices, dtype=bool)
+    outer_free = np.zeros(n_vertices, dtype=bool)
+    for row, vid in enumerate(mesh.vertex_ids):
+        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
+        if str(opts.get("preset") or "") == "disk":
+            if any(
+                opts.get(key) == "rim"
+                for key in (
+                    "rim_slope_match_group",
+                    "rim_slope_match_outer_group",
+                    "rim_slope_match_disk_group",
+                    "tilt_thetaB_group",
+                    "tilt_thetaB_group_in",
+                )
+            ):
+                shared_rim[row] = True
+            else:
+                disk[row] = True
+            continue
+        if any(
+            opts.get(key) == "outer"
+            for key in (
+                "rim_slope_match_group",
+                "rim_slope_match_outer_group",
+                "rim_slope_match_disk_group",
+                "tilt_thetaB_group",
+                "tilt_thetaB_group_in",
+            )
+        ):
+            outer_support[row] = True
+        else:
+            outer_free[row] = True
+    return {
+        "disk": disk,
+        "shared_rim": shared_rim,
+        "outer_support": outer_support,
+        "outer_free": outer_free,
+    }
+
+
+def _region_l2_summary(
+    values: np.ndarray,
+    masks: dict[str, np.ndarray],
+    *,
+    shell_mask: np.ndarray | None = None,
+) -> dict[str, float]:
+    out = {
+        region: float(np.linalg.norm(values[mask])) if np.any(mask) else 0.0
+        for region, mask in masks.items()
+    }
+    if shell_mask is not None:
+        out["outer_shell"] = (
+            float(np.linalg.norm(values[shell_mask])) if np.any(shell_mask) else 0.0
+        )
+    return out
+
+
+def _region_mean_summary(
+    values: np.ndarray,
+    masks: dict[str, np.ndarray],
+    *,
+    shell_mask: np.ndarray | None = None,
+) -> dict[str, float]:
+    out = {
+        region: float(np.mean(values[mask])) if np.any(mask) else 0.0
+        for region, mask in masks.items()
+    }
+    if shell_mask is not None:
+        out["outer_shell"] = (
+            float(np.mean(values[shell_mask])) if np.any(shell_mask) else 0.0
+        )
+    return out
+
+
 class TiltRelaxationManager:
     """Delegated handler for combined and leaflet-specific tilt relaxation."""
 
@@ -154,6 +232,7 @@ class TiltRelaxationManager:
 
         self.last_tilt_projection_stats: dict[str, Any] = {}
         self.last_inner_coupled_update_mode_stats: dict[str, Any] = {}
+        self.last_leaflet_relaxation_stats: dict[str, Any] = {}
 
     def relax_tilts(
         self,
@@ -355,6 +434,63 @@ class TiltRelaxationManager:
         mode: str,
     ) -> None:
         """Relax inner/outer leaflet tilt vectors according to solve mode."""
+        self.last_leaflet_relaxation_stats = {
+            "mode": str(mode or ""),
+            "solver": str(global_params.get("tilt_solver", "cg") or "cg")
+            .strip()
+            .lower(),
+            "max_iters": 0,
+            "accepted_steps": 0,
+            "rejected_steps": 0,
+            "backtracking_steps": 0,
+            "stop_reason": "not_run",
+            "initial_energy": 0.0,
+            "final_energy": 0.0,
+            "initial_gradient_norm": 0.0,
+            "final_gradient_norm": 0.0,
+            "free_rows_in": 0,
+            "free_rows_out": 0,
+            "fixed_rows_in": 0,
+            "fixed_rows_out": 0,
+            "active_outer_area_rows": 0,
+            "outer_shell_row_count": 0,
+            "initial_gradient_norms_before_constraints": {},
+            "initial_gradient_norms_after_constraints": {},
+            "gradient_norms_before_constraints": {},
+            "gradient_norms_after_constraints": {},
+            "final_gradient_norms_before_constraints": {},
+            "final_gradient_norms_after_constraints": {},
+            "initial_update_norms_in": {},
+            "initial_update_norms_out": {},
+            "accepted_update_norms_in": {},
+            "accepted_update_norms_out": {},
+            "preconditioner_mean_inv_in": {},
+            "preconditioner_mean_inv_out": {},
+            "step_size_first_accepted": 0.0,
+            "step_size_last_accepted": 0.0,
+            "step_size_min_accepted": 0.0,
+            "step_size_max_accepted": 0.0,
+            "cg_rejection_fallback": str(
+                global_params.get("tilt_cg_rejection_fallback", "off") or "off"
+            )
+            .strip()
+            .lower(),
+            "cg_fallback_attempted_count": 0,
+            "cg_fallback_accepted_count": 0,
+            "cg_fallback_step_size_last": 0.0,
+            "cg_fallback_update_norms_in": {},
+            "cg_fallback_update_norms_out": {},
+        }
+        cg_rejection_fallback = (
+            str(global_params.get("tilt_cg_rejection_fallback", "off") or "off")
+            .strip()
+            .lower()
+        )
+        if cg_rejection_fallback not in {"off", "gd"}:
+            raise ValueError("tilt_cg_rejection_fallback must be 'off' or 'gd'.")
+        self.last_leaflet_relaxation_stats["cg_rejection_fallback"] = str(
+            cg_rejection_fallback
+        )
         projection_cadence = (
             str(global_params.get("tilt_projection_cadence", "per_step") or "per_step")
             .strip()
@@ -376,14 +512,17 @@ class TiltRelaxationManager:
 
         mode_norm = str(mode or "").strip().lower()
         if mode_norm in ("", "none", "off", "false", "fixed"):
+            self.last_leaflet_relaxation_stats["stop_reason"] = "mode_fixed"
             return
 
         if mode_norm not in ("nested", "coupled"):
             logger.warning("Unknown tilt_solve_mode=%r; treating as 'fixed'.", mode)
+            self.last_leaflet_relaxation_stats["stop_reason"] = "mode_unknown"
             return
 
         step_size = float(global_params.get("tilt_step_size", 0.0) or 0.0)
         if step_size <= 0.0:
+            self.last_leaflet_relaxation_stats["stop_reason"] = "step_size_zero"
             return
 
         tol = float(global_params.get("tilt_tol", 0.0) or 0.0)
@@ -409,14 +548,26 @@ class TiltRelaxationManager:
         if solver == "cg":
             max_iters = int(global_params.get("tilt_cg_max_iters", n_inner) or 0)
             if max_iters <= 0:
+                self.last_leaflet_relaxation_stats["stop_reason"] = "max_iters_zero"
                 return
         else:
             max_iters = n_inner
+        self.last_leaflet_relaxation_stats["solver"] = str(solver)
+        self.last_leaflet_relaxation_stats["max_iters"] = int(max_iters)
 
         fixed_mask_in = self.tilt_fixed_mask_in_fn()
         fixed_mask_out = self.tilt_fixed_mask_out_fn()
+        self.last_leaflet_relaxation_stats["fixed_rows_in"] = int(np.sum(fixed_mask_in))
+        self.last_leaflet_relaxation_stats["fixed_rows_out"] = int(
+            np.sum(fixed_mask_out)
+        )
+        self.last_leaflet_relaxation_stats["free_rows_in"] = int(np.sum(~fixed_mask_in))
+        self.last_leaflet_relaxation_stats["free_rows_out"] = int(
+            np.sum(~fixed_mask_out)
+        )
         has_free = bool(np.any(~fixed_mask_in) or np.any(~fixed_mask_out))
         if not has_free:
+            self.last_leaflet_relaxation_stats["stop_reason"] = "no_free_rows"
             return
 
         def _apply_scaffold_interface_shape_projection() -> None:
@@ -424,12 +575,7 @@ class TiltRelaxationManager:
                 str(global_params.get("rim_slope_match_mode") or "").strip().lower()
             )
             trace_radius = global_params.get("parity_trace_layer_radius")
-            outer_shells = int(global_params.get("parity_outer_shells", 0) or 0)
-            if (
-                mode_match != "physical_edge_staggered_v1"
-                or trace_radius is None
-                or outer_shells <= 0
-            ):
+            if mode_match != "physical_edge_staggered_v1" or trace_radius is None:
                 return
             residual_threshold = 0.1
             for mod in constraint_modules:
@@ -549,6 +695,9 @@ class TiltRelaxationManager:
                         positions=positions,
                     )
                 )
+            self.last_leaflet_relaxation_stats["active_outer_area_rows"] = int(
+                np.sum(np.asarray(tilt_vertex_areas_out, dtype=float) > 0.0)
+            )
             tilt_fixed_vals_in = (
                 tilts_in[fixed_mask_in].copy() if np.any(fixed_mask_in) else None
             )
@@ -582,6 +731,8 @@ class TiltRelaxationManager:
             projection_norm_ref_outer_far = 0.0
 
             outer_far_rows = np.asarray([], dtype=int)
+            outer_shell_row_count = 0
+            shell_rows = np.asarray([], dtype=int)
             projection_loss_radius = float(
                 global_params.get("tilt_projection_loss_radius", 0.0) or 0.0
             )
@@ -601,6 +752,53 @@ class TiltRelaxationManager:
                         + projection_loss_outer_near_width * projection_loss_lambda
                     )
                 )
+            try:
+                from modules.constraints.local_interface_shells import (
+                    build_local_interface_shell_data,
+                )
+
+                shell_data = build_local_interface_shell_data(mesh, positions=positions)
+                shell_rows = np.asarray(shell_data.outer_rows, dtype=int)
+                outer_shell_row_count = int(len(shell_rows))
+            except AssertionError:
+                outer_shell_row_count = 0
+            self.last_leaflet_relaxation_stats["outer_shell_row_count"] = int(
+                outer_shell_row_count
+            )
+            region_masks = _leaflet_row_region_masks(mesh)
+            outer_shell_mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
+            if shell_rows.size > 0:
+                outer_shell_mask[shell_rows] = True
+
+            def _capture_gradient_stats(
+                *,
+                key: str,
+                in_grad: np.ndarray,
+                out_grad: np.ndarray,
+            ) -> None:
+                self.last_leaflet_relaxation_stats[key] = {
+                    "in": _region_l2_summary(
+                        in_grad, region_masks, shell_mask=outer_shell_mask
+                    ),
+                    "out": _region_l2_summary(
+                        out_grad, region_masks, shell_mask=outer_shell_mask
+                    ),
+                }
+
+            def _capture_post_constraint_gradient_stats(
+                *,
+                key: str,
+                in_grad: np.ndarray,
+                out_grad: np.ndarray,
+            ) -> None:
+                self.last_leaflet_relaxation_stats[key] = {
+                    "in": _region_l2_summary(
+                        in_grad, region_masks, shell_mask=outer_shell_mask
+                    ),
+                    "out": _region_l2_summary(
+                        out_grad, region_masks, shell_mask=outer_shell_mask
+                    ),
+                }
 
             def _refresh_tilts_from_constraints_and_project() -> None:
                 nonlocal tilts_in, tilts_out
@@ -636,6 +834,11 @@ class TiltRelaxationManager:
                     grad_dummy=grad_dummy,
                     tilt_only=True,
                 )
+                _capture_gradient_stats(
+                    key="gradient_norms_before_constraints",
+                    in_grad=tilt_in_grad,
+                    out_grad=tilt_out_grad,
+                )
                 if hasattr(
                     constraint_manager, "apply_tilt_gradient_modifications_array"
                 ):
@@ -652,6 +855,11 @@ class TiltRelaxationManager:
                     tilt_in_grad[fixed_mask_in] = 0.0
                 if np.any(fixed_mask_out):
                     tilt_out_grad[fixed_mask_out] = 0.0
+                _capture_post_constraint_gradient_stats(
+                    key="gradient_norms_after_constraints",
+                    in_grad=tilt_in_grad,
+                    out_grad=tilt_out_grad,
+                )
 
                 gnorm = float(
                     np.sqrt(
@@ -673,18 +881,50 @@ class TiltRelaxationManager:
                 )
                 if preconditioner in ("none", "off", "false"):
                     preconditioner = None
+            rejected_steps = 0
+            backtracking_steps = 0
+            stop_reason = "completed_max_iters"
+            initial_energy = 0.0
+            initial_gradient_norm = 0.0
+            final_energy = 0.0
+            final_gradient_norm = 0.0
 
             if solver == "gd":
                 for _ in range(max_iters):
                     E0, gnorm = _leaflet_tilt_gradients()
+                    if accepted_steps == 0 and rejected_steps == 0:
+                        initial_energy = float(E0)
+                        initial_gradient_norm = float(gnorm)
+                        self.last_leaflet_relaxation_stats[
+                            "initial_gradient_norms_before_constraints"
+                        ] = dict(
+                            self.last_leaflet_relaxation_stats[
+                                "gradient_norms_before_constraints"
+                            ]
+                        )
+                        self.last_leaflet_relaxation_stats[
+                            "initial_gradient_norms_after_constraints"
+                        ] = dict(
+                            self.last_leaflet_relaxation_stats[
+                                "gradient_norms_after_constraints"
+                            ]
+                        )
                     if gnorm == 0.0:
+                        stop_reason = "zero_gradient"
+                        final_energy = float(E0)
+                        final_gradient_norm = float(gnorm)
                         break
                     if tol > 0.0 and gnorm < tol:
+                        stop_reason = "converged"
+                        final_energy = float(E0)
+                        final_gradient_norm = float(gnorm)
                         break
 
                     step = step_size
                     accepted = False
                     for _bt in range(12):
+                        if _bt > 0:
+                            backtracking_steps += 1
                         delta_in_trial = -step * tilt_in_grad
                         delta_in_trial, update_mode_stats = (
                             _apply_inner_coupled_update_mode_to_delta(
@@ -720,6 +960,8 @@ class TiltRelaxationManager:
                             tilt_vertex_areas_out=tilt_vertex_areas_out,
                         )
                         if E1 <= E0:
+                            delta_in_accepted = trial_in - tilts_in
+                            delta_out_accepted = trial_out - tilts_out
                             tilts_in, trial_in_buf = trial_in, tilts_in
                             tilts_out, trial_out_buf = trial_out, tilts_out
                             accepted = True
@@ -729,19 +971,123 @@ class TiltRelaxationManager:
                             break
 
                     if not accepted:
+                        rejected_steps += 1
+                        stop_reason = "line_search_rejected"
+                        final_energy = float(E0)
+                        final_gradient_norm = float(gnorm)
                         break
 
                     accepted_steps += 1
+                    self.last_leaflet_relaxation_stats["accepted_update_norms_in"] = (
+                        _region_l2_summary(
+                            delta_in_accepted,
+                            region_masks,
+                            shell_mask=outer_shell_mask,
+                        )
+                    )
+                    self.last_leaflet_relaxation_stats["accepted_update_norms_out"] = (
+                        _region_l2_summary(
+                            delta_out_accepted,
+                            region_masks,
+                            shell_mask=outer_shell_mask,
+                        )
+                    )
+                    if accepted_steps == 1:
+                        self.last_leaflet_relaxation_stats[
+                            "initial_update_norms_in"
+                        ] = dict(
+                            self.last_leaflet_relaxation_stats[
+                                "accepted_update_norms_in"
+                            ]
+                        )
+                        self.last_leaflet_relaxation_stats[
+                            "initial_update_norms_out"
+                        ] = dict(
+                            self.last_leaflet_relaxation_stats[
+                                "accepted_update_norms_out"
+                            ]
+                        )
+                    if accepted_steps == 1:
+                        self.last_leaflet_relaxation_stats[
+                            "step_size_first_accepted"
+                        ] = float(step)
+                        self.last_leaflet_relaxation_stats["step_size_min_accepted"] = (
+                            float(step)
+                        )
+                        self.last_leaflet_relaxation_stats["step_size_max_accepted"] = (
+                            float(step)
+                        )
+                    else:
+                        self.last_leaflet_relaxation_stats["step_size_min_accepted"] = (
+                            float(
+                                min(
+                                    float(
+                                        self.last_leaflet_relaxation_stats[
+                                            "step_size_min_accepted"
+                                        ]
+                                    ),
+                                    float(step),
+                                )
+                            )
+                        )
+                        self.last_leaflet_relaxation_stats["step_size_max_accepted"] = (
+                            float(
+                                max(
+                                    float(
+                                        self.last_leaflet_relaxation_stats[
+                                            "step_size_max_accepted"
+                                        ]
+                                    ),
+                                    float(step),
+                                )
+                            )
+                        )
+                    self.last_leaflet_relaxation_stats["step_size_last_accepted"] = (
+                        float(step)
+                    )
                     if (
                         projection_cadence == "per_step"
                         and (accepted_steps % projection_interval) == 0
                     ):
                         _refresh_tilts_from_constraints_and_project()
+                    final_energy = float(E1)
+                    final_gradient_norm = float(gnorm)
             else:
                 # CG path
                 E0, gnorm = _leaflet_tilt_gradients()
+                initial_energy = float(E0)
+                initial_gradient_norm = float(gnorm)
+                self.last_leaflet_relaxation_stats[
+                    "initial_gradient_norms_before_constraints"
+                ] = dict(
+                    self.last_leaflet_relaxation_stats[
+                        "gradient_norms_before_constraints"
+                    ]
+                )
+                self.last_leaflet_relaxation_stats[
+                    "initial_gradient_norms_after_constraints"
+                ] = dict(
+                    self.last_leaflet_relaxation_stats[
+                        "gradient_norms_after_constraints"
+                    ]
+                )
                 if gnorm == 0.0 or (tol > 0.0 and gnorm < tol):
+                    stop_reason = "zero_gradient" if gnorm == 0.0 else "converged"
+                    final_energy = float(E0)
+                    final_gradient_norm = float(gnorm)
                     self.set_leaflet_tilts_from_arrays_fast_fn(tilts_in, tilts_out)
+                    self.last_leaflet_relaxation_stats.update(
+                        {
+                            "accepted_steps": int(accepted_steps),
+                            "rejected_steps": int(rejected_steps),
+                            "backtracking_steps": int(backtracking_steps),
+                            "stop_reason": str(stop_reason),
+                            "initial_energy": float(initial_energy),
+                            "final_energy": float(final_energy),
+                            "initial_gradient_norm": float(initial_gradient_norm),
+                            "final_gradient_norm": float(final_gradient_norm),
+                        }
+                    )
                     return
 
                 residual_in = -tilt_in_grad
@@ -762,6 +1108,18 @@ class TiltRelaxationManager:
                         index_map=mesh.vertex_index_to_row,
                         fixed_mask_in=fixed_mask_in,
                         fixed_mask_out=fixed_mask_out,
+                        tilt_vertex_areas_in=tilt_vertex_areas_in,
+                        tilt_vertex_areas_out=tilt_vertex_areas_out,
+                    )
+                    self.last_leaflet_relaxation_stats["preconditioner_mean_inv_in"] = (
+                        _region_mean_summary(
+                            M_inv_in, region_masks, shell_mask=outer_shell_mask
+                        )
+                    )
+                    self.last_leaflet_relaxation_stats[
+                        "preconditioner_mean_inv_out"
+                    ] = _region_mean_summary(
+                        M_inv_out, region_masks, shell_mask=outer_shell_mask
                     )
 
                 if M_inv_in is not None:
@@ -779,13 +1137,22 @@ class TiltRelaxationManager:
 
                 for _ in range(max_iters):
                     if gnorm == 0.0:
+                        stop_reason = "zero_gradient"
+                        final_energy = float(E0)
+                        final_gradient_norm = float(gnorm)
                         break
                     if tol > 0.0 and gnorm < tol:
+                        stop_reason = "converged"
+                        final_energy = float(E0)
+                        final_gradient_norm = float(gnorm)
                         break
 
                     step = step_size
                     accepted = False
+                    fallback_used = False
                     for _bt in range(12):
+                        if _bt > 0:
+                            backtracking_steps += 1
                         delta_in_trial = step * direction_in
                         delta_in_trial, update_mode_stats = (
                             _apply_inner_coupled_update_mode_to_delta(
@@ -821,6 +1188,8 @@ class TiltRelaxationManager:
                             tilt_vertex_areas_out=tilt_vertex_areas_out,
                         )
                         if E1 <= E0:
+                            delta_in_accepted = trial_in - tilts_in
+                            delta_out_accepted = trial_out - tilts_out
                             tilts_in, trial_in_buf = trial_in, tilts_in
                             tilts_out, trial_out_buf = trial_out, tilts_out
                             E0 = E1
@@ -831,9 +1200,171 @@ class TiltRelaxationManager:
                             break
 
                     if not accepted:
-                        break
+                        if cg_rejection_fallback == "gd":
+                            self.last_leaflet_relaxation_stats[
+                                "cg_fallback_attempted_count"
+                            ] = (
+                                int(
+                                    self.last_leaflet_relaxation_stats[
+                                        "cg_fallback_attempted_count"
+                                    ]
+                                )
+                                + 1
+                            )
+                            step = step_size
+                            for _bt in range(12):
+                                if _bt > 0:
+                                    backtracking_steps += 1
+                                delta_in_trial = -step * tilt_in_grad
+                                delta_in_trial, update_mode_stats = (
+                                    _apply_inner_coupled_update_mode_to_delta(
+                                        mesh=mesh,
+                                        global_params=global_params,
+                                        positions=positions,
+                                        fixed_mask_in=fixed_mask_in,
+                                        delta_in=delta_in_trial,
+                                    )
+                                )
+                                self.last_inner_coupled_update_mode_stats = dict(
+                                    update_mode_stats
+                                )
+                                trial_in, trial_out = build_leaflet_trial_tilts(
+                                    base_in=tilts_in,
+                                    base_out=tilts_out,
+                                    delta_in=delta_in_trial,
+                                    delta_out=-step * tilt_out_grad,
+                                    normals=normals,
+                                    fixed_mask_in=fixed_mask_in,
+                                    fixed_mask_out=fixed_mask_out,
+                                    fixed_vals_in=tilt_fixed_vals_in,
+                                    fixed_vals_out=tilt_fixed_vals_out,
+                                    out_in=trial_in_buf,
+                                    out_out=trial_out_buf,
+                                )
+                                E1 = self.compute_tilt_dependent_energy_with_leaflet_tilts_fn(
+                                    positions=positions,
+                                    tilts_in=trial_in,
+                                    tilts_out=trial_out,
+                                    grad_dummy=grad_dummy,
+                                    tilt_vertex_areas_in=tilt_vertex_areas_in,
+                                    tilt_vertex_areas_out=tilt_vertex_areas_out,
+                                )
+                                if E1 <= E0:
+                                    delta_in_accepted = trial_in - tilts_in
+                                    delta_out_accepted = trial_out - tilts_out
+                                    tilts_in, trial_in_buf = trial_in, tilts_in
+                                    tilts_out, trial_out_buf = trial_out, tilts_out
+                                    E0 = E1
+                                    accepted = True
+                                    fallback_used = True
+                                    break
+                                step *= 0.5
+                                if step < 1e-16:
+                                    break
+
+                        if not accepted:
+                            rejected_steps += 1
+                            stop_reason = "line_search_rejected"
+                            final_energy = float(E0)
+                            final_gradient_norm = float(gnorm)
+                            break
 
                     accepted_steps += 1
+                    self.last_leaflet_relaxation_stats["accepted_update_norms_in"] = (
+                        _region_l2_summary(
+                            delta_in_accepted,
+                            region_masks,
+                            shell_mask=outer_shell_mask,
+                        )
+                    )
+                    self.last_leaflet_relaxation_stats["accepted_update_norms_out"] = (
+                        _region_l2_summary(
+                            delta_out_accepted,
+                            region_masks,
+                            shell_mask=outer_shell_mask,
+                        )
+                    )
+                    if fallback_used:
+                        self.last_leaflet_relaxation_stats[
+                            "cg_fallback_accepted_count"
+                        ] = (
+                            int(
+                                self.last_leaflet_relaxation_stats[
+                                    "cg_fallback_accepted_count"
+                                ]
+                            )
+                            + 1
+                        )
+                        self.last_leaflet_relaxation_stats[
+                            "cg_fallback_step_size_last"
+                        ] = float(step)
+                        self.last_leaflet_relaxation_stats[
+                            "cg_fallback_update_norms_in"
+                        ] = dict(
+                            self.last_leaflet_relaxation_stats[
+                                "accepted_update_norms_in"
+                            ]
+                        )
+                        self.last_leaflet_relaxation_stats[
+                            "cg_fallback_update_norms_out"
+                        ] = dict(
+                            self.last_leaflet_relaxation_stats[
+                                "accepted_update_norms_out"
+                            ]
+                        )
+                    if accepted_steps == 1:
+                        self.last_leaflet_relaxation_stats[
+                            "initial_update_norms_in"
+                        ] = dict(
+                            self.last_leaflet_relaxation_stats[
+                                "accepted_update_norms_in"
+                            ]
+                        )
+                        self.last_leaflet_relaxation_stats[
+                            "initial_update_norms_out"
+                        ] = dict(
+                            self.last_leaflet_relaxation_stats[
+                                "accepted_update_norms_out"
+                            ]
+                        )
+                    if accepted_steps == 1:
+                        self.last_leaflet_relaxation_stats[
+                            "step_size_first_accepted"
+                        ] = float(step)
+                        self.last_leaflet_relaxation_stats["step_size_min_accepted"] = (
+                            float(step)
+                        )
+                        self.last_leaflet_relaxation_stats["step_size_max_accepted"] = (
+                            float(step)
+                        )
+                    else:
+                        self.last_leaflet_relaxation_stats["step_size_min_accepted"] = (
+                            float(
+                                min(
+                                    float(
+                                        self.last_leaflet_relaxation_stats[
+                                            "step_size_min_accepted"
+                                        ]
+                                    ),
+                                    float(step),
+                                )
+                            )
+                        )
+                        self.last_leaflet_relaxation_stats["step_size_max_accepted"] = (
+                            float(
+                                max(
+                                    float(
+                                        self.last_leaflet_relaxation_stats[
+                                            "step_size_max_accepted"
+                                        ]
+                                    ),
+                                    float(step),
+                                )
+                            )
+                        )
+                    self.last_leaflet_relaxation_stats["step_size_last_accepted"] = (
+                        float(step)
+                    )
                     if (
                         projection_cadence == "per_step"
                         and (accepted_steps % projection_interval) == 0
@@ -842,6 +1373,9 @@ class TiltRelaxationManager:
 
                     E0, gnorm = _leaflet_tilt_gradients()
                     if gnorm == 0.0 or (tol > 0.0 and gnorm < tol):
+                        stop_reason = "zero_gradient" if gnorm == 0.0 else "converged"
+                        final_energy = float(E0)
+                        final_gradient_norm = float(gnorm)
                         break
 
                     residual_in = -tilt_in_grad
@@ -856,12 +1390,24 @@ class TiltRelaxationManager:
                     rz_new = float(
                         np.sum(residual_in * z_in) + np.sum(residual_out * z_out)
                     )
+                    if fallback_used:
+                        direction_in = z_in.copy()
+                        direction_out = z_out.copy()
+                        rz_old = rz_new
+                        final_energy = float(E0)
+                        final_gradient_norm = float(gnorm)
+                        continue
                     if rz_old == 0.0:
+                        stop_reason = "cg_breakdown"
+                        final_energy = float(E0)
+                        final_gradient_norm = float(gnorm)
                         break
                     beta = rz_new / rz_old
                     direction_in = z_in + beta * direction_in
                     direction_out = z_out + beta * direction_out
                     rz_old = rz_new
+                    final_energy = float(E0)
+                    final_gradient_norm = float(gnorm)
 
             if projection_cadence == "per_pass":
                 _refresh_tilts_from_constraints_and_project()
@@ -871,6 +1417,54 @@ class TiltRelaxationManager:
             )
             self.last_tilt_projection_stats["tilt_projection_norm_loss_outer_far"] = (
                 projection_norm_loss_outer_far
+            )
+            if accepted_steps == 0 and rejected_steps == 0:
+                final_energy, final_gradient_norm = _leaflet_tilt_gradients()
+                initial_energy = float(final_energy)
+                initial_gradient_norm = float(final_gradient_norm)
+                stop_reason = "completed_without_steps"
+                self.last_leaflet_relaxation_stats[
+                    "initial_gradient_norms_before_constraints"
+                ] = dict(
+                    self.last_leaflet_relaxation_stats[
+                        "gradient_norms_before_constraints"
+                    ]
+                )
+                self.last_leaflet_relaxation_stats[
+                    "initial_gradient_norms_after_constraints"
+                ] = dict(
+                    self.last_leaflet_relaxation_stats[
+                        "gradient_norms_after_constraints"
+                    ]
+                )
+            self.last_leaflet_relaxation_stats[
+                "final_gradient_norms_before_constraints"
+            ] = dict(
+                self.last_leaflet_relaxation_stats["gradient_norms_before_constraints"]
+            )
+            self.last_leaflet_relaxation_stats[
+                "final_gradient_norms_after_constraints"
+            ] = dict(
+                self.last_leaflet_relaxation_stats["gradient_norms_after_constraints"]
+            )
+            self.last_leaflet_relaxation_stats.update(
+                {
+                    "accepted_steps": int(accepted_steps),
+                    "rejected_steps": int(rejected_steps),
+                    "backtracking_steps": int(backtracking_steps),
+                    "stop_reason": str(stop_reason),
+                    "initial_energy": float(initial_energy),
+                    "final_energy": float(final_energy),
+                    "initial_gradient_norm": float(initial_gradient_norm),
+                    "final_gradient_norm": float(final_gradient_norm),
+                    "projection_apply_count": int(projection_apply_count),
+                    "tilt_projection_norm_loss_outer_far": float(
+                        projection_norm_loss_outer_far
+                    ),
+                    "tilt_projection_norm_ref_outer_far": float(
+                        projection_norm_ref_outer_far
+                    ),
+                }
             )
 
         self.set_leaflet_tilts_from_arrays_fast_fn(tilts_in, tilts_out)

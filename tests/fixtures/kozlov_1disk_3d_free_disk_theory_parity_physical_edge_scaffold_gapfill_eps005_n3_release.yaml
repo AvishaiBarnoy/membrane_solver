@@ -11,8 +11,10 @@ global_parameters:
   tilt_modulus_out: 225.0
   bending_tilt_assume_J0_presets_in:
   - disk
+  bending_tilt_base_term_reference_mode: flat_reference_zero_J0
   tilt_thetaB_group_in: disk
   tilt_thetaB_contact_penalty_mode: 'off'
+  tilt_thetaB_contact_work_mode: field_linear
   tilt_thetaB_strength_in: 1.0e8
   tilt_thetaB_contact_strength_in: 4.286
   tilt_thetaB_value: 0.0
@@ -59,6 +61,7 @@ global_parameters:
   - 0.0
   theory_parity_lane: physical_edge_scaffold_gapfill_eps005_n3_release
   rim_slope_match_mode: physical_edge_staggered_v1
+  rim_slope_match_scaffold_projector_mode: continuity_v2
   tilt_solver: cg
   tilt_cg_max_iters: 120
   tilt_mass_mode_in: consistent

@@ -32,6 +32,7 @@ from modules.constraints.rim_slope_match_out import (
     matching_residual_diagnostics,
     matching_ring_diagnostics,
 )
+from modules.energy.bt_params import _base_term_reference_mode
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
@@ -76,6 +77,13 @@ def _parity_lane_name(mesh_path: Path, mesh) -> str:
     if configured:
         return configured
     return Path(mesh_path).stem
+
+
+def _model_intent(mesh) -> str:
+    lane = str(mesh.global_parameters.get("theory_parity_lane") or "").strip().lower()
+    if lane.startswith("physical_edge_full_coupling"):
+        return "full_physics_candidate"
+    return "analytical_parity"
 
 
 def _build_context(mesh_path: Path) -> CommandContext:
@@ -896,6 +904,185 @@ def _trace_error_split(
     return out
 
 
+def _cyclic_angle_order(
+    positions: np.ndarray, *, center: np.ndarray, normal: np.ndarray
+) -> np.ndarray:
+    trial = np.array([1.0, 0.0, 0.0], dtype=float)
+    if abs(float(np.dot(trial, normal))) > 0.9:
+        trial = np.array([0.0, 1.0, 0.0], dtype=float)
+    u = trial - float(np.dot(trial, normal)) * normal
+    u_norm = float(np.linalg.norm(u))
+    if u_norm <= 1.0e-15:
+        u = np.array([1.0, 0.0, 0.0], dtype=float)
+    else:
+        u = u / u_norm
+    v = np.cross(normal, u)
+    v_norm = float(np.linalg.norm(v))
+    if v_norm <= 1.0e-15:
+        v = np.array([0.0, 1.0, 0.0], dtype=float)
+    else:
+        v = v / v_norm
+
+    rel = positions - center[None, :]
+    rel_plane = rel - np.einsum("ij,j->i", rel, normal)[:, None] * normal[None, :]
+    return np.argsort(np.arctan2(rel_plane @ v, rel_plane @ u))
+
+
+def _arc_length_weights_for_ordered_ring(positions: np.ndarray) -> np.ndarray:
+    n = int(len(positions))
+    if n == 0:
+        return np.zeros(0, dtype=float)
+    diffs_next = positions[(np.arange(n) + 1) % n] - positions
+    diffs_prev = positions - positions[(np.arange(n) - 1) % n]
+    return 0.5 * (
+        np.linalg.norm(diffs_next, axis=1) + np.linalg.norm(diffs_prev, axis=1)
+    )
+
+
+def _scaffold_boundary_payload(mesh, positions: np.ndarray):
+    try:
+        shell_data = build_local_interface_shell_data(
+            mesh, positions=positions, group="disk"
+        )
+    except AssertionError:
+        return None
+
+    center = _resolve_center(mesh.global_parameters)
+    normal = _resolve_normal(mesh.global_parameters)
+    disk_rows = np.asarray(shell_data.disk_rows, dtype=int)
+    if disk_rows.size == 0:
+        return None
+    if normal is None:
+        normal = _fit_plane_normal(positions[disk_rows])
+    if normal is None:
+        normal = np.array([0.0, 0.0, 1.0], dtype=float)
+
+    pts = positions[disk_rows]
+    order = _cyclic_angle_order(pts, center=center, normal=normal)
+    rows = disk_rows[order]
+    pts = pts[order]
+    weights = _arc_length_weights_for_ordered_ring(pts)
+
+    r_vec = pts - center[None, :]
+    r_vec = r_vec - np.einsum("ij,j->i", r_vec, normal)[:, None] * normal[None, :]
+    r_len = np.linalg.norm(r_vec, axis=1)
+    good = r_len > 1.0e-12
+    if not bool(np.any(good)):
+        return None
+
+    rows = rows[good]
+    weights = weights[good]
+    r_len = r_len[good]
+    r_hat = r_vec[good] / r_len[:, None]
+    wsum = float(np.sum(weights))
+    if wsum <= 1.0e-12:
+        return None
+    return rows, weights, r_hat, r_len, wsum
+
+
+def _scaffold_boundary_driver_diagnostics(
+    ctx: CommandContext,
+    *,
+    interface_shell: dict[str, float | str | bool],
+) -> dict[str, float | str | bool]:
+    mesh = ctx.mesh
+    gp = mesh.global_parameters
+    out: dict[str, float | str | bool] = {
+        "available": False,
+        "contact_work_mode": str(gp.get("tilt_thetaB_contact_work_mode") or "scalar"),
+        "projector_mode": str(gp.get("rim_slope_match_scaffold_projector_mode") or ""),
+        "gamma": 0.0,
+        "R_eff": 0.0,
+        "theta_contact_mean": 0.0,
+        "thetaB_scalar": float(gp.get("tilt_thetaB_value") or 0.0),
+        "half_split_t_in_residual": 0.0,
+        "half_split_t_out_residual": 0.0,
+        "half_split_phi_residual": 0.0,
+        "elastic_slope_fd": 0.0,
+        "contact_slope_analytic": 0.0,
+        "total_slope_fd": 0.0,
+        "stationarity_residual": 0.0,
+    }
+
+    mode_match = str(gp.get("rim_slope_match_mode") or "").strip().lower()
+    if (
+        mode_match != "physical_edge_staggered_v1"
+        or gp.get("parity_trace_layer_radius") is None
+    ):
+        return out
+
+    positions = mesh.positions_view()
+    payload = _scaffold_boundary_payload(mesh, positions)
+    if payload is None:
+        return out
+    rows, weights, r_hat, r_len, wsum = payload
+
+    tilts_in = np.asarray(mesh.tilts_in_view(), dtype=float)
+    theta_vals = np.einsum("ij,ij->i", tilts_in[rows], r_hat)
+    theta_mean = float(np.sum(weights * theta_vals) / wsum)
+    r_eff = float(np.sum(weights * r_len) / wsum)
+    gamma = float(gp.get("tilt_thetaB_contact_strength_in") or 0.0)
+    contact_slope = float(-2.0 * np.pi * r_eff * gamma)
+    half_theta = 0.5 * theta_mean
+
+    if bool(interface_shell.get("available", False)):
+        out["half_split_t_in_residual"] = float(
+            float(interface_shell.get("t_in_at_R_plus_epsilon") or 0.0) - half_theta
+        )
+        out["half_split_t_out_residual"] = float(
+            float(interface_shell.get("t_out_at_R_plus_epsilon") or 0.0) - half_theta
+        )
+        out["half_split_phi_residual"] = float(
+            float(interface_shell.get("phi_secant_at_R_plus_epsilon") or 0.0)
+            - half_theta
+        )
+
+    original_in = mesh.tilts_in_view().copy(order="F")
+    original_out = mesh.tilts_out_view().copy(order="F")
+    original_gamma = gp.get("tilt_thetaB_contact_strength_in")
+    direction = np.zeros_like(original_in)
+    direction[rows] = r_hat
+    eps = 1.0e-6
+
+    def _energy_at(alpha: float) -> float:
+        trial = original_in.copy(order="F")
+        trial[rows] += float(alpha) * direction[rows]
+        mesh.set_tilts_in_from_array(trial)
+        mesh.set_tilts_out_from_array(original_out)
+        return float(ctx.minimizer.compute_energy())
+
+    try:
+        total_plus = _energy_at(eps)
+        total_minus = _energy_at(-eps)
+        total_slope = float((total_plus - total_minus) / (2.0 * eps))
+
+        gp.set("tilt_thetaB_contact_strength_in", 0.0)
+        elastic_plus = _energy_at(eps)
+        elastic_minus = _energy_at(-eps)
+        elastic_slope = float((elastic_plus - elastic_minus) / (2.0 * eps))
+    finally:
+        if original_gamma is None:
+            gp.unset("tilt_thetaB_contact_strength_in")
+        else:
+            gp.set("tilt_thetaB_contact_strength_in", original_gamma)
+        mesh.set_tilts_in_from_array(original_in)
+        mesh.set_tilts_out_from_array(original_out)
+
+    out.update(
+        {
+            "available": True,
+            "gamma": gamma,
+            "R_eff": r_eff,
+            "theta_contact_mean": theta_mean,
+            "contact_slope_analytic": contact_slope,
+            "total_slope_fd": total_slope,
+            "elastic_slope_fd": elastic_slope,
+            "stationarity_residual": float(elastic_slope + contact_slope),
+        }
+    )
+    return out
+
+
 def _collect_report_from_context(
     *,
     ctx: CommandContext,
@@ -1045,6 +1232,9 @@ def _collect_report_from_context(
     trace_error_split = _trace_error_split(
         ctx.mesh, ctx.mesh.positions_view(), theta_meas
     )
+    scaffold_boundary_driver = _scaffold_boundary_driver_diagnostics(
+        ctx, interface_shell=interface_shell
+    )
 
     report = {
         "meta": {
@@ -1074,6 +1264,7 @@ def _collect_report_from_context(
             "diagnostics": {
                 "outer_split": {
                     "available": bool(split_diag.get("available", False)),
+                    "target_source": str(split_diag.get("target_source", "")),
                     "phi_mean": phi_mean,
                     "t_in_mean": t_in_mean,
                     "t_out_mean": t_out_mean,
@@ -1092,10 +1283,16 @@ def _collect_report_from_context(
                 "interface_directors": interface_directors,
                 "outer_profile_parity": outer_profile,
                 "trace_error_split": trace_error_split,
+                "scaffold_boundary_driver": scaffold_boundary_driver,
+                "thetaB_scan_trace": list(
+                    getattr(ctx.mesh, "_thetaB_scan_trace", []) or []
+                ),
             },
             "theory": legacy_anchor,
             "legacy_anchor": legacy_anchor,
             "tex_benchmark": tex_benchmark,
+            "model_intent": _model_intent(ctx.mesh),
+            "reference_mode": _base_term_reference_mode(ctx.mesh.global_parameters),
         },
     }
     return report

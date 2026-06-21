@@ -218,6 +218,14 @@ def _project_point_to_circle(
     return center + radius * tangent
 
 
+def _project_point_to_circle_preserve_normal(
+    pos: np.ndarray, normal: np.ndarray, center: np.ndarray, radius: float
+) -> np.ndarray:
+    projected = _project_point_to_circle(pos, normal, center, radius)
+    normal_offset = float(np.dot(pos - center, normal))
+    return projected + normal_offset * normal
+
+
 def _entity_has_constraint(options: dict | None) -> bool:
     if not options:
         return False
@@ -231,7 +239,50 @@ def _entity_has_constraint(options: dict | None) -> bool:
     return False
 
 
+def _mesh_operation_preserve_normal_groups(mesh, context: str) -> set[str]:
+    if context not in {"mesh_operation", "finalize"}:
+        return set()
+    gp = getattr(mesh, "global_parameters", None)
+    raw = (
+        None
+        if gp is None
+        else gp.get("pin_to_circle_mesh_operation_preserve_normal_groups")
+    )
+    if raw is None:
+        return set()
+    if isinstance(raw, str):
+        items = [raw]
+    else:
+        try:
+            items = list(raw)
+        except TypeError:
+            items = [raw]
+    return {str(item).strip() for item in items if str(item).strip()}
+
+
+def _project_vertex_for_context(
+    mesh,
+    vertex,
+    options: dict | None,
+    normal: np.ndarray,
+    center: np.ndarray,
+    radius: float,
+    preserve_groups: set[str],
+) -> None:
+    group = str(_group_from_options(options))
+    if group in preserve_groups:
+        vertex.position[:] = _project_point_to_circle_preserve_normal(
+            vertex.position, normal, center, radius
+        )
+    else:
+        vertex.position[:] = _project_point_to_circle(
+            vertex.position, normal, center, radius
+        )
+
+
 def enforce_constraint(mesh, **_kwargs):
+    context = str(_kwargs.get("context") or "").strip().lower()
+    preserve_groups = _mesh_operation_preserve_normal_groups(mesh, context)
     tagged_vertices = [
         v
         for v in mesh.vertices.values()
@@ -258,8 +309,14 @@ def enforce_constraint(mesh, **_kwargs):
             if params is None:
                 continue
             normal, center, radius = params
-            vertex.position[:] = _project_point_to_circle(
-                vertex.position, normal, center, radius
+            _project_vertex_for_context(
+                mesh,
+                vertex,
+                getattr(vertex, "options", None),
+                normal,
+                center,
+                radius,
+                preserve_groups,
             )
 
         for edge in tagged_edges:
@@ -271,8 +328,14 @@ def enforce_constraint(mesh, **_kwargs):
                 vertex = mesh.vertices.get(vidx)
                 if vertex is None:
                     continue
-                vertex.position[:] = _project_point_to_circle(
-                    vertex.position, normal, center, radius
+                _project_vertex_for_context(
+                    mesh,
+                    vertex,
+                    getattr(edge, "options", None),
+                    normal,
+                    center,
+                    radius,
+                    preserve_groups,
                 )
         return
 
@@ -299,8 +362,8 @@ def enforce_constraint(mesh, **_kwargs):
         if params is None:
             continue
         normal, center, radius = params
-        vertex.position[:] = _project_point_to_circle(
-            vertex.position, normal, center, radius
+        _project_vertex_for_context(
+            mesh, vertex, options, normal, center, radius, preserve_groups
         )
 
     for edge in tagged_edges:
@@ -318,8 +381,8 @@ def enforce_constraint(mesh, **_kwargs):
             vertex = mesh.vertices.get(vidx)
             if vertex is None:
                 continue
-            vertex.position[:] = _project_point_to_circle(
-                vertex.position, normal, center, radius
+            _project_vertex_for_context(
+                mesh, vertex, options, normal, center, radius, preserve_groups
             )
 
     for group, spec in fit_groups.items():

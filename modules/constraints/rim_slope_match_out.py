@@ -35,6 +35,7 @@ from modules.constraints.rim_slope_match_params import (
     _resolve_group,
     _resolve_matching_mode,
     _sanitize_disk_group,
+    _scaffold_mesh_operation_projection_mode,
     _use_curved_free_disk_shell2_tilt_continuation,
     _use_disk_theta_targeting,
     _uses_outer_shell_tilt_matching,
@@ -297,23 +298,44 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
     """Project interface-shell heights onto the current rim law."""
     matching_mode = _resolve_matching_mode(global_params)
     context = str(_kwargs.get("context") or "").strip().lower()
+    if (
+        context in {"mesh_operation", "finalize"}
+        and matching_mode == "physical_edge_staggered_v1"
+        and _uses_scaffold_trace_lane(global_params, matching_mode)
+        and _scaffold_mesh_operation_projection_mode(global_params)
+        == "preserve_trace_v1"
+    ):
+        setattr(
+            mesh,
+            "_last_rim_slope_match_scaffold_mesh_operation_stats",
+            {
+                "mode": "preserve_trace_v1",
+                "skipped": True,
+                "context": context,
+            },
+        )
+        return
+    setattr(
+        mesh,
+        "_last_rim_slope_match_scaffold_mesh_operation_stats",
+        {
+            "mode": _scaffold_mesh_operation_projection_mode(global_params),
+            "skipped": False,
+            "context": context,
+        },
+    )
     if matching_mode not in {
         "physical_edge_staggered_v1",
         "shared_rim_staggered_v1",
     }:
         return
     if matching_mode == "physical_edge_staggered_v1":
-        scaffold_outer_shells = (
-            0
-            if global_params is None
-            else int(global_params.get("parity_outer_shells") or 0)
-        )
         trace_layer_radius = (
             None
             if global_params is None
             else global_params.get("parity_trace_layer_radius")
         )
-        if scaffold_outer_shells <= 0 or trace_layer_radius is None:
+        if trace_layer_radius is None:
             return
     elif not _use_curved_free_disk_shell2_tilt_continuation(global_params):
         return
@@ -337,6 +359,13 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
     rim_rows = np.asarray(data["rim_rows"], dtype=int)
     inv_dr = np.asarray(data["inv_dr"], dtype=float)
     theta_scalar = data["theta_scalar"]
+    scaffold_projector_mode = ""
+    if global_params is not None:
+        scaffold_projector_mode = (
+            str(global_params.get("rim_slope_match_scaffold_projector_mode") or "")
+            .strip()
+            .lower()
+        )
 
     tilts_in = mesh.tilts_in_view().copy(order="F")
     tilts_out = mesh.tilts_out_view().copy(order="F")
@@ -430,15 +459,23 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
                 else float(theta_disk[i])
             )
             continuity_target = theta_val - float(t_in_rad)
-            # Joint local proximal solve with equal weights on:
-            # - staying near the current shell secant phi_current
-            # - staying near the current outer radial tilt t_out_rad
-            # - satisfying t_out = phi
-            # - satisfying t_in = theta_disk - phi
-            phi_target = (
-                2.0 * phi_current + float(t_out_rad) + 2.0 * continuity_target
-            ) / 5.0
-            t_out_target = 0.5 * (phi_target + float(t_out_rad))
+            if (
+                matching_mode == "physical_edge_staggered_v1"
+                and scaffold_projector_mode == "continuity_v2"
+            ):
+                half_split_target = 0.5 * theta_val
+                phi_target = half_split_target
+                t_out_target = phi_target
+            else:
+                # Joint local proximal solve with equal weights on:
+                # - staying near the current shell secant phi_current
+                # - staying near the current outer radial tilt t_out_rad
+                # - satisfying t_out = phi
+                # - satisfying t_in = theta_disk - phi
+                phi_target = (
+                    2.0 * phi_current + float(t_out_rad) + 2.0 * continuity_target
+                ) / 5.0
+                t_out_target = 0.5 * (phi_target + float(t_out_rad))
 
         target_height = current_rim_height + phi_target * dr
         if abs(w0) > 1.0e-12:
@@ -509,6 +546,7 @@ __all__ = [
     "_resolve_matching_mode",
     "_resolve_normal",
     "_sanitize_disk_group",
+    "_scaffold_mesh_operation_projection_mode",
     "_tilt_target_rows_weights_and_direction",
     "_use_curved_free_disk_shell2_tilt_continuation",
     "_use_disk_theta_targeting",

@@ -11,6 +11,8 @@ from tools.theory_parity_interface_profiles import (
     INTERFACE_PROFILES,
     SOURCE_INNER_RADIUS,
     SOURCE_OUTER_RADIUS,
+    build_full_physics_fixture,
+    build_full_physics_trace_fixture,
     build_profiled_fixture,
     build_scaled_fixture,
 )
@@ -60,6 +62,56 @@ def test_build_profiled_fixture_applies_general_near_edge_profile() -> None:
     assert inner_radius in radii
     assert outer_radius in radii
     assert profiled["global_parameters"]["theory_parity_lane"] == "general_near_edge_v1"
+
+
+def test_build_full_physics_fixture_sets_current_geometry_reference_mode() -> None:
+    base_doc = yaml.safe_load(
+        (
+            ROOT
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    full = build_full_physics_fixture(
+        base_doc=base_doc, lane="physical_edge_full_coupling_v1"
+    )
+    assert (
+        full["global_parameters"]["theory_parity_lane"]
+        == "physical_edge_full_coupling_v1"
+    )
+    assert (
+        full["global_parameters"]["bending_tilt_base_term_reference_mode"]
+        == "current_geometry"
+    )
+
+
+def test_build_full_physics_trace_fixture_adds_trace_ring_and_current_geometry() -> (
+    None
+):
+    base_doc = yaml.safe_load(
+        (
+            ROOT
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    full = build_full_physics_trace_fixture(
+        base_doc=base_doc,
+        lane="physical_edge_full_coupling_trace_eps005_v1",
+        trace_radius=(7.0 / 15.0) + 0.005,
+    )
+    radii = _ring_radii(full)
+    assert 0.471666666667 in radii
+    assert (
+        full["global_parameters"]["theory_parity_lane"]
+        == "physical_edge_full_coupling_trace_eps005_v1"
+    )
+    assert (
+        full["global_parameters"]["bending_tilt_base_term_reference_mode"]
+        == "current_geometry"
+    )
 
 
 def test_build_profiled_fixture_rejects_unknown_profile() -> None:

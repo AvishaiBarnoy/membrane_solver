@@ -409,7 +409,9 @@ def test_matching_ring_diagnostics_falls_back_to_outer_rim_preset_rows() -> None
     assert float(diag["outer_radius"]) == pytest.approx(1.0, abs=1.0e-6)
 
 
-def test_physical_edge_matching_skips_trace_layer_for_operator_target_rows() -> None:
+def test_physical_edge_matching_uses_explicit_trace_layer_for_operator_target_rows() -> (
+    None
+):
     root = Path(__file__).resolve().parent.parent
     base_doc = yaml.safe_load(
         (
@@ -437,6 +439,8 @@ def test_physical_edge_matching_skips_trace_layer_for_operator_target_rows() -> 
     data = constraint._build_matching_data(
         mesh, mesh.global_parameters, mesh.positions_view()
     )
+
+    assert data["target_source"] == "explicit_trace_shell"
 
     disk_r = np.linalg.norm(
         mesh.positions_view()[np.asarray(data["disk_rows"]), :2], axis=1
@@ -501,6 +505,7 @@ def test_physical_edge_scaffold_uses_trace_layer_for_operator_tilt_rows() -> Non
     data = constraint._build_matching_data(
         mesh, mesh.global_parameters, mesh.positions_view()
     )
+    assert data["target_source"] == "scaffold_trace_shell"
 
     tilt_r = np.linalg.norm(
         mesh.positions_view()[np.asarray(data["tilt_rows"]), :2], axis=1
@@ -563,6 +568,182 @@ def test_physical_edge_scaffold_shape_projection_moves_trace_shell_height() -> N
     data = constraint._build_matching_data(
         mesh, mesh.global_parameters, mesh.positions_view()
     )
+    trace_rows = np.asarray(data["outer_rows"], dtype=int)
+    disk_rows = np.asarray(data["disk_rows"], dtype=int)
+    positions = mesh.positions_view()
+    normals = mesh.vertex_normals(positions=positions)
+
+    for row in disk_rows:
+        r_hat = positions[int(row), :2]
+        r_hat = np.array([r_hat[0], r_hat[1], 0.0], dtype=float)
+        r_hat /= np.linalg.norm(r_hat)
+        mesh.vertices[int(mesh.vertex_ids[int(row)])].tilt_in = 0.2 * r_hat
+    for row in trace_rows:
+        r_hat = positions[int(row), :2]
+        r_hat = np.array([r_hat[0], r_hat[1], 0.0], dtype=float)
+        r_hat /= np.linalg.norm(r_hat)
+        normal = normals[int(row)]
+        r_dir = r_hat - float(np.dot(r_hat, normal)) * normal
+        r_dir /= np.linalg.norm(r_dir)
+        mesh.vertices[int(mesh.vertex_ids[int(row)])].tilt_out = 0.1 * r_dir
+        mesh.vertices[int(mesh.vertex_ids[int(row)])].tilt_in = 0.05 * r_dir
+    mesh.touch_tilts_in()
+    mesh.touch_tilts_out()
+
+    before = mesh.positions_view()[trace_rows, 2].copy()
+    before_tilt = mesh.tilts_out_view()[trace_rows].copy()
+    constraint.enforce_constraint(mesh, global_params=mesh.global_parameters)
+    after = mesh.positions_view()[trace_rows, 2]
+    after_tilt = mesh.tilts_out_view()[trace_rows]
+
+    height_change = float(np.max(np.abs(after - before)))
+    tilt_change = float(np.max(np.linalg.norm(after_tilt - before_tilt, axis=1)))
+    assert max(height_change, tilt_change) > 1.0e-6
+    assert tilt_change > 1.0e-6
+
+
+def test_physical_edge_scaffold_mesh_operation_can_preserve_trace_height() -> None:
+    root = Path(__file__).resolve().parent.parent
+    base_doc = yaml.safe_load(
+        (
+            root
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    scaffold = build_gap_filled_outer_shell_scaffold_fixture(
+        base_doc=base_doc,
+        label="trace_layer_scaffold_preserve_mesh_op_unit",
+        trace_radius=(7.0 / 15.0) + 0.005,
+        outer_shells=1,
+        planar_geometry=False,
+    )
+    scaffold["global_parameters"]["rim_slope_match_scaffold_mesh_operation_mode"] = (
+        "preserve_trace_v1"
+    )
+    fixture_path = (
+        root
+        / "tests"
+        / "fixtures"
+        / "_tmp_trace_layer_scaffold_preserve_mesh_op_unit.yaml"
+    )
+    fixture_path.write_text(yaml.safe_dump(scaffold, sort_keys=False), encoding="utf-8")
+    try:
+        mesh = parse_geometry(load_data(str(fixture_path)))
+    finally:
+        fixture_path.unlink(missing_ok=True)
+
+    from modules.constraints import rim_slope_match_out as constraint
+
+    data = constraint._build_matching_data(
+        mesh, mesh.global_parameters, mesh.positions_view()
+    )
+    trace_rows = np.asarray(data["outer_rows"], dtype=int)
+    target_z = 0.123
+    for row in trace_rows:
+        mesh.vertices[int(mesh.vertex_ids[int(row)])].position[2] = target_z
+    mesh.increment_version()
+
+    before = mesh.positions_view()[trace_rows, 2].copy()
+    for context in ("mesh_operation", "finalize"):
+        constraint.enforce_constraint(
+            mesh, global_params=mesh.global_parameters, context=context
+        )
+        after = mesh.positions_view()[trace_rows, 2]
+
+        assert np.max(np.abs(after - before)) == pytest.approx(0.0, abs=1.0e-12)
+        stats = getattr(mesh, "_last_rim_slope_match_scaffold_mesh_operation_stats", {})
+        assert stats["mode"] == "preserve_trace_v1"
+        assert stats["skipped"] is True
+        assert stats["context"] == context
+
+
+def test_pin_to_circle_mesh_operation_can_preserve_trace_normal_coordinate() -> None:
+    root = Path(__file__).resolve().parent.parent
+    base_doc = yaml.safe_load(
+        (
+            root
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    scaffold = build_gap_filled_outer_shell_scaffold_fixture(
+        base_doc=base_doc,
+        label="trace_layer_pin_circle_preserve_normal_unit",
+        trace_radius=(7.0 / 15.0) + 0.005,
+        outer_shells=1,
+        planar_geometry=False,
+    )
+    scaffold["global_parameters"][
+        "pin_to_circle_mesh_operation_preserve_normal_groups"
+    ] = ["trace_layer"]
+    fixture_path = (
+        root
+        / "tests"
+        / "fixtures"
+        / "_tmp_trace_layer_pin_circle_preserve_normal_unit.yaml"
+    )
+    fixture_path.write_text(yaml.safe_dump(scaffold, sort_keys=False), encoding="utf-8")
+    try:
+        mesh = parse_geometry(load_data(str(fixture_path)))
+    finally:
+        fixture_path.unlink(missing_ok=True)
+
+    from modules.constraints import pin_to_circle
+    from modules.constraints import rim_slope_match_out as constraint
+
+    data = constraint._build_matching_data(
+        mesh, mesh.global_parameters, mesh.positions_view()
+    )
+    trace_rows = np.asarray(data["outer_rows"], dtype=int)
+    for row in trace_rows:
+        mesh.vertices[int(mesh.vertex_ids[int(row)])].position[2] = 0.123
+    mesh.increment_version()
+
+    before = mesh.positions_view()[trace_rows, 2].copy()
+    for context in ("mesh_operation", "finalize"):
+        pin_to_circle.enforce_constraint(mesh, context=context)
+        after = mesh.positions_view()[trace_rows, 2]
+
+        assert np.max(np.abs(after - before)) == pytest.approx(0.0, abs=1.0e-12)
+
+
+def test_physical_edge_explicit_trace_shape_projection_moves_trace_shell() -> None:
+    root = Path(__file__).resolve().parent.parent
+    base_doc = yaml.safe_load(
+        (
+            root
+            / "tests"
+            / "fixtures"
+            / "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    traced = build_trace_ring_fixture(
+        base_doc=base_doc,
+        label="trace_layer_ghost_shape_projection_unit",
+        trace_radius=(7.0 / 15.0) + 0.005,
+        planar_geometry=False,
+    )
+    fixture_path = (
+        root
+        / "tests"
+        / "fixtures"
+        / "_tmp_trace_layer_ghost_shape_projection_unit.yaml"
+    )
+    fixture_path.write_text(yaml.safe_dump(traced, sort_keys=False), encoding="utf-8")
+    try:
+        mesh = parse_geometry(load_data(str(fixture_path)))
+    finally:
+        fixture_path.unlink(missing_ok=True)
+
+    from modules.constraints import rim_slope_match_out as constraint
+
+    data = constraint._build_matching_data(
+        mesh, mesh.global_parameters, mesh.positions_view()
+    )
+    assert data["target_source"] == "explicit_trace_shell"
     trace_rows = np.asarray(data["outer_rows"], dtype=int)
     disk_rows = np.asarray(data["disk_rows"], dtype=int)
     positions = mesh.positions_view()

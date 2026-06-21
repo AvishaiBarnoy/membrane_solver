@@ -1,0 +1,149 @@
+meta:
+  fixture: tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_gapfill_eps005_n3_release.yaml
+  lane: physical_edge_scaffold_gapfill_eps005_n3_release
+  protocol:
+  - g40
+  - r
+  - V5
+  - g100
+  - V1
+  - energy
+  - V1
+  - energy
+  - V1
+  - energy
+  - V1
+  - energy
+  - V1
+  - energy
+  - V1
+  - energy
+  - V1
+  - energy
+  - V1
+  - energy
+  - V1
+  - energy
+  - V1
+  - energy
+  - V1
+  - energy
+  - V1
+  - energy
+  - V5
+  - energy
+  - V5
+  - energy
+  - V5
+  - energy
+  - V5
+  - energy
+  - V5
+  - energy
+  - V10
+  - energy
+  - V10
+  - energy
+  - V10
+  - energy
+  format: yaml
+metrics:
+  final_energy: -0.9514652678349097
+  thetaB_value: 0.136155761034079
+  breakdown:
+    bending_tilt_in: 0.36348784188221966
+    bending_tilt_out: 0.033153247204830955
+    tilt_in: 0.3405463143713059
+    tilt_out: 0.02244514872472362
+    tilt_thetaB_contact_in: -1.7110978200179898
+  reduced_terms:
+    elastic_measured: 0.7596325521830801
+    contact_measured: -1.7110978200179898
+    total_measured: -0.9514652678349097
+  diagnostics:
+    outer_split:
+      available: true
+      phi_mean: 0.0680778805170395
+      t_in_mean: 0.0680778805170395
+      t_out_mean: 0.0680778805170395
+      theta_disk_mean: 0.136155761034079
+      phi_over_half_theta: 1.0
+    interface_shell_at_R_plus_epsilon:
+      available: true
+      t_in_at_R_plus_epsilon: 0.06807786922473279
+      t_out_at_R_plus_epsilon: 0.0680778547512541
+      phi_secant_at_R_plus_epsilon: 0.06807788051250219
+      disk_director_angle_at_R: 0.136155761034079
+      free_inner_director_angle_at_R_plus_epsilon: 0.13615574973723496
+      free_outer_director_angle_at_R_plus_epsilon: 0.0680778547512541
+      disk_vs_free_inner_director_gap: 1.1296844038925316e-08
+      free_inner_vs_free_outer_director_gap: 0.06807789498598087
+    scaffold_boundary_driver:
+      available: true
+      gamma: 4.286
+      R_eff: 0.466666666666667
+      theta_contact_mean: 0.136155761034079
+      thetaB_scalar: 0.0
+      half_split_t_in_residual: -1.1292306714705269e-08
+      half_split_t_out_residual: -2.576578540802732e-08
+      half_split_phi_residual: -4.537314968189321e-12
+      elastic_slope_fd: 8.69889227500531
+      contact_slope_analytic: -12.567208372400136
+      total_slope_fd: -3.8683160976105135
+      stationarity_residual: -3.8683160973948265
+  theory:
+    ratios:
+      theta_ratio: 1.4753885647825382
+      elastic_ratio: 1.3099814257442142
+      contact_ratio: 1.4753885647825389
+      total_ratio: 1.6407957038208638
+tolerances:
+  final_energy: 0.002
+  thetaB_value: 1.0e-06
+  breakdown:
+    bending_tilt_in: 0.002
+    bending_tilt_out: 0.001
+    tilt_in: 0.002
+    tilt_out: 0.001
+    tilt_thetaB_contact_in: 0.002
+  reduced_terms:
+    elastic_measured: 0.002
+    contact_measured: 0.002
+    total_measured: 0.002
+  diagnostics:
+    outer_split:
+      available: 0.0
+      phi_mean: 1.0e-06
+      t_in_mean: 1.0e-06
+      t_out_mean: 1.0e-06
+      theta_disk_mean: 1.0e-06
+      phi_over_half_theta: 1.0e-06
+    interface_shell_at_R_plus_epsilon:
+      available: 0.0
+      t_in_at_R_plus_epsilon: 1.0e-06
+      t_out_at_R_plus_epsilon: 1.0e-06
+      phi_secant_at_R_plus_epsilon: 1.0e-06
+      disk_director_angle_at_R: 1.0e-06
+      free_inner_director_angle_at_R_plus_epsilon: 1.0e-06
+      free_outer_director_angle_at_R_plus_epsilon: 1.0e-06
+      disk_vs_free_inner_director_gap: 1.0e-06
+      free_inner_vs_free_outer_director_gap: 1.0e-06
+    scaffold_boundary_driver:
+      available: 0.0
+      gamma: 1.0e-12
+      R_eff: 1.0e-12
+      theta_contact_mean: 1.0e-06
+      thetaB_scalar: 1.0e-12
+      half_split_t_in_residual: 1.0e-06
+      half_split_t_out_residual: 1.0e-06
+      half_split_phi_residual: 1.0e-06
+      elastic_slope_fd: 0.01
+      contact_slope_analytic: 1.0e-09
+      total_slope_fd: 0.01
+      stationarity_residual: 0.01
+  theory:
+    ratios:
+      theta_ratio: 0.0002
+      elastic_ratio: 0.005
+      contact_ratio: 0.0002
+      total_ratio: 0.005

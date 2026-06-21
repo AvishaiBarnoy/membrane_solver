@@ -126,4 +126,4 @@ def test_leaflet_static_tilt_payload_cache_reuses_and_invalidates_on_c0_change()
         cache_tag="out",
     )
     assert refreshed is not sentinel
-    assert not (refreshed["base_tri"] == static_payload["base_tri"]).all()
+    assert not (refreshed["c0_arr"] == static_payload["c0_arr"]).all()

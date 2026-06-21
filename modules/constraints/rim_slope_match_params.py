@@ -111,3 +111,17 @@ def _use_disk_theta_targeting(global_params, matching_mode: str) -> bool:
     if global_params is None:
         return False
     return bool(str(global_params.get("theory_parity_lane") or "").strip())
+
+
+def _scaffold_mesh_operation_projection_mode(global_params) -> str:
+    """Return scaffold hard-projection behavior for mesh-op/finalize contexts."""
+    if global_params is None:
+        return "project"
+    raw = global_params.get("rim_slope_match_scaffold_mesh_operation_mode")
+    mode = str(raw or "project").strip().lower()
+    if mode not in {"project", "preserve_trace_v1"}:
+        raise ValueError(
+            "rim_slope_match_scaffold_mesh_operation_mode must be "
+            "'project' or 'preserve_trace_v1'."
+        )
+    return mode
