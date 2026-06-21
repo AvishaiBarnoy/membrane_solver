@@ -40,6 +40,10 @@ def test_kozlov_free_disk_outer_leaflet_tilt_becomes_nontrivial() -> None:
     # condition, not about the details of thetaB optimization.
     gp.set("tilt_thetaB_optimize", False)
     gp.set("tilt_thetaB_value", 0.03)
+    # The fixture's global flat-reference mode is for theory-parity zero-J0
+    # accounting. This coupling regression needs the outer curvature base term
+    # to drive a nonzero `tilt_out` response.
+    gp.set("bending_tilt_base_term_reference_mode_out", "current_geometry")
 
     gp.set("step_size_mode", "fixed")
     gp.set("step_size", 1.0e-3)
