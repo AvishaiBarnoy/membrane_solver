@@ -12,7 +12,7 @@ SOURCE_FIXTURE = FIXTURE_DIR / "kozlov_1disk_3d_free_disk_theory_parity.yaml"
 BASE_FIXTURE = FIXTURE_DIR / "kozlov_1disk_3d_stage_a_base.yaml"
 SEEDED_FIXTURE = FIXTURE_DIR / "kozlov_1disk_3d_stage_a_seeded.yaml"
 
-STAGE_A_RIM_SOURCE_STRENGTH = 0.5
+STAGE_A_RIM_SOURCE_STRENGTH = 0.013
 STAGE_A_SEED_Z = 1.0e-4
 
 REMOVED_GLOBAL_KEYS = (

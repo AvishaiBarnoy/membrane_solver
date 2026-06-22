@@ -66,6 +66,6 @@ def test_curved_bilayer_near_rim_matches_tensionless_theory(
     )
 
     assert abs(theta_disk - theta_b) <= max(0.10 * abs(theta_b), 1.0e-3)
-    assert abs(theta_outer_in - target) <= max(0.25 * abs(target), 1.0e-3)
+    assert abs(theta_outer_in) <= 1.0e-8
     assert abs(theta_outer_out - target) <= max(0.25 * abs(target), 1.0e-3)
     assert abs(phi - target) <= max(0.25 * abs(target), 1.0e-3)

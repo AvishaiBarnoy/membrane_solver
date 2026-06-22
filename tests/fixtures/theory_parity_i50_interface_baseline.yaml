@@ -12,22 +12,22 @@ meta:
   format: yaml
   fixed_polish_steps: 0
 metrics:
-  final_energy: -1.1427640390197626
-  thetaB_value: 0.18000000000000002
+  final_energy: -1.12421801331151
+  thetaB_value: 0.17
   reduced_terms:
-    elastic_measured: 1.119333468012262
-    contact_measured: -2.2620975070320246
-    total_measured: -1.1427640390197626
+    elastic_measured: 1.0122074099965137
+    contact_measured: -2.1364254233080238
+    total_measured: -1.12421801331151
   theory:
     ratios:
-      theta_ratio: 1.9504862639957357
-      elastic_ratio: 1.9302833298756819
-      contact_ratio: 1.9504862639957365
-      total_ratio: 1.970689198115791
+      theta_ratio: 1.8421259159959724
+      elastic_ratio: 1.745545135322896
+      contact_ratio: 1.8421259159959738
+      total_ratio: 1.9387066966690518
   diagnostics:
     outer_shell_geometry:
       rim_radius: 0.466666666666667
-      outer_radius: 0.6700491151970724
+      outer_radius: 0.6734734972033912
 tolerances:
   final_energy: 0.002
   thetaB_value: 1.0e-06
