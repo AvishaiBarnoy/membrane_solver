@@ -47,56 +47,57 @@ meta:
   - V10
   - energy
   format: yaml
+  fixed_polish_steps: 0
 metrics:
-  final_energy: -0.9514652678349097
-  thetaB_value: 0.136155761034079
+  final_energy: -1.0094043705005316
+  thetaB_value: 0.14247997693071604
   breakdown:
-    bending_tilt_in: 0.36348784188221966
-    bending_tilt_out: 0.033153247204830955
-    tilt_in: 0.3405463143713059
-    tilt_out: 0.02244514872472362
-    tilt_thetaB_contact_in: -1.7110978200179898
+    bending_tilt_in: 0.32267073891714254
+    bending_tilt_out: 0.06432161145143343
+    tilt_in: 0.3592174001410805
+    tilt_out: 0.03496143797288499
+    tilt_thetaB_contact_in: -1.790575558983073
   reduced_terms:
-    elastic_measured: 0.7596325521830801
-    contact_measured: -1.7110978200179898
-    total_measured: -0.9514652678349097
+    elastic_measured: 0.7811711884825415
+    contact_measured: -1.790575558983073
+    total_measured: -1.0094043705005316
   diagnostics:
     outer_split:
       available: true
-      phi_mean: 0.0680778805170395
-      t_in_mean: 0.0680778805170395
-      t_out_mean: 0.0680778805170395
-      theta_disk_mean: 0.136155761034079
+      phi_mean: 0.07123998846535802
+      t_in_mean: 0.07123998846535802
+      t_out_mean: 0.07123998846535802
+      theta_disk_mean: 0.14247997693071604
       phi_over_half_theta: 1.0
     interface_shell_at_R_plus_epsilon:
       available: true
-      t_in_at_R_plus_epsilon: 0.06807786922473279
-      t_out_at_R_plus_epsilon: 0.0680778547512541
-      phi_secant_at_R_plus_epsilon: 0.06807788051250219
-      disk_director_angle_at_R: 0.136155761034079
-      free_inner_director_angle_at_R_plus_epsilon: 0.13615574973723496
-      free_outer_director_angle_at_R_plus_epsilon: 0.0680778547512541
-      disk_vs_free_inner_director_gap: 1.1296844038925316e-08
-      free_inner_vs_free_outer_director_gap: 0.06807789498598087
+      t_in_at_R_plus_epsilon: 0.07123999831967442
+      t_out_at_R_plus_epsilon: 0.0712399742739228
+      phi_secant_at_R_plus_epsilon: 0.07123998846060862
+      disk_director_angle_at_R: 0.14247997693071604
+      free_inner_director_angle_at_R_plus_epsilon: 0.14247998678028306
+      free_outer_director_angle_at_R_plus_epsilon: 0.0712399742739228
+      disk_vs_free_inner_director_gap: -9.849567012693017e-09
+      free_inner_vs_free_outer_director_gap: 0.07124001250636026
     scaffold_boundary_driver:
       available: true
       gamma: 4.286
       R_eff: 0.466666666666667
-      theta_contact_mean: 0.136155761034079
+      theta_contact_mean: 0.14247997693071604
       thetaB_scalar: 0.0
-      half_split_t_in_residual: -1.1292306714705269e-08
-      half_split_t_out_residual: -2.576578540802732e-08
-      half_split_phi_residual: -4.537314968189321e-12
-      elastic_slope_fd: 8.69889227500531
+      half_split_t_in_residual: 9.854316404545038e-09
+      half_split_t_out_residual: -1.4191435221411197e-08
+      half_split_phi_residual: -4.7493953214683415e-12
+      elastic_slope_fd: 8.69338317283086
       contact_slope_analytic: -12.567208372400136
-      total_slope_fd: -3.8683160976105135
-      stationarity_residual: -3.8683160973948265
+      total_slope_fd: -3.873825199507408
+      stationarity_residual: -3.8738251995692767
   theory:
     ratios:
-      theta_ratio: 1.4753885647825382
-      elastic_ratio: 1.3099814257442142
-      contact_ratio: 1.4753885647825389
-      total_ratio: 1.6407957038208638
+      theta_ratio: 1.5439179883210605
+      elastic_ratio: 1.3471246648103492
+      contact_ratio: 1.5439179883210614
+      total_ratio: 1.7407113118317739
 tolerances:
   final_energy: 0.002
   thetaB_value: 1.0e-06

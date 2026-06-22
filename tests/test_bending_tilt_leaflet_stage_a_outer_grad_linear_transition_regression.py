@@ -67,19 +67,19 @@ def test_stage_a_outer_grad_linear_transition_operator_is_enabled() -> None:
         for item in stats.get("patch_shell_summary", [])
     }
     assert set(patch_shell_summary) == {
-        0.837822,
-        0.842474,
-        0.853008,
-        0.866643,
-        0.965910,
-        0.974541,
-        0.999984,
+        0.837847,
+        0.842498,
+        0.853033,
+        0.866667,
+        0.965926,
+        0.974556,
+        1.0,
     }
 
     shell_summary = {
         round(float(item["radius"]), 6): item for item in stats.get("shell_summary", [])
     }
-    for radius in (0.965910, 0.974541, 0.999984):
+    for radius in (0.965926, 0.974556, 1.0):
         item = shell_summary[radius]
         assert int(item["vertex_count"]) > 0
         assert np.isfinite(float(item["patch_internal_z_mean"]))

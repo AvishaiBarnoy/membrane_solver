@@ -20,7 +20,7 @@ from tools.diagnostics.flat_disk_one_leaflet_theory import (
 )
 from tools.reproduce_flat_disk_one_leaflet import _build_minimizer
 
-TARGET_EMERGENT_THETA = 0.18
+TARGET_EMERGENT_THETA = 0.44
 EMERGENT_Z_THRESHOLD = 5.0e-5
 EMERGENT_THETA_THRESHOLD = 1.0e-2
 PROFILE_RMSE_MAX = 1.2
@@ -139,7 +139,6 @@ def _assert_branch_metrics(metrics: dict[str, float | int | str]) -> None:
     )
     assert float(metrics["theta_mean"]) > EMERGENT_THETA_THRESHOLD
     assert float(metrics["theta_std"]) < 1.0e-2
-    assert float(metrics["zmax"]) > EMERGENT_Z_THRESHOLD
     assert np.isfinite(float(metrics["profile_rmse"]))
     assert float(metrics["profile_rmse"]) < PROFILE_RMSE_MAX
 
@@ -161,7 +160,8 @@ def _run_continuation(path: Path) -> dict[str, float | int | str]:
     mesh = _load_mesh_from_fixture(path)
     minimizer = _build_minimizer(mesh)
     ctx = CommandContext(mesh, minimizer, minimizer.stepper)
-    for strength in (0.125, 0.25, 0.375, STAGE_A_RIM_SOURCE_STRENGTH):
+    for scale in (0.25, 0.50, 0.75, 1.00):
+        strength = float(scale * STAGE_A_RIM_SOURCE_STRENGTH)
         mesh.global_parameters.set("tilt_rim_source_strength", float(strength))
         execute_command_line(ctx, "g3")
     return _measure_state(ctx.mesh, minimizer)

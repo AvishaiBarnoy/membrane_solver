@@ -12,17 +12,17 @@ meta:
   format: yaml
   fixed_polish_steps: 0
 metrics:
-  final_energy: -0.569893237541043
+  final_energy: -0.5699661890419044
   thetaB_value: 0.09
   breakdown:
-    bending_tilt_in: 0.021848190692808953
-    bending_tilt_out: 2.1684318195669033e-05
-    tilt_in: 0.5392521816747895
-    tilt_out: 3.3459289175143635e-05
+    bending_tilt_in: 0.021815990391379016
+    bending_tilt_out: 2.6639966653681717e-09
+    tilt_in: 0.539266161785433
+    tilt_out: 4.096332991749317e-07
     tilt_thetaB_contact_in: -1.1310487535160123
   tilt_stats:
-    tstat_in_p90_norm: 0.005341351215602568
-    tstat_out_p90_norm: 1.996061610478178e-05
+    tstat_in_p90_norm: 0.005338732981543273
+    tstat_out_p90_norm: 1.5153483100843045e-05
 tolerances:
   final_energy: 0.0005
   thetaB_value: 0.001

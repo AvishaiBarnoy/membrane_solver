@@ -40,7 +40,7 @@ global_parameters:
   - 0.0
   - 0.0
   tilt_rim_source_group: disk
-  tilt_rim_source_strength: 0.5
+  tilt_rim_source_strength: 0.013
   tilt_rim_source_edge_mode: all
   theory_parity_lane: stage_a_emergent
 constraint_modules:
