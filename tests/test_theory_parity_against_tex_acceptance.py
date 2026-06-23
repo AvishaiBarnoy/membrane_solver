@@ -75,6 +75,12 @@ SCAFFOLD_GAPFILL_RELEASE_FIXTURE = (
 DEFAULT_BASELINE = (
     ROOT / "tests" / "fixtures" / "theory_parity_physical_edge_default_baseline.yaml"
 )
+DEFAULT_COMPARISON_BASELINE = (
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "theory_parity_physical_edge_default_comparison_baseline.yaml"
+)
 GHOST_BAD_BRANCH_BASELINE = {
     "thetaB_value": 0.21000000000000005,
     "tex_total_ratio": 1.1552837784931795,
@@ -232,6 +238,11 @@ def _run_fixture_report(
 def _load_default_baseline() -> dict[str, Any]:
     """Return the tracked physical-edge default baseline report."""
     return yaml.safe_load(DEFAULT_BASELINE.read_text(encoding="utf-8"))
+
+
+def _load_default_comparison_baseline() -> dict[str, Any]:
+    """Return the pre-fix baseline used for improvement assertions."""
+    return yaml.safe_load(DEFAULT_COMPARISON_BASELINE.read_text(encoding="utf-8"))
 
 
 def _run_context_report(
@@ -1085,7 +1096,7 @@ def test_physical_edge_default_improves_free_side_trace_continuation_over_baseli
         cwd=str(ROOT),
     )
 
-    baseline = _load_default_baseline()
+    baseline = _load_default_comparison_baseline()
     current = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
 
     baseline_traces = baseline["metrics"]["diagnostics"]["interface_traces_at_R"]
@@ -1156,7 +1167,7 @@ def test_physical_edge_default_improves_director_and_profile_parity_over_baselin
         cwd=str(ROOT),
     )
 
-    baseline = _load_default_baseline()
+    baseline = _load_default_comparison_baseline()
     current = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
 
     baseline_profile = baseline["metrics"]["diagnostics"]["outer_profile_parity"]
