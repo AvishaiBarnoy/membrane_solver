@@ -587,14 +587,26 @@ def constraint_gradients(mesh, _global_params) -> list[dict[int, np.ndarray]] | 
         if resolved is None:
             continue
         normal, center, _radius = resolved
-        for vidx in sorted(spec["vertex_ids"]):
+        vertex_ids = sorted(spec["vertex_ids"])
+        mode = str(spec.get("mode") or "fit").lower()
+        reference_vidx = int(vertex_ids[0]) if vertex_ids else None
+        for vidx in vertex_ids:
             vertex = mesh.vertices.get(int(vidx))
             if vertex is None or getattr(vertex, "fixed", False):
                 continue
             g_plane, g_radial = _circle_constraint_gradients_for_vertex(
                 pos=vertex.position, normal=normal, center=center
             )
-            gradients.append({int(vidx): g_plane})
+            if mode == "slide":
+                if int(vidx) != reference_vidx:
+                    gradients.append(
+                        {
+                            int(reference_vidx): -g_plane,
+                            int(vidx): g_plane,
+                        }
+                    )
+            else:
+                gradients.append({int(vidx): g_plane})
             gradients.append({int(vidx): g_radial})
 
     return gradients or None
@@ -661,7 +673,13 @@ def constraint_gradients_rows_array(
         if resolved is None:
             continue
         normal, center, _radius = resolved
-        for vidx in sorted(spec["vertex_ids"]):
+        vertex_ids = sorted(spec["vertex_ids"])
+        mode = str(spec.get("mode") or "fit").lower()
+        reference_vidx = int(vertex_ids[0]) if vertex_ids else None
+        reference_row = (
+            None if reference_vidx is None else index_map.get(int(reference_vidx))
+        )
+        for vidx in vertex_ids:
             vertex = mesh.vertices.get(int(vidx))
             if vertex is None or getattr(vertex, "fixed", False):
                 continue
@@ -672,7 +690,18 @@ def constraint_gradients_rows_array(
                 pos=vertex.position, normal=normal, center=center
             )
             row_arr = np.asarray([int(row)], dtype=int)
-            row_grads.append((row_arr, np.asarray(g_plane, dtype=float).reshape(1, 3)))
+            if mode == "slide":
+                if int(vidx) != reference_vidx and reference_row is not None:
+                    row_grads.append(
+                        (
+                            np.asarray([int(reference_row), int(row)], dtype=int),
+                            np.asarray([-g_plane, g_plane], dtype=float),
+                        )
+                    )
+            else:
+                row_grads.append(
+                    (row_arr, np.asarray(g_plane, dtype=float).reshape(1, 3))
+                )
             row_grads.append(
                 (row_arr.copy(), np.asarray(g_radial, dtype=float).reshape(1, 3))
             )

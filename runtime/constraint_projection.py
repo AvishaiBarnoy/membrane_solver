@@ -460,6 +460,13 @@ def _build_joint_sparse_projection_operator(
             solve_mat = np.linalg.inv(A)
         except np.linalg.LinAlgError:
             solve_mat = None
+    if solve_mat is None:
+        # Redundant constraint rows are expected when local interface
+        # relations overlap.  Project through the row-space pseudoinverse
+        # instead of silently skipping the entire joint projection.
+        proj_active = np.asarray(np.linalg.pinv(C) @ C, dtype=float)
+    else:
+        proj_active = np.asarray(C.T @ solve_mat @ C, dtype=float)
 
     return {
         "active_cols": active_cols,
@@ -476,9 +483,7 @@ def _build_joint_sparse_projection_operator(
         "A": A,
         "chol_L": chol_L,
         "solve_mat": solve_mat,
-        "proj_active": (
-            None if solve_mat is None else np.asarray(C.T @ solve_mat @ C, dtype=float)
-        ),
+        "proj_active": proj_active,
     }
 
 

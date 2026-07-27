@@ -538,6 +538,7 @@ def _build_outer_shell_scaffold_fixture_with_radii(
         out["pin_to_circle_radius"] = float(trace_radius)
         out["pin_to_circle_normal"] = [0.0, 0.0, 1.0]
         out["pin_to_circle_point"] = [0.0, 0.0, 0.0]
+        out["pin_to_circle_mode"] = "slide"
         if planar_geometry:
             if "pin_to_plane" not in constraints:
                 constraints.append("pin_to_plane")
@@ -585,6 +586,7 @@ def _build_outer_shell_scaffold_fixture_with_radii(
         out["pin_to_circle_radius"] = float(radius)
         out["pin_to_circle_normal"] = [0.0, 0.0, 1.0]
         out["pin_to_circle_point"] = [0.0, 0.0, 0.0]
+        out["pin_to_circle_mode"] = "slide"
         return out
 
     def _release_ring_options(opts: dict[str, Any]) -> dict[str, Any]:

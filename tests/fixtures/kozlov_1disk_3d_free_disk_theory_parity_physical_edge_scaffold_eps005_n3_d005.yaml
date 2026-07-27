@@ -630,6 +630,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -647,6 +648,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -664,6 +666,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -681,6 +684,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -698,6 +702,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -715,6 +720,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -732,6 +738,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -749,6 +756,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -766,6 +774,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -783,6 +792,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -800,6 +810,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -817,6 +828,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -835,6 +847,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -851,6 +864,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -867,6 +881,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -883,6 +898,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -899,6 +915,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -915,6 +932,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -931,6 +949,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -947,6 +966,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -963,6 +983,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -979,6 +1000,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -995,6 +1017,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1011,6 +1034,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_1
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1027,6 +1051,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1043,6 +1068,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1059,6 +1085,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1075,6 +1102,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1091,6 +1119,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1107,6 +1136,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1123,6 +1153,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1139,6 +1170,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1155,6 +1187,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1171,6 +1204,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1187,6 +1221,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1203,6 +1238,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_2
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.5716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1219,6 +1255,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1235,6 +1272,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1251,6 +1289,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1267,6 +1306,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1283,6 +1323,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1299,6 +1340,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1315,6 +1357,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1331,6 +1374,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1347,6 +1391,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1363,6 +1408,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1379,6 +1425,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0
@@ -1395,6 +1442,7 @@ vertices:
     constraints:
     - pin_to_circle
     pin_to_circle_group: outer_shell_3
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.6216666666666667
     pin_to_circle_normal:
     - 0.0

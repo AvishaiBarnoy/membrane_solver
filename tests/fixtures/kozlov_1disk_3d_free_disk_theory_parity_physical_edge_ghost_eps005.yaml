@@ -630,6 +630,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -647,6 +648,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -664,6 +666,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -681,6 +684,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -698,6 +702,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -715,6 +720,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -732,6 +738,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -749,6 +756,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -766,6 +774,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -783,6 +792,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -800,6 +810,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0
@@ -817,6 +828,7 @@ vertices:
   - preset: rim
     rim_slope_match_group: rim
     pin_to_circle_group: trace_layer
+    pin_to_circle_mode: slide
     pin_to_circle_radius: 0.4716666666666667
     pin_to_circle_normal:
     - 0.0

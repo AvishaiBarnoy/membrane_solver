@@ -237,6 +237,66 @@ def constraint_gradients_joint_array(
             np.asarray(vecs_tout, dtype=float),
         )
 
+        fixed_half_split = (
+            matching_mode == "physical_edge_staggered_v1"
+            and str(global_params.get("rim_slope_match_scaffold_projector_mode") or "")
+            .strip()
+            .lower()
+            == "continuity_v2"
+        )
+        if fixed_half_split:
+            # The continuity_v2 retraction fixes phi, t_out, and t_in to
+            # half the measured disk-boundary director angle.  Its Jacobian
+            # therefore has three rows, each coupled to one-half of the disk
+            # tilt variation, rather than the two primitive relations below.
+            disk_target = _disk_theta_rows_weights_and_direction(
+                data=data,
+                i=i,
+                theta_scalar_active=False,
+            )
+            disk_part_shape = None
+            disk_part_tilt = None
+            if disk_target is not None:
+                rows_disk, _weights_disk, dirs_disk = disk_target
+                disk_part_shape = (
+                    np.asarray(rows_disk, dtype=int),
+                    np.asarray(
+                        [
+                            0.5 * coeff_t * np.asarray(vec, dtype=float)
+                            for vec in dirs_disk
+                        ],
+                        dtype=float,
+                    ),
+                )
+                disk_part_tilt = (
+                    np.asarray(rows_disk, dtype=int),
+                    np.asarray(
+                        [
+                            -0.5 * coeff_t * np.asarray(vec, dtype=float)
+                            for vec in dirs_disk
+                        ],
+                        dtype=float,
+                    ),
+                )
+            constraints.append((shape_part, disk_part_shape, None))
+            constraints.append((None, disk_part_tilt, tout_part))
+            if disk_rows is not None:
+                rows_tin = [int(row) for row in target_rows]
+                vecs_tin = [coeff_t * float(w) * r_dir for w in target_weights]
+                if disk_target is not None:
+                    rows_disk, _weights_disk, dirs_disk = disk_target
+                    rows_tin.extend(int(row) for row in rows_disk)
+                    vecs_tin.extend(
+                        -0.5 * coeff_t * np.asarray(vec, dtype=float)
+                        for vec in dirs_disk
+                    )
+                tin_part = (
+                    np.asarray(rows_tin, dtype=int),
+                    np.asarray(vecs_tin, dtype=float),
+                )
+                constraints.append((None, tin_part, None))
+            continue
+
         constraints.append((shape_part, None, tout_part))
 
         if disk_rows is not None and disk_r_hat is None:
@@ -516,8 +576,7 @@ def constraint_gradients_tilt_rows_array(
             continue
 
         fixed_half_split = (
-            theta_scalar is not None
-            and matching_mode == "physical_edge_staggered_v1"
+            matching_mode == "physical_edge_staggered_v1"
             and str(global_params.get("rim_slope_match_scaffold_projector_mode") or "")
             .strip()
             .lower()

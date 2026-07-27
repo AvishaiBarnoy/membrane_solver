@@ -211,6 +211,11 @@ def test_curved_profile_fixture_projects_the_theoretical_half_split():
     positions = mesh.positions_view()
     radii = np.linalg.norm(positions[:, :2], axis=1)
     trace_rows = np.flatnonzero(np.isclose(radii, trace_radius))
+    assert all(
+        mesh.vertices[int(mesh.vertex_ids[int(row)])].options["pin_to_circle_mode"]
+        == "slide"
+        for row in trace_rows
+    )
     trace_height = float(np.mean(positions[trace_rows, 2]))
     radial = positions[trace_rows].copy()
     radial[:, 2] = 0.0

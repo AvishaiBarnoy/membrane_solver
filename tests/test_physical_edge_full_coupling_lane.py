@@ -104,11 +104,11 @@ def test_full_coupling_trace_fixture_reports_lane_and_reference_mode() -> None:
     assert report["metrics"]["reference_mode"] == "current_geometry"
 
 
-def test_full_coupling_keeps_existing_default_lane_unchanged() -> None:
+def test_full_coupling_keeps_post_core_fix_default_lane_baseline() -> None:
     report = _run_report(DEFAULT_FIXTURE)
-    assert float(report["metrics"]["thetaB_value"]) == pytest.approx(0.18, abs=1.0e-9)
+    assert float(report["metrics"]["thetaB_value"]) == pytest.approx(0.19, abs=1.0e-9)
     assert float(report["metrics"]["tex_benchmark"]["ratios"]["total_ratio"]) == (
-        pytest.approx(1.0063565852776968, abs=1.0e-6)
+        pytest.approx(1.028971349876678, abs=1.0e-6)
     )
     assert report["metrics"]["model_intent"] == "analytical_parity"
     assert report["metrics"]["reference_mode"] == "flat_reference_zero_j0"
