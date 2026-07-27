@@ -304,6 +304,40 @@ def build_full_physics_trace_fixture(
     return doc
 
 
+def build_curved_profile_fixture(
+    *,
+    base_doc: dict[str, Any],
+    lane: str,
+    trace_radius: float,
+) -> dict[str, Any]:
+    """Return a tensionless curved-profile lane with compatible boundaries."""
+    doc = build_full_physics_trace_fixture(
+        base_doc=base_doc,
+        lane=str(lane),
+        trace_radius=float(trace_radius),
+        planar_geometry=False,
+    )
+    disk_ring = _find_group_vertex_ids(doc["vertices"], "disk")
+    if not disk_ring:
+        raise ValueError("curved-profile fixture requires a tagged disk boundary")
+
+    gp = dict(doc.get("global_parameters") or {})
+    gp["rim_slope_match_mode"] = "physical_edge_staggered_v1"
+    gp["rim_slope_match_scaffold_projector_mode"] = "continuity_v2"
+    gp["bending_tilt_base_term_boundary_group_out"] = "disk"
+    gp["theory_radius"] = float(_vertex_radius(doc["vertices"][int(disk_ring[0])]))
+    doc["global_parameters"] = gp
+
+    outer_definition = dict((doc.get("definitions") or {}).get("outer_rim") or {})
+    outer_definition["constraints"] = [
+        constraint
+        for constraint in list(outer_definition.get("constraints") or [])
+        if constraint != "pin_to_plane"
+    ]
+    doc["definitions"]["outer_rim"] = outer_definition
+    return doc
+
+
 def build_trace_ring_fixture(
     *,
     base_doc: dict[str, Any],
@@ -599,6 +633,7 @@ __all__ = [
     "INTERFACE_PROFILES",
     "SOURCE_INNER_RADIUS",
     "SOURCE_OUTER_RADIUS",
+    "build_curved_profile_fixture",
     "build_full_physics_trace_fixture",
     "build_gap_filled_outer_shell_scaffold_fixture",
     "build_outer_shell_scaffold_fixture",
