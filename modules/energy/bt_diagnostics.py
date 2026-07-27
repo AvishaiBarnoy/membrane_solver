@@ -41,7 +41,8 @@ def _total_energy_leaflet(
     kappa_key: str,
     cache_tag: str,
     div_sign: float,
-) -> float:
+    return_triangle_energy: bool = False,
+) -> float | tuple[np.ndarray, np.ndarray]:
     """Energy-only helper for finite-difference debugging."""
     payload = _leaflet_triangle_payload(
         mesh,
@@ -56,6 +57,8 @@ def _total_energy_leaflet(
     tri_rows = np.asarray(payload["tri_rows"], dtype=np.int32)
     tri_area = payload.get("tri_area")
     if tri_rows.size == 0:
+        if return_triangle_energy:
+            return tri_rows.reshape(0, 3), np.empty(0, dtype=float)
         return 0.0
 
     transport_model = _resolve_transport_model(
@@ -137,7 +140,10 @@ def _total_energy_leaflet(
     va_eff = np.stack([va0_eff, va1_eff, va2_eff], axis=1)
     kappa_tri = np.asarray(static_payload["kappa_tri"], dtype=float)
 
-    return float(0.5 * np.sum(kappa_tri * term_tri**2 * va_eff))
+    triangle_energy = 0.5 * np.sum(kappa_tri * term_tri**2 * va_eff, axis=1)
+    if return_triangle_energy:
+        return tri_rows, np.asarray(triangle_energy, dtype=float)
+    return float(np.sum(triangle_energy))
 
 
 def _finite_difference_gradient_shape_leaflet(

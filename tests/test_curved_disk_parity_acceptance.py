@@ -12,7 +12,9 @@ from tools.diagnostics.curved_disk_theory import (
     compare_tensionless_curved_disk_profiles,
     compute_curved_disk_theory,
     evaluate_tensionless_curved_disk_profiles,
+    radial_leaflet_bending_tilt_bands,
     tex_reference_params,
+    topological_leaflet_bending_tilt_regions,
 )
 
 
@@ -113,6 +115,71 @@ def test_curved_branch_energy_comparison_identifies_ordering_reversal_source():
         -0.0042287177,
         abs=1.0e-9,
     )
+
+
+def test_radial_leaflet_bands_conserve_triangle_energy():
+    from pathlib import Path
+
+    from geometry.geom_io import load_data, parse_geometry
+    from modules.energy.bt_diagnostics import _total_energy_leaflet
+
+    root = Path(__file__).resolve().parents[1]
+    mesh = parse_geometry(
+        load_data(root / "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml")
+    )
+    positions = mesh.positions_view().copy()
+    tilts = mesh.tilts_in_view().copy()
+    radial_edges = np.array([0.0, 7.0 / 15.0, 1.0, 3.0, 13.0])
+
+    report = radial_leaflet_bending_tilt_bands(
+        mesh=mesh,
+        positions=positions,
+        tilts=tilts,
+        radial_edges=radial_edges,
+        cache_tag="in",
+    )
+    total = _total_energy_leaflet(
+        mesh,
+        mesh.global_parameters,
+        positions=positions,
+        index_map=mesh.vertex_index_to_row,
+        tilts=tilts,
+        kappa_key="bending_modulus_in",
+        cache_tag="in",
+        div_sign=-1.0,
+    )
+
+    assert report["total_energy"] == pytest.approx(total)
+    assert report["assigned_energy"] == pytest.approx(total)
+    assert report["unassigned_energy"] == pytest.approx(0.0, abs=1.0e-15)
+    assert sum(band["triangle_count"] for band in report["bands"]) == len(mesh.facets)
+
+
+def test_topological_leaflet_regions_conserve_and_partition_triangle_energy():
+    from pathlib import Path
+
+    from geometry.geom_io import load_data, parse_geometry
+
+    root = Path(__file__).resolve().parents[1]
+    mesh = parse_geometry(
+        load_data(root / "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml")
+    )
+    report = topological_leaflet_bending_tilt_regions(
+        mesh=mesh,
+        positions=mesh.positions_view().copy(),
+        tilts=mesh.tilts_in_view().copy(),
+        cache_tag="in",
+    )
+    regions = {region["name"]: region for region in report["regions"]}
+
+    assert report["assigned_energy"] == pytest.approx(report["total_energy"])
+    assert report["unassigned_energy"] == pytest.approx(0.0, abs=1.0e-15)
+    assert sum(region["triangle_count"] for region in regions.values()) == len(
+        mesh.facets
+    )
+    assert regions["disk"]["triangle_count"] > 0
+    assert regions["rim_spanning"]["triangle_count"] > 0
+    assert regions["outer"]["triangle_count"] > 0
 
 
 def test_curved_profile_topology_audit_separates_clean_and_folded_lanes():

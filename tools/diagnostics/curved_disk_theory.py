@@ -323,6 +323,131 @@ def compare_curved_branch_energy_breakdowns(
     }
 
 
+def radial_leaflet_bending_tilt_bands(
+    *,
+    mesh,
+    positions: np.ndarray,
+    tilts: np.ndarray,
+    radial_edges: np.ndarray,
+    cache_tag: str,
+) -> dict[str, object]:
+    """Bin one leaflet's bending–tilt energy by triangle-centroid radius."""
+    from modules.energy.bt_diagnostics import _total_energy_leaflet
+
+    edges = np.asarray(radial_edges, dtype=float)
+    if edges.ndim != 1 or edges.size < 2 or np.any(np.diff(edges) <= 0.0):
+        raise ValueError("radial_edges must be a strictly increasing 1D array")
+    if str(cache_tag) not in {"in", "out"}:
+        raise ValueError("cache_tag must be 'in' or 'out'")
+
+    triangle_data = _total_energy_leaflet(
+        mesh,
+        mesh.global_parameters,
+        positions=np.asarray(positions, dtype=float),
+        index_map=mesh.vertex_index_to_row,
+        tilts=np.asarray(tilts, dtype=float),
+        kappa_key=f"bending_modulus_{cache_tag}",
+        cache_tag=str(cache_tag),
+        div_sign=-1.0 if str(cache_tag) == "in" else 1.0,
+        return_triangle_energy=True,
+    )
+    tri_rows, triangle_energy = triangle_data
+    centroids = np.mean(np.asarray(positions, dtype=float)[tri_rows], axis=1)
+    radii = np.linalg.norm(centroids[:, :2], axis=1)
+    band_index = np.searchsorted(edges, radii, side="right") - 1
+
+    bands: list[dict[str, float | int]] = []
+    assigned_total = 0.0
+    for idx in range(edges.size - 1):
+        mask = band_index == idx
+        energy = float(np.sum(triangle_energy[mask]))
+        assigned_total += energy
+        bands.append(
+            {
+                "radius_min": float(edges[idx]),
+                "radius_max": float(edges[idx + 1]),
+                "triangle_count": int(np.sum(mask)),
+                "energy": energy,
+            }
+        )
+    total = float(np.sum(triangle_energy))
+    return {
+        "cache_tag": str(cache_tag),
+        "total_energy": total,
+        "assigned_energy": assigned_total,
+        "unassigned_energy": total - assigned_total,
+        "bands": bands,
+    }
+
+
+def topological_leaflet_bending_tilt_regions(
+    *,
+    mesh,
+    positions: np.ndarray,
+    tilts: np.ndarray,
+    cache_tag: str,
+    disk_group: str = "disk",
+) -> dict[str, object]:
+    """Partition leaflet energy into disk, rim-spanning, and outer triangles."""
+    from modules.energy.bt_diagnostics import _total_energy_leaflet
+
+    if str(cache_tag) not in {"in", "out"}:
+        raise ValueError("cache_tag must be 'in' or 'out'")
+
+    triangle_data = _total_energy_leaflet(
+        mesh,
+        mesh.global_parameters,
+        positions=np.asarray(positions, dtype=float),
+        index_map=mesh.vertex_index_to_row,
+        tilts=np.asarray(tilts, dtype=float),
+        kappa_key=f"bending_modulus_{cache_tag}",
+        cache_tag=str(cache_tag),
+        div_sign=-1.0 if str(cache_tag) == "in" else 1.0,
+        return_triangle_energy=True,
+    )
+    tri_rows, triangle_energy = triangle_data
+    disk_rows = np.array(
+        [
+            str(
+                (getattr(mesh.vertices[int(vid)], "options", {}) or {}).get(
+                    "pin_to_circle_group"
+                )
+                or ""
+            )
+            == str(disk_group)
+            for vid in mesh.vertex_ids
+        ],
+        dtype=bool,
+    )
+    disk_vertex_count = np.sum(disk_rows[tri_rows], axis=1)
+    region_masks = {
+        "disk": disk_vertex_count == 3,
+        "rim_spanning": (disk_vertex_count > 0) & (disk_vertex_count < 3),
+        "outer": disk_vertex_count == 0,
+    }
+    regions = []
+    assigned_total = 0.0
+    for name, mask in region_masks.items():
+        energy = float(np.sum(triangle_energy[mask]))
+        assigned_total += energy
+        regions.append(
+            {
+                "name": name,
+                "triangle_count": int(np.sum(mask)),
+                "energy": energy,
+            }
+        )
+    total = float(np.sum(triangle_energy))
+    return {
+        "cache_tag": str(cache_tag),
+        "disk_group": str(disk_group),
+        "total_energy": total,
+        "assigned_energy": assigned_total,
+        "unassigned_energy": total - assigned_total,
+        "regions": regions,
+    }
+
+
 def axisymmetric_ring_topology_diagnostics(mesh) -> dict[str, object]:
     """Report radial backtracking in an axisymmetric ring mesh.
 
