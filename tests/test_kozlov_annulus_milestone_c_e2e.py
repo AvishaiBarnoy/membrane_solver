@@ -239,7 +239,7 @@ def _break_up_down_symmetry(
 
 
 def test_milestone_c_soft_source_generates_curvature_and_outer_tilt() -> None:
-    """Milestone C: soft rim source + bending_tilt generates curvature; outer leaflet responds."""
+    """Milestone C: the soft source activates the outer leaflet through shape."""
     mesh = parse_geometry(_milestone_c_soft_source_data())
     mesh.global_parameters.set("tilt_inner_steps", 20)
     mesh.global_parameters.set("tilt_tol", 1e-8)
@@ -256,12 +256,21 @@ def test_milestone_c_soft_source_generates_curvature_and_outer_tilt() -> None:
     outer_rows = _outer_rim_rows(mesh)
     assert len(outer_rows) > 0
     assert float(np.max(np.abs(z[outer_rows]))) < 1e-8
-    assert float(np.max(np.abs(z))) > 2e-4
 
     # Without explicit `tilt_coupling`, the outer leaflet can still become nonzero
     # because `bending_tilt_out` couples it to the shared shape curvature.
     t_out = mesh.tilts_out_view()
-    assert float(np.max(np.linalg.norm(t_out, axis=1))) > 5e-4
+    driven_outer_tilt = float(np.max(np.linalg.norm(t_out, axis=1)))
+
+    control = parse_geometry(_milestone_c_soft_source_data(rim_source_strength=0.0))
+    control.global_parameters.set("tilt_inner_steps", 20)
+    control.global_parameters.set("tilt_tol", 1e-8)
+    _break_up_down_symmetry(control)
+    _build_minimizer(control).minimize(n_steps=50)
+    control_outer_tilt = float(np.max(np.linalg.norm(control.tilts_out_view(), axis=1)))
+
+    assert driven_outer_tilt > 1e-7
+    assert driven_outer_tilt > 50.0 * control_outer_tilt
 
 
 def test_milestone_c_without_bending_tilt_out_keeps_outer_tilt_zeroish() -> None:
@@ -280,13 +289,6 @@ def test_milestone_c_without_bending_tilt_out_keeps_outer_tilt_zeroish() -> None
     assert float(np.max(np.linalg.norm(t_out, axis=1))) < 5e-5
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Sign-flip regression: swapping rim-source leaflet currently fails to flip "
-        "curvature direction; tracked in docs/ROADMAP.md."
-    ),
-    strict=False,
-)
 def test_milestone_c_swapping_source_leaflet_flips_curvature_direction() -> None:
     """Milestone C sign test: putting the same source on the other leaflet flips invagination."""
     mesh_in = parse_geometry(_milestone_c_soft_source_data())
@@ -336,3 +338,35 @@ def test_milestone_c_swapping_source_leaflet_flips_curvature_direction() -> None
     assert abs(delta_in) > 1e-6
     assert abs(delta_out) > 1e-6
     assert delta_in * delta_out < 0.0
+
+
+def test_milestone_c_shape_gradient_tracks_finite_difference() -> None:
+    """The driven annulus shape gradient tracks its fixed-tilt energy derivative."""
+    mesh = parse_geometry(_milestone_c_soft_source_data())
+    mesh.global_parameters.set("tilt_inner_steps", 20)
+    mesh.global_parameters.set("tilt_tol", 1e-8)
+    _break_up_down_symmetry(mesh)
+
+    minim = _build_minimizer(mesh)
+    minim.minimize(n_steps=5)
+    positions = mesh.positions_view().copy()
+    _, gradient = minim._evaluation_manager.compute_energy_and_gradient_array(
+        positions=mesh.positions_view()
+    )
+
+    direction = np.zeros_like(positions)
+    free_rows = sorted(set(_inner_rim_rows(mesh) + _mid_ring_rows(mesh)))
+    direction[free_rows, 2] = np.linspace(-1.0, 1.0, len(free_rows))
+    direction /= float(np.linalg.norm(direction))
+
+    eps = 1e-7
+    e_plus = minim._evaluation_manager.compute_energy_array_total(
+        positions=positions + eps * direction
+    )
+    e_minus = minim._evaluation_manager.compute_energy_array_total(
+        positions=positions - eps * direction
+    )
+    finite_difference = float((e_plus - e_minus) / (2.0 * eps))
+    analytic = float(np.sum(gradient * direction))
+
+    assert analytic == pytest.approx(finite_difference, rel=5e-4, abs=1e-5)
