@@ -17,6 +17,53 @@ from .bt_transition import (
 )
 
 
+def _accumulate_ambient_p1_divergence_shape_gradient(
+    *,
+    positions: np.ndarray,
+    tilts: np.ndarray,
+    tri_rows: np.ndarray,
+    coefficient: np.ndarray,
+    grad_arr: np.ndarray,
+) -> None:
+    """Accumulate ``coefficient * d(div_P1)/d(positions)`` for ambient tilts."""
+    rows = np.asarray(tri_rows, dtype=np.int32)
+    if rows.size == 0:
+        return
+
+    v0 = positions[rows[:, 0]]
+    v1 = positions[rows[:, 1]]
+    v2 = positions[rows[:, 2]]
+    a = v1 - v0
+    b = v2 - v0
+    normal = np.cross(a, b)
+    normal_sq = np.einsum("ij,ij->i", normal, normal)
+    safe_normal_sq = np.maximum(normal_sq, 1.0e-20)
+
+    t0 = tilts[rows[:, 0]]
+    t1 = tilts[rows[:, 1]]
+    t2 = tilts[rows[:, 2]]
+    e0 = b - a
+    e1 = -b
+    e2 = a
+    w = np.cross(e0, t0) + np.cross(e1, t1) + np.cross(e2, t2)
+    normal_dot_w = np.einsum("ij,ij->i", normal, w)
+    ddiv_dnormal = (
+        w / safe_normal_sq[:, None]
+        - 2.0 * normal_dot_w[:, None] * normal / (safe_normal_sq**2)[:, None]
+    )
+    ddiv_de0 = np.cross(t0, normal) / safe_normal_sq[:, None]
+    ddiv_de1 = np.cross(t1, normal) / safe_normal_sq[:, None]
+    ddiv_de2 = np.cross(t2, normal) / safe_normal_sq[:, None]
+    ddiv_da = np.cross(b, ddiv_dnormal) - ddiv_de0 + ddiv_de2
+    ddiv_db = np.cross(ddiv_dnormal, a) + ddiv_de0 - ddiv_de1
+    factor = np.asarray(coefficient, dtype=float)[:, None]
+    grad_a = factor * ddiv_da
+    grad_b = factor * ddiv_db
+    np.add.at(grad_arr, rows[:, 1], grad_a)
+    np.add.at(grad_arr, rows[:, 2], grad_b)
+    np.add.at(grad_arr, rows[:, 0], -(grad_a + grad_b))
+
+
 def _backpropagate_bending_tilt_shape_gradient(
     mesh: Mesh,
     *,

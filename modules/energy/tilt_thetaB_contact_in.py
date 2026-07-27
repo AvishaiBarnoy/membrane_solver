@@ -35,6 +35,9 @@ from typing import Dict, Tuple
 import numpy as np
 
 from geometry.entities import Mesh
+from modules.constraints.inclusion_components import (
+    warn_if_disconnected_group_uses_single_frame,
+)
 
 USES_TILT_LEAFLETS = True
 IS_EXTERNAL_WORK = True
@@ -205,6 +208,12 @@ def _boundary_geometry_payload(
     rows = _collect_group_rows(mesh, group)
     if rows.size == 0:
         return None
+    warn_if_disconnected_group_uses_single_frame(
+        mesh,
+        group=group,
+        operator="tilt_thetaB_contact_in",
+        option_keys=("rim_slope_match_group", "tilt_thetaB_group"),
+    )
 
     center = _resolve_center(param_resolver)
     raw_normal = param_resolver.get(None, "tilt_thetaB_normal")
