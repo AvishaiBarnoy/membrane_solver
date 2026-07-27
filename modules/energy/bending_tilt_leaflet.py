@@ -31,6 +31,7 @@ from .bt_divergence import (
     _inner_recovered_divergence,
     _inner_recovered_divergence_area_pullback,
     _inner_recovered_divergence_pullback,
+    _inner_recovery_triangle_domains,
 )
 from .bt_gradient import (
     _accumulate_ambient_p1_divergence_shape_gradient,
@@ -314,6 +315,12 @@ def compute_energy_and_gradient_array_leaflet(
         if tri_area is None:
             tri_area = mesh.p1_triangle_shape_gradient_cache(positions)[0]
         tri_area = np.asarray(tri_area, dtype=float)
+        recovery_triangle_domains = _inner_recovery_triangle_domains(
+            mesh,
+            global_params,
+            cache_tag=cache_tag,
+            tri_rows=tri_rows,
+        )
         div_eval_tri, div_eval_vertex_div, div_eval_vertex_area = (
             _inner_recovered_divergence(
                 global_params=global_params,
@@ -322,6 +329,7 @@ def compute_energy_and_gradient_array_leaflet(
                 tri_area=tri_area,
                 div_tri=div_term,
                 n_vertices=len(mesh.vertex_ids),
+                triangle_domains=recovery_triangle_domains,
                 ctx=ctx,
                 scratch_tag=f"btl_{cache_tag}",
             )
@@ -413,6 +421,7 @@ def compute_energy_and_gradient_array_leaflet(
                     tri_area=tri_area,
                     coeff_div_eval=float(div_sign) * dE_ddiv_base,
                     v_area=div_eval_vertex_area,
+                    triangle_domains=recovery_triangle_domains,
                     ctx=ctx,
                     scratch_tag=f"btl_{cache_tag}",
                 )
@@ -638,6 +647,7 @@ def compute_energy_and_gradient_array_leaflet(
                 coeff_div_eval=dE_ddiv_base,
                 v_div=div_eval_vertex_div,
                 v_area=div_eval_vertex_area,
+                triangle_domains=recovery_triangle_domains,
                 ctx=ctx,
                 scratch_tag=f"btl_{cache_tag}",
             )
@@ -648,6 +658,7 @@ def compute_energy_and_gradient_array_leaflet(
                 tri_area=tri_area,
                 coeff_div_eval=float(div_sign) * dE_ddiv_base,
                 v_area=div_eval_vertex_area,
+                triangle_domains=recovery_triangle_domains,
                 ctx=ctx,
                 scratch_tag=f"btl_{cache_tag}",
             )

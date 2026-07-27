@@ -18,6 +18,7 @@ from modules.energy.bending_utils import (
 
 from .bt_divergence import (
     _inner_recovered_divergence,
+    _inner_recovery_triangle_domains,
 )
 from .bt_params import (
     _use_inner_recovered_divergence,
@@ -104,6 +105,12 @@ def _total_energy_leaflet(
         if tri_area is None:
             tri_area = mesh.p1_triangle_shape_gradient_cache(positions)[0]
         tri_area = np.asarray(tri_area, dtype=float)
+        triangle_domains = _inner_recovery_triangle_domains(
+            mesh,
+            global_params,
+            cache_tag=cache_tag,
+            tri_rows=tri_rows,
+        )
         div_eval_tri, _, _ = _inner_recovered_divergence(
             global_params=global_params,
             cache_tag=cache_tag,
@@ -111,6 +118,7 @@ def _total_energy_leaflet(
             tri_area=tri_area,
             div_tri=div_term,
             n_vertices=len(mesh.vertex_ids),
+            triangle_domains=triangle_domains,
             scratch_tag=f"btl_{cache_tag}",
         )
     else:
