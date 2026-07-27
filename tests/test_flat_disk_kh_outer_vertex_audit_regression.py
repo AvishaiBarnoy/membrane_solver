@@ -19,6 +19,7 @@ def test_flat_disk_kh_outer_vertex_audit_reports_finite_bands() -> None:
         include_frozen_analytic=True,
     )
     assert bool(report["meta"]["include_frozen_analytic"]) is True
+    assert int(report["meta"]["relax_repeats_applied"]) >= 2
     assert report["meta"]["outer_reference_primary"] == "infinite"
     assert report["meta"]["outer_reference_secondary"] == "finite_outer_rmax"
     assert report["meta"]["continuum_field_model"] == "vector_field_radial_amplitude"
@@ -62,3 +63,44 @@ def test_flat_disk_kh_outer_vertex_audit_reports_finite_bands() -> None:
             assert np.isfinite(float(sec["mesh"]))
             assert np.isfinite(float(sec["theory"]))
             assert np.isfinite(float(sec["ratio_mesh_over_theory"]))
+
+        profile = report["profile_error_by_field"][field]
+        for name in ("disk_core", "rim_band", "outer_near", "outer_tail"):
+            row = profile[name]
+            assert int(row["vertex_count"]) > 0
+            assert np.isfinite(float(row["radial_relative_l2"]))
+            assert np.isfinite(float(row["azimuthal_relative_l2"]))
+            assert np.isfinite(float(row["radial_abs_max_over_theta"]))
+
+    frozen = report["profile_error_by_field"]["frozen_analytic"]
+    for name in ("disk_core", "rim_band", "outer_near", "outer_tail"):
+        assert float(frozen[name]["radial_relative_l2"]) < 1.0e-12
+        assert float(frozen[name]["azimuthal_relative_l2"]) < 1.0e-12
+
+    solved = report["profile_error_by_field"]["solved"]
+    radial_caps = {
+        "disk_core": 0.025,
+        "rim_band": 0.05,
+        "outer_near": 0.08,
+        "outer_tail": 0.12,
+    }
+    for name, cap in radial_caps.items():
+        assert float(solved[name]["radial_relative_l2"]) < cap
+        assert float(solved[name]["azimuthal_relative_l2"]) < 0.12
+
+
+@pytest.mark.slow
+@pytest.mark.acceptance
+def test_flat_disk_kh_field_profile_converges_below_five_percent_at_refine_3() -> None:
+    report = run_flat_disk_kh_outer_vertex_audit(
+        optimize_preset="kh_strict_outerfield_tight",
+        refine_level=3,
+        theta=0.14174044650187945,
+        include_frozen_analytic=False,
+    )
+
+    assert bool(report["meta"]["relax_converged"])
+    solved = report["profile_error_by_field"]["solved"]
+    for name in ("disk_core", "rim_band", "outer_near", "outer_tail"):
+        assert float(solved[name]["radial_relative_l2"]) < 0.05
+        assert float(solved[name]["azimuthal_relative_l2"]) < 0.04
