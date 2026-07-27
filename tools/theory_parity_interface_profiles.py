@@ -334,6 +334,7 @@ def build_curved_profile_fixture(
         for constraint in list(outer_definition.get("constraints") or [])
         if constraint != "pin_to_plane"
     ]
+    outer_definition["pin_to_circle_mode"] = "slide"
     doc["definitions"]["outer_rim"] = outer_definition
     return doc
 

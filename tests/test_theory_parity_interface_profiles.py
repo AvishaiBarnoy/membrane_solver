@@ -149,6 +149,7 @@ def test_build_curved_profile_fixture_frees_outer_height_and_uses_physical_edge(
     outer_constraints = curved["definitions"]["outer_rim"]["constraints"]
     assert "pin_to_circle" in outer_constraints
     assert "pin_to_plane" not in outer_constraints
+    assert curved["definitions"]["outer_rim"]["pin_to_circle_mode"] == "slide"
 
 
 def test_curved_profile_fixture_projects_the_theoretical_half_split():
