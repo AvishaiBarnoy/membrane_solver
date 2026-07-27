@@ -228,7 +228,7 @@ def build_scaled_fixture(
     label: str,
     inner_radius: float,
     outer_radius: float,
-    base_term_reference_mode: str = "flat_reference_zero_J0",
+    base_term_reference_mode: str = "current_geometry",
 ) -> dict[str, Any]:
     """Return a fixture copy with the interface rings moved inward."""
     doc = copy.deepcopy(base_doc)
@@ -246,7 +246,7 @@ def build_profiled_fixture(
     base_doc: dict[str, Any],
     profile: str,
     lane: str | None = None,
-    base_term_reference_mode: str = "flat_reference_zero_J0",
+    base_term_reference_mode: str = "current_geometry",
 ) -> dict[str, Any]:
     """Return a fixture copy for one named near-edge interface profile."""
     key = str(profile).strip()
@@ -671,7 +671,7 @@ def _build_outer_shell_scaffold_fixture_with_radii(
 
     gp = dict(doc.get("global_parameters") or {})
     gp["theory_parity_lane"] = str(label)
-    gp["bending_tilt_base_term_reference_mode"] = "flat_reference_zero_J0"
+    gp["bending_tilt_base_term_reference_mode"] = "current_geometry"
     gp["parity_trace_layer_radius"] = float(trace_radius)
     gp["parity_outer_shells"] = int(outer_shells)
     gp["parity_outer_shells_d"] = float(outer_shells_d)

@@ -46,6 +46,10 @@ def test_build_scaled_fixture_moves_target_rings_and_sets_lane() -> None:
     assert SOURCE_INNER_RADIUS not in radii
     assert SOURCE_OUTER_RADIUS not in radii
     assert scaled["global_parameters"]["theory_parity_lane"] == "candidate_lane"
+    assert (
+        scaled["global_parameters"]["bending_tilt_base_term_reference_mode"]
+        == "current_geometry"
+    )
 
 
 def test_build_profiled_fixture_applies_general_near_edge_profile() -> None:
@@ -64,6 +68,29 @@ def test_build_profiled_fixture_applies_general_near_edge_profile() -> None:
     assert inner_radius in radii
     assert outer_radius in radii
     assert profiled["global_parameters"]["theory_parity_lane"] == "general_near_edge_v1"
+    assert (
+        profiled["global_parameters"]["bending_tilt_base_term_reference_mode"]
+        == "current_geometry"
+    )
+
+
+def test_profile_builder_can_still_request_legacy_zero_j_reference() -> None:
+    base_doc = yaml.safe_load(
+        (
+            ROOT / "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    profiled = build_profiled_fixture(
+        base_doc=base_doc,
+        profile="near_edge_v1",
+        lane="legacy_control",
+        base_term_reference_mode="flat_reference_zero_J0",
+    )
+
+    assert (
+        profiled["global_parameters"]["bending_tilt_base_term_reference_mode"]
+        == "flat_reference_zero_J0"
+    )
 
 
 def test_build_full_physics_fixture_sets_current_geometry_reference_mode() -> None:
