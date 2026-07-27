@@ -165,3 +165,63 @@ def _inner_recovered_divergence_pullback(
         + v_grad[tri_rows[:, 2]] * inv_v_area[tri_rows[:, 2]]
     )
     return coeff_div
+
+
+def _inner_recovered_divergence_area_pullback(
+    *,
+    global_params,
+    cache_tag: str,
+    tri_rows: np.ndarray,
+    div_tri: np.ndarray,
+    coeff_div_eval: np.ndarray,
+    v_div: np.ndarray | None,
+    v_area: np.ndarray | None,
+    ctx=None,
+    scratch_tag: str,
+) -> np.ndarray:
+    """Map recovered-divergence sensitivity to triangle-area coefficients."""
+    coeff_div_eval = np.asarray(coeff_div_eval, dtype=float)
+    if str(cache_tag) != "in" or coeff_div_eval.size == 0:
+        return np.zeros_like(coeff_div_eval)
+    if not _use_inner_recovered_divergence(global_params, cache_tag=cache_tag):
+        return np.zeros_like(coeff_div_eval)
+    if v_div is None or v_area is None:
+        raise ValueError("Recovered inner divergence requires vertex values and areas.")
+
+    n_vertices = int(v_area.shape[0])
+    if ctx is not None:
+        v_grad = ctx.scratch_array(
+            f"{scratch_tag}_area_v_grad", shape=(n_vertices,), dtype=float
+        )
+        inv_v_area = ctx.scratch_array(
+            f"{scratch_tag}_area_inv_v_area", shape=(n_vertices,), dtype=float
+        )
+        coeff_area = ctx.scratch_array(
+            f"{scratch_tag}_coeff_area", shape=coeff_div_eval.shape, dtype=float
+        )
+        v_grad.fill(0.0)
+        inv_v_area.fill(0.0)
+    else:
+        v_grad = np.zeros(n_vertices, dtype=float)
+        inv_v_area = np.zeros_like(v_area)
+        coeff_area = np.zeros_like(coeff_div_eval)
+
+    np.add.at(v_grad, tri_rows[:, 0], coeff_div_eval / 3.0)
+    np.add.at(v_grad, tri_rows[:, 1], coeff_div_eval / 3.0)
+    np.add.at(v_grad, tri_rows[:, 2], coeff_div_eval / 3.0)
+    good_v = v_area > 1.0e-20
+    inv_v_area[good_v] = 1.0 / v_area[good_v]
+
+    div_tri = np.asarray(div_tri, dtype=float)
+    coeff_area[:] = (
+        v_grad[tri_rows[:, 0]]
+        * (div_tri - v_div[tri_rows[:, 0]])
+        * inv_v_area[tri_rows[:, 0]]
+        + v_grad[tri_rows[:, 1]]
+        * (div_tri - v_div[tri_rows[:, 1]])
+        * inv_v_area[tri_rows[:, 1]]
+        + v_grad[tri_rows[:, 2]]
+        * (div_tri - v_div[tri_rows[:, 2]])
+        * inv_v_area[tri_rows[:, 2]]
+    ) / 3.0
+    return coeff_area

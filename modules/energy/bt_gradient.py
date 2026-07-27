@@ -64,6 +64,28 @@ def _accumulate_ambient_p1_divergence_shape_gradient(
     np.add.at(grad_arr, rows[:, 0], -(grad_a + grad_b))
 
 
+def _accumulate_triangle_area_shape_gradient(
+    *,
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+    coefficient: np.ndarray,
+    grad_arr: np.ndarray,
+) -> None:
+    """Accumulate ``coefficient * d(triangle_area)/d(positions)``."""
+    rows = np.asarray(tri_rows, dtype=np.int32)
+    if rows.size == 0:
+        return
+    u = positions[rows[:, 1]] - positions[rows[:, 0]]
+    v = positions[rows[:, 2]] - positions[rows[:, 0]]
+    grad_u, grad_v = grad_triangle_area(u, v)
+    factor = np.asarray(coefficient, dtype=float)[:, None]
+    grad_u *= factor
+    grad_v *= factor
+    np.add.at(grad_arr, rows[:, 1], grad_u)
+    np.add.at(grad_arr, rows[:, 2], grad_v)
+    np.add.at(grad_arr, rows[:, 0], -(grad_u + grad_v))
+
+
 def _backpropagate_bending_tilt_shape_gradient(
     mesh: Mesh,
     *,

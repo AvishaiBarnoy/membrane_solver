@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pytest
 import yaml
 
 from geometry.geom_io import load_data, parse_geometry
@@ -105,13 +104,6 @@ def test_outer_bending_tilt_shape_pullback_matches_retraction_finite_difference(
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "The inner recovered-divergence shape pullback is not yet exact on "
-        "the scaffold transition."
-    ),
-)
 def test_boundary_retraction_derivative_matches_full_gradient_strictly() -> None:
     ctx = _build_context(DEFAULT_FIXTURE)
     _run_protocol_with_parity_activation(ctx, protocol=QUICK_PROTOCOL)

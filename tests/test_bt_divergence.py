@@ -3,6 +3,7 @@ import numpy as np
 from modules.energy.bt_divergence import (
     _inner_bending_tilt_dE_ddiv,
     _inner_recovered_divergence,
+    _inner_recovered_divergence_area_pullback,
     _inner_recovered_divergence_pullback,
 )
 
@@ -90,6 +91,57 @@ def test_inner_recovered_divergence_pullback():
     # T0: 1 * ( (1/3)/1.0 + (2/3)/2.0 + (2/3)/2.0 ) = 1 * (1/3 + 1/3 + 1/3) = 1.0
     # T1: 1 * ( (2/3)/2.0 + (2/3)/2.0 + (1/3)/1.0 ) = 1 * (1/3 + 1/3 + 1/3) = 1.0
     assert np.allclose(coeff_div, [1.0, 1.0])
+
+
+def test_inner_recovered_divergence_area_pullback_matches_finite_difference():
+    tri_rows = np.array([[0, 1, 2], [1, 2, 3]])
+    tri_area = np.array([3.0, 4.0])
+    div_tri = np.array([10.0, 20.0])
+    coeff_div_eval = np.array([1.2, -0.7])
+    global_params = {"theory_parity_lane": "test"}
+
+    _, v_div, v_area = _inner_recovered_divergence(
+        global_params=global_params,
+        cache_tag="in",
+        tri_rows=tri_rows,
+        tri_area=tri_area,
+        div_tri=div_tri,
+        n_vertices=4,
+        scratch_tag="test",
+    )
+    analytic = _inner_recovered_divergence_area_pullback(
+        global_params=global_params,
+        cache_tag="in",
+        tri_rows=tri_rows,
+        div_tri=div_tri,
+        coeff_div_eval=coeff_div_eval,
+        v_div=v_div,
+        v_area=v_area,
+        scratch_tag="test",
+    )
+
+    def objective(areas):
+        div_eval, _, _ = _inner_recovered_divergence(
+            global_params=global_params,
+            cache_tag="in",
+            tri_rows=tri_rows,
+            tri_area=areas,
+            div_tri=div_tri,
+            n_vertices=4,
+            scratch_tag="test",
+        )
+        return float(np.dot(coeff_div_eval, div_eval))
+
+    eps = 1.0e-6
+    finite_difference = np.zeros_like(tri_area)
+    for idx in range(tri_area.size):
+        direction = np.zeros_like(tri_area)
+        direction[idx] = eps
+        finite_difference[idx] = (
+            objective(tri_area + direction) - objective(tri_area - direction)
+        ) / (2.0 * eps)
+
+    assert np.allclose(analytic, finite_difference, rtol=1.0e-8, atol=1.0e-9)
 
 
 def test_inner_bending_tilt_dE_ddiv_off():
