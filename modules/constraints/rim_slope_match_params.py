@@ -105,6 +105,13 @@ def _use_curved_free_disk_shell2_tilt_continuation(global_params) -> bool:
 
 def _use_disk_theta_targeting(global_params, matching_mode: str) -> bool:
     if matching_mode == "physical_edge_staggered_v1":
+        if (
+            str(global_params.get("rim_slope_match_scaffold_projector_mode") or "")
+            .strip()
+            .lower()
+            == "continuity_v2"
+        ):
+            return False
         if _uses_scaffold_trace_lane(global_params, matching_mode):
             return False
         return True

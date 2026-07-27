@@ -185,6 +185,9 @@ def test_curved_profile_fixture_projects_the_theoretical_half_split():
 
     from geometry.geom_io import parse_geometry
     from modules.constraints.rim_slope_match_out import enforce_constraint
+    from modules.constraints.tilt_thetaB_boundary_in import (
+        enforce_tilt_constraint as enforce_theta_boundary,
+    )
 
     base_doc = yaml.safe_load(
         (
@@ -203,6 +206,7 @@ def test_curved_profile_fixture_projects_the_theoretical_half_split():
     mesh.global_parameters.set("tilt_thetaB_value", theta)
 
     enforce_constraint(mesh, mesh.global_parameters, context="minimize")
+    enforce_theta_boundary(mesh, mesh.global_parameters)
 
     positions = mesh.positions_view()
     radii = np.linalg.norm(positions[:, :2], axis=1)
@@ -214,8 +218,12 @@ def test_curved_profile_fixture_projects_the_theoretical_half_split():
     trace_tilt_out = float(
         np.mean(np.einsum("ij,ij->i", mesh.tilts_out_view()[trace_rows], radial))
     )
+    trace_tilt_in = float(
+        np.mean(np.einsum("ij,ij->i", mesh.tilts_in_view()[trace_rows], radial))
+    )
 
     assert trace_height / (trace_radius - radius) == pytest.approx(0.5 * theta)
+    assert trace_tilt_in == pytest.approx(0.5 * theta)
     assert trace_tilt_out == pytest.approx(0.5 * theta)
 
 
@@ -238,6 +246,14 @@ def test_free_outer_refinement_rings_have_no_support_constraints():
         doc["global_parameters"]["bending_tilt_base_term_reference_mode"]
         == "current_geometry"
     )
+    assert (
+        doc["global_parameters"]["rim_slope_match_mode"] == "physical_edge_staggered_v1"
+    )
+    assert (
+        doc["global_parameters"]["rim_slope_match_scaffold_projector_mode"]
+        == "continuity_v2"
+    )
+    assert doc["global_parameters"]["parity_outer_shells"] == 0
     for ring_index, ring_radius in enumerate(free_radii, start=1):
         rows = [
             vertex

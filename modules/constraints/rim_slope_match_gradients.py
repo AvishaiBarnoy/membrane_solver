@@ -515,7 +515,18 @@ def constraint_gradients_tilt_rows_array(
                 constraints.append((None, out_part))
             continue
 
-        if theta_scalar is not None and _use_disk_theta_targeting(
+        fixed_half_split = (
+            theta_scalar is not None
+            and matching_mode == "physical_edge_staggered_v1"
+            and str(global_params.get("rim_slope_match_scaffold_projector_mode") or "")
+            .strip()
+            .lower()
+            == "continuity_v2"
+        )
+        if fixed_half_split:
+            rows_in = [int(row) for row in target_rows]
+            vecs_in = [coeff * float(w) * r_dir for w in target_weights]
+        elif theta_scalar is not None and _use_disk_theta_targeting(
             global_params, matching_mode
         ):
             disk_target = _disk_theta_rows_weights_and_direction(

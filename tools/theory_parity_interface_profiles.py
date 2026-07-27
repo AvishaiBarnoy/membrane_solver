@@ -325,6 +325,8 @@ def build_curved_profile_fixture(
     gp["rim_slope_match_mode"] = "physical_edge_staggered_v1"
     gp["rim_slope_match_scaffold_projector_mode"] = "continuity_v2"
     gp["bending_tilt_base_term_boundary_group_out"] = "disk"
+    gp["parity_outer_shells"] = 0
+    gp["parity_outer_shells_d"] = 0.0
     gp["theory_radius"] = float(_vertex_radius(doc["vertices"][int(disk_ring[0])]))
     doc["global_parameters"] = gp
 
@@ -380,7 +382,24 @@ def build_free_outer_refinement_fixture(
     )
     gp = dict(doc.get("global_parameters") or {})
     gp["bending_tilt_base_term_reference_mode"] = "current_geometry"
+    gp["rim_slope_match_mode"] = "physical_edge_staggered_v1"
+    gp["rim_slope_match_scaffold_projector_mode"] = "continuity_v2"
+    gp["bending_tilt_base_term_boundary_group_out"] = "disk"
+    gp["parity_outer_shells"] = 0
+    gp["parity_outer_shells_d"] = 0.0
+    disk_ring = _find_group_vertex_ids(doc["vertices"], "disk")
+    if not disk_ring:
+        raise ValueError("free outer refinement requires a tagged disk boundary")
+    gp["theory_radius"] = float(_vertex_radius(doc["vertices"][int(disk_ring[0])]))
     doc["global_parameters"] = gp
+    outer_definition = dict((doc.get("definitions") or {}).get("outer_rim") or {})
+    outer_definition["constraints"] = [
+        constraint
+        for constraint in list(outer_definition.get("constraints") or [])
+        if constraint != "pin_to_plane"
+    ]
+    outer_definition["pin_to_circle_mode"] = "slide"
+    doc["definitions"]["outer_rim"] = outer_definition
     return doc
 
 

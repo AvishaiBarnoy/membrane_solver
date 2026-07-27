@@ -1076,6 +1076,10 @@ class TiltRelaxationManager:
                     final_energy = float(E0)
                     final_gradient_norm = float(gnorm)
                     self.set_leaflet_tilts_from_arrays_fast_fn(tilts_in, tilts_out)
+                    if hasattr(constraint_manager, "enforce_tilt_constraints"):
+                        constraint_manager.enforce_tilt_constraints(
+                            mesh, global_params=global_params
+                        )
                     self.last_leaflet_relaxation_stats.update(
                         {
                             "accepted_steps": int(accepted_steps),
@@ -1468,3 +1472,7 @@ class TiltRelaxationManager:
             )
 
         self.set_leaflet_tilts_from_arrays_fast_fn(tilts_in, tilts_out)
+        if hasattr(constraint_manager, "enforce_tilt_constraints"):
+            constraint_manager.enforce_tilt_constraints(
+                mesh, global_params=global_params
+            )
