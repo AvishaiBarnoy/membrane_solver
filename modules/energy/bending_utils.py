@@ -54,9 +54,12 @@ def _compute_effective_areas(
     key_va0 = f"va0_eff::{cache_token}"
     key_va1 = f"va1_eff::{cache_token}"
     key_va2 = f"va2_eff::{cache_token}"
+    key_version = f"effective_area_version::{cache_token}"
     if is_cached_pos and mesh._curvature_version == mesh._version:
         c = mesh._curvature_cache
-        if len(c.get(key_va0, ())) == int(tri_rows.shape[0]):
+        if c.get(key_version) == mesh._version and len(c.get(key_va0, ())) == int(
+            tri_rows.shape[0]
+        ):
             vertex_cached = c.get(key_vertex)
             if vertex_cached is not None:
                 return (
@@ -77,53 +80,43 @@ def _compute_effective_areas(
             np.zeros(0),
         )
 
-    use_raw_area_cache = False
-    if is_cached_pos and mesh._curvature_version == mesh._version:
-        c = mesh._curvature_cache
-        va0_raw = np.asarray(c.get("va0_raw", ()), dtype=float)
-        va1_raw = np.asarray(c.get("va1_raw", ()), dtype=float)
-        va2_raw = np.asarray(c.get("va2_raw", ()), dtype=float)
-        nf = int(tri_rows.shape[0])
-        if va0_raw.shape == (nf,) and va1_raw.shape == (nf,) and va2_raw.shape == (nf,):
-            use_raw_area_cache = True
-            va0 = va0_raw
-            va1 = va1_raw
-            va2 = va2_raw
+    # Recompute the corner areas from the exact positions supplied by the
+    # caller.  The curvature-kernel cache is keyed to the active mesh geometry
+    # and its optional corner outputs are not safe for filtered leaflet
+    # triangle sets or detached finite-difference arrays.
+    v0 = positions[tri_rows[:, 0]]
+    v1 = positions[tri_rows[:, 1]]
+    v2 = positions[tri_rows[:, 2]]
 
-    if not use_raw_area_cache:
-        v0 = positions[tri_rows[:, 0]]
-        v1 = positions[tri_rows[:, 1]]
-        v2 = positions[tri_rows[:, 2]]
+    e0 = v2 - v1
+    e1 = v0 - v2
+    e2 = v1 - v0
 
-        e0 = v2 - v1
-        e1 = v0 - v2
-        e2 = v1 - v0
+    l0_sq = np.einsum("ij,ij->i", e0, e0)
+    l1_sq = np.einsum("ij,ij->i", e1, e1)
+    l2_sq = np.einsum("ij,ij->i", e2, e2)
 
-        l0_sq = np.einsum("ij,ij->i", e0, e0)
-        l1_sq = np.einsum("ij,ij->i", e1, e1)
-        l2_sq = np.einsum("ij,ij->i", e2, e2)
+    c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
 
-        c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
+    n = np.cross(v1 - v0, v2 - v0)
+    tri_areas = 0.5 * np.linalg.norm(n, axis=1)
+    tri_areas = np.maximum(tri_areas, 1e-12)
 
-        n = np.cross(v1 - v0, v2 - v0)
-        tri_areas = 0.5 * np.linalg.norm(n, axis=1)
-        tri_areas = np.maximum(tri_areas, 1e-12)
+    is_obtuse_v0 = c0 < 0
+    is_obtuse_v1 = c1 < 0
+    is_obtuse_v2 = c2 < 0
+    any_obtuse = is_obtuse_v0 | is_obtuse_v1 | is_obtuse_v2
 
-        is_obtuse_v0 = c0 < 0
-        is_obtuse_v1 = c1 < 0
-        is_obtuse_v2 = c2 < 0
-        any_obtuse = is_obtuse_v0 | is_obtuse_v1 | is_obtuse_v2
+    va0 = np.where(~any_obtuse, (l1_sq * c1 + l2_sq * c2) / 8.0, 0.0)
+    va1 = np.where(~any_obtuse, (l2_sq * c2 + l0_sq * c0) / 8.0, 0.0)
+    va2 = np.where(~any_obtuse, (l0_sq * c0 + l1_sq * c1) / 8.0, 0.0)
 
-        va0 = np.where(~any_obtuse, (l1_sq * c1 + l2_sq * c2) / 8.0, 0.0)
-        va1 = np.where(~any_obtuse, (l2_sq * c2 + l0_sq * c0) / 8.0, 0.0)
-        va2 = np.where(~any_obtuse, (l0_sq * c0 + l1_sq * c1) / 8.0, 0.0)
-
-        va0 = np.where(is_obtuse_v0, tri_areas / 2.0, va0)
-        va0 = np.where(is_obtuse_v1 | is_obtuse_v2, tri_areas / 4.0, va0)
-        va1 = np.where(is_obtuse_v1, tri_areas / 2.0, va1)
-        va1 = np.where(is_obtuse_v0 | is_obtuse_v2, tri_areas / 4.0, va1)
-        va2 = np.where(is_obtuse_v2, tri_areas / 2.0, va2)
-        va2 = np.where(is_obtuse_v0 | is_obtuse_v1, tri_areas / 4.0, va2)
+    va0 = np.where(is_obtuse_v0, tri_areas / 2.0, va0)
+    va0 = np.where(is_obtuse_v1 | is_obtuse_v2, tri_areas / 4.0, va0)
+    va1 = np.where(is_obtuse_v1, tri_areas / 2.0, va1)
+    va1 = np.where(is_obtuse_v0 | is_obtuse_v2, tri_areas / 4.0, va1)
+    va2 = np.where(is_obtuse_v2, tri_areas / 2.0, va2)
+    va2 = np.where(is_obtuse_v0 | is_obtuse_v1, tri_areas / 4.0, va2)
 
     boundary_rows = np.array(
         [
@@ -163,6 +156,7 @@ def _compute_effective_areas(
         mesh._curvature_cache[key_va0] = va_eff[:, 0]
         mesh._curvature_cache[key_va1] = va_eff[:, 1]
         mesh._curvature_cache[key_va2] = va_eff[:, 2]
+        mesh._curvature_cache[key_version] = mesh._version
     if not compute_vertex_areas:
         return None, va_eff[:, 0], va_eff[:, 1], va_eff[:, 2]
 

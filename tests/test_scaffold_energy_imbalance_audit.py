@@ -88,11 +88,28 @@ def test_boundary_retraction_derivative_contract_is_localized() -> None:
     assert audit["state_delta_after_audit"]["tilts_out_max_abs"] == 0.0
 
 
+def test_outer_bending_tilt_shape_pullback_matches_retraction_finite_difference() -> (
+    None
+):
+    ctx = _build_context(DEFAULT_FIXTURE)
+    _run_protocol_with_parity_activation(ctx, protocol=QUICK_PROTOCOL)
+
+    audit = _boundary_retraction_derivative_audit(ctx)
+    outer = audit["position_module_derivatives"]["bending_tilt_out"]
+
+    assert np.isclose(
+        float(outer["fd_slope"]),
+        float(outer["gradient_dot_retraction"]),
+        rtol=1.0e-7,
+        atol=1.0e-9,
+    )
+
+
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "The outer bending-tilt shape pullback is not yet exact on the "
-        "scaffold transition."
+        "The inner recovered-divergence shape pullback is not yet exact on "
+        "the scaffold transition."
     ),
 )
 def test_boundary_retraction_derivative_matches_full_gradient_strictly() -> None:

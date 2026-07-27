@@ -590,10 +590,10 @@ def compute_energy_and_gradient_array_leaflet(
     }
 
     if suppress_shape_cross:
-        fA_eff = 0.5 * kappa_arr * (base_term**2 + div_eff**2)
+        corner_fA_eff = 0.5 * kappa_tri * (base_tri**2 + div_eval_tri[:, None] ** 2)
         fA_vor = -2.0 * kappa_arr * base_term * ratio * H_vor
     else:
-        fA_eff = 0.5 * kappa_arr * term**2
+        corner_fA_eff = 0.5 * kappa_tri * term_tri**2
         fA_vor = -2.0 * kappa_arr * term * ratio * H_vor
     if flat_reference:
         fA_vor = np.zeros_like(fA_vor)
@@ -661,7 +661,7 @@ def compute_energy_and_gradient_array_leaflet(
             weights=weights,
             tri_keep=tri_keep,
             is_interior=is_interior,
-            fA_eff=fA_eff,
+            corner_fA_eff=corner_fA_eff,
             fA_vor=fA_vor,
             factor_K_vec=factor_K_vec,
             grad_arr=grad_arr,
