@@ -188,6 +188,43 @@ def test_clean_fixture_keeps_current_curvature_when_spontaneous_curvature_is_zer
     assert energy(curved) > 1.0e-6
 
 
+def test_filtered_trace_connector_shape_gradient_is_finite():
+    from pathlib import Path
+
+    import yaml
+
+    from geometry.geom_io import parse_geometry
+    from modules.energy.bt_diagnostics import _finite_difference_gradient_shape_leaflet
+    from tools.theory_parity_interface_profiles import build_trace_ring_fixture
+
+    root = Path(__file__).resolve().parents[1]
+    base_doc = yaml.safe_load(
+        (
+            root / "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    doc = build_trace_ring_fixture(
+        base_doc=base_doc,
+        label="filtered_connector_gradient",
+        trace_radius=(7.0 / 15.0) + 0.005,
+    )
+    mesh = parse_geometry(doc)
+    positions = mesh.positions_view().copy()
+    gradient = _finite_difference_gradient_shape_leaflet(
+        mesh,
+        mesh.global_parameters,
+        positions=positions,
+        index_map=mesh.vertex_index_to_row,
+        tilts=np.zeros_like(positions),
+        kappa_key="bending_modulus_in",
+        cache_tag="in",
+        div_sign=-1.0,
+        eps=1.0e-6,
+    )
+
+    assert np.all(np.isfinite(gradient))
+
+
 def test_topological_leaflet_regions_conserve_and_partition_triangle_energy():
     from pathlib import Path
 
@@ -294,6 +331,7 @@ def test_clean_curved_profile_lane_represents_tensionless_log_shape():
     )
 
     assert topology["is_monotone"] is True
+    assert topology["component_count"] == 2
     assert energy_in < 1.0e-3
     assert energy_out < 1.0e-3
 

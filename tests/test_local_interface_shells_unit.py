@@ -76,6 +76,40 @@ def test_build_local_interface_shell_data_orders_shells_and_matches_rows() -> No
 
 
 @pytest.mark.unit
+def test_trace_fixture_has_no_material_triangles_between_disk_and_trace():
+    base_doc = yaml.safe_load(
+        (
+            ROOT / "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    doc = build_trace_ring_fixture(
+        base_doc=base_doc,
+        label="connector_mask_unit",
+        trace_radius=(7.0 / 15.0) + 0.005,
+    )
+    mesh = parse_geometry(doc)
+    tri_rows, _ = mesh.triangle_row_cache()
+    disk_rows = np.array(
+        [
+            (mesh.vertices[int(vid)].options or {}).get("pin_to_circle_group") == "disk"
+            for vid in mesh.vertex_ids
+        ]
+    )
+    trace_rows = np.array(
+        [
+            (mesh.vertices[int(vid)].options or {}).get("pin_to_circle_group")
+            == "trace_layer"
+            for vid in mesh.vertex_ids
+        ]
+    )
+    connector = np.any(disk_rows[tri_rows], axis=1) & np.any(
+        trace_rows[tri_rows], axis=1
+    )
+
+    assert not np.any(connector)
+
+
+@pytest.mark.unit
 def test_local_interface_constraint_diagnostics_reports_available_shells() -> None:
     mesh = parse_geometry(
         load_data("tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml")

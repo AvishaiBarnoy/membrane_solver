@@ -475,35 +475,48 @@ def axisymmetric_ring_topology_diagnostics(mesh) -> dict[str, object]:
         adjacency[tail_ring].add(head_ring)
         adjacency[head_ring].add(tail_ring)
 
-    start = int(np.argmin(unique_radii))
-    path = [start]
-    previous: int | None = None
-    current = start
-    while True:
-        candidates = sorted(
-            adjacency[current] - ({previous} if previous is not None else set())
-        )
-        if len(candidates) != 1:
-            break
-        next_ring = int(candidates[0])
-        if next_ring in path:
-            break
-        path.append(next_ring)
-        previous, current = current, next_ring
+    component_paths: list[list[int]] = []
+    unvisited = set(range(unique_radii.size))
+    while unvisited:
+        start = min(unvisited, key=lambda idx: float(unique_radii[idx]))
+        path = [int(start)]
+        previous: int | None = None
+        current = int(start)
+        while True:
+            candidates = sorted(
+                (adjacency[current] & unvisited)
+                - ({previous} if previous is not None else set())
+            )
+            if len(candidates) != 1:
+                break
+            next_ring = int(candidates[0])
+            if next_ring in path:
+                break
+            path.append(next_ring)
+            previous, current = current, next_ring
+        component_paths.append(path)
+        unvisited.difference_update(path)
 
+    path = [idx for component in component_paths for idx in component]
     path_radii = np.asarray([unique_radii[idx] for idx in path], dtype=float)
     inversions = [
         {
-            "inner_radius": float(path_radii[idx]),
-            "outer_radius": float(path_radii[idx + 1]),
+            "inner_radius": float(unique_radii[component[idx]]),
+            "outer_radius": float(unique_radii[component[idx + 1]]),
         }
-        for idx in range(max(0, path_radii.size - 1))
-        if path_radii[idx + 1] <= path_radii[idx]
+        for component in component_paths
+        for idx in range(max(0, len(component) - 1))
+        if unique_radii[component[idx + 1]] <= unique_radii[component[idx]]
     ]
     return {
         "ring_count": int(unique_radii.size),
         "path_ring_count": int(path_radii.size),
         "path_radii": path_radii.tolist(),
+        "component_count": int(len(component_paths)),
+        "component_path_radii": [
+            [float(unique_radii[idx]) for idx in component]
+            for component in component_paths
+        ],
         "inversion_count": int(len(inversions)),
         "inversions": inversions,
         "is_monotone": bool(path_radii.size == unique_radii.size and not inversions),

@@ -104,6 +104,9 @@ def _total_energy_leaflet(
     if use_recovered_div:
         if tri_area is None:
             tri_area = mesh.p1_triangle_shape_gradient_cache(positions)[0]
+            tri_keep = np.asarray(payload["tri_keep"], dtype=bool)
+            if tri_keep.size:
+                tri_area = tri_area[tri_keep]
         tri_area = np.asarray(tri_area, dtype=float)
         triangle_domains = _inner_recovery_triangle_domains(
             mesh,

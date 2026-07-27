@@ -646,12 +646,13 @@ def _build_outer_shell_scaffold_fixture_with_radii(
     new_edges: list[list[int]] = []
     for ring_ids in ring_id_groups[1:-1]:
         new_edges.extend(_ring_cycle_edges(ring_ids))
-    for inner_ids, outer_ids in zip(ring_id_groups[:-1], ring_id_groups[1:]):
+    physical_ring_pairs = list(zip(ring_id_groups[:-1], ring_id_groups[1:]))[1:]
+    for inner_ids, outer_ids in physical_ring_pairs:
         new_edges.extend(_annulus_edges(inner_ids, outer_ids))
     edge_lookup = _append_edges(edges, new_edges)
 
     scaffold_faces: list[list[int | str]] = []
-    for inner_ids, outer_ids in zip(ring_id_groups[:-1], ring_id_groups[1:]):
+    for inner_ids, outer_ids in physical_ring_pairs:
         scaffold_faces.extend(
             _annulus_faces(
                 inner_ids=inner_ids, outer_ids=outer_ids, edge_lookup=edge_lookup
