@@ -12,6 +12,7 @@ from tools.theory_parity_interface_profiles import (
     SOURCE_INNER_RADIUS,
     SOURCE_OUTER_RADIUS,
     build_curved_profile_fixture,
+    build_free_outer_refinement_fixture,
     build_full_physics_fixture,
     build_full_physics_trace_fixture,
     build_profiled_fixture,
@@ -189,6 +190,38 @@ def test_curved_profile_fixture_projects_the_theoretical_half_split():
 
     assert trace_height / (trace_radius - radius) == pytest.approx(0.5 * theta)
     assert trace_tilt_out == pytest.approx(0.5 * theta)
+
+
+def test_free_outer_refinement_rings_have_no_support_constraints():
+    base_doc = yaml.safe_load(
+        (
+            ROOT / "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    radius = 7.0 / 15.0
+    free_radii = [radius + 0.025, radius + 0.05, radius + 0.1]
+    doc = build_free_outer_refinement_fixture(
+        base_doc=base_doc,
+        label="free_outer_refinement",
+        trace_radius=radius + 0.005,
+        free_radii=free_radii,
+    )
+
+    for ring_index, ring_radius in enumerate(free_radii, start=1):
+        rows = [
+            vertex
+            for vertex in doc["vertices"]
+            if (float(vertex[0]) ** 2 + float(vertex[1]) ** 2) ** 0.5
+            == pytest.approx(ring_radius)
+        ]
+        assert len(rows) == 12
+        for vertex in rows:
+            options = vertex[3]
+            assert options["outer_shell_free_index"] == ring_index
+            assert "outer_shell_scaffold_index" not in options
+            assert "pin_to_circle" not in options.get("constraints", [])
+            assert "pin_to_plane" not in options.get("constraints", [])
+            assert "pin_to_circle_group" not in options
 
 
 def test_build_profiled_fixture_rejects_unknown_profile() -> None:

@@ -357,6 +357,29 @@ def build_trace_ring_fixture(
     )
 
 
+def build_free_outer_refinement_fixture(
+    *,
+    base_doc: dict[str, Any],
+    label: str,
+    trace_radius: float,
+    free_radii: list[float],
+    planar_geometry: bool = False,
+) -> dict[str, Any]:
+    """Insert unconstrained membrane rings between the trace and coarse mesh."""
+    return _build_outer_shell_scaffold_fixture_with_radii(
+        base_doc=base_doc,
+        label=label,
+        trace_radius=float(trace_radius),
+        support_radii=[float(radius) for radius in free_radii],
+        release_ring_radius=None,
+        planar_geometry=planar_geometry,
+        outer_shells=len(free_radii),
+        outer_shells_d=0.0,
+        scaffold_mode="free_refinement",
+        free_inserted_rings=True,
+    )
+
+
 def build_outer_shell_scaffold_fixture(
     *,
     base_doc: dict[str, Any],
@@ -438,6 +461,7 @@ def _build_outer_shell_scaffold_fixture_with_radii(
     outer_shells: int,
     outer_shells_d: float,
     scaffold_mode: str,
+    free_inserted_rings: bool = False,
 ) -> dict[str, Any]:
     """Return a fixture copy with explicit trace/support/release ring radii."""
     doc = copy.deepcopy(base_doc)
@@ -459,7 +483,11 @@ def _build_outer_shell_scaffold_fixture_with_radii(
         raise ValueError("trace_radius must lie strictly between R and the current rim")
     if int(outer_shells) < 0:
         raise ValueError("outer_shells must be >= 0")
-    if int(outer_shells) > 0 and float(outer_shells_d) <= 0.0:
+    if (
+        int(outer_shells) > 0
+        and float(outer_shells_d) <= 0.0
+        and not free_inserted_rings
+    ):
         raise ValueError("outer_shells_d must be > 0 when outer_shells > 0")
     support_radii = [float(radius) for radius in support_radii]
     if any(radius <= float(trace_radius) for radius in support_radii):
@@ -504,6 +532,26 @@ def _build_outer_shell_scaffold_fixture_with_radii(
         out = dict(opts)
         out.pop("rim_slope_match_group", None)
         out.pop("preset", None)
+        if free_inserted_rings:
+            out.pop("outer_shell_scaffold_index", None)
+            out["outer_shell_free_index"] = int(idx)
+            constraints = [
+                c
+                for c in list(out.get("constraints") or [])
+                if c not in {"pin_to_circle", "pin_to_plane"}
+            ]
+            if constraints:
+                out["constraints"] = constraints
+            else:
+                out.pop("constraints", None)
+            for key in (
+                "pin_to_circle_group",
+                "pin_to_circle_radius",
+                "pin_to_circle_normal",
+                "pin_to_circle_point",
+            ):
+                out.pop(key, None)
+            return out
         out["outer_shell_scaffold_index"] = int(idx)
         constraints = list(out.get("constraints") or [])
         constraints = [c for c in constraints if c != "pin_to_plane"]
@@ -635,6 +683,7 @@ __all__ = [
     "SOURCE_INNER_RADIUS",
     "SOURCE_OUTER_RADIUS",
     "build_curved_profile_fixture",
+    "build_free_outer_refinement_fixture",
     "build_full_physics_trace_fixture",
     "build_gap_filled_outer_shell_scaffold_fixture",
     "build_outer_shell_scaffold_fixture",
