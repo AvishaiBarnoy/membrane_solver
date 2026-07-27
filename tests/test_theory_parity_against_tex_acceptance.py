@@ -7,6 +7,9 @@ from typing import Any
 import pytest
 import yaml
 
+from tools.diagnostics.scaffold_energy_imbalance_audit import (
+    _constrained_gradient_audit,
+)
 from tools.reproduce_theory_parity import (
     DEFAULT_PROTOCOL,
     _build_context,
@@ -253,6 +256,25 @@ def _run_context_report(
     return _collect_report_from_context(ctx=ctx, mesh_path=mesh_path, protocol=protocol)
 
 
+@pytest.fixture(scope="module")
+def scaffold_gapfill_long_context_report() -> tuple[Any, dict[str, Any]]:
+    ctx = _build_context(SCAFFOLD_GAPFILL_RELEASE_FIXTURE)
+    _run_protocol_with_parity_activation(ctx, protocol=LONG_INTERFACE_PROTOCOL)
+    report = _collect_report_from_context(
+        ctx=ctx,
+        mesh_path=SCAFFOLD_GAPFILL_RELEASE_FIXTURE,
+        protocol=LONG_INTERFACE_PROTOCOL,
+    )
+    return ctx, report
+
+
+@pytest.fixture(scope="module")
+def scaffold_gapfill_long_report(
+    scaffold_gapfill_long_context_report: tuple[Any, dict[str, Any]],
+) -> dict[str, Any]:
+    return scaffold_gapfill_long_context_report[1]
+
+
 @pytest.mark.acceptance
 def test_physical_edge_ghost_shell_reports_direct_outer_interface_shell() -> None:
     epsilon = 0.005
@@ -380,13 +402,10 @@ def test_scaffold_fixed_d_long_interface_schedule_stays_on_inner_leaflet_only_br
 
 
 @pytest.mark.acceptance
-def test_scaffold_gapfill_base_long_schedule_activates_outer_leaflet_without_repair() -> (
-    None
-):
-    report = _run_context_report(
-        SCAFFOLD_GAPFILL_RELEASE_FIXTURE,
-        protocol=LONG_INTERFACE_PROTOCOL,
-    )
+def test_scaffold_gapfill_base_long_schedule_activates_outer_leaflet_without_repair(
+    scaffold_gapfill_long_report: dict[str, Any],
+) -> None:
+    report = scaffold_gapfill_long_report
 
     breakdown = report["metrics"]["breakdown"]
     shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
@@ -408,11 +427,10 @@ def test_scaffold_gapfill_base_long_schedule_activates_outer_leaflet_without_rep
 
 
 @pytest.mark.acceptance
-def test_scaffold_gapfill_reports_measured_thetaB_from_disk_boundary() -> None:
-    report = _run_context_report(
-        SCAFFOLD_GAPFILL_RELEASE_FIXTURE,
-        protocol=LONG_INTERFACE_PROTOCOL,
-    )
+def test_scaffold_gapfill_reports_measured_thetaB_from_disk_boundary(
+    scaffold_gapfill_long_report: dict[str, Any],
+) -> None:
+    report = scaffold_gapfill_long_report
 
     traces = report["metrics"]["diagnostics"]["interface_traces_at_R"]
     measured_theta = float(traces["disk_t_in_at_R"])
@@ -422,11 +440,10 @@ def test_scaffold_gapfill_reports_measured_thetaB_from_disk_boundary() -> None:
 
 
 @pytest.mark.acceptance
-def test_scaffold_gapfill_boundary_driver_reports_stationarity_diagnostics() -> None:
-    report = _run_context_report(
-        SCAFFOLD_GAPFILL_RELEASE_FIXTURE,
-        protocol=LONG_INTERFACE_PROTOCOL,
-    )
+def test_scaffold_gapfill_boundary_driver_reports_stationarity_diagnostics(
+    scaffold_gapfill_long_report: dict[str, Any],
+) -> None:
+    report = scaffold_gapfill_long_report
 
     driver = report["metrics"]["diagnostics"]["scaffold_boundary_driver"]
     theta = float(report["metrics"]["thetaB_value"])
@@ -450,6 +467,35 @@ def test_scaffold_gapfill_boundary_driver_reports_stationarity_diagnostics() -> 
         "half_split_phi_residual",
     ):
         assert abs(float(driver[key])) < 1.0e6
+
+
+@pytest.mark.acceptance
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Gate 0: the field-linear scaffold is not stationary along the measured "
+        "disk-boundary mode after the long protocol"
+    ),
+)
+def test_gate0_scaffold_boundary_mode_is_stationary(
+    scaffold_gapfill_long_context_report: tuple[Any, dict[str, Any]],
+) -> None:
+    ctx, report = scaffold_gapfill_long_context_report
+    driver = report["metrics"]["diagnostics"]["scaffold_boundary_driver"]
+    derivative_audit = _constrained_gradient_audit(ctx)
+    boundary_probe = next(
+        row
+        for row in derivative_audit["probes"]
+        if row["label"] == "boundary_radial_tilt_in"
+    )
+    elastic = abs(float(driver["elastic_slope_fd"]))
+    contact = abs(float(driver["contact_slope_analytic"]))
+    normalized_residual = abs(float(boundary_probe["enforced_relaxed_fd_slope"])) / max(
+        elastic + contact,
+        1.0e-12,
+    )
+
+    assert normalized_residual < 1.0e-3
 
 
 @pytest.mark.acceptance

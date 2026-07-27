@@ -236,8 +236,13 @@ def _row_roles(mesh) -> list[str]:
             roles.append("trace_shell")
         elif str(opts.get("rim_slope_match_group") or "") == "rim":
             roles.append("trace_shell")
+        elif (
+            str(opts.get("preset") or "") == "disk"
+            and str(opts.get("rim_slope_match_group") or "") == "disk"
+        ):
+            roles.append("disk_boundary")
         elif str(opts.get("preset") or "") == "disk":
-            roles.append("disk")
+            roles.append("disk_bulk")
         elif str(opts.get("pin_to_circle_group") or "") == "outer":
             roles.append("outer_boundary")
         else:
@@ -407,6 +412,75 @@ def _module_energy_audit(ctx) -> dict[str, Any]:
         "module_count": int(len(modules)),
         "modules": modules,
         "total_boundary_tilt_slope_fd_by_modules": total_slope,
+    }
+
+
+def _region_boundary_mode_slope_audit(ctx) -> dict[str, Any]:
+    """Resolve fixed-state radial tilt slopes by mesh role and energy module."""
+    mesh = ctx.mesh
+    positions = mesh.positions_view()
+    base_in = mesh.tilts_in_view().copy(order="F")
+    base_out = mesh.tilts_out_view().copy(order="F")
+    state = _snapshot_state(ctx)
+    eps = 1.0e-6
+    role_output: dict[str, Any] = {}
+    try:
+        for role, rows in _role_rows(mesh).items():
+            _, r_hat = radial_unit_vectors(positions[rows])
+            role_row: dict[str, Any] = {
+                "row_count": int(rows.size),
+                "tilt_in": {"modules": {}, "total_slope_fd": 0.0},
+                "tilt_out": {"modules": {}, "total_slope_fd": 0.0},
+            }
+            for leaflet in ("tilt_in", "tilt_out"):
+                direction = np.zeros_like(base_in)
+                direction[rows] = r_hat
+                module_rows: dict[str, dict[str, float]] = {}
+                for name, module in zip(
+                    ctx.minimizer.energy_module_names,
+                    ctx.minimizer.energy_modules,
+                ):
+                    if leaflet == "tilt_in":
+                        plus_in = base_in + eps * direction
+                        minus_in = base_in - eps * direction
+                        plus_out = minus_out = base_out
+                    else:
+                        plus_in = minus_in = base_in
+                        plus_out = base_out + eps * direction
+                        minus_out = base_out - eps * direction
+                    e_plus = _module_energy(
+                        ctx,
+                        str(name),
+                        module,
+                        positions,
+                        plus_in,
+                        plus_out,
+                    )
+                    e_minus = _module_energy(
+                        ctx,
+                        str(name),
+                        module,
+                        positions,
+                        minus_in,
+                        minus_out,
+                    )
+                    module_rows[str(name)] = {
+                        "slope_fd": float((e_plus - e_minus) / (2.0 * eps))
+                    }
+                total_slope = float(
+                    sum(row["slope_fd"] for row in module_rows.values())
+                )
+                role_row[leaflet] = {
+                    "direction_norm": float(np.linalg.norm(direction)),
+                    "modules": module_rows,
+                    "total_slope_fd": total_slope,
+                }
+            role_output[str(role)] = role_row
+    finally:
+        _restore_state(ctx, state)
+    return {
+        "roles": role_output,
+        "state_delta_after_audit": _state_delta(ctx, state),
     }
 
 
@@ -1318,6 +1392,244 @@ def _finite_difference_total_slope(ctx, perturb, transform=None) -> float:
     return float((vals[0] - vals[1]) / (2.0 * eps))
 
 
+def _boundary_retraction_derivative_audit(ctx) -> dict[str, Any]:
+    """Differentiate the hard constraint retraction along the boundary tilt mode."""
+    mesh = ctx.mesh
+    original_state = _snapshot_state(ctx)
+    eps = 1.0e-6
+
+    def enforce() -> None:
+        ctx.minimizer._enforce_constraints()
+        mesh.increment_version()
+
+    def residual_max_abs() -> float:
+        diagnostics = matching_residual_diagnostics(
+            mesh, mesh.global_parameters, mesh.positions_view()
+        )
+        values = []
+        for name in ("outer_residual", "inner_residual"):
+            summary = diagnostics.get(name) or {}
+            value = _as_float(summary.get("max_abs"), default=float("nan"))
+            if np.isfinite(value):
+                values.append(abs(value))
+        return float(max(values, default=0.0))
+
+    try:
+        enforce()
+        base_state = _snapshot_state(ctx)
+        positions = mesh.positions_view()
+        tilts_in = mesh.tilts_in_view()
+        tilts_out = mesh.tilts_out_view()
+        input_direction, boundary_rows = _boundary_tilt_direction(ctx)
+        if boundary_rows.size == 0:
+            return {
+                "available": False,
+                "reason": "missing_boundary_payload",
+                "state_delta_after_audit": _state_delta(ctx, original_state),
+            }
+
+        base_energy, raw_shape_grad = (
+            ctx.minimizer._evaluation_manager.compute_energy_and_gradient_array(
+                positions=positions
+            )
+        )
+        raw_shape_grad = np.asarray(raw_shape_grad, dtype=float).copy()
+        raw_tilt_in_grad = np.zeros_like(tilts_in)
+        raw_tilt_out_grad = np.zeros_like(tilts_out)
+        ctx.minimizer._compute_energy_and_leaflet_tilt_gradients_array(
+            positions=positions,
+            tilts_in=tilts_in,
+            tilts_out=tilts_out,
+            tilt_in_grad_arr=raw_tilt_in_grad,
+            tilt_out_grad_arr=raw_tilt_out_grad,
+            tilt_only=True,
+        )
+
+        joint_shape_grad = raw_shape_grad.copy()
+        joint_tilt_in_grad = raw_tilt_in_grad.copy()
+        joint_tilt_out_grad = raw_tilt_out_grad.copy()
+        ctx.minimizer.constraint_manager.apply_joint_gradient_modifications_array(
+            joint_shape_grad,
+            joint_tilt_in_grad,
+            joint_tilt_out_grad,
+            mesh,
+            mesh.global_parameters,
+            positions=positions,
+            tilts_in=tilts_in,
+            tilts_out=tilts_out,
+        )
+        joint_tilt_in_grad[ctx.minimizer._tilt_fixed_mask_in()] = 0.0
+        joint_tilt_out_grad[ctx.minimizer._tilt_fixed_mask_out()] = 0.0
+
+        retracted_states: list[dict[str, Any]] = []
+        energies: list[float] = []
+        residuals: list[float] = []
+        for sign in (1.0, -1.0):
+            _restore_state(ctx, base_state)
+            mesh.set_tilts_in_from_array(
+                np.asarray(base_state["tilts_in"]) + sign * eps * input_direction
+            )
+            mesh.increment_version()
+            enforce()
+            retracted_states.append(_snapshot_state(ctx))
+            energies.append(float(ctx.minimizer.compute_energy()))
+            residuals.append(residual_max_abs())
+
+        plus_state, minus_state = retracted_states
+        position_tangent = (
+            np.asarray(plus_state["positions"]) - np.asarray(minus_state["positions"])
+        ) / (2.0 * eps)
+        tilt_in_tangent = (
+            np.asarray(plus_state["tilts_in"]) - np.asarray(minus_state["tilts_in"])
+        ) / (2.0 * eps)
+        tilt_out_tangent = (
+            np.asarray(plus_state["tilts_out"]) - np.asarray(minus_state["tilts_out"])
+        ) / (2.0 * eps)
+
+        raw_dot = float(
+            np.sum(raw_shape_grad * position_tangent)
+            + np.sum(raw_tilt_in_grad * tilt_in_tangent)
+            + np.sum(raw_tilt_out_grad * tilt_out_tangent)
+        )
+        raw_shape_dot = float(np.sum(raw_shape_grad * position_tangent))
+        raw_tilt_in_dot = float(np.sum(raw_tilt_in_grad * tilt_in_tangent))
+        raw_tilt_out_dot = float(np.sum(raw_tilt_out_grad * tilt_out_tangent))
+        joint_dot = float(
+            np.sum(joint_shape_grad * position_tangent)
+            + np.sum(joint_tilt_in_grad * tilt_in_tangent)
+            + np.sum(joint_tilt_out_grad * tilt_out_tangent)
+        )
+
+        def tangent_fd(
+            *,
+            use_positions: bool,
+            use_tilts_in: bool,
+            use_tilts_out: bool,
+        ) -> float:
+            values: list[float] = []
+            for sign in (1.0, -1.0):
+                _restore_state(ctx, base_state)
+                if use_positions:
+                    _set_positions_from_array(
+                        ctx,
+                        np.asarray(base_state["positions"])
+                        + sign * eps * position_tangent,
+                    )
+                if use_tilts_in:
+                    mesh.set_tilts_in_from_array(
+                        np.asarray(base_state["tilts_in"])
+                        + sign * eps * tilt_in_tangent
+                    )
+                if use_tilts_out:
+                    mesh.set_tilts_out_from_array(
+                        np.asarray(base_state["tilts_out"])
+                        + sign * eps * tilt_out_tangent
+                    )
+                mesh.increment_version()
+                values.append(float(ctx.minimizer.compute_energy()))
+            return float((values[0] - values[1]) / (2.0 * eps))
+
+        position_module_derivatives: dict[str, dict[str, float]] = {}
+        for name, module in zip(
+            ctx.minimizer.energy_module_names, ctx.minimizer.energy_modules
+        ):
+            _restore_state(ctx, base_state)
+            scale = float(
+                ctx.minimizer._experimental_energy_scale_for_module(str(name))
+            )
+            module_grad = np.zeros_like(positions)
+            try:
+                ctx.minimizer._evaluation_manager._call_module_array(
+                    module,
+                    positions=np.asarray(base_state["positions"]),
+                    index_map=mesh.vertex_index_to_row,
+                    grad_arr=module_grad,
+                    tilts_in=np.asarray(base_state["tilts_in"]),
+                    tilts_out=np.asarray(base_state["tilts_out"]),
+                    tilt_in_grad_arr=None,
+                    tilt_out_grad_arr=None,
+                )
+            except TypeError:
+                ctx.minimizer._evaluation_manager._call_module_array(
+                    module,
+                    positions=np.asarray(base_state["positions"]),
+                    index_map=mesh.vertex_index_to_row,
+                    grad_arr=module_grad,
+                )
+            module_energies: list[float] = []
+            for sign in (1.0, -1.0):
+                _restore_state(ctx, base_state)
+                _set_positions_from_array(
+                    ctx,
+                    np.asarray(base_state["positions"]) + sign * eps * position_tangent,
+                )
+                module_energies.append(
+                    _module_energy(
+                        ctx,
+                        str(name),
+                        module,
+                        mesh.positions_view(),
+                        mesh.tilts_in_view(),
+                        mesh.tilts_out_view(),
+                    )
+                )
+            analytic = float(scale * np.sum(module_grad * position_tangent))
+            finite_difference = float(
+                (module_energies[0] - module_energies[1]) / (2.0 * eps)
+            )
+            position_module_derivatives[str(name)] = {
+                "fd_slope": finite_difference,
+                "gradient_dot_retraction": analytic,
+                "fd_minus_gradient": float(finite_difference - analytic),
+            }
+
+        result = {
+            "available": True,
+            "reason": "ok",
+            "boundary_rows": int(boundary_rows.size),
+            "epsilon": float(eps),
+            "base_energy": float(base_energy),
+            "retraction_fd_slope": float((energies[0] - energies[1]) / (2.0 * eps)),
+            "raw_gradient_dot_retraction": raw_dot,
+            "joint_projected_gradient_dot_retraction": joint_dot,
+            "raw_minus_joint_dot": float(raw_dot - joint_dot),
+            "linearized_retraction_fd_slope": tangent_fd(
+                use_positions=True,
+                use_tilts_in=True,
+                use_tilts_out=True,
+            ),
+            "position_fd_slope": tangent_fd(
+                use_positions=True,
+                use_tilts_in=False,
+                use_tilts_out=False,
+            ),
+            "tilt_in_fd_slope": tangent_fd(
+                use_positions=False,
+                use_tilts_in=True,
+                use_tilts_out=False,
+            ),
+            "tilt_out_fd_slope": tangent_fd(
+                use_positions=False,
+                use_tilts_in=False,
+                use_tilts_out=True,
+            ),
+            "raw_shape_gradient_dot_retraction": raw_shape_dot,
+            "raw_tilt_in_gradient_dot_retraction": raw_tilt_in_dot,
+            "raw_tilt_out_gradient_dot_retraction": raw_tilt_out_dot,
+            "position_module_derivatives": position_module_derivatives,
+            "position_tangent_norm": float(np.linalg.norm(position_tangent)),
+            "tilt_in_tangent_norm": float(np.linalg.norm(tilt_in_tangent)),
+            "tilt_out_tangent_norm": float(np.linalg.norm(tilt_out_tangent)),
+            "plus_constraint_residual_max_abs": float(residuals[0]),
+            "minus_constraint_residual_max_abs": float(residuals[1]),
+        }
+    finally:
+        _restore_state(ctx, original_state)
+
+    result["state_delta_after_audit"] = _state_delta(ctx, original_state)
+    return result
+
+
 def _constrained_gradient_audit(ctx) -> dict[str, Any]:
     mesh = ctx.mesh
     positions = mesh.positions_view()
@@ -1325,6 +1637,51 @@ def _constrained_gradient_audit(ctx) -> dict[str, Any]:
     raw_grad = np.asarray(grad_arr, dtype=float).copy()
     projected_grad = raw_grad.copy()
     ctx.minimizer.project_constraints_array(projected_grad)
+    raw_tilt_in_grad = np.zeros_like(mesh.tilts_in_view())
+    raw_tilt_out_grad = np.zeros_like(mesh.tilts_out_view())
+    ctx.minimizer._compute_energy_and_leaflet_tilt_gradients_array(
+        positions=positions,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+        tilt_in_grad_arr=raw_tilt_in_grad,
+        tilt_out_grad_arr=raw_tilt_out_grad,
+        tilt_only=True,
+    )
+    projected_tilt_in_grad = raw_tilt_in_grad.copy()
+    projected_tilt_out_grad = raw_tilt_out_grad.copy()
+    ctx.minimizer.constraint_manager.apply_tilt_gradient_modifications_array(
+        projected_tilt_in_grad,
+        projected_tilt_out_grad,
+        mesh,
+        mesh.global_parameters,
+        positions=positions,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+    )
+    fixed_in = ctx.minimizer._tilt_fixed_mask_in()
+    fixed_out = ctx.minimizer._tilt_fixed_mask_out()
+    projected_tilt_in_grad[fixed_in] = 0.0
+    projected_tilt_out_grad[fixed_out] = 0.0
+    _, raw_shape_grad = (
+        ctx.minimizer._evaluation_manager.compute_energy_and_gradient_array(
+            positions=positions
+        )
+    )
+    joint_shape_grad = np.asarray(raw_shape_grad, dtype=float).copy()
+    joint_tilt_in_grad = raw_tilt_in_grad.copy()
+    joint_tilt_out_grad = raw_tilt_out_grad.copy()
+    ctx.minimizer.constraint_manager.apply_joint_gradient_modifications_array(
+        joint_shape_grad,
+        joint_tilt_in_grad,
+        joint_tilt_out_grad,
+        mesh,
+        mesh.global_parameters,
+        positions=positions,
+        tilts_in=mesh.tilts_in_view(),
+        tilts_out=mesh.tilts_out_view(),
+    )
+    joint_tilt_in_grad[fixed_in] = 0.0
+    joint_tilt_out_grad[fixed_out] = 0.0
 
     def enforce() -> None:
         ctx.minimizer._enforce_constraints()
@@ -1373,19 +1730,30 @@ def _constrained_gradient_audit(ctx) -> dict[str, Any]:
             mesh.set_tilts_in_from_array(tin0 + scale * direction)
             mesh.increment_version()
 
+        raw_fd_slope = _finite_difference_total_slope(ctx, perturb)
         rows.append(
             {
                 "label": label,
                 "kind": "tilt_in",
-                "raw_fd_slope": _finite_difference_total_slope(ctx, perturb),
+                "raw_fd_slope": raw_fd_slope,
                 "enforced_fd_slope": _finite_difference_total_slope(
                     ctx, perturb, enforce
                 ),
                 "enforced_relaxed_fd_slope": _finite_difference_total_slope(
                     ctx, perturb, enforce_relax
                 ),
-                "raw_gradient_dot_direction": 0.0,
-                "projected_gradient_dot_direction": 0.0,
+                "raw_gradient_dot_direction": float(
+                    np.sum(raw_tilt_in_grad * direction)
+                ),
+                "projected_gradient_dot_direction": float(
+                    np.sum(projected_tilt_in_grad * direction)
+                ),
+                "joint_projected_gradient_dot_direction": float(
+                    np.sum(joint_tilt_in_grad * direction)
+                ),
+                "raw_fd_minus_gradient": float(
+                    raw_fd_slope - np.sum(raw_tilt_in_grad * direction)
+                ),
             }
         )
 
@@ -1398,10 +1766,11 @@ def _constrained_gradient_audit(ctx) -> dict[str, Any]:
         "trace_shell_radius", _position_direction_for_role(ctx, "trace_shell", "radial")
     )
     add_position_probe(
-        "disk_rim_height", _position_direction_for_role(ctx, "disk", "z")
+        "disk_rim_height", _position_direction_for_role(ctx, "disk_boundary", "z")
     )
     add_position_probe(
-        "disk_rim_radius", _position_direction_for_role(ctx, "disk", "radial")
+        "disk_rim_radius",
+        _position_direction_for_role(ctx, "disk_boundary", "radial"),
     )
     add_position_probe(
         "first_support_shell_height",
@@ -1874,12 +2243,16 @@ def run_audit(
         },
         "refinement_trace": _refinement_trace(Path(mesh_path), protocol),
         "module_energy_audit": _module_energy_audit(ctx),
+        "region_boundary_mode_slopes": _region_boundary_mode_slope_audit(ctx),
         "interface_target_audit": _interface_target_audit(ctx),
         "constraint_audit": _constraint_audit(ctx),
         "coupled_stationarity_audit": _coupled_stationarity_audit(ctx),
         "elastic_magnitude_audit": _elastic_magnitude_audit(ctx),
         "bending_tilt_base_term_audit": _bending_tilt_base_term_audit(ctx),
         "base_term_fixture_comparison": _base_term_fixture_comparison(),
+        "boundary_retraction_derivative_audit": (
+            _boundary_retraction_derivative_audit(ctx)
+        ),
         "constrained_gradient_audit": _constrained_gradient_audit(ctx),
         "protocol_snapshot_audit": _protocol_snapshot_audit(Path(mesh_path), protocol),
         "energy_normalization_audit": _energy_normalization_audit(ctx, report),

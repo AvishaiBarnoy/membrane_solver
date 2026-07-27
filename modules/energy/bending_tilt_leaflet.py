@@ -32,6 +32,7 @@ from .bt_divergence import (
     _inner_recovered_divergence_pullback,
 )
 from .bt_gradient import (
+    _accumulate_ambient_p1_divergence_shape_gradient,
     _backpropagate_bending_tilt_shape_gradient,
 )
 from .bt_params import (
@@ -558,7 +559,13 @@ def compute_energy_and_gradient_array_leaflet(
     K_dir[mask_k] = k_vecs[mask_k] / k_mag[mask_k][:, None]
     K_dir[~mask_k] = normals[~mask_k]
 
+    flat_reference = (
+        _base_term_reference_mode(global_params, cache_tag=cache_tag)
+        == "flat_reference_zero_j0"
+    )
     shape_term = base_term if suppress_shape_cross else term
+    if flat_reference:
+        shape_term = np.zeros_like(shape_term)
     scale_K = (kappa_arr * shape_term * ratio).astype(float, copy=False)
     if ctx is not None:
         factor_K_vec = ctx.scratch_array(
@@ -588,6 +595,8 @@ def compute_energy_and_gradient_array_leaflet(
     else:
         fA_eff = 0.5 * kappa_arr * term**2
         fA_vor = -2.0 * kappa_arr * term * ratio * H_vor
+    if flat_reference:
+        fA_vor = np.zeros_like(fA_vor)
 
     scaffold_shape_trace_rows: np.ndarray | None = None
     scaffold_shape_before: np.ndarray | None = None
@@ -596,6 +605,39 @@ def compute_energy_and_gradient_array_leaflet(
         scaffold_shape_trace_rows, _ = _inner_scaffold_trace_rows(mesh)
         if scaffold_shape_trace_rows.size:
             scaffold_shape_before = grad_arr[scaffold_shape_trace_rows].copy()
+
+    dE_ddiv = None
+    if tilt_grad_arr is not None or (
+        mode == "analytic" and transport_model == "ambient_v1"
+    ):
+        dE_ddiv_base, mode_stats = _inner_bending_tilt_dE_ddiv(
+            mesh=mesh,
+            global_params=global_params,
+            cache_tag=cache_tag,
+            kappa_tri=kappa_tri,
+            base_tri=base_tri,
+            div_term=div_eval_tri,
+            va0_eff=va0_eff,
+            va1_eff=va1_eff,
+            va2_eff=va2_eff,
+        )
+        if str(cache_tag) == "in":
+            setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
+        if use_recovered_div:
+            dE_ddiv = _inner_recovered_divergence_pullback(
+                global_params=global_params,
+                cache_tag=cache_tag,
+                tri_rows=tri_rows,
+                tri_area=tri_area,
+                coeff_div_eval=float(div_sign) * dE_ddiv_base,
+                v_area=div_eval_vertex_area,
+                ctx=ctx,
+                scratch_tag=f"btl_{cache_tag}",
+            )
+        else:
+            dE_ddiv = float(div_sign) * _apply_trace_reconstruction_pullback(
+                dE_ddiv_base, reconstruction_stats
+            )
 
     if mode == "finite_difference":  # pragma: no cover - slow debugging path
         eps = float(global_params.get("bending_fd_eps", 1e-6))
@@ -628,6 +670,14 @@ def compute_energy_and_gradient_array_leaflet(
             ctx=ctx,
             transition_operator_enabled=transition_operator_enabled,
         )
+        if transport_model == "ambient_v1" and dE_ddiv is not None:
+            _accumulate_ambient_p1_divergence_shape_gradient(
+                positions=positions,
+                tilts=tilts,
+                tri_rows=tri_rows,
+                coefficient=dE_ddiv,
+                grad_arr=grad_arr,
+            )
 
     if scaffold_shape_trace_rows is not None and scaffold_shape_trace_rows.size:
         stats = _maybe_neutralize_inner_scaffold_trace_shape_gradient(
@@ -661,34 +711,7 @@ def compute_energy_and_gradient_array_leaflet(
         if tilt_grad_arr.shape != (len(mesh.vertex_ids), 3):
             raise ValueError("tilt_grad_arr must have shape (N_vertices, 3)")
 
-        dE_ddiv_base, mode_stats = _inner_bending_tilt_dE_ddiv(
-            mesh=mesh,
-            global_params=global_params,
-            cache_tag=cache_tag,
-            kappa_tri=kappa_tri,
-            base_tri=base_tri,
-            div_term=div_eval_tri,
-            va0_eff=va0_eff,
-            va1_eff=va1_eff,
-            va2_eff=va2_eff,
-        )
-        if str(cache_tag) == "in":
-            setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
-        if use_recovered_div:
-            dE_ddiv = _inner_recovered_divergence_pullback(
-                global_params=global_params,
-                cache_tag=cache_tag,
-                tri_rows=tri_rows,
-                tri_area=tri_area,
-                coeff_div_eval=float(div_sign) * dE_ddiv_base,
-                v_area=div_eval_vertex_area,
-                ctx=ctx,
-                scratch_tag=f"btl_{cache_tag}",
-            )
-        else:
-            dE_ddiv = float(div_sign) * _apply_trace_reconstruction_pullback(
-                dE_ddiv_base, reconstruction_stats
-            )
+        assert dE_ddiv is not None
         factor = dE_ddiv[:, None]
 
         np.add.at(tilt_grad_arr, tri_rows[:, 0], factor * g0)

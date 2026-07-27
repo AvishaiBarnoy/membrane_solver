@@ -5,6 +5,9 @@ from __future__ import annotations
 import numpy as np
 
 from geometry.entities import Mesh
+from modules.constraints.inclusion_components import (
+    warn_if_disconnected_group_uses_single_frame,
+)
 from modules.constraints.local_interface_shells import build_local_interface_shell_data
 from modules.constraints.rim_slope_match_params import (
     _resolve_center,
@@ -42,6 +45,16 @@ def _build_matching_data(mesh: Mesh, global_params, positions: np.ndarray):
     elif group is None or outer_group is None:
         return None
     center = _resolve_center(global_params)
+    interface_group_for_warning = (
+        disk_group or group if matching_mode == "physical_edge_staggered_v1" else group
+    )
+    if interface_group_for_warning is not None:
+        warn_if_disconnected_group_uses_single_frame(
+            mesh,
+            group=str(interface_group_for_warning),
+            operator="rim_slope_match_out",
+            option_keys=("rim_slope_match_group",),
+        )
     raw_normal = _resolve_normal(global_params)
     normal_token = (
         None

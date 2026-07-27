@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 import yaml
 
 from geometry.geom_io import load_data, parse_geometry
@@ -12,7 +13,10 @@ from tools.diagnostics.scaffold_energy_imbalance_audit import (
     DEFAULT_FIXTURE,
     QUICK_PROTOCOL,
     _bending_tilt_base_term_audit,
+    _boundary_retraction_derivative_audit,
     _mesh_topology_audit,
+    _region_boundary_mode_slope_audit,
+    _run_protocol_with_parity_activation,
     run_audit,
 )
 from tools.reproduce_theory_parity import _build_context
@@ -33,6 +37,78 @@ def test_scaffold_mesh_row_cache_consistency_for_gapfill_fixture() -> None:
     assert topo["role_counts"]["release_ring"] == 12
 
 
+def test_region_boundary_mode_slopes_isolate_contact_to_disk_boundary() -> None:
+    ctx = _build_context(DEFAULT_FIXTURE)
+
+    audit = _region_boundary_mode_slope_audit(ctx)
+
+    assert audit["roles"]["disk_boundary"]["row_count"] == 12
+    assert audit["roles"]["disk_bulk"]["row_count"] == 13
+    boundary_contact = audit["roles"]["disk_boundary"]["tilt_in"]["modules"][
+        "tilt_thetaB_contact_in"
+    ]["slope_fd"]
+    bulk_contact = audit["roles"]["disk_bulk"]["tilt_in"]["modules"][
+        "tilt_thetaB_contact_in"
+    ]["slope_fd"]
+    assert boundary_contact < -12.0
+    assert abs(bulk_contact) < 1.0e-10
+    assert audit["state_delta_after_audit"]["positions_max_abs"] == 0.0
+    assert audit["state_delta_after_audit"]["tilts_in_max_abs"] == 0.0
+    assert audit["state_delta_after_audit"]["tilts_out_max_abs"] == 0.0
+
+
+def test_boundary_retraction_derivative_contract_is_localized() -> None:
+    ctx = _build_context(DEFAULT_FIXTURE)
+    _run_protocol_with_parity_activation(ctx, protocol=QUICK_PROTOCOL)
+
+    audit = _boundary_retraction_derivative_audit(ctx)
+
+    assert bool(audit["available"])
+    assert float(audit["plus_constraint_residual_max_abs"]) < 1.0e-8
+    assert float(audit["minus_constraint_residual_max_abs"]) < 1.0e-8
+    assert np.isclose(
+        float(audit["retraction_fd_slope"]),
+        float(audit["linearized_retraction_fd_slope"]),
+        rtol=1.0e-5,
+        atol=1.0e-6,
+    )
+    assert np.isclose(
+        float(audit["raw_gradient_dot_retraction"]),
+        float(audit["joint_projected_gradient_dot_retraction"]),
+        rtol=1.0e-5,
+        atol=1.0e-6,
+    )
+    relative_gradient_gap = abs(
+        float(audit["retraction_fd_slope"])
+        - float(audit["raw_gradient_dot_retraction"])
+    ) / max(1.0, abs(float(audit["retraction_fd_slope"])))
+    assert relative_gradient_gap < 2.0e-3
+    assert audit["state_delta_after_audit"]["positions_max_abs"] == 0.0
+    assert audit["state_delta_after_audit"]["tilts_in_max_abs"] == 0.0
+    assert audit["state_delta_after_audit"]["tilts_out_max_abs"] == 0.0
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "The outer bending-tilt shape pullback is not yet exact on the "
+        "scaffold transition."
+    ),
+)
+def test_boundary_retraction_derivative_matches_full_gradient_strictly() -> None:
+    ctx = _build_context(DEFAULT_FIXTURE)
+    _run_protocol_with_parity_activation(ctx, protocol=QUICK_PROTOCOL)
+
+    audit = _boundary_retraction_derivative_audit(ctx)
+
+    assert np.isclose(
+        float(audit["retraction_fd_slope"]),
+        float(audit["raw_gradient_dot_retraction"]),
+        rtol=1.0e-5,
+        atol=1.0e-6,
+    )
+
+
 def test_scaffold_energy_imbalance_audit_emits_core_sections() -> None:
     audit = run_audit(
         mesh_path=DEFAULT_FIXTURE,
@@ -44,12 +120,14 @@ def test_scaffold_energy_imbalance_audit_emits_core_sections() -> None:
         "mesh_topology",
         "refinement_trace",
         "module_energy_audit",
+        "region_boundary_mode_slopes",
         "interface_target_audit",
         "constraint_audit",
         "coupled_stationarity_audit",
         "elastic_magnitude_audit",
         "bending_tilt_base_term_audit",
         "base_term_fixture_comparison",
+        "boundary_retraction_derivative_audit",
         "constrained_gradient_audit",
         "protocol_snapshot_audit",
         "energy_normalization_audit",
@@ -139,6 +217,20 @@ def test_scaffold_elastic_and_constrained_diagnostics_are_finite() -> None:
         assert np.isfinite(float(row["enforced_fd_slope"]))
         assert np.isfinite(float(row["enforced_relaxed_fd_slope"]))
         assert np.isfinite(float(row["projected_gradient_dot_direction"]))
+    boundary_probe = next(
+        row
+        for row in constrained["probes"]
+        if row["label"] == "boundary_radial_tilt_in"
+    )
+    assert np.isclose(
+        float(boundary_probe["raw_gradient_dot_direction"]),
+        float(boundary_probe["raw_fd_slope"]),
+        rtol=1.0e-5,
+        atol=1.0e-6,
+    )
+    assert abs(float(boundary_probe["projected_gradient_dot_direction"])) > 1.0e-6
+    assert np.isfinite(float(boundary_probe["joint_projected_gradient_dot_direction"]))
+    assert abs(float(boundary_probe["raw_fd_minus_gradient"])) < 1.0e-6
 
     snapshots = audit["protocol_snapshot_audit"]
     assert snapshots[0]["label"] == "initial"

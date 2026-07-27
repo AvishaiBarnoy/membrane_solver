@@ -10,9 +10,48 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
 from geometry.geom_io import parse_geometry
+from geometry.tilt_operators import p1_triangle_divergence
 from modules.energy import bending
 from modules.energy import bending_tilt_leaflet as bt_leaflet
+from modules.energy.bt_gradient import (
+    _accumulate_ambient_p1_divergence_shape_gradient,
+)
 from tests.sample_meshes import SAMPLE_GEOMETRY
+
+
+def test_ambient_p1_divergence_shape_pullback_matches_directional_derivative() -> None:
+    rng = np.random.default_rng(23)
+    positions = rng.normal(size=(5, 3))
+    tri_rows = np.asarray([[0, 1, 2], [1, 3, 4]], dtype=np.int32)
+    tilts = rng.normal(size=positions.shape)
+    coefficient = rng.normal(size=len(tri_rows))
+    direction = rng.normal(size=positions.shape)
+    gradient = np.zeros_like(positions)
+
+    _accumulate_ambient_p1_divergence_shape_gradient(
+        positions=positions,
+        tilts=tilts,
+        tri_rows=tri_rows,
+        coefficient=coefficient,
+        grad_arr=gradient,
+    )
+
+    eps = 1.0e-7
+    plus = p1_triangle_divergence(
+        positions=positions + eps * direction,
+        tilts=tilts,
+        tri_rows=tri_rows,
+    )[0]
+    minus = p1_triangle_divergence(
+        positions=positions - eps * direction,
+        tilts=tilts,
+        tri_rows=tri_rows,
+    )[0]
+    finite_difference = float(np.sum(coefficient * (plus - minus)) / (2.0 * eps))
+
+    assert float(np.sum(gradient * direction)) == pytest.approx(
+        finite_difference, rel=1.0e-7, abs=1.0e-8
+    )
 
 
 def _planar_patch_with_center() -> dict:
