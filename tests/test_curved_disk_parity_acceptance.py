@@ -155,6 +155,39 @@ def test_radial_leaflet_bands_conserve_triangle_energy():
     assert sum(band["triangle_count"] for band in report["bands"]) == len(mesh.facets)
 
 
+def test_clean_fixture_keeps_current_curvature_when_spontaneous_curvature_is_zero():
+    from pathlib import Path
+
+    from geometry.geom_io import load_data, parse_geometry
+    from modules.energy.bt_diagnostics import _total_energy_leaflet
+
+    root = Path(__file__).resolve().parents[1]
+    mesh = parse_geometry(
+        load_data(root / "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml")
+    )
+    flat = mesh.positions_view().copy()
+    radii = np.linalg.norm(flat[:, :2], axis=1)
+    curved = flat.copy()
+    curved[:, 2] = 0.05 * np.exp(-(radii**2))
+    zero_tilts = np.zeros_like(flat)
+
+    def energy(positions):
+        return _total_energy_leaflet(
+            mesh,
+            mesh.global_parameters,
+            positions=positions,
+            index_map=mesh.vertex_index_to_row,
+            tilts=zero_tilts,
+            kappa_key="bending_modulus_in",
+            cache_tag="in",
+            div_sign=-1.0,
+        )
+
+    assert mesh.global_parameters.get("spontaneous_curvature") == pytest.approx(0.0)
+    assert energy(flat) == pytest.approx(0.0, abs=1.0e-20)
+    assert energy(curved) > 1.0e-6
+
+
 def test_topological_leaflet_regions_conserve_and_partition_triangle_energy():
     from pathlib import Path
 

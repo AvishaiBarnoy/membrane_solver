@@ -207,6 +207,10 @@ def test_free_outer_refinement_rings_have_no_support_constraints():
         free_radii=free_radii,
     )
 
+    assert (
+        doc["global_parameters"]["bending_tilt_base_term_reference_mode"]
+        == "current_geometry"
+    )
     for ring_index, ring_radius in enumerate(free_radii, start=1):
         rows = [
             vertex

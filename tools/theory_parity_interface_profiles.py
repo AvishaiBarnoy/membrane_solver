@@ -366,7 +366,7 @@ def build_free_outer_refinement_fixture(
     planar_geometry: bool = False,
 ) -> dict[str, Any]:
     """Insert unconstrained membrane rings between the trace and coarse mesh."""
-    return _build_outer_shell_scaffold_fixture_with_radii(
+    doc = _build_outer_shell_scaffold_fixture_with_radii(
         base_doc=base_doc,
         label=label,
         trace_radius=float(trace_radius),
@@ -378,6 +378,10 @@ def build_free_outer_refinement_fixture(
         scaffold_mode="free_refinement",
         free_inserted_rings=True,
     )
+    gp = dict(doc.get("global_parameters") or {})
+    gp["bending_tilt_base_term_reference_mode"] = "current_geometry"
+    doc["global_parameters"] = gp
+    return doc
 
 
 def build_outer_shell_scaffold_fixture(
