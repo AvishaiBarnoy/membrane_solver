@@ -292,6 +292,37 @@ def compare_tensionless_curved_disk_profiles(
     }
 
 
+def compare_curved_branch_energy_breakdowns(
+    *,
+    reference: dict[str, float],
+    candidate: dict[str, float],
+) -> dict[str, object]:
+    """Compare matched branch energies module by module.
+
+    Positive deltas mean that ``candidate`` is more expensive than
+    ``reference``. Missing modules are treated as zero so diagnostic reports
+    from slightly different lanes remain comparable.
+    """
+    modules = sorted(set(reference) | set(candidate))
+    deltas = {
+        module: float(candidate.get(module, 0.0) - reference.get(module, 0.0))
+        for module in modules
+    }
+    total_reference = float(sum(reference.values()))
+    total_candidate = float(sum(candidate.values()))
+    dominant_module = (
+        max(modules, key=lambda module: abs(deltas[module])) if modules else ""
+    )
+    return {
+        "reference_total": total_reference,
+        "candidate_total": total_candidate,
+        "total_delta": total_candidate - total_reference,
+        "module_deltas": deltas,
+        "dominant_module": dominant_module,
+        "dominant_delta": float(deltas.get(dominant_module, 0.0)),
+    }
+
+
 def axisymmetric_ring_topology_diagnostics(mesh) -> dict[str, object]:
     """Report radial backtracking in an axisymmetric ring mesh.
 

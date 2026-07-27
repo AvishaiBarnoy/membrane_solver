@@ -8,6 +8,7 @@ import pytest
 from tools.diagnostics.curved_disk_theory import (
     CurvedDiskTheoryParams,
     axisymmetric_ring_topology_diagnostics,
+    compare_curved_branch_energy_breakdowns,
     compare_tensionless_curved_disk_profiles,
     compute_curved_disk_theory,
     evaluate_tensionless_curved_disk_profiles,
@@ -82,6 +83,36 @@ def test_curved_profile_comparison_is_function_level_and_height_gauge_invariant(
     assert metrics["slope_rel_l2"] < 1.0e-14
     assert metrics["tilt_in_rel_l2"] < 1.0e-14
     assert metrics["tilt_out_rel_l2"] < 1.0e-14
+
+
+def test_curved_branch_energy_comparison_identifies_ordering_reversal_source():
+    localized = {
+        "bending_tilt_in": 0.4108162957,
+        "bending_tilt_out": 0.0330533117,
+        "tilt_in": 0.8284561168,
+        "tilt_out": 0.0104276053,
+        "tilt_thetaB_contact_in": -2.4451936808,
+    }
+    trumpet = {
+        "bending_tilt_in": 0.4580404649,
+        "bending_tilt_out": 0.0288245940,
+        "tilt_in": 0.8300421431,
+        "tilt_out": 0.0098469261,
+        "tilt_thetaB_contact_in": -2.4451936808,
+    }
+
+    comparison = compare_curved_branch_energy_breakdowns(
+        reference=localized,
+        candidate=trumpet,
+    )
+
+    assert comparison["total_delta"] == pytest.approx(0.0440007986, abs=1.0e-9)
+    assert comparison["dominant_module"] == "bending_tilt_in"
+    assert comparison["dominant_delta"] == pytest.approx(0.0472241692, abs=1.0e-9)
+    assert comparison["module_deltas"]["bending_tilt_out"] == pytest.approx(
+        -0.0042287177,
+        abs=1.0e-9,
+    )
 
 
 def test_curved_profile_topology_audit_separates_clean_and_folded_lanes():
