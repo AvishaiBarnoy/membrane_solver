@@ -1173,6 +1173,18 @@ STEP SIZE:\t {self.step_size}
         # stale after mesh operations like refinement/averaging.
         target_mesh.increment_version()
 
+    def _finalize_constraints(self) -> None:
+        """Project the final state and invalidate geometry-dependent caches."""
+        if not self._has_enforceable_constraints:
+            return
+        self.constraint_manager.enforce_all(
+            self.mesh,
+            global_params=self.global_params,
+            context="finalize",
+        )
+        self.mesh.project_tilts_to_tangent()
+        self.mesh.increment_version()
+
     def minimize(
         self, n_steps: int = 1, callback: Optional[Callable[["Mesh", int], None]] = None
     ):
@@ -1312,6 +1324,7 @@ STEP SIZE:\t {self.step_size}
             if grad_norm < self.tol:
                 logger.debug("Converged: gradient norm below tolerance.")
                 logger.info(f"Converged in {i} iterations; |∇E|={grad_norm:.3e}")
+                self._finalize_constraints()
                 log_energy_consistency(self, "converged")
                 return {
                     "energy": E,
@@ -1500,20 +1513,10 @@ STEP SIZE:\t {self.step_size}
 
                 _maybe_auto_mesh_quality_repair(self, iteration=i)
 
-        if self._has_enforceable_constraints:
-            # One final projection improves cross-platform determinism for hard
-            # constraints (e.g. fixed volume) without impacting the line search
-            # acceptance logic.
-            self.constraint_manager.enforce_all(
-                self.mesh,
-                global_params=self.global_params,
-                context="finalize",
-            )
-            self.mesh.project_tilts_to_tangent()
-            # Finalize projections mutate positions/tilts in-place; bump the
-            # mesh version so subsequent energy evaluations rebuild geometry-
-            # versioned caches from the finalized state.
-            self.mesh.increment_version()
+        # One final projection improves cross-platform determinism for hard
+        # constraints (e.g. fixed volume) without impacting the line search
+        # acceptance logic.
+        self._finalize_constraints()
 
         log_energy_consistency(self, "finalize")
         self.mesh._curvature_cache = {}
