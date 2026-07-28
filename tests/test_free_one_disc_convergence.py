@@ -13,6 +13,7 @@ from tools.free_one_disc_convergence import (
     build_canonical_free_one_disc_fixture,
     default_convergence_cases,
     fixed_theta_field_agreement,
+    resample_axisymmetric_rings,
     shape_regular_free_radii,
 )
 
@@ -131,24 +132,66 @@ def test_fixed_theta_field_metrics_recover_exact_sampled_profiles() -> None:
     assert metrics["vector"]["max_tangential_leak_relative"] < 1.0e-12
 
 
+def test_axisymmetric_ring_resampling_preserves_topology_and_tags() -> None:
+    case = FreeOneDiscCase(
+        label="angular_resample_unit",
+        trace_epsilon=0.02,
+        near_spacing=0.02,
+        outer_radius=8.0,
+    )
+    doc = build_canonical_free_one_disc_fixture(
+        base_doc=_base_doc(), case=case, theta_b=0.18
+    )
+    original_ring_count = len(
+        {
+            round(float(np.hypot(vertex[0], vertex[1])), 10)
+            for vertex in doc["vertices"]
+            if np.hypot(vertex[0], vertex[1]) > 1.0e-12
+        }
+    )
+
+    resampled = resample_axisymmetric_rings(doc, angular_sectors=24)
+    mesh = parse_geometry(resampled)
+    radii = np.linalg.norm(mesh.positions_view()[:, :2], axis=1)
+    counts = [
+        int(np.count_nonzero(np.isclose(radii, radius, atol=1.0e-9)))
+        for radius in sorted({round(float(value), 10) for value in radii if value > 0})
+    ]
+
+    assert len(counts) == original_ring_count
+    assert set(counts) == {24}
+    assert len(mesh.vertices) == 1 + 24 * original_ring_count
+    assert len(mesh.facets) == 24 + 2 * 24 * (original_ring_count - 2)
+    assert (
+        sum(
+            vertex.options.get("rim_slope_match_group") == "disk"
+            for vertex in mesh.vertices.values()
+        )
+        == 24
+    )
+    assert (
+        sum(
+            vertex.options.get("pin_to_circle_group") == "trace_layer"
+            for vertex in mesh.vertices.values()
+        )
+        == 24
+    )
+
+
 def test_default_convergence_matrix_separates_three_families() -> None:
     cases = default_convergence_cases()
     labels = {case.label for case in cases}
 
     assert {"radial_h020", "radial_h010", "radial_h005"} <= labels
-    assert {"topology_refine0", "topology_refine1"} <= labels
+    assert {"angular_n12", "angular_n24", "angular_n48"} <= labels
     assert {"domain_r8", "domain_r12", "domain_r16"} <= labels
     assert (
         len({case.outer_radius for case in cases if case.label.startswith("domain_")})
         == 3
     )
     assert (
-        max(
-            case.refinement_passes
-            for case in cases
-            if case.label.startswith("topology_")
-        )
-        == 1
+        max(case.angular_sectors for case in cases if case.label.startswith("angular_"))
+        == 48
     )
 
 

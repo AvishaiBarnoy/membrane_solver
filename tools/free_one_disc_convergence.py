@@ -10,6 +10,7 @@ used.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 import tempfile
@@ -48,6 +49,7 @@ class FreeOneDiscCase:
     near_spacing: float
     outer_radius: float
     refinement_passes: int = 0
+    angular_sectors: int = 12
 
 
 def _vertex_radius(vertex: Sequence[Any]) -> float:
@@ -111,6 +113,146 @@ def shape_regular_free_radii(
     intervals = max(1, int(np.ceil(span / float(target_spacing))))
     radii = np.linspace(trace_radius, first_coarse_radius, intervals + 1)
     return [float(value) for value in radii[1:-1]]
+
+
+def _rotate_axisymmetric_vector(
+    value: Sequence[float], *, source_angle: float, target_angle: float
+) -> list[float]:
+    vector = np.zeros(3, dtype=float)
+    raw = np.asarray(value, dtype=float)
+    vector[: min(3, raw.size)] = raw[:3]
+    source_radial = np.asarray(
+        [np.cos(source_angle), np.sin(source_angle), 0.0], dtype=float
+    )
+    source_azimuthal = np.asarray(
+        [-np.sin(source_angle), np.cos(source_angle), 0.0], dtype=float
+    )
+    target_radial = np.asarray(
+        [np.cos(target_angle), np.sin(target_angle), 0.0], dtype=float
+    )
+    target_azimuthal = np.asarray(
+        [-np.sin(target_angle), np.cos(target_angle), 0.0], dtype=float
+    )
+    rotated = (
+        float(np.dot(vector, source_radial)) * target_radial
+        + float(np.dot(vector, source_azimuthal)) * target_azimuthal
+        + np.asarray([0.0, 0.0, vector[2]], dtype=float)
+    )
+    return rotated.tolist()
+
+
+def resample_axisymmetric_rings(
+    doc: dict[str, Any], *, angular_sectors: int
+) -> dict[str, Any]:
+    """Rebuild a concentric-ring mesh with a uniform angular sector count."""
+    if int(angular_sectors) < 3:
+        raise ValueError("angular_sectors must be at least 3")
+    out = copy.deepcopy(doc)
+    source_vertices = out["vertices"]
+    radii = np.asarray([_vertex_radius(vertex) for vertex in source_vertices])
+    center_ids = np.flatnonzero(radii <= 1.0e-12)
+    if center_ids.size != 1:
+        raise ValueError("axisymmetric resampling requires exactly one center vertex")
+    ring_radii = sorted(
+        {round(float(radius), 10) for radius in radii if radius > 1.0e-12}
+    )
+    if not ring_radii:
+        raise ValueError("axisymmetric resampling requires at least one ring")
+
+    center = copy.deepcopy(source_vertices[int(center_ids[0])])
+    vertices: list[list[Any]] = [center]
+    ring_ids: list[list[int]] = []
+    trace_ring_index: int | None = None
+    n = int(angular_sectors)
+    for radius in ring_radii:
+        source_ids = np.flatnonzero(np.isclose(radii, radius, atol=5.0e-9))
+        if source_ids.size < 3:
+            raise ValueError(f"radius {radius:g} is not a complete circular ring")
+        source_angles = np.mod(
+            np.arctan2(
+                [source_vertices[int(idx)][1] for idx in source_ids],
+                [source_vertices[int(idx)][0] for idx in source_ids],
+            ),
+            2.0 * np.pi,
+        )
+        representative_id = int(source_ids[int(np.argmin(source_angles))])
+        representative = source_vertices[representative_id]
+        representative_opts = (
+            representative[3]
+            if len(representative) > 3 and isinstance(representative[3], dict)
+            else {}
+        )
+        if representative_opts.get("pin_to_circle_group") == "trace_layer":
+            trace_ring_index = len(ring_ids)
+        source_angle = float(
+            np.arctan2(float(representative[1]), float(representative[0]))
+        )
+        z = float(
+            np.median([float(source_vertices[int(idx)][2]) for idx in source_ids])
+        )
+        ids: list[int] = []
+        for sector in range(n):
+            angle = 2.0 * np.pi * float(sector) / float(n)
+            opts = copy.deepcopy(representative_opts)
+            for field in ("tilt_in", "tilt_out"):
+                if field in opts:
+                    opts[field] = _rotate_axisymmetric_vector(
+                        opts[field],
+                        source_angle=source_angle,
+                        target_angle=angle,
+                    )
+            ids.append(len(vertices))
+            vertices.append(
+                [
+                    float(radius * np.cos(angle)),
+                    float(radius * np.sin(angle)),
+                    z,
+                    opts,
+                ]
+            )
+        ring_ids.append(ids)
+    if trace_ring_index is None or trace_ring_index == 0:
+        raise ValueError("axisymmetric resampling requires a tagged trace ring")
+
+    edges: list[list[int]] = []
+    edge_lookup: dict[tuple[int, int], int] = {}
+
+    def edge_token(start: int, end: int) -> int | str:
+        direct = edge_lookup.get((start, end))
+        if direct is not None:
+            return direct
+        reverse = edge_lookup.get((end, start))
+        if reverse is not None:
+            return f"r{reverse}"
+        idx = len(edges)
+        edges.append([start, end])
+        edge_lookup[(start, end)] = idx
+        return idx
+
+    def triangle(a: int, b: int, c: int) -> list[int | str]:
+        return [edge_token(a, b), edge_token(b, c), edge_token(c, a)]
+
+    faces: list[list[int | str]] = []
+    first_ring = ring_ids[0]
+    for sector in range(n):
+        faces.append(triangle(0, first_ring[sector], first_ring[(sector + 1) % n]))
+    for pair_index, (inner, outer) in enumerate(zip(ring_ids[:-1], ring_ids[1:])):
+        if pair_index == trace_ring_index - 1:
+            continue
+        for sector in range(n):
+            next_sector = (sector + 1) % n
+            faces.append(triangle(inner[sector], outer[sector], inner[next_sector]))
+            faces.append(
+                triangle(inner[next_sector], outer[sector], outer[next_sector])
+            )
+
+    out["vertices"] = vertices
+    out["edges"] = edges
+    out["faces"] = faces
+    gp = dict(out.get("global_parameters") or {})
+    gp["free_one_disc_angular_sectors"] = n
+    out["global_parameters"] = gp
+    return out
 
 
 def build_canonical_free_one_disc_fixture(
@@ -222,6 +364,10 @@ def build_canonical_free_one_disc_fixture(
                 vertex[2] = float(
                     half_theta * disk_radius * np.log(radius / disk_radius)
                 )
+    if int(case.angular_sectors) != 12:
+        doc = resample_axisymmetric_rings(
+            doc, angular_sectors=int(case.angular_sectors)
+        )
     return doc
 
 
@@ -345,18 +491,14 @@ def fixed_theta_field_agreement(mesh, *, theta_b: float) -> dict[str, Any]:
 
 
 def default_convergence_cases(*, outer_radius: float = 12.0) -> list[FreeOneDiscCase]:
-    """Return radial, topology-stress, and domain convergence families.
-
-    ``r`` refines triangles rather than independently resampling the circular
-    rings.  Those cases therefore audit whether generic refinement remains
-    admissible; they are not labeled as angular convergence.
-    """
+    """Return independent radial, angular, and domain convergence families."""
     cases = [
         FreeOneDiscCase("radial_h020", 0.02, 0.02, outer_radius),
         FreeOneDiscCase("radial_h010", 0.01, 0.01, outer_radius),
         FreeOneDiscCase("radial_h005", 0.005, 0.005, outer_radius),
-        FreeOneDiscCase("topology_refine0", 0.01, 0.01, outer_radius, 0),
-        FreeOneDiscCase("topology_refine1", 0.01, 0.01, outer_radius, 1),
+        FreeOneDiscCase("angular_n12", 0.01, 0.01, outer_radius, angular_sectors=12),
+        FreeOneDiscCase("angular_n24", 0.01, 0.01, outer_radius, angular_sectors=24),
+        FreeOneDiscCase("angular_n48", 0.01, 0.01, outer_radius, angular_sectors=48),
         FreeOneDiscCase("domain_r8", 0.01, 0.01, 8.0),
         FreeOneDiscCase("domain_r12", 0.01, 0.01, 12.0),
         FreeOneDiscCase("domain_r16", 0.01, 0.01, 16.0),
@@ -428,10 +570,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "protocol": list(args.protocol),
             "constructed_support_shells": False,
             "outer_height_fixed": False,
-            "angular_convergence_status": (
-                "not implemented: generic triangle refinement is reported only "
-                "as a topology stress test"
-            ),
+            "angular_convergence_status": "independent uniform ring resampling",
         },
         "cases": [
             run_case(
