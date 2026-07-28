@@ -451,13 +451,15 @@ def compute_energy_and_gradient_array_leaflet(
         mesh, global_params, model=model, kappa_key=kappa_key, cache_tag=cache_tag
     )
 
-    k_mag = np.linalg.norm(k_vecs, axis=1)
-    H_vor = k_mag / (2.0 * safe_areas_vor)
+    # The J·div(t) cross-term requires oriented curvature.  Using |K| is
+    # equivalent only for J² and becomes non-differentiable as J crosses zero.
+    normals = _vertex_normals(mesh, positions, tri_rows)
+    signed_k = np.einsum("ij,ij->i", k_vecs, normals)
+    H_vor = signed_k / (2.0 * safe_areas_vor)
 
     is_interior = _interior_mask_leaflet(
         mesh, global_params, cache_tag=cache_tag, index_map=index_map
     )
-
     base_term = (2.0 * H_vor) - c0_arr
     if (
         _base_term_reference_mode(global_params, cache_tag=cache_tag)
@@ -562,16 +564,14 @@ def compute_energy_and_gradient_array_leaflet(
     )
 
     mode = _gradient_mode(global_params)
-    normals = _vertex_normals(mesh, positions, tri_rows)
     if ctx is not None:
         K_dir = ctx.scratch_array(
             f"btl_{cache_tag}_K_dir", shape=k_vecs.shape, dtype=k_vecs.dtype
         )
     else:
         K_dir = np.zeros_like(k_vecs)
-    mask_k = k_mag > 1e-15
-    K_dir[mask_k] = k_vecs[mask_k] / k_mag[mask_k][:, None]
-    K_dir[~mask_k] = normals[~mask_k]
+    # d(K·n)/dK = n; the K·dn contribution vanishes because K is normal.
+    K_dir[:] = normals
 
     flat_reference = (
         _base_term_reference_mode(global_params, cache_tag=cache_tag)
