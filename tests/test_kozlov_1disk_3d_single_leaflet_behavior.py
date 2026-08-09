@@ -115,7 +115,9 @@ def test_single_leaflet_1disk_3d_behavior() -> None:
     )
     assert abs(theta_in_rim) > 1e-3
     assert abs(theta_out_rim) > 1e-4
-    assert phi * theta_in_rim < 0.0
+    # With oriented curvature, the radial tilt and outward height slope use the
+    # same mesh-normal convention.
+    assert phi * theta_in_rim > 0.0
 
     free_rows = _outer_free_ring_rows(mesh, positions)
     assert free_rows.size
