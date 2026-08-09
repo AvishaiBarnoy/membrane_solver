@@ -876,7 +876,7 @@ class Minimizer:
         *,
         positions: np.ndarray,
         mode: str,
-    ) -> None:
+    ) -> dict[str, object]:
         """Relax inner/outer leaflet tilt vectors according to solve mode."""
         self._tilt_relaxation_manager.relax_leaflet_tilts(
             mesh=self.mesh,
@@ -895,6 +895,7 @@ class Minimizer:
         self._last_leaflet_relaxation_stats = (
             self._tilt_relaxation_manager.last_leaflet_relaxation_stats
         )
+        return dict(self._last_leaflet_relaxation_stats)
 
     @staticmethod
     def _tilt_vertex_areas_from_triangles(

@@ -175,3 +175,85 @@ def test_reduced_trial_energy_fn_keeps_geometry_cache_active() -> None:
     assert trial_energy == 0.0
     assert cache_active["relax"] is True
     assert cache_active["energy"] is True
+
+
+def test_reduced_trial_energy_is_repeatable_and_order_independent() -> None:
+    mesh = _build_single_triangle_leaflet_mesh()
+    tin0 = np.zeros((len(mesh.vertex_ids), 3), dtype=float)
+    tout0 = np.zeros_like(tin0)
+    tin0[:, 0] = 0.25
+    tout0[:, 1] = -0.5
+    mesh.set_tilts_in_from_array(tin0)
+    mesh.set_tilts_out_from_array(tout0)
+    gp = GlobalParameters(
+        {
+            "tilt_modulus_in": 1.0,
+            "tilt_modulus_out": 1.0,
+            "tilt_solve_mode": "coupled",
+            "tilt_step_size": 0.25,
+            "line_search_reduced_energy": True,
+            "line_search_reduced_tilt_inner_steps": 5,
+        }
+    )
+    minim = _build_minimizer(mesh, gp)
+
+    def fake_relax_leaflet_tilts(*, positions: np.ndarray, mode: str) -> None:
+        _ = mode
+        marker = float(np.sum(positions[:, 2]))
+        mesh.set_tilts_in_from_array(0.5 * mesh.tilts_in_view() + marker)
+        mesh.set_tilts_out_from_array(0.5 * mesh.tilts_out_view() - marker)
+
+    minim._relax_leaflet_tilts = fake_relax_leaflet_tilts
+    trial_energy_fn = minim._line_search_trial_energy_fn()
+    assert trial_energy_fn is not None
+
+    trial_a = mesh.positions_view().copy(order="F")
+    trial_a[1, 2] = 0.1
+    trial_b = mesh.positions_view().copy(order="F")
+    trial_b[2, 2] = -0.2
+
+    energy_a_first = float(trial_energy_fn(trial_a))
+    tilts_a_first = (
+        mesh.tilts_in_view().copy(),
+        mesh.tilts_out_view().copy(),
+    )
+    _ = float(trial_energy_fn(trial_b))
+    energy_a_second = float(trial_energy_fn(trial_a))
+
+    assert energy_a_second == pytest.approx(energy_a_first, abs=1.0e-14)
+    assert np.allclose(mesh.tilts_in_view(), tilts_a_first[0])
+    assert np.allclose(mesh.tilts_out_view(), tilts_a_first[1])
+
+
+def test_reduced_trial_energy_batches_until_tilt_tolerance() -> None:
+    mesh = _build_single_triangle_leaflet_mesh()
+    gp = GlobalParameters(
+        {
+            "tilt_modulus_in": 1.0,
+            "tilt_modulus_out": 1.0,
+            "tilt_solve_mode": "coupled",
+            "tilt_step_size": 0.25,
+            "tilt_tol": 1.0e-3,
+            "line_search_reduced_energy": True,
+            "line_search_reduced_tilt_inner_steps": 5,
+            "line_search_reduced_tilt_max_steps": 20,
+        }
+    )
+    minim = _build_minimizer(mesh, gp)
+    final_norms = iter((1.0, 0.1, 1.0e-4))
+    calls = {"count": 0}
+
+    def fake_relax_leaflet_tilts(*, positions: np.ndarray, mode: str) -> dict:
+        _ = positions, mode
+        calls["count"] += 1
+        return {"final_gradient_norm": next(final_norms)}
+
+    minim._relax_leaflet_tilts = fake_relax_leaflet_tilts
+    trial_energy_fn = minim._line_search_trial_energy_fn()
+    assert trial_energy_fn is not None
+
+    _ = float(trial_energy_fn(mesh.positions_view().copy(order="F")))
+
+    assert calls["count"] == 3
+    assert gp.get("tilt_inner_steps") is None
+    assert gp.get("tilt_coupled_steps") is None

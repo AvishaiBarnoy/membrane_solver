@@ -106,6 +106,14 @@ LONG_SCAFFOLD_PROTOCOL = (
     "energy",
 )
 
+PARITY_REQUALIFICATION_XFAIL = pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Signed-curvature and shape-pullback corrections changed the energy "
+        "landscape; refresh this golden only after qualitative lane invariants pass"
+    ),
+)
+
 
 def _iter_leaf_scalars(obj: Any, prefix: str = ""):
     if isinstance(obj, dict):
@@ -124,6 +132,7 @@ def _get_path(dct: dict[str, Any], path: str) -> float:
 
 
 @pytest.mark.acceptance
+@PARITY_REQUALIFICATION_XFAIL
 def test_reproduce_theory_parity_matches_yaml_baseline_with_tolerances(
     tmp_path,
 ) -> None:
@@ -152,6 +161,7 @@ def test_reproduce_theory_parity_matches_yaml_baseline_with_tolerances(
 
 
 @pytest.mark.acceptance
+@PARITY_REQUALIFICATION_XFAIL
 def test_reproduce_theory_parity_i50_interface_matches_yaml_baseline_with_tolerances(
     tmp_path,
 ) -> None:
@@ -186,6 +196,7 @@ def test_reproduce_theory_parity_i50_interface_matches_yaml_baseline_with_tolera
 
 
 @pytest.mark.acceptance
+@PARITY_REQUALIFICATION_XFAIL
 def test_reproduce_theory_parity_i60_interface_matches_yaml_baseline_with_tolerances(
     tmp_path,
 ) -> None:
@@ -220,6 +231,7 @@ def test_reproduce_theory_parity_i60_interface_matches_yaml_baseline_with_tolera
 
 
 @pytest.mark.acceptance
+@PARITY_REQUALIFICATION_XFAIL
 def test_reproduce_theory_parity_near_edge_v1_matches_yaml_baseline_with_tolerances(
     tmp_path,
 ) -> None:
@@ -254,6 +266,7 @@ def test_reproduce_theory_parity_near_edge_v1_matches_yaml_baseline_with_toleran
 
 
 @pytest.mark.acceptance
+@PARITY_REQUALIFICATION_XFAIL
 def test_reproduce_theory_parity_physical_edge_default_matches_yaml_baseline_with_tolerances(
     tmp_path,
 ) -> None:
@@ -288,6 +301,7 @@ def test_reproduce_theory_parity_physical_edge_default_matches_yaml_baseline_wit
 
 
 @pytest.mark.acceptance
+@PARITY_REQUALIFICATION_XFAIL
 def test_reproduce_theory_parity_physical_edge_primary_matches_yaml_baseline_with_tolerances(
     tmp_path,
 ) -> None:
@@ -322,6 +336,13 @@ def test_reproduce_theory_parity_physical_edge_primary_matches_yaml_baseline_wit
 
 
 @pytest.mark.acceptance
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Gate 0: scaffold gapfill is nonstationary and develops topology "
+        "collisions; its historical YAML is not a valid parity baseline"
+    ),
+)
 def test_reproduce_theory_parity_scaffold_gapfill_matches_yaml_baseline_with_tolerances(
     tmp_path,
 ) -> None:

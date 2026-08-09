@@ -21,6 +21,17 @@ from tools.theory_parity_interface_profiles import (
 
 ROOT = Path(__file__).resolve().parent.parent
 
+COLLISION_FREE_PROFILE_FIXTURES = (
+    "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml",
+    "kozlov_1disk_3d_free_disk_theory_parity_near_edge_v1.yaml",
+    "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_primary.yaml",
+    "kozlov_1disk_3d_free_disk_physical_edge_full_coupling_v1.yaml",
+    "kozlov_1disk_3d_free_disk_physical_edge_full_coupling_trace_eps005_v1.yaml",
+    "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_ghost_eps005.yaml",
+    "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_eps005_n3_d005.yaml",
+    "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_scaffold_gapfill_eps005_n3_release.yaml",
+)
+
 
 def _ring_radii(doc: dict) -> set[float]:
     return {
@@ -50,6 +61,41 @@ def test_build_scaled_fixture_moves_target_rings_and_sets_lane() -> None:
         scaled["global_parameters"]["bending_tilt_base_term_reference_mode"]
         == "current_geometry"
     )
+
+
+def test_build_scaled_fixture_preserves_radial_order_and_has_no_t_junctions() -> None:
+    from geometry.geom_io import parse_geometry
+    from runtime.topology import detect_vertex_edge_collisions
+
+    base_doc = yaml.safe_load(
+        (
+            ROOT / "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml"
+        ).read_text(encoding="utf-8")
+    )
+    scaled = build_scaled_fixture(
+        base_doc=base_doc,
+        label="collision_free_default",
+        inner_radius=0.772,
+        outer_radius=2.66,
+    )
+
+    radii = sorted(_ring_radii(scaled))
+    assert 2.833333333333 not in radii
+    assert any(0.772 < radius < 2.66 for radius in radii)
+    assert detect_vertex_edge_collisions(parse_geometry(scaled)) == []
+
+
+@pytest.mark.parametrize("fixture_name", COLLISION_FREE_PROFILE_FIXTURES)
+def test_tracked_profile_fixture_has_no_vertex_edge_collisions(
+    fixture_name: str,
+) -> None:
+    from geometry.geom_io import parse_geometry
+    from runtime.topology import detect_vertex_edge_collisions
+
+    doc = yaml.safe_load(
+        (ROOT / "tests" / "fixtures" / fixture_name).read_text(encoding="utf-8")
+    )
+    assert detect_vertex_edge_collisions(parse_geometry(doc)) == []
 
 
 def test_build_profiled_fixture_applies_general_near_edge_profile() -> None:

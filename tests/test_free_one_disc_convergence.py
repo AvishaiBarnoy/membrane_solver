@@ -11,9 +11,12 @@ from geometry.geom_io import parse_geometry
 from tools.free_one_disc_convergence import (
     FreeOneDiscCase,
     build_canonical_free_one_disc_fixture,
+    coupled_angular_sectors,
     default_convergence_cases,
     fixed_theta_field_agreement,
+    mesh_quality_metrics,
     resample_axisymmetric_rings,
+    shape_regular_convergence_cases,
     shape_regular_free_radii,
 )
 
@@ -193,6 +196,84 @@ def test_default_convergence_matrix_separates_three_families() -> None:
         max(case.angular_sectors for case in cases if case.label.startswith("angular_"))
         == 48
     )
+
+
+def test_radial_only_refinement_is_rejected_by_near_interface_quality_gate() -> None:
+    case = FreeOneDiscCase(
+        label="radial_stress_h005",
+        trace_epsilon=0.005,
+        near_spacing=0.005,
+        outer_radius=8.0,
+        angular_sectors=12,
+    )
+    mesh = parse_geometry(
+        build_canonical_free_one_disc_fixture(
+            base_doc=_base_doc(), case=case, theta_b=0.18
+        )
+    )
+
+    quality = mesh_quality_metrics(
+        mesh,
+        interface_radius=float(mesh.global_parameters.get("theory_radius")),
+        near_width=0.1,
+    )
+
+    assert quality["near_interface"]["triangle_count"] > 0
+    assert quality["near_interface"]["median_aspect_ratio"] > 20.0
+    assert quality["near_interface"]["minimum_angle_degrees"] < 5.0
+    assert quality["valid"] is False
+
+
+def test_coupled_refinement_controls_near_interface_triangle_quality() -> None:
+    spacing = 0.02
+    trace_radius = 0.48
+    sectors = coupled_angular_sectors(
+        trace_radius=trace_radius,
+        radial_spacing=spacing,
+    )
+    case = FreeOneDiscCase(
+        label="coupled_h020",
+        trace_epsilon=spacing,
+        near_spacing=spacing,
+        outer_radius=8.0,
+        angular_sectors=sectors,
+    )
+    mesh = parse_geometry(
+        build_canonical_free_one_disc_fixture(
+            base_doc=_base_doc(), case=case, theta_b=0.18
+        )
+    )
+
+    quality = mesh_quality_metrics(
+        mesh,
+        interface_radius=float(mesh.global_parameters.get("theory_radius")),
+        near_width=0.1,
+    )
+
+    assert sectors % 12 == 0
+    assert quality["near_interface"]["maximum_aspect_ratio"] <= 4.0
+    assert quality["near_interface"]["minimum_angle_degrees"] >= 15.0
+    assert quality["valid"] is True
+
+
+def test_shape_regular_convergence_family_couples_radial_and_angular_resolution() -> (
+    None
+):
+    cases = shape_regular_convergence_cases(outer_radius=8.0)
+
+    assert [case.label for case in cases] == [
+        "coupled_h040",
+        "coupled_h020",
+        "coupled_h010",
+    ]
+    assert [case.near_spacing for case in cases] == [0.04, 0.02, 0.01]
+    assert [case.angular_sectors for case in cases] == sorted(
+        case.angular_sectors for case in cases
+    )
+    for case in cases:
+        trace_radius = 7.0 / 15.0 + case.trace_epsilon
+        tangential_spacing = 2.0 * np.pi * trace_radius / case.angular_sectors
+        assert tangential_spacing <= 2.0 * case.near_spacing
 
 
 def test_canonical_free_fixture_rejects_outer_radius_inside_disc() -> None:

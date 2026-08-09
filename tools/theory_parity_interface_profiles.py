@@ -15,9 +15,9 @@ INTERFACE_PROFILES: dict[str, tuple[float, float] | None] = {
     "i60": (0.76, 2.6),
     "tight": (0.6, 0.8),
     "near_edge_v1": (0.76, 2.6),
-    "default_lo": (0.776, 2.68),
-    "default": (0.772, 2.66),
-    "default_hi": (0.771, 2.655),
+    "default_lo": (0.776, 5.1),
+    "default": (0.772, 5.0),
+    "default_hi": (0.771, 4.9),
     "physical_edge_family_lo": (0.78, 2.7),
     "physical_edge_primary_v1": (0.76, 2.6),
     "physical_edge_family_hi": (0.758, 2.6),
@@ -37,6 +37,35 @@ def _scale_ring(
         scale = float(target_radius) / radius
         vertex[0] = x * scale
         vertex[1] = y * scale
+
+
+def _remap_radial_interval(
+    vertices: list[list[Any]],
+    *,
+    source_inner: float,
+    source_outer: float,
+    target_inner: float,
+    target_outer: float,
+) -> None:
+    """Monotonically remap all rings between two radial endpoints."""
+    source_span = float(source_outer) - float(source_inner)
+    target_span = float(target_outer) - float(target_inner)
+    if source_span <= 0.0 or target_span <= 0.0:
+        raise ValueError("radial remap endpoints must be strictly increasing")
+
+    for vertex in vertices:
+        radius = _vertex_radius(vertex)
+        if radius < float(source_inner) - 1.0e-9:
+            continue
+        if radius > float(source_outer) + 1.0e-9:
+            continue
+        if radius <= 0.0:
+            continue
+        fraction = (radius - float(source_inner)) / source_span
+        target_radius = float(target_inner) + fraction * target_span
+        scale = target_radius / radius
+        vertex[0] = float(vertex[0]) * scale
+        vertex[1] = float(vertex[1]) * scale
 
 
 def _vertex_radius(vertex: list[Any]) -> float:
@@ -232,8 +261,13 @@ def build_scaled_fixture(
 ) -> dict[str, Any]:
     """Return a fixture copy with the interface rings moved inward."""
     doc = copy.deepcopy(base_doc)
-    _scale_ring(doc["vertices"], SOURCE_INNER_RADIUS, float(inner_radius))
-    _scale_ring(doc["vertices"], SOURCE_OUTER_RADIUS, float(outer_radius))
+    _remap_radial_interval(
+        doc["vertices"],
+        source_inner=SOURCE_INNER_RADIUS,
+        source_outer=SOURCE_OUTER_RADIUS,
+        target_inner=float(inner_radius),
+        target_outer=float(outer_radius),
+    )
     gp = dict(doc.get("global_parameters") or {})
     gp["theory_parity_lane"] = str(label)
     gp["bending_tilt_base_term_reference_mode"] = str(base_term_reference_mode)

@@ -40,6 +40,8 @@ DEFAULT_BASE_FIXTURE = (
     ROOT / "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml"
 )
 DEFAULT_PROTOCOL = ("g10", "t2e-3", "g20")
+QUALITY_MAX_ASPECT_RATIO = 4.0
+QUALITY_MIN_ANGLE_DEGREES = 15.0
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,124 @@ class FreeOneDiscCase:
     outer_radius: float
     refinement_passes: int = 0
     angular_sectors: int = 12
+
+
+def coupled_angular_sectors(
+    *,
+    trace_radius: float,
+    radial_spacing: float,
+    max_tangential_to_radial: float = 2.0,
+    symmetry_multiple: int = 12,
+) -> int:
+    """Choose angular resolution together with radial resolution.
+
+    The trace-ring chord is bounded by a fixed multiple of the radial spacing.
+    Rounding upward to a symmetry multiple keeps all convergence meshes nested
+    in angle without sacrificing the quality bound.
+    """
+    if trace_radius <= 0.0:
+        raise ValueError("trace_radius must be positive")
+    if radial_spacing <= 0.0:
+        raise ValueError("radial_spacing must be positive")
+    if max_tangential_to_radial <= 0.0:
+        raise ValueError("max_tangential_to_radial must be positive")
+    if int(symmetry_multiple) < 1:
+        raise ValueError("symmetry_multiple must be positive")
+    required = int(
+        np.ceil(
+            2.0
+            * np.pi
+            * float(trace_radius)
+            / (float(max_tangential_to_radial) * float(radial_spacing))
+        )
+    )
+    multiple = int(symmetry_multiple)
+    return max(3, multiple * int(np.ceil(required / multiple)))
+
+
+def mesh_quality_metrics(
+    mesh: Any,
+    *,
+    interface_radius: float,
+    near_width: float,
+    max_aspect_ratio: float = QUALITY_MAX_ASPECT_RATIO,
+    min_angle_degrees: float = QUALITY_MIN_ANGLE_DEGREES,
+) -> dict[str, Any]:
+    """Measure global and outer-interface triangle shape quality."""
+    if near_width <= 0.0:
+        raise ValueError("near_width must be positive")
+    mesh.build_facet_vertex_loops()
+    triangle_rows, _ = mesh.triangle_row_cache()
+    if triangle_rows is None or len(triangle_rows) == 0:
+        raise ValueError("mesh quality requires triangular facets")
+    positions = mesh.positions_view()
+    triangles = positions[np.asarray(triangle_rows, dtype=int)]
+    edge_vectors = np.stack(
+        (
+            triangles[:, 1] - triangles[:, 0],
+            triangles[:, 2] - triangles[:, 1],
+            triangles[:, 0] - triangles[:, 2],
+        ),
+        axis=1,
+    )
+    edge_lengths = np.linalg.norm(edge_vectors, axis=2)
+    doubled_area = np.linalg.norm(
+        np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]),
+        axis=1,
+    )
+    safe_area = np.maximum(doubled_area, np.finfo(float).tiny)
+    aspect = np.max(edge_lengths, axis=1) ** 2 / safe_area
+    side_sq = edge_lengths**2
+    cosines = np.empty_like(side_sq)
+    cosines[:, 0] = (side_sq[:, 2] + side_sq[:, 0] - side_sq[:, 1]) / (
+        2.0 * edge_lengths[:, 2] * edge_lengths[:, 0]
+    )
+    cosines[:, 1] = (side_sq[:, 0] + side_sq[:, 1] - side_sq[:, 2]) / (
+        2.0 * edge_lengths[:, 0] * edge_lengths[:, 1]
+    )
+    cosines[:, 2] = (side_sq[:, 1] + side_sq[:, 2] - side_sq[:, 0]) / (
+        2.0 * edge_lengths[:, 1] * edge_lengths[:, 2]
+    )
+    angles = np.degrees(np.arccos(np.clip(cosines, -1.0, 1.0)))
+    radii = np.linalg.norm(triangles[:, :, :2], axis=2)
+    near_mask = (np.min(radii, axis=1) > float(interface_radius) + 1.0e-10) & (
+        np.min(radii, axis=1) <= float(interface_radius) + float(near_width)
+    )
+
+    def summarize(mask: np.ndarray) -> dict[str, float | int]:
+        selected_aspect = aspect[mask]
+        selected_angles = angles[mask]
+        selected_edges = edge_lengths[mask]
+        return {
+            "triangle_count": int(np.count_nonzero(mask)),
+            "median_aspect_ratio": float(np.median(selected_aspect)),
+            "maximum_aspect_ratio": float(np.max(selected_aspect)),
+            "minimum_angle_degrees": float(np.min(selected_angles)),
+            "median_minimum_angle_degrees": float(
+                np.median(np.min(selected_angles, axis=1))
+            ),
+            "minimum_edge_length": float(np.min(selected_edges)),
+            "maximum_edge_length": float(np.max(selected_edges)),
+        }
+
+    if not np.any(near_mask):
+        raise ValueError(
+            "mesh has no triangles in the requested interface neighborhood"
+        )
+    near = summarize(near_mask)
+    global_metrics = summarize(np.ones(len(triangles), dtype=bool))
+    valid = near["maximum_aspect_ratio"] <= float(max_aspect_ratio) and near[
+        "minimum_angle_degrees"
+    ] >= float(min_angle_degrees)
+    return {
+        "valid": bool(valid),
+        "thresholds": {
+            "maximum_aspect_ratio": float(max_aspect_ratio),
+            "minimum_angle_degrees": float(min_angle_degrees),
+        },
+        "near_interface": near,
+        "global": global_metrics,
+    }
 
 
 def _vertex_radius(vertex: Sequence[Any]) -> float:
@@ -324,6 +444,9 @@ def build_canonical_free_one_disc_fixture(
     gp["free_one_disc_outer_radius"] = float(case.outer_radius)
     gp["free_one_disc_refinement_passes"] = int(case.refinement_passes)
     gp["free_one_disc_theory_seeded"] = bool(seed_theory)
+    gp["shape_step_edge_fraction"] = 0.3
+    gp["shape_line_search_max_iter"] = 30
+    gp["line_search_reduced_tilt_max_steps"] = 120
     doc["global_parameters"] = gp
     if seed_theory:
         lam_in = float(
@@ -506,6 +629,28 @@ def default_convergence_cases(*, outer_radius: float = 12.0) -> list[FreeOneDisc
     return cases
 
 
+def shape_regular_convergence_cases(
+    *, outer_radius: float = 12.0, disk_radius: float = 7.0 / 15.0
+) -> list[FreeOneDiscCase]:
+    """Return the coupled radial/angular family used for scientific convergence."""
+    cases: list[FreeOneDiscCase] = []
+    for spacing in (0.04, 0.02, 0.01):
+        sectors = coupled_angular_sectors(
+            trace_radius=float(disk_radius) + spacing,
+            radial_spacing=spacing,
+        )
+        cases.append(
+            FreeOneDiscCase(
+                label=f"coupled_h{int(round(1000.0 * spacing)):03d}",
+                trace_epsilon=spacing,
+                near_spacing=spacing,
+                outer_radius=outer_radius,
+                angular_sectors=sectors,
+            )
+        )
+    return cases
+
+
 def run_case(
     *,
     base_doc: dict[str, Any],
@@ -523,12 +668,25 @@ def run_case(
         context = _build_context(path)
         for _ in range(int(case.refinement_passes)):
             execute_command_line(context, "r")
+        interface_radius = float(
+            context.mesh.global_parameters.get("theory_radius") or 0.46
+        )
+        quality_before = mesh_quality_metrics(
+            context.mesh,
+            interface_radius=interface_radius,
+            near_width=max(0.1, 5.0 * float(case.near_spacing)),
+        )
         initial_collisions = detect_vertex_edge_collisions(
             context.mesh, threshold=1.0e-3
         )
         for command in protocol:
             execute_command_line(context, str(command))
         final_collisions = detect_vertex_edge_collisions(context.mesh, threshold=1.0e-3)
+        quality_after = mesh_quality_metrics(
+            context.mesh,
+            interface_radius=interface_radius,
+            near_width=max(0.1, 5.0 * float(case.near_spacing)),
+        )
         agreement = fixed_theta_field_agreement(context.mesh, theta_b=theta_b)
         energy = float(context.minimizer.compute_energy())
         projected_energy, projected_gradient = (
@@ -545,6 +703,17 @@ def run_case(
                 "initial_vertex_edge_collision_count": len(initial_collisions),
                 "final_vertex_edge_collision_count": len(final_collisions),
             },
+            "mesh_quality": {
+                "valid": bool(quality_before["valid"] and quality_after["valid"]),
+                "initial": quality_before,
+                "final": quality_after,
+            },
+            "scientifically_valid": bool(
+                not initial_collisions
+                and not final_collisions
+                and quality_before["valid"]
+                and quality_after["valid"]
+            ),
             "agreement": agreement,
         }
     finally:
@@ -560,9 +729,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--quick", action="store_true")
     args = parser.parse_args(argv)
     base_doc = yaml.safe_load(args.base.read_text(encoding="utf-8")) or {}
-    cases = default_convergence_cases()
+    cases = default_convergence_cases() + shape_regular_convergence_cases()
     if args.quick:
-        cases = [cases[1]]
+        cases = [shape_regular_convergence_cases()[0]]
     report = {
         "meta": {
             "base": str(args.base),
@@ -571,6 +740,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "constructed_support_shells": False,
             "outer_height_fixed": False,
             "angular_convergence_status": "independent uniform ring resampling",
+            "scientific_convergence_family": "coupled radial/angular shape regular",
         },
         "cases": [
             run_case(

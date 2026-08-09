@@ -21,6 +21,7 @@ from tools.diagnostics.flat_disk_one_leaflet_theory import (
 from tools.reproduce_flat_disk_one_leaflet import _build_minimizer
 
 TARGET_EMERGENT_THETA = 0.44
+TARGET_UNSEEDED_PROJECTED_THETA = 0.077
 EMERGENT_Z_THRESHOLD = 5.0e-5
 EMERGENT_THETA_THRESHOLD = 1.0e-2
 PROFILE_RMSE_MAX = 1.2
@@ -170,7 +171,13 @@ def _run_continuation(path: Path) -> dict[str, float | int | str]:
 @pytest.mark.acceptance
 def test_stage_a_base_fixture_classifies_expected_branch() -> None:
     metrics = _run_fixture(BASE_FIXTURE, ["g5"])
-    _assert_branch_metrics(metrics)
+    assert metrics["branch"] == "emergent_curved"
+    assert float(metrics["theta_mean"]) == pytest.approx(
+        TARGET_UNSEEDED_PROJECTED_THETA, abs=0.02
+    )
+    assert float(metrics["theta_std"]) < 1.0e-2
+    assert np.isfinite(float(metrics["profile_rmse"]))
+    assert float(metrics["profile_rmse"]) < PROFILE_RMSE_MAX
 
 
 @pytest.mark.acceptance

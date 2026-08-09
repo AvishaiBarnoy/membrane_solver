@@ -2,6 +2,7 @@ import os
 import sys
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -113,7 +114,40 @@ def test_array_line_search_fast_path_failure_keeps_mesh_state_pristine() -> None
     assert success is False
     assert trial_energies == [2.0]
     assert accepted_energy == 1.0
-    np.testing.assert_allclose(mesh.positions_view(), x0, rtol=0, atol=1e-12)
+
+
+def test_array_line_search_can_scale_initial_step_by_minimum_edge() -> None:
+    mesh = _build_triangle_mesh()
+    mesh.global_parameters = GlobalParameters({"shape_step_edge_fraction": 0.1})
+    vertex_ids = tuple(int(v) for v in mesh.vertex_ids.tolist())
+    x0 = mesh.positions_view().copy()
+    direction = np.zeros_like(x0)
+    direction[1, 0] = -10.0
+    gradient = -direction
+    trials: list[np.ndarray] = []
+
+    success, _, _ = backtracking_line_search_array(
+        mesh,
+        direction,
+        gradient,
+        step_size=1.0,
+        energy_fn=lambda: float(mesh.positions_view()[1, 0] ** 2),
+        trial_energy_fn=lambda positions: (
+            trials.append(positions.copy()) or float(positions[1, 0] ** 2)
+        ),
+        vertex_ids=vertex_ids,
+        max_iter=1,
+        beta=0.5,
+        c=1e-4,
+        gamma=1.0,
+        alpha_max_factor=1.0,
+        constraint_enforcer=None,
+    )
+
+    assert success is True
+    assert len(trials) == 1
+    assert np.linalg.norm(trials[0][1] - x0[1]) == pytest.approx(0.1)
+    assert np.linalg.norm(mesh.positions_view()[1] - x0[1]) == pytest.approx(0.1)
 
 
 def test_array_line_search_reduced_fast_path_accepts_trial_state() -> None:

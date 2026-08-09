@@ -275,7 +275,7 @@ def test_scaffold_builder_removes_old_disk_to_original_rim_spoke_edges() -> None
         and {int(edge.tail_index), int(edge.head_index)} & original_outer_rows
     ]
     assert stale_spokes == []
-    assert len(collisions) == 12
+    assert collisions == []
 
 
 @pytest.mark.unit
