@@ -400,6 +400,8 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
     )
     tilt_num = np.zeros(len(mesh.vertex_ids), dtype=float)
     tilt_den = np.zeros(len(mesh.vertex_ids), dtype=float)
+    tilt_in_num = np.zeros(len(mesh.vertex_ids), dtype=float)
+    tilt_in_den = np.zeros(len(mesh.vertex_ids), dtype=float)
 
     for i, ok in enumerate(valid):
         if not ok:
@@ -438,6 +440,7 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
             continue
         current_outer_height /= height_weight
         phi_current = (current_outer_height - current_rim_height) / dr
+        t_in_target = None
 
         if matching_mode == "shared_rim_staggered_v1" and theta_scalar is not None:
             phi_target = 0.5 * float(theta_scalar)
@@ -466,6 +469,7 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
                 half_split_target = 0.5 * theta_val
                 phi_target = half_split_target
                 t_out_target = phi_target
+                t_in_target = half_split_target
             else:
                 # Joint local proximal solve with equal weights on:
                 # - staying near the current shell secant phi_current
@@ -476,6 +480,11 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
                     2.0 * phi_current + float(t_out_rad) + 2.0 * continuity_target
                 ) / 5.0
                 t_out_target = 0.5 * (phi_target + float(t_out_rad))
+
+        if t_in_target is not None:
+            for row, weight in zip(target_rows, target_weights):
+                tilt_in_num[int(row)] += float(weight) * t_in_target
+                tilt_in_den[int(row)] += abs(float(weight))
 
         target_height = current_rim_height + phi_target * dr
         if abs(w0) > 1.0e-12:
@@ -525,10 +534,33 @@ def enforce_constraint(mesh: Mesh, global_params=None, **_kwargs) -> None:
         tangential = current - radial * r_dir
         mesh.vertices[vid].tilt_out = tangential + target_tilt * r_dir
 
+    for row in np.flatnonzero(tilt_in_den > 1.0e-12):
+        vid = int(mesh.vertex_ids[int(row)])
+        if getattr(mesh.vertices[vid], "tilt_fixed_in", False):
+            continue
+        normal_row = np.asarray(normals[int(row)], dtype=float)
+        pos = np.asarray(mesh.vertices[vid].position, dtype=float)
+        radius = float(np.linalg.norm(pos[:2]))
+        if radius <= 1.0e-12:
+            continue
+        r_hat_row = np.array([pos[0] / radius, pos[1] / radius, 0.0], dtype=float)
+        r_dir = r_hat_row - float(np.dot(r_hat_row, normal_row)) * normal_row
+        r_norm = float(np.linalg.norm(r_dir))
+        if r_norm <= 1.0e-12:
+            continue
+        r_dir = r_dir / r_norm
+        current = np.asarray(mesh.vertices[vid].tilt_in, dtype=float)
+        radial = float(np.dot(current, r_dir))
+        target_tilt = float(tilt_in_num[int(row)] / tilt_in_den[int(row)])
+        tangential = current - radial * r_dir
+        mesh.vertices[vid].tilt_in = tangential + target_tilt * r_dir
+
     if moved:
         mesh.increment_version()
     if update_tilt_out:
         mesh.touch_tilts_out()
+    if np.any(tilt_in_den > 1.0e-12):
+        mesh.touch_tilts_in()
 
 
 __all__ = [

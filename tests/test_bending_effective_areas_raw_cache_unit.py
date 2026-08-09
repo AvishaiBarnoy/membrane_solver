@@ -55,14 +55,22 @@ def _accumulate_vertex_areas(n_verts: int, tri_rows: np.ndarray, va_eff: np.ndar
     return out
 
 
-def test_effective_areas_reuse_cached_raw_triangle_areas() -> None:
+def test_effective_areas_do_not_trust_curvature_kernel_corner_cache() -> None:
     mesh = _closed_tetra_mesh()
     positions = mesh.positions_view()
     index_map = mesh.vertex_index_to_row
 
     _k, _a, weights, tri_rows = compute_curvature_data(mesh, positions, index_map)
-    nf = tri_rows.shape[0]
+    _, va0_ref, va1_ref, va2_ref = _compute_effective_areas(
+        mesh,
+        positions.copy(),
+        tri_rows,
+        weights,
+        index_map,
+        cache_token="detached_reference",
+    )
 
+    nf = tri_rows.shape[0]
     va0_raw = np.linspace(0.11, 0.14, nf)
     va1_raw = np.linspace(0.21, 0.24, nf)
     va2_raw = np.linspace(0.31, 0.34, nf)
@@ -79,13 +87,45 @@ def test_effective_areas_reuse_cached_raw_triangle_areas() -> None:
         cache_token="raw_cache_reuse",
     )
 
-    assert np.allclose(va0_eff, va0_raw)
-    assert np.allclose(va1_eff, va1_raw)
-    assert np.allclose(va2_eff, va2_raw)
+    assert np.allclose(va0_eff, va0_ref)
+    assert np.allclose(va1_eff, va1_ref)
+    assert np.allclose(va2_eff, va2_ref)
 
-    va_eff = np.stack([va0_raw, va1_raw, va2_raw], axis=1)
+    va_eff = np.stack([va0_ref, va1_ref, va2_ref], axis=1)
     expected_vertex = _accumulate_vertex_areas(len(mesh.vertex_ids), tri_rows, va_eff)
     assert np.allclose(vertex_eff, expected_vertex)
+
+
+def test_effective_area_cache_is_invalidated_by_geometry_version() -> None:
+    mesh = _closed_tetra_mesh()
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    _k, _a, weights, tri_rows = compute_curvature_data(mesh, positions, index_map)
+    token = "geometry_version"
+
+    _compute_effective_areas(
+        mesh, positions, tri_rows, weights, index_map, cache_token=token
+    )
+
+    mesh.vertices[0].position[0] += 0.2
+    mesh.increment_version()
+    positions = mesh.positions_view()
+    _k, _a, weights, tri_rows = compute_curvature_data(mesh, positions, index_map)
+    _, va0_active, va1_active, va2_active = _compute_effective_areas(
+        mesh, positions, tri_rows, weights, index_map, cache_token=token
+    )
+    _, va0_ref, va1_ref, va2_ref = _compute_effective_areas(
+        mesh,
+        positions.copy(),
+        tri_rows,
+        weights,
+        index_map,
+        cache_token="geometry_version_reference",
+    )
+
+    assert np.allclose(va0_active, va0_ref)
+    assert np.allclose(va1_active, va1_ref)
+    assert np.allclose(va2_active, va2_ref)
 
 
 def test_effective_areas_ignore_mismatched_raw_cache_shape() -> None:

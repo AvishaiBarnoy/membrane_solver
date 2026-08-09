@@ -113,6 +113,12 @@ def backtracking_line_search(
             return False, step_size, float(energy0)
 
     alpha = step_size
+    edge_fraction = float(
+        getattr(mesh, "global_parameters", {}).get("shape_step_edge_fraction", 0.0)
+        or 0.0
+    )
+    if edge_fraction > 0.0 and min_edge_len > 0.0 and max_dir_norm > 0.0:
+        alpha = min(alpha, edge_fraction * min_edge_len / max_dir_norm)
     alpha_max = alpha_max_factor * step_size
 
     scalar_params = getattr(mesh, "global_parameters", None)
@@ -322,6 +328,12 @@ def backtracking_line_search_array(
             return False, step_size, float(energy0)
 
     alpha = step_size
+    edge_fraction = float(
+        getattr(mesh, "global_parameters", {}).get("shape_step_edge_fraction", 0.0)
+        or 0.0
+    )
+    if edge_fraction > 0.0 and min_edge_len > 0.0 and max_dir_norm > 0.0:
+        alpha = min(alpha, edge_fraction * min_edge_len / max_dir_norm)
     alpha_max = alpha_max_factor * step_size
     backtracks = 0
     use_trial_energy_fast_path = bool(

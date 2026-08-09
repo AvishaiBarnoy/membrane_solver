@@ -624,6 +624,44 @@ def test_joint_sparse_rows_with_unsorted_duplicates_match_dense_reference() -> N
     assert np.allclose(got_out, ref_out, atol=1e-12, rtol=0.0)
 
 
+def test_joint_sparse_projection_handles_redundant_constraint_rows() -> None:
+    cm = ConstraintModuleManager([])
+    shape_x = (
+        np.asarray([0], dtype=int),
+        np.asarray([[1.0, 0.0, 0.0]], dtype=float),
+    )
+    tilt_y = (
+        np.asarray([0], dtype=int),
+        np.asarray([[0.0, 1.0, 0.0]], dtype=float),
+    )
+    cm.modules = {
+        "joint": DummyJointRowConstraint(
+            [
+                (shape_x, None, None),
+                (None, tilt_y, None),
+                (shape_x, tilt_y, None),
+            ]
+        ),
+    }
+    mesh = DummyMesh(1)
+    grad = np.asarray([[2.0, 0.0, 0.0]], dtype=float)
+    tilt_in = np.asarray([[0.0, 4.0, 0.0]], dtype=float)
+    tilt_out = np.zeros((1, 3), dtype=float)
+
+    cm.apply_joint_gradient_modifications_array(
+        grad,
+        tilt_in,
+        tilt_out,
+        mesh=mesh,
+        global_params=None,
+    )
+
+    # The third row is the sum of the first two. Rank deficiency must not
+    # disable projection against their two-dimensional row space.
+    assert np.allclose(grad, 0.0, atol=1.0e-12, rtol=0.0)
+    assert np.allclose(tilt_in, 0.0, atol=1.0e-12, rtol=0.0)
+
+
 def test_compute_energy_and_gradient_array_uses_joint_projection_for_stage_a() -> None:
     class RecordingConstraintManager:
         def __init__(self):

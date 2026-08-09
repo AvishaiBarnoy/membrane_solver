@@ -102,14 +102,7 @@ def test_kozlov_free_disk_outer_leaflet_symmetry_improves_with_radius() -> None:
     # opposite-sign mismatch (matches TeX sign convention).
     assert diff_same[-1] <= diff_oppo[-1] + 1e-9, f"outer band metrics: {metrics}"
 
-    # Symmetry should be best in the far field, but absolute mismatches can be
-    # noisy when the signal is tiny. Use a normalized score:
-    #
-    #   score = diff_same / (diff_oppo + eps)
-    #
-    # Smaller is better (same-sign convention matches more closely than
-    # opposite-sign). Require the far-field score to be no worse than the inner
-    # band's score.
-    eps = 1e-12
-    score = [s / (o + eps) for s, o in zip(diff_same, diff_oppo)]
-    assert score[-1] <= score[0] + 0.1, f"annulus metrics: {metrics}, score={score}"
+    # Symmetry should improve in absolute terms with radius.  A ratio against
+    # the opposite-sign mismatch is ill-conditioned once both fields decay to
+    # the numerical floor.
+    assert diff_same[-1] <= diff_same[0], f"annulus metrics: {metrics}"

@@ -64,6 +64,28 @@ def _accumulate_ambient_p1_divergence_shape_gradient(
     np.add.at(grad_arr, rows[:, 0], -(grad_a + grad_b))
 
 
+def _accumulate_triangle_area_shape_gradient(
+    *,
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+    coefficient: np.ndarray,
+    grad_arr: np.ndarray,
+) -> None:
+    """Accumulate ``coefficient * d(triangle_area)/d(positions)``."""
+    rows = np.asarray(tri_rows, dtype=np.int32)
+    if rows.size == 0:
+        return
+    u = positions[rows[:, 1]] - positions[rows[:, 0]]
+    v = positions[rows[:, 2]] - positions[rows[:, 0]]
+    grad_u, grad_v = grad_triangle_area(u, v)
+    factor = np.asarray(coefficient, dtype=float)[:, None]
+    grad_u *= factor
+    grad_v *= factor
+    np.add.at(grad_arr, rows[:, 1], grad_u)
+    np.add.at(grad_arr, rows[:, 2], grad_v)
+    np.add.at(grad_arr, rows[:, 0], -(grad_u + grad_v))
+
+
 def _backpropagate_bending_tilt_shape_gradient(
     mesh: Mesh,
     *,
@@ -73,7 +95,7 @@ def _backpropagate_bending_tilt_shape_gradient(
     weights: np.ndarray,
     tri_keep: np.ndarray,
     is_interior: np.ndarray,
-    fA_eff: np.ndarray,
+    corner_fA_eff: np.ndarray,
     fA_vor: np.ndarray,
     factor_K_vec: np.ndarray,
     grad_arr: np.ndarray,
@@ -201,11 +223,28 @@ def _backpropagate_bending_tilt_shape_gradient(
 
     # --- Area Gradients (Step 2: Propagate area reassignment) ---
 
-    tri_is_int = is_interior[tri_rows]
+    # Match the redistribution contract in ``_compute_effective_areas`` exactly.
+    # The leaflet interior mask may additionally exclude theory/interface groups,
+    # but those rows are not geometric boundary rows and their raw corner areas
+    # are therefore not redistributed.
+    area_is_interior = np.ones(len(mesh.vertex_ids), dtype=bool)
+    boundary_rows = np.fromiter(
+        (
+            mesh.vertex_index_to_row[vid]
+            for vid in (mesh.boundary_vertex_ids or ())
+            if vid in mesh.vertex_index_to_row
+        ),
+        dtype=np.int32,
+    )
+    if boundary_rows.size:
+        area_is_interior[boundary_rows] = False
+    tri_is_int = area_is_interior[tri_rows]
     interior_counts = np.sum(tri_is_int, axis=1)
 
-    tri_fA_eff = fA_eff[tri_rows]
-    sum_fA_eff_int = np.sum(tri_fA_eff * tri_is_int, axis=1)
+    corner_fA_eff = np.asarray(corner_fA_eff, dtype=float)
+    if corner_fA_eff.shape != tri_rows.shape:
+        raise ValueError("corner_fA_eff must have shape (N_triangles, 3)")
+    sum_fA_eff_int = np.sum(corner_fA_eff * tri_is_int, axis=1)
 
     if ctx is not None:
         avg_fA_eff = ctx.scratch_array(
@@ -220,7 +259,7 @@ def _backpropagate_bending_tilt_shape_gradient(
         sum_fA_eff_int[mask_has_int] / interior_counts[mask_has_int]
     )
 
-    C_eff = np.where(tri_is_int, tri_fA_eff, avg_fA_eff[:, None])
+    C_eff = np.where(tri_is_int, corner_fA_eff, avg_fA_eff[:, None])
     tri_fA_vor = fA_vor[tri_rows]
     C = C_eff + tri_fA_vor
 

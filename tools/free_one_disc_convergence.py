@@ -1,0 +1,764 @@
+#!/usr/bin/env python3
+"""Canonical free-one-disc field and convergence validation.
+
+The lane built here has one radial-only trace ring at ``R + epsilon`` and
+otherwise unconstrained refinement rings between the disc and the pre-existing
+outer membrane.  Constructed support shells and height constraints are not
+used.
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import json
+import sys
+import tempfile
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Sequence
+
+import numpy as np
+import yaml
+from scipy.special import i1, k1
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from commands.executor import execute_command_line  # noqa: E402
+from runtime.topology import detect_vertex_edge_collisions  # noqa: E402
+from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import (  # noqa: E402
+    THEORY_THETA_B,
+)
+from tools.reproduce_theory_parity import _build_context  # noqa: E402
+from tools.theory_parity_interface_profiles import (  # noqa: E402
+    build_free_outer_refinement_fixture,
+)
+
+DEFAULT_BASE_FIXTURE = (
+    ROOT / "tests/fixtures/kozlov_1disk_3d_free_disk_theory_parity.yaml"
+)
+DEFAULT_PROTOCOL = ("g10", "t2e-3", "g20")
+QUALITY_MAX_ASPECT_RATIO = 4.0
+QUALITY_MIN_ANGLE_DEGREES = 15.0
+
+
+@dataclass(frozen=True)
+class FreeOneDiscCase:
+    label: str
+    trace_epsilon: float
+    near_spacing: float
+    outer_radius: float
+    refinement_passes: int = 0
+    angular_sectors: int = 12
+
+
+def coupled_angular_sectors(
+    *,
+    trace_radius: float,
+    radial_spacing: float,
+    max_tangential_to_radial: float = 2.0,
+    symmetry_multiple: int = 12,
+) -> int:
+    """Choose angular resolution together with radial resolution.
+
+    The trace-ring chord is bounded by a fixed multiple of the radial spacing.
+    Rounding upward to a symmetry multiple keeps all convergence meshes nested
+    in angle without sacrificing the quality bound.
+    """
+    if trace_radius <= 0.0:
+        raise ValueError("trace_radius must be positive")
+    if radial_spacing <= 0.0:
+        raise ValueError("radial_spacing must be positive")
+    if max_tangential_to_radial <= 0.0:
+        raise ValueError("max_tangential_to_radial must be positive")
+    if int(symmetry_multiple) < 1:
+        raise ValueError("symmetry_multiple must be positive")
+    required = int(
+        np.ceil(
+            2.0
+            * np.pi
+            * float(trace_radius)
+            / (float(max_tangential_to_radial) * float(radial_spacing))
+        )
+    )
+    multiple = int(symmetry_multiple)
+    return max(3, multiple * int(np.ceil(required / multiple)))
+
+
+def mesh_quality_metrics(
+    mesh: Any,
+    *,
+    interface_radius: float,
+    near_width: float,
+    max_aspect_ratio: float = QUALITY_MAX_ASPECT_RATIO,
+    min_angle_degrees: float = QUALITY_MIN_ANGLE_DEGREES,
+) -> dict[str, Any]:
+    """Measure global and outer-interface triangle shape quality."""
+    if near_width <= 0.0:
+        raise ValueError("near_width must be positive")
+    mesh.build_facet_vertex_loops()
+    triangle_rows, _ = mesh.triangle_row_cache()
+    if triangle_rows is None or len(triangle_rows) == 0:
+        raise ValueError("mesh quality requires triangular facets")
+    positions = mesh.positions_view()
+    triangles = positions[np.asarray(triangle_rows, dtype=int)]
+    edge_vectors = np.stack(
+        (
+            triangles[:, 1] - triangles[:, 0],
+            triangles[:, 2] - triangles[:, 1],
+            triangles[:, 0] - triangles[:, 2],
+        ),
+        axis=1,
+    )
+    edge_lengths = np.linalg.norm(edge_vectors, axis=2)
+    doubled_area = np.linalg.norm(
+        np.cross(triangles[:, 1] - triangles[:, 0], triangles[:, 2] - triangles[:, 0]),
+        axis=1,
+    )
+    safe_area = np.maximum(doubled_area, np.finfo(float).tiny)
+    aspect = np.max(edge_lengths, axis=1) ** 2 / safe_area
+    side_sq = edge_lengths**2
+    cosines = np.empty_like(side_sq)
+    cosines[:, 0] = (side_sq[:, 2] + side_sq[:, 0] - side_sq[:, 1]) / (
+        2.0 * edge_lengths[:, 2] * edge_lengths[:, 0]
+    )
+    cosines[:, 1] = (side_sq[:, 0] + side_sq[:, 1] - side_sq[:, 2]) / (
+        2.0 * edge_lengths[:, 0] * edge_lengths[:, 1]
+    )
+    cosines[:, 2] = (side_sq[:, 1] + side_sq[:, 2] - side_sq[:, 0]) / (
+        2.0 * edge_lengths[:, 1] * edge_lengths[:, 2]
+    )
+    angles = np.degrees(np.arccos(np.clip(cosines, -1.0, 1.0)))
+    radii = np.linalg.norm(triangles[:, :, :2], axis=2)
+    near_mask = (np.min(radii, axis=1) > float(interface_radius) + 1.0e-10) & (
+        np.min(radii, axis=1) <= float(interface_radius) + float(near_width)
+    )
+
+    def summarize(mask: np.ndarray) -> dict[str, float | int]:
+        selected_aspect = aspect[mask]
+        selected_angles = angles[mask]
+        selected_edges = edge_lengths[mask]
+        return {
+            "triangle_count": int(np.count_nonzero(mask)),
+            "median_aspect_ratio": float(np.median(selected_aspect)),
+            "maximum_aspect_ratio": float(np.max(selected_aspect)),
+            "minimum_angle_degrees": float(np.min(selected_angles)),
+            "median_minimum_angle_degrees": float(
+                np.median(np.min(selected_angles, axis=1))
+            ),
+            "minimum_edge_length": float(np.min(selected_edges)),
+            "maximum_edge_length": float(np.max(selected_edges)),
+        }
+
+    if not np.any(near_mask):
+        raise ValueError(
+            "mesh has no triangles in the requested interface neighborhood"
+        )
+    near = summarize(near_mask)
+    global_metrics = summarize(np.ones(len(triangles), dtype=bool))
+    valid = near["maximum_aspect_ratio"] <= float(max_aspect_ratio) and near[
+        "minimum_angle_degrees"
+    ] >= float(min_angle_degrees)
+    return {
+        "valid": bool(valid),
+        "thresholds": {
+            "maximum_aspect_ratio": float(max_aspect_ratio),
+            "minimum_angle_degrees": float(min_angle_degrees),
+        },
+        "near_interface": near,
+        "global": global_metrics,
+    }
+
+
+def _vertex_radius(vertex: Sequence[Any]) -> float:
+    return float(np.hypot(float(vertex[0]), float(vertex[1])))
+
+
+def _group_radii(doc: dict[str, Any], group: str) -> list[float]:
+    radii: list[float] = []
+    for vertex in doc.get("vertices", []):
+        if len(vertex) < 4 or not isinstance(vertex[3], dict):
+            continue
+        opts = vertex[3]
+        if (
+            opts.get("rim_slope_match_group") == group
+            or opts.get("pin_to_circle_group") == group
+        ):
+            radii.append(_vertex_radius(vertex))
+    return radii
+
+
+def _rescale_outer_domain(
+    doc: dict[str, Any], *, disk_radius: float, outer_radius: float
+) -> dict[str, Any]:
+    current_outer = max(_vertex_radius(v) for v in doc["vertices"])
+    if outer_radius <= disk_radius:
+        raise ValueError("outer_radius must exceed the disc radius")
+    if np.isclose(current_outer, outer_radius, rtol=0.0, atol=1.0e-12):
+        return doc
+    scale = (float(outer_radius) - disk_radius) / (current_outer - disk_radius)
+    for vertex in doc["vertices"]:
+        radius = _vertex_radius(vertex)
+        if radius <= disk_radius + 1.0e-12:
+            continue
+        target = disk_radius + scale * (radius - disk_radius)
+        factor = target / radius
+        vertex[0] = float(vertex[0]) * factor
+        vertex[1] = float(vertex[1]) * factor
+        if len(vertex) >= 4 and isinstance(vertex[3], dict):
+            opts = vertex[3]
+            if opts.get("pin_to_circle_radius") is not None:
+                opts["pin_to_circle_radius"] = float(target)
+    gp = dict(doc.get("global_parameters") or {})
+    if gp.get("pin_to_circle_radius") is not None:
+        gp["pin_to_circle_radius"] = float(outer_radius)
+    doc["global_parameters"] = gp
+    return doc
+
+
+def shape_regular_free_radii(
+    *,
+    trace_radius: float,
+    first_coarse_radius: float,
+    target_spacing: float,
+) -> list[float]:
+    """Return uniform free-ring radii without a terminal radial sliver."""
+    span = float(first_coarse_radius) - float(trace_radius)
+    if span <= 0.0:
+        raise ValueError("first coarse radius must exceed the trace radius")
+    if target_spacing <= 0.0:
+        raise ValueError("target_spacing must be positive")
+    intervals = max(1, int(np.ceil(span / float(target_spacing))))
+    radii = np.linspace(trace_radius, first_coarse_radius, intervals + 1)
+    return [float(value) for value in radii[1:-1]]
+
+
+def _rotate_axisymmetric_vector(
+    value: Sequence[float], *, source_angle: float, target_angle: float
+) -> list[float]:
+    vector = np.zeros(3, dtype=float)
+    raw = np.asarray(value, dtype=float)
+    vector[: min(3, raw.size)] = raw[:3]
+    source_radial = np.asarray(
+        [np.cos(source_angle), np.sin(source_angle), 0.0], dtype=float
+    )
+    source_azimuthal = np.asarray(
+        [-np.sin(source_angle), np.cos(source_angle), 0.0], dtype=float
+    )
+    target_radial = np.asarray(
+        [np.cos(target_angle), np.sin(target_angle), 0.0], dtype=float
+    )
+    target_azimuthal = np.asarray(
+        [-np.sin(target_angle), np.cos(target_angle), 0.0], dtype=float
+    )
+    rotated = (
+        float(np.dot(vector, source_radial)) * target_radial
+        + float(np.dot(vector, source_azimuthal)) * target_azimuthal
+        + np.asarray([0.0, 0.0, vector[2]], dtype=float)
+    )
+    return rotated.tolist()
+
+
+def resample_axisymmetric_rings(
+    doc: dict[str, Any], *, angular_sectors: int
+) -> dict[str, Any]:
+    """Rebuild a concentric-ring mesh with a uniform angular sector count."""
+    if int(angular_sectors) < 3:
+        raise ValueError("angular_sectors must be at least 3")
+    out = copy.deepcopy(doc)
+    source_vertices = out["vertices"]
+    radii = np.asarray([_vertex_radius(vertex) for vertex in source_vertices])
+    center_ids = np.flatnonzero(radii <= 1.0e-12)
+    if center_ids.size != 1:
+        raise ValueError("axisymmetric resampling requires exactly one center vertex")
+    ring_radii = sorted(
+        {round(float(radius), 10) for radius in radii if radius > 1.0e-12}
+    )
+    if not ring_radii:
+        raise ValueError("axisymmetric resampling requires at least one ring")
+
+    center = copy.deepcopy(source_vertices[int(center_ids[0])])
+    vertices: list[list[Any]] = [center]
+    ring_ids: list[list[int]] = []
+    trace_ring_index: int | None = None
+    n = int(angular_sectors)
+    for radius in ring_radii:
+        source_ids = np.flatnonzero(np.isclose(radii, radius, atol=5.0e-9))
+        if source_ids.size < 3:
+            raise ValueError(f"radius {radius:g} is not a complete circular ring")
+        source_angles = np.mod(
+            np.arctan2(
+                [source_vertices[int(idx)][1] for idx in source_ids],
+                [source_vertices[int(idx)][0] for idx in source_ids],
+            ),
+            2.0 * np.pi,
+        )
+        representative_id = int(source_ids[int(np.argmin(source_angles))])
+        representative = source_vertices[representative_id]
+        representative_opts = (
+            representative[3]
+            if len(representative) > 3 and isinstance(representative[3], dict)
+            else {}
+        )
+        if representative_opts.get("pin_to_circle_group") == "trace_layer":
+            trace_ring_index = len(ring_ids)
+        source_angle = float(
+            np.arctan2(float(representative[1]), float(representative[0]))
+        )
+        z = float(
+            np.median([float(source_vertices[int(idx)][2]) for idx in source_ids])
+        )
+        ids: list[int] = []
+        for sector in range(n):
+            angle = 2.0 * np.pi * float(sector) / float(n)
+            opts = copy.deepcopy(representative_opts)
+            for field in ("tilt_in", "tilt_out"):
+                if field in opts:
+                    opts[field] = _rotate_axisymmetric_vector(
+                        opts[field],
+                        source_angle=source_angle,
+                        target_angle=angle,
+                    )
+            ids.append(len(vertices))
+            vertices.append(
+                [
+                    float(radius * np.cos(angle)),
+                    float(radius * np.sin(angle)),
+                    z,
+                    opts,
+                ]
+            )
+        ring_ids.append(ids)
+    if trace_ring_index is None or trace_ring_index == 0:
+        raise ValueError("axisymmetric resampling requires a tagged trace ring")
+
+    edges: list[list[int]] = []
+    edge_lookup: dict[tuple[int, int], int] = {}
+
+    def edge_token(start: int, end: int) -> int | str:
+        direct = edge_lookup.get((start, end))
+        if direct is not None:
+            return direct
+        reverse = edge_lookup.get((end, start))
+        if reverse is not None:
+            return f"r{reverse}"
+        idx = len(edges)
+        edges.append([start, end])
+        edge_lookup[(start, end)] = idx
+        return idx
+
+    def triangle(a: int, b: int, c: int) -> list[int | str]:
+        return [edge_token(a, b), edge_token(b, c), edge_token(c, a)]
+
+    faces: list[list[int | str]] = []
+    first_ring = ring_ids[0]
+    for sector in range(n):
+        faces.append(triangle(0, first_ring[sector], first_ring[(sector + 1) % n]))
+    for pair_index, (inner, outer) in enumerate(zip(ring_ids[:-1], ring_ids[1:])):
+        if pair_index == trace_ring_index - 1:
+            continue
+        for sector in range(n):
+            next_sector = (sector + 1) % n
+            faces.append(triangle(inner[sector], outer[sector], inner[next_sector]))
+            faces.append(
+                triangle(inner[next_sector], outer[sector], outer[next_sector])
+            )
+
+    out["vertices"] = vertices
+    out["edges"] = edges
+    out["faces"] = faces
+    gp = dict(out.get("global_parameters") or {})
+    gp["free_one_disc_angular_sectors"] = n
+    out["global_parameters"] = gp
+    return out
+
+
+def build_canonical_free_one_disc_fixture(
+    *,
+    base_doc: dict[str, Any],
+    case: FreeOneDiscCase,
+    theta_b: float = THEORY_THETA_B,
+    seed_theory: bool = True,
+) -> dict[str, Any]:
+    """Build a fixed-theta free membrane without constructed support shells."""
+    doc = yaml.safe_load(yaml.safe_dump(base_doc, sort_keys=False))
+    disk_radii = _group_radii(doc, "disk")
+    if not disk_radii:
+        raise ValueError("canonical free lane requires a tagged disc boundary")
+    disk_radius = float(np.median(disk_radii))
+    doc = _rescale_outer_domain(
+        doc, disk_radius=disk_radius, outer_radius=float(case.outer_radius)
+    )
+    outer_definition = dict((doc.get("definitions") or {}).get("outer_rim") or {})
+    outer_definition["constraints"] = [
+        name
+        for name in list(outer_definition.get("constraints") or [])
+        if name != "pin_to_plane"
+    ]
+    outer_definition["pin_to_circle_mode"] = "slide"
+    doc["definitions"]["outer_rim"] = outer_definition
+    for vertex in doc["vertices"]:
+        if len(vertex) < 4 or not isinstance(vertex[3], dict):
+            continue
+        opts = vertex[3]
+        if opts.get("pin_to_circle_group") != "outer":
+            continue
+        opts["constraints"] = [
+            name
+            for name in list(opts.get("constraints") or [])
+            if name != "pin_to_plane"
+        ]
+        opts["pin_to_circle_mode"] = "slide"
+
+    membrane_radii = sorted(
+        {
+            round(_vertex_radius(vertex), 12)
+            for vertex in doc["vertices"]
+            if _vertex_radius(vertex) > disk_radius + 1.0e-10
+        }
+    )
+    if not membrane_radii:
+        raise ValueError("canonical free lane requires an outer membrane")
+    first_coarse_radius = float(membrane_radii[0])
+    trace_radius = disk_radius + float(case.trace_epsilon)
+    free_radii = shape_regular_free_radii(
+        trace_radius=trace_radius,
+        first_coarse_radius=first_coarse_radius,
+        target_spacing=float(case.near_spacing),
+    )
+    doc = build_free_outer_refinement_fixture(
+        base_doc=doc,
+        label=str(case.label),
+        trace_radius=trace_radius,
+        free_radii=free_radii,
+        planar_geometry=False,
+    )
+    gp = dict(doc.get("global_parameters") or {})
+    gp["tilt_thetaB_optimize"] = False
+    gp["tilt_thetaB_value"] = float(theta_b)
+    gp["free_one_disc_validation_lane"] = True
+    gp["free_one_disc_trace_epsilon"] = float(case.trace_epsilon)
+    gp["free_one_disc_near_spacing"] = float(case.near_spacing)
+    gp["free_one_disc_outer_radius"] = float(case.outer_radius)
+    gp["free_one_disc_refinement_passes"] = int(case.refinement_passes)
+    gp["free_one_disc_theory_seeded"] = bool(seed_theory)
+    gp["shape_step_edge_fraction"] = 0.3
+    gp["shape_line_search_max_iter"] = 30
+    gp["line_search_reduced_tilt_max_steps"] = 120
+    doc["global_parameters"] = gp
+    if seed_theory:
+        lam_in = float(
+            np.sqrt(
+                float(gp.get("tilt_modulus_in") or 0.0)
+                / float(gp.get("bending_modulus_in") or 1.0)
+            )
+        )
+        lam_out = float(
+            np.sqrt(
+                float(gp.get("tilt_modulus_out") or 0.0)
+                / float(gp.get("bending_modulus_out") or 1.0)
+            )
+        )
+        half_theta = 0.5 * float(theta_b)
+        for vertex in doc["vertices"]:
+            radius = _vertex_radius(vertex)
+            if len(vertex) < 4 or not isinstance(vertex[3], dict):
+                vertex.append({})
+            opts = vertex[3]
+            radial = np.zeros(3, dtype=float)
+            if radius > 1.0e-12:
+                radial[:2] = np.asarray(vertex[:2], dtype=float) / radius
+            if radius <= disk_radius + 1.0e-10:
+                amplitude = (
+                    float(theta_b) * i1(lam_in * radius) / i1(lam_in * disk_radius)
+                    if radius > 1.0e-12
+                    else 0.0
+                )
+                opts["tilt_in"] = (amplitude * radial).tolist()
+                opts["tilt_out"] = [0.0, 0.0, 0.0]
+            else:
+                amplitude = (
+                    half_theta * k1(lam_out * radius) / k1(lam_out * disk_radius)
+                )
+                opts["tilt_in"] = (amplitude * radial).tolist()
+                opts["tilt_out"] = (amplitude * radial).tolist()
+                vertex[2] = float(
+                    half_theta * disk_radius * np.log(radius / disk_radius)
+                )
+    if int(case.angular_sectors) != 12:
+        doc = resample_axisymmetric_rings(
+            doc, angular_sectors=int(case.angular_sectors)
+        )
+    return doc
+
+
+def _shell_profile(
+    mesh,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    positions = mesh.positions_view()
+    tilts_in = mesh.tilts_in_view()
+    tilts_out = mesh.tilts_out_view()
+    normals = mesh.vertex_normals(positions=positions)
+    radii = np.linalg.norm(positions[:, :2], axis=1)
+    shell_r: list[float] = []
+    shell_z: list[float] = []
+    shell_in: list[float] = []
+    shell_out: list[float] = []
+    shell_leak: list[float] = []
+    for radius in sorted({round(float(value), 10) for value in radii if value > 0.0}):
+        rows = np.flatnonzero(np.isclose(radii, radius, atol=5.0e-9))
+        radial = positions[rows].copy()
+        radial[:, 2] = 0.0
+        radial /= np.linalg.norm(radial, axis=1)[:, None]
+        tangent_radial = (
+            radial
+            - np.einsum("ij,ij->i", radial, normals[rows])[:, None] * normals[rows]
+        )
+        tangent_radial /= np.linalg.norm(tangent_radial, axis=1)[:, None]
+        tin_r = np.einsum("ij,ij->i", tilts_in[rows], tangent_radial)
+        tout_r = np.einsum("ij,ij->i", tilts_out[rows], tangent_radial)
+        tin_leak = tilts_in[rows] - tin_r[:, None] * tangent_radial
+        tout_leak = tilts_out[rows] - tout_r[:, None] * tangent_radial
+        shell_r.append(float(np.median(radii[rows])))
+        shell_z.append(float(np.median(positions[rows, 2])))
+        shell_in.append(float(np.median(tin_r)))
+        shell_out.append(float(np.median(tout_r)))
+        shell_leak.append(
+            float(
+                max(
+                    np.median(np.linalg.norm(tin_leak, axis=1)),
+                    np.median(np.linalg.norm(tout_leak, axis=1)),
+                )
+            )
+        )
+    return tuple(
+        np.asarray(values, dtype=float)
+        for values in (shell_r, shell_z, shell_in, shell_out, shell_leak)
+    )
+
+
+def _error_metrics(actual: np.ndarray, expected: np.ndarray) -> dict[str, float]:
+    residual = np.asarray(actual) - np.asarray(expected)
+    expected_norm = float(np.linalg.norm(expected))
+    scale = float(np.max(np.abs(expected))) if expected.size else 0.0
+    denom = max(expected_norm, 1.0e-30)
+    cosine_denom = float(np.linalg.norm(actual) * np.linalg.norm(expected))
+    cosine = (
+        float(np.dot(actual, expected) / cosine_denom)
+        if cosine_denom > 1.0e-30
+        else float("nan")
+    )
+    return {
+        "relative_l2": float(np.linalg.norm(residual) / denom),
+        "relative_linf": float(np.max(np.abs(residual)) / max(scale, 1.0e-30)),
+        "rmse": float(np.sqrt(np.mean(residual * residual))),
+        "cosine": cosine,
+    }
+
+
+def fixed_theta_field_agreement(mesh, *, theta_b: float) -> dict[str, Any]:
+    """Compare complete axisymmetric fields against the tensionless theory."""
+    gp = mesh.global_parameters
+    disk_radius = float(gp.get("theory_radius") or 0.0)
+    if disk_radius <= 0.0:
+        raise ValueError("theory_radius must be set")
+    trace_radius = float(gp.get("parity_trace_layer_radius") or disk_radius)
+    lam = float(
+        np.sqrt(
+            float(gp.get("tilt_modulus_out") or 0.0)
+            / float(gp.get("bending_modulus_out") or 1.0)
+        )
+    )
+    shell_r, shell_z, shell_in, shell_out, shell_leak = _shell_profile(mesh)
+    outer_mask = shell_r >= trace_radius - 1.0e-9
+    r = shell_r[outer_mask]
+    z = shell_z[outer_mask]
+    tin = shell_in[outer_mask]
+    tout = shell_out[outer_mask]
+    leak = shell_leak[outer_mask]
+
+    # Exclude the fixed far boundary from the continuum profile comparison.
+    if r.size > 2:
+        r, z, tin, tout, leak = r[:-1], z[:-1], tin[:-1], tout[:-1], leak[:-1]
+    phi_r = np.gradient(z, r, edge_order=1)
+    phi_boundary = 0.5 * float(theta_b)
+    expected_phi = phi_boundary * disk_radius / r
+    expected_tilt = phi_boundary * k1(lam * r) / k1(lam * disk_radius)
+    expected_z_shape = phi_boundary * disk_radius * np.log(r / disk_radius)
+    expected_z = expected_z_shape + float(np.mean(z - expected_z_shape))
+
+    inner_mask = (shell_r > 0.0) & (shell_r <= disk_radius + 1.0e-9)
+    r_inner = shell_r[inner_mask]
+    tin_inner = shell_in[inner_mask]
+    expected_inner = float(theta_b) * i1(lam * r_inner) / i1(lam * disk_radius)
+    tilt_scale = max(float(np.max(np.abs(expected_tilt))), 1.0e-30)
+    return {
+        "theta_B": float(theta_b),
+        "lambda": lam,
+        "disk_radius": disk_radius,
+        "trace_radius": trace_radius,
+        "outer_shell_count": int(r.size),
+        "inner_shell_count": int(r_inner.size),
+        "phi": _error_metrics(phi_r, expected_phi),
+        "z": _error_metrics(z, expected_z),
+        "t_in_outer": _error_metrics(tin, expected_tilt),
+        "t_out_outer": _error_metrics(tout, expected_tilt),
+        "t_in_disc": _error_metrics(tin_inner, expected_inner),
+        "vector": {
+            "max_tangential_leak_relative": float(np.max(leak) / tilt_scale),
+            "median_tangential_leak_relative": float(np.median(leak) / tilt_scale),
+        },
+    }
+
+
+def default_convergence_cases(*, outer_radius: float = 12.0) -> list[FreeOneDiscCase]:
+    """Return independent radial, angular, and domain convergence families."""
+    cases = [
+        FreeOneDiscCase("radial_h020", 0.02, 0.02, outer_radius),
+        FreeOneDiscCase("radial_h010", 0.01, 0.01, outer_radius),
+        FreeOneDiscCase("radial_h005", 0.005, 0.005, outer_radius),
+        FreeOneDiscCase("angular_n12", 0.01, 0.01, outer_radius, angular_sectors=12),
+        FreeOneDiscCase("angular_n24", 0.01, 0.01, outer_radius, angular_sectors=24),
+        FreeOneDiscCase("angular_n48", 0.01, 0.01, outer_radius, angular_sectors=48),
+        FreeOneDiscCase("domain_r8", 0.01, 0.01, 8.0),
+        FreeOneDiscCase("domain_r12", 0.01, 0.01, 12.0),
+        FreeOneDiscCase("domain_r16", 0.01, 0.01, 16.0),
+    ]
+    return cases
+
+
+def shape_regular_convergence_cases(
+    *, outer_radius: float = 12.0, disk_radius: float = 7.0 / 15.0
+) -> list[FreeOneDiscCase]:
+    """Return the coupled radial/angular family used for scientific convergence."""
+    cases: list[FreeOneDiscCase] = []
+    for spacing in (0.04, 0.02, 0.01):
+        sectors = coupled_angular_sectors(
+            trace_radius=float(disk_radius) + spacing,
+            radial_spacing=spacing,
+        )
+        cases.append(
+            FreeOneDiscCase(
+                label=f"coupled_h{int(round(1000.0 * spacing)):03d}",
+                trace_epsilon=spacing,
+                near_spacing=spacing,
+                outer_radius=outer_radius,
+                angular_sectors=sectors,
+            )
+        )
+    return cases
+
+
+def run_case(
+    *,
+    base_doc: dict[str, Any],
+    case: FreeOneDiscCase,
+    theta_b: float,
+    protocol: Sequence[str],
+) -> dict[str, Any]:
+    doc = build_canonical_free_one_disc_fixture(
+        base_doc=base_doc, case=case, theta_b=theta_b
+    )
+    with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as stream:
+        yaml.safe_dump(doc, stream, sort_keys=False)
+        path = Path(stream.name)
+    try:
+        context = _build_context(path)
+        for _ in range(int(case.refinement_passes)):
+            execute_command_line(context, "r")
+        interface_radius = float(
+            context.mesh.global_parameters.get("theory_radius") or 0.46
+        )
+        quality_before = mesh_quality_metrics(
+            context.mesh,
+            interface_radius=interface_radius,
+            near_width=max(0.1, 5.0 * float(case.near_spacing)),
+        )
+        initial_collisions = detect_vertex_edge_collisions(
+            context.mesh, threshold=1.0e-3
+        )
+        for command in protocol:
+            execute_command_line(context, str(command))
+        final_collisions = detect_vertex_edge_collisions(context.mesh, threshold=1.0e-3)
+        quality_after = mesh_quality_metrics(
+            context.mesh,
+            interface_radius=interface_radius,
+            near_width=max(0.1, 5.0 * float(case.near_spacing)),
+        )
+        agreement = fixed_theta_field_agreement(context.mesh, theta_b=theta_b)
+        energy = float(context.minimizer.compute_energy())
+        projected_energy, projected_gradient = (
+            context.minimizer.compute_energy_and_gradient_array()
+        )
+        return {
+            "case": asdict(case),
+            "protocol": list(protocol),
+            "energy": energy,
+            "gradient_energy": float(projected_energy),
+            "projected_shape_gradient_norm": float(np.linalg.norm(projected_gradient)),
+            "topology": {
+                "valid": not initial_collisions and not final_collisions,
+                "initial_vertex_edge_collision_count": len(initial_collisions),
+                "final_vertex_edge_collision_count": len(final_collisions),
+            },
+            "mesh_quality": {
+                "valid": bool(quality_before["valid"] and quality_after["valid"]),
+                "initial": quality_before,
+                "final": quality_after,
+            },
+            "scientifically_valid": bool(
+                not initial_collisions
+                and not final_collisions
+                and quality_before["valid"]
+                and quality_after["valid"]
+            ),
+            "agreement": agreement,
+        }
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base", type=Path, default=DEFAULT_BASE_FIXTURE)
+    parser.add_argument("--theta", type=float, default=THEORY_THETA_B)
+    parser.add_argument("--protocol", nargs="*", default=list(DEFAULT_PROTOCOL))
+    parser.add_argument("--out", type=Path)
+    parser.add_argument("--quick", action="store_true")
+    args = parser.parse_args(argv)
+    base_doc = yaml.safe_load(args.base.read_text(encoding="utf-8")) or {}
+    cases = default_convergence_cases() + shape_regular_convergence_cases()
+    if args.quick:
+        cases = [shape_regular_convergence_cases()[0]]
+    report = {
+        "meta": {
+            "base": str(args.base),
+            "theta_B": float(args.theta),
+            "protocol": list(args.protocol),
+            "constructed_support_shells": False,
+            "outer_height_fixed": False,
+            "angular_convergence_status": "independent uniform ring resampling",
+            "scientific_convergence_family": "coupled radial/angular shape regular",
+        },
+        "cases": [
+            run_case(
+                base_doc=base_doc,
+                case=case,
+                theta_b=float(args.theta),
+                protocol=tuple(args.protocol),
+            )
+            for case in cases
+        ],
+    }
+    text = json.dumps(report, indent=2, sort_keys=True)
+    if args.out is None:
+        print(text)
+    else:
+        args.out.write_text(text + "\n", encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

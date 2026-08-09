@@ -12,6 +12,7 @@ from modules.energy.bending_params import (
     _energy_model,
     _spontaneous_curvature,
 )
+from modules.energy.bending_utils import _vertex_normals
 from modules.energy.leaflet_presence import (
     leaflet_absent_vertex_mask,
     leaflet_present_triangle_mask,
@@ -248,8 +249,11 @@ def _leaflet_static_tilt_payload(
         mesh, global_params, model=model, kappa_key=kappa_key, cache_tag=cache_tag
     )
     safe_areas_vor = np.maximum(vertex_areas_vor, 1e-12)
-    k_mag = np.linalg.norm(k_vecs, axis=1)
-    h_vor = k_mag / (2.0 * safe_areas_vor)
+    # The tilt cross-term is linear in J, so unlike pure J² bending it must
+    # retain the orientation of the discrete curvature vector.
+    normals = _vertex_normals(mesh, positions, tri_rows)
+    signed_k = np.einsum("ij,ij->i", k_vecs, normals)
+    h_vor = signed_k / (2.0 * safe_areas_vor)
     is_interior = _interior_mask_leaflet(
         mesh, global_params, cache_tag=cache_tag, index_map=index_map
     )

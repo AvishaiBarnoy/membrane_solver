@@ -17,6 +17,26 @@ def _use_inner_recovered_divergence(global_params, *, cache_tag: str) -> bool:
     return bool(str(global_params.get("theory_parity_lane") or "").strip())
 
 
+def _inner_recovered_divergence_domain_mode(global_params) -> str:
+    """Return how recovered inner divergence treats shared interface vertices."""
+    if global_params is None:
+        return "shared_vertex"
+    mode = (
+        str(
+            global_params.get("inner_recovered_divergence_domain_mode")
+            or "shared_vertex"
+        )
+        .strip()
+        .lower()
+    )
+    if mode not in {"shared_vertex", "physical_disk_one_sided_v1"}:
+        raise ValueError(
+            "inner_recovered_divergence_domain_mode must be 'shared_vertex' "
+            "or 'physical_disk_one_sided_v1'."
+        )
+    return mode
+
+
 def _assume_J0_presets(global_params, *, cache_tag: str) -> tuple[str, ...]:
     """Optional config: presets for which the Helfrich base term is set to zero."""
     if global_params is None:

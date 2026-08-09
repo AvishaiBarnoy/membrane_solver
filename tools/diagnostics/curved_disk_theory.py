@@ -166,6 +166,363 @@ def tex_reference_params() -> CurvedDiskTheoryParams:
     )
 
 
+def evaluate_tensionless_curved_disk_profiles(
+    *,
+    result: CurvedDiskTheoryResult,
+    radii: np.ndarray,
+    z_rim: float = 0.0,
+) -> dict[str, np.ndarray]:
+    """Evaluate the tensionless one-disc minimizing fields at radial samples."""
+    if float(result.params.surface_tension) != 0.0:
+        raise ValueError("This profile evaluator currently requires zero tension.")
+
+    r = np.asarray(radii, dtype=float)
+    if np.any(r < 0.0):
+        raise ValueError("radii must be non-negative")
+    radius = float(result.params.radius)
+    lam = float(result.lambda_value)
+    theta = float(result.theta_star)
+    phi = float(result.phi_star)
+    x_rim = lam * radius
+    i1_rim = float(special.iv(1, x_rim))
+    k1_rim = float(special.kv(1, x_rim))
+    if abs(i1_rim) < 1.0e-18 or abs(k1_rim) < 1.0e-18:
+        raise ValueError("Invalid Bessel normalization at the disc rim.")
+
+    disk = r <= radius
+    outer = r >= radius
+    height = np.full_like(r, float(z_rim))
+    slope = np.zeros_like(r)
+    tilt_disk = np.zeros_like(r)
+    tilt_outer = np.zeros_like(r)
+
+    scaled = lam * r
+    tilt_disk[disk] = (
+        theta * np.asarray(special.iv(1, scaled[disk]), dtype=float) / i1_rim
+    )
+    if np.any(outer):
+        outer_amplitude = (
+            phi * np.asarray(special.kv(1, scaled[outer]), dtype=float) / k1_rim
+        )
+        tilt_outer[outer] = outer_amplitude
+        slope[outer] = phi * radius / r[outer]
+        height[outer] = float(z_rim) + phi * radius * np.log(r[outer] / radius)
+
+    tilt_in = np.where(disk, tilt_disk, tilt_outer)
+    return {
+        "height": height,
+        "slope": slope,
+        "tilt_disk": tilt_disk,
+        "tilt_outer": tilt_outer,
+        "tilt_in": tilt_in,
+        "tilt_out": tilt_outer.copy(),
+    }
+
+
+def _weighted_relative_l2(
+    measured: np.ndarray,
+    reference: np.ndarray,
+    weights: np.ndarray,
+) -> float:
+    """Return a weighted relative L2 error with a stable zero-field fallback."""
+    delta_norm = float(np.sqrt(np.sum(weights * (measured - reference) ** 2)))
+    reference_norm = float(np.sqrt(np.sum(weights * reference**2)))
+    if reference_norm <= 1.0e-15:
+        return delta_norm
+    return delta_norm / reference_norm
+
+
+def compare_tensionless_curved_disk_profiles(
+    *,
+    result: CurvedDiskTheoryResult,
+    radii: np.ndarray,
+    height: np.ndarray,
+    slope: np.ndarray,
+    tilt_in_radial: np.ndarray,
+    tilt_out_radial: np.ndarray,
+    weights: np.ndarray | None = None,
+) -> dict[str, float]:
+    """Compare sampled numerical fields with the full tensionless solution.
+
+    The absolute height is a gauge degree of freedom.  Its best weighted
+    constant offset is therefore removed before evaluating the height error.
+    """
+    r = np.asarray(radii, dtype=float)
+    measured = {
+        "height": np.asarray(height, dtype=float),
+        "slope": np.asarray(slope, dtype=float),
+        "tilt_in": np.asarray(tilt_in_radial, dtype=float),
+        "tilt_out": np.asarray(tilt_out_radial, dtype=float),
+    }
+    if any(values.shape != r.shape for values in measured.values()):
+        raise ValueError("all sampled fields must have the same shape as radii")
+
+    if weights is None:
+        sample_weights = np.ones_like(r)
+    else:
+        sample_weights = np.asarray(weights, dtype=float)
+        if sample_weights.shape != r.shape:
+            raise ValueError("weights must have the same shape as radii")
+        if np.any(sample_weights < 0.0):
+            raise ValueError("weights must be non-negative")
+    weight_sum = float(np.sum(sample_weights))
+    if weight_sum <= 0.0:
+        raise ValueError("weights must have a positive sum")
+
+    reference = evaluate_tensionless_curved_disk_profiles(result=result, radii=r)
+    height_offset = float(
+        np.sum(sample_weights * (measured["height"] - reference["height"])) / weight_sum
+    )
+    height_aligned = measured["height"] - height_offset
+
+    return {
+        "height_gauge_offset": height_offset,
+        "height_rel_l2": _weighted_relative_l2(
+            height_aligned, reference["height"], sample_weights
+        ),
+        "slope_rel_l2": _weighted_relative_l2(
+            measured["slope"], reference["slope"], sample_weights
+        ),
+        "tilt_in_rel_l2": _weighted_relative_l2(
+            measured["tilt_in"], reference["tilt_in"], sample_weights
+        ),
+        "tilt_out_rel_l2": _weighted_relative_l2(
+            measured["tilt_out"], reference["tilt_out"], sample_weights
+        ),
+    }
+
+
+def compare_curved_branch_energy_breakdowns(
+    *,
+    reference: dict[str, float],
+    candidate: dict[str, float],
+) -> dict[str, object]:
+    """Compare matched branch energies module by module.
+
+    Positive deltas mean that ``candidate`` is more expensive than
+    ``reference``. Missing modules are treated as zero so diagnostic reports
+    from slightly different lanes remain comparable.
+    """
+    modules = sorted(set(reference) | set(candidate))
+    deltas = {
+        module: float(candidate.get(module, 0.0) - reference.get(module, 0.0))
+        for module in modules
+    }
+    total_reference = float(sum(reference.values()))
+    total_candidate = float(sum(candidate.values()))
+    dominant_module = (
+        max(modules, key=lambda module: abs(deltas[module])) if modules else ""
+    )
+    return {
+        "reference_total": total_reference,
+        "candidate_total": total_candidate,
+        "total_delta": total_candidate - total_reference,
+        "module_deltas": deltas,
+        "dominant_module": dominant_module,
+        "dominant_delta": float(deltas.get(dominant_module, 0.0)),
+    }
+
+
+def radial_leaflet_bending_tilt_bands(
+    *,
+    mesh,
+    positions: np.ndarray,
+    tilts: np.ndarray,
+    radial_edges: np.ndarray,
+    cache_tag: str,
+) -> dict[str, object]:
+    """Bin one leaflet's bending–tilt energy by triangle-centroid radius."""
+    from modules.energy.bt_diagnostics import _total_energy_leaflet
+
+    edges = np.asarray(radial_edges, dtype=float)
+    if edges.ndim != 1 or edges.size < 2 or np.any(np.diff(edges) <= 0.0):
+        raise ValueError("radial_edges must be a strictly increasing 1D array")
+    if str(cache_tag) not in {"in", "out"}:
+        raise ValueError("cache_tag must be 'in' or 'out'")
+
+    triangle_data = _total_energy_leaflet(
+        mesh,
+        mesh.global_parameters,
+        positions=np.asarray(positions, dtype=float),
+        index_map=mesh.vertex_index_to_row,
+        tilts=np.asarray(tilts, dtype=float),
+        kappa_key=f"bending_modulus_{cache_tag}",
+        cache_tag=str(cache_tag),
+        div_sign=-1.0 if str(cache_tag) == "in" else 1.0,
+        return_triangle_energy=True,
+    )
+    tri_rows, triangle_energy = triangle_data
+    centroids = np.mean(np.asarray(positions, dtype=float)[tri_rows], axis=1)
+    radii = np.linalg.norm(centroids[:, :2], axis=1)
+    band_index = np.searchsorted(edges, radii, side="right") - 1
+
+    bands: list[dict[str, float | int]] = []
+    assigned_total = 0.0
+    for idx in range(edges.size - 1):
+        mask = band_index == idx
+        energy = float(np.sum(triangle_energy[mask]))
+        assigned_total += energy
+        bands.append(
+            {
+                "radius_min": float(edges[idx]),
+                "radius_max": float(edges[idx + 1]),
+                "triangle_count": int(np.sum(mask)),
+                "energy": energy,
+            }
+        )
+    total = float(np.sum(triangle_energy))
+    return {
+        "cache_tag": str(cache_tag),
+        "total_energy": total,
+        "assigned_energy": assigned_total,
+        "unassigned_energy": total - assigned_total,
+        "bands": bands,
+    }
+
+
+def topological_leaflet_bending_tilt_regions(
+    *,
+    mesh,
+    positions: np.ndarray,
+    tilts: np.ndarray,
+    cache_tag: str,
+    disk_group: str = "disk",
+) -> dict[str, object]:
+    """Partition leaflet energy into disk, rim-spanning, and outer triangles."""
+    from modules.energy.bt_diagnostics import _total_energy_leaflet
+
+    if str(cache_tag) not in {"in", "out"}:
+        raise ValueError("cache_tag must be 'in' or 'out'")
+
+    triangle_data = _total_energy_leaflet(
+        mesh,
+        mesh.global_parameters,
+        positions=np.asarray(positions, dtype=float),
+        index_map=mesh.vertex_index_to_row,
+        tilts=np.asarray(tilts, dtype=float),
+        kappa_key=f"bending_modulus_{cache_tag}",
+        cache_tag=str(cache_tag),
+        div_sign=-1.0 if str(cache_tag) == "in" else 1.0,
+        return_triangle_energy=True,
+    )
+    tri_rows, triangle_energy = triangle_data
+    disk_rows = np.array(
+        [
+            str(
+                (getattr(mesh.vertices[int(vid)], "options", {}) or {}).get(
+                    "pin_to_circle_group"
+                )
+                or ""
+            )
+            == str(disk_group)
+            for vid in mesh.vertex_ids
+        ],
+        dtype=bool,
+    )
+    disk_vertex_count = np.sum(disk_rows[tri_rows], axis=1)
+    region_masks = {
+        "disk": disk_vertex_count == 3,
+        "rim_spanning": (disk_vertex_count > 0) & (disk_vertex_count < 3),
+        "outer": disk_vertex_count == 0,
+    }
+    regions = []
+    assigned_total = 0.0
+    for name, mask in region_masks.items():
+        energy = float(np.sum(triangle_energy[mask]))
+        assigned_total += energy
+        regions.append(
+            {
+                "name": name,
+                "triangle_count": int(np.sum(mask)),
+                "energy": energy,
+            }
+        )
+    total = float(np.sum(triangle_energy))
+    return {
+        "cache_tag": str(cache_tag),
+        "disk_group": str(disk_group),
+        "total_energy": total,
+        "assigned_energy": assigned_total,
+        "unassigned_energy": total - assigned_total,
+        "regions": regions,
+    }
+
+
+def axisymmetric_ring_topology_diagnostics(mesh) -> dict[str, object]:
+    """Report radial backtracking in an axisymmetric ring mesh.
+
+    Vertices are grouped by cylindrical radius and the resulting ring graph is
+    traversed outward from the center.  A decreasing radius along that
+    topological path identifies a folded annular band.
+    """
+    mesh.build_position_cache()
+    positions = np.asarray(mesh.positions_view(), dtype=float)
+    radii = np.linalg.norm(positions[:, :2], axis=1)
+    rounded = np.round(radii, 9)
+    unique_radii, ring_index = np.unique(rounded, return_inverse=True)
+    index_map = mesh.vertex_index_to_row
+
+    adjacency: list[set[int]] = [set() for _ in range(unique_radii.size)]
+    for edge in mesh.edges.values():
+        tail_row = index_map.get(int(edge.tail_index))
+        head_row = index_map.get(int(edge.head_index))
+        if tail_row is None or head_row is None:
+            continue
+        tail_ring = int(ring_index[int(tail_row)])
+        head_ring = int(ring_index[int(head_row)])
+        if tail_ring == head_ring:
+            continue
+        adjacency[tail_ring].add(head_ring)
+        adjacency[head_ring].add(tail_ring)
+
+    component_paths: list[list[int]] = []
+    unvisited = set(range(unique_radii.size))
+    while unvisited:
+        start = min(unvisited, key=lambda idx: float(unique_radii[idx]))
+        path = [int(start)]
+        previous: int | None = None
+        current = int(start)
+        while True:
+            candidates = sorted(
+                (adjacency[current] & unvisited)
+                - ({previous} if previous is not None else set())
+            )
+            if len(candidates) != 1:
+                break
+            next_ring = int(candidates[0])
+            if next_ring in path:
+                break
+            path.append(next_ring)
+            previous, current = current, next_ring
+        component_paths.append(path)
+        unvisited.difference_update(path)
+
+    path = [idx for component in component_paths for idx in component]
+    path_radii = np.asarray([unique_radii[idx] for idx in path], dtype=float)
+    inversions = [
+        {
+            "inner_radius": float(unique_radii[component[idx]]),
+            "outer_radius": float(unique_radii[component[idx + 1]]),
+        }
+        for component in component_paths
+        for idx in range(max(0, len(component) - 1))
+        if unique_radii[component[idx + 1]] <= unique_radii[component[idx]]
+    ]
+    return {
+        "ring_count": int(unique_radii.size),
+        "path_ring_count": int(path_radii.size),
+        "path_radii": path_radii.tolist(),
+        "component_count": int(len(component_paths)),
+        "component_path_radii": [
+            [float(unique_radii[idx]) for idx in component]
+            for component in component_paths
+        ],
+        "inversion_count": int(len(inversions)),
+        "inversions": inversions,
+        "is_monotone": bool(path_radii.size == unique_radii.size and not inversions),
+    }
+
+
 if __name__ == "__main__":
     res = compute_curved_disk_theory(tex_reference_params())
     print("Theory Results (Tensionless):")

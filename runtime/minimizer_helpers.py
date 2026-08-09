@@ -86,7 +86,7 @@ def build_reduced_line_search_energy_fn(
     projected_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
     compute_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
     relax_tilts_fn: Callable[..., None],
-    relax_leaflet_tilts_fn: Callable[..., None],
+    relax_leaflet_tilts_fn: Callable[..., Any],
     set_leaflet_tilts_fast_fn: Callable[[np.ndarray, np.ndarray], None],
     logger_obj: logging.Logger,
 ) -> Callable[[], float]:
@@ -119,7 +119,7 @@ def build_reduced_line_search_trial_energy_fn(
     projected_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
     compute_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
     relax_tilts_fn: Callable[..., None],
-    relax_leaflet_tilts_fn: Callable[..., None],
+    relax_leaflet_tilts_fn: Callable[..., Any],
     set_leaflet_tilts_fast_fn: Callable[[np.ndarray, np.ndarray], None],
     logger_obj: logging.Logger,
 ) -> Callable[[np.ndarray], float] | None:
@@ -152,7 +152,7 @@ def _build_reduced_line_search_callbacks(
     projected_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
     compute_energy_at_positions_fn: Callable[[np.ndarray], float] | None = None,
     relax_tilts_fn: Callable[..., None],
-    relax_leaflet_tilts_fn: Callable[..., None],
+    relax_leaflet_tilts_fn: Callable[..., Any],
     set_leaflet_tilts_fast_fn: Callable[[np.ndarray, np.ndarray], None],
     logger_obj: logging.Logger,
 ) -> tuple[Callable[[], float], Callable[[np.ndarray], float] | None]:
@@ -187,7 +187,15 @@ def _build_reduced_line_search_callbacks(
         if "tilts" in snapshot:
             mesh.set_tilts_from_array(snapshot["tilts"])
 
+    canonical_trial_tilts: dict[str, np.ndarray] | None = None
+
     def _evaluate(positions: np.ndarray | None) -> float:
+        nonlocal canonical_trial_tilts
+        if positions is not None:
+            if canonical_trial_tilts is None:
+                canonical_trial_tilts = _capture_tilt_state()
+            else:
+                _restore_tilt_state(canonical_trial_tilts)
         tilt_mode = str(gp.get("tilt_solve_mode", "fixed") or "fixed")
         mode_norm = tilt_mode.strip().lower()
         if positions is None:
@@ -229,7 +237,28 @@ def _build_reduced_line_search_callbacks(
                     pre_e = float(raw_eval())
 
                 if uses_leaflet_tilts:
-                    relax_leaflet_tilts_fn(positions=positions_arg, mode=tilt_mode)
+                    max_steps = int(
+                        gp.get("line_search_reduced_tilt_max_steps", reduced_steps)
+                        or reduced_steps
+                    )
+                    used_steps = 0
+                    while used_steps < max_steps:
+                        batch_steps = min(reduced_steps, max_steps - used_steps)
+                        gp.set("tilt_inner_steps", batch_steps)
+                        gp.set("tilt_coupled_steps", batch_steps)
+                        gp.set("tilt_cg_max_iters", batch_steps)
+                        stats = relax_leaflet_tilts_fn(
+                            positions=positions_arg, mode=tilt_mode
+                        )
+                        used_steps += batch_steps
+                        if not isinstance(stats, dict):
+                            break
+                        tolerance = float(gp.get("tilt_tol", 0.0) or 0.0)
+                        final_norm = float(
+                            stats.get("final_gradient_norm", np.inf) or 0.0
+                        )
+                        if tolerance > 0.0 and final_norm <= tolerance:
+                            break
                 else:
                     relax_tilts_fn(positions=positions_arg, mode=tilt_mode)
 

@@ -18,6 +18,7 @@ from modules.energy.bending_utils import (
 
 from .bt_divergence import (
     _inner_recovered_divergence,
+    _inner_recovery_triangle_domains,
 )
 from .bt_params import (
     _use_inner_recovered_divergence,
@@ -41,7 +42,8 @@ def _total_energy_leaflet(
     kappa_key: str,
     cache_tag: str,
     div_sign: float,
-) -> float:
+    return_triangle_energy: bool = False,
+) -> float | tuple[np.ndarray, np.ndarray]:
     """Energy-only helper for finite-difference debugging."""
     payload = _leaflet_triangle_payload(
         mesh,
@@ -56,6 +58,8 @@ def _total_energy_leaflet(
     tri_rows = np.asarray(payload["tri_rows"], dtype=np.int32)
     tri_area = payload.get("tri_area")
     if tri_rows.size == 0:
+        if return_triangle_energy:
+            return tri_rows.reshape(0, 3), np.empty(0, dtype=float)
         return 0.0
 
     transport_model = _resolve_transport_model(
@@ -100,7 +104,16 @@ def _total_energy_leaflet(
     if use_recovered_div:
         if tri_area is None:
             tri_area = mesh.p1_triangle_shape_gradient_cache(positions)[0]
+            tri_keep = np.asarray(payload["tri_keep"], dtype=bool)
+            if tri_keep.size:
+                tri_area = tri_area[tri_keep]
         tri_area = np.asarray(tri_area, dtype=float)
+        triangle_domains = _inner_recovery_triangle_domains(
+            mesh,
+            global_params,
+            cache_tag=cache_tag,
+            tri_rows=tri_rows,
+        )
         div_eval_tri, _, _ = _inner_recovered_divergence(
             global_params=global_params,
             cache_tag=cache_tag,
@@ -108,6 +121,7 @@ def _total_energy_leaflet(
             tri_area=tri_area,
             div_tri=div_term,
             n_vertices=len(mesh.vertex_ids),
+            triangle_domains=triangle_domains,
             scratch_tag=f"btl_{cache_tag}",
         )
     else:
@@ -137,7 +151,10 @@ def _total_energy_leaflet(
     va_eff = np.stack([va0_eff, va1_eff, va2_eff], axis=1)
     kappa_tri = np.asarray(static_payload["kappa_tri"], dtype=float)
 
-    return float(0.5 * np.sum(kappa_tri * term_tri**2 * va_eff))
+    triangle_energy = 0.5 * np.sum(kappa_tri * term_tri**2 * va_eff, axis=1)
+    if return_triangle_energy:
+        return tri_rows, np.asarray(triangle_energy, dtype=float)
+    return float(np.sum(triangle_energy))
 
 
 def _finite_difference_gradient_shape_leaflet(

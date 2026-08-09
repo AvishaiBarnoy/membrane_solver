@@ -91,4 +91,4 @@ def test_kozlov_named_mesh_has_active_outer_relaxation_channels(
     theta_out = np.einsum("ij,ij->i", mesh.tilts_out_view(), r_hat)
     diff_same = float(np.median(np.abs(theta_in[mask] - theta_out[mask])))
     diff_oppo = float(np.median(np.abs(theta_in[mask] + theta_out[mask])))
-    assert diff_oppo <= diff_same + 1.0e-9
+    assert diff_same <= diff_oppo + 1.0e-9

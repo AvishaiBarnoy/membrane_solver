@@ -15,9 +15,9 @@ INTERFACE_PROFILES: dict[str, tuple[float, float] | None] = {
     "i60": (0.76, 2.6),
     "tight": (0.6, 0.8),
     "near_edge_v1": (0.76, 2.6),
-    "default_lo": (0.776, 2.68),
-    "default": (0.772, 2.66),
-    "default_hi": (0.771, 2.655),
+    "default_lo": (0.776, 5.1),
+    "default": (0.772, 5.0),
+    "default_hi": (0.771, 4.9),
     "physical_edge_family_lo": (0.78, 2.7),
     "physical_edge_primary_v1": (0.76, 2.6),
     "physical_edge_family_hi": (0.758, 2.6),
@@ -37,6 +37,35 @@ def _scale_ring(
         scale = float(target_radius) / radius
         vertex[0] = x * scale
         vertex[1] = y * scale
+
+
+def _remap_radial_interval(
+    vertices: list[list[Any]],
+    *,
+    source_inner: float,
+    source_outer: float,
+    target_inner: float,
+    target_outer: float,
+) -> None:
+    """Monotonically remap all rings between two radial endpoints."""
+    source_span = float(source_outer) - float(source_inner)
+    target_span = float(target_outer) - float(target_inner)
+    if source_span <= 0.0 or target_span <= 0.0:
+        raise ValueError("radial remap endpoints must be strictly increasing")
+
+    for vertex in vertices:
+        radius = _vertex_radius(vertex)
+        if radius < float(source_inner) - 1.0e-9:
+            continue
+        if radius > float(source_outer) + 1.0e-9:
+            continue
+        if radius <= 0.0:
+            continue
+        fraction = (radius - float(source_inner)) / source_span
+        target_radius = float(target_inner) + fraction * target_span
+        scale = target_radius / radius
+        vertex[0] = float(vertex[0]) * scale
+        vertex[1] = float(vertex[1]) * scale
 
 
 def _vertex_radius(vertex: list[Any]) -> float:
@@ -228,12 +257,17 @@ def build_scaled_fixture(
     label: str,
     inner_radius: float,
     outer_radius: float,
-    base_term_reference_mode: str = "flat_reference_zero_J0",
+    base_term_reference_mode: str = "current_geometry",
 ) -> dict[str, Any]:
     """Return a fixture copy with the interface rings moved inward."""
     doc = copy.deepcopy(base_doc)
-    _scale_ring(doc["vertices"], SOURCE_INNER_RADIUS, float(inner_radius))
-    _scale_ring(doc["vertices"], SOURCE_OUTER_RADIUS, float(outer_radius))
+    _remap_radial_interval(
+        doc["vertices"],
+        source_inner=SOURCE_INNER_RADIUS,
+        source_outer=SOURCE_OUTER_RADIUS,
+        target_inner=float(inner_radius),
+        target_outer=float(outer_radius),
+    )
     gp = dict(doc.get("global_parameters") or {})
     gp["theory_parity_lane"] = str(label)
     gp["bending_tilt_base_term_reference_mode"] = str(base_term_reference_mode)
@@ -246,7 +280,7 @@ def build_profiled_fixture(
     base_doc: dict[str, Any],
     profile: str,
     lane: str | None = None,
-    base_term_reference_mode: str = "flat_reference_zero_J0",
+    base_term_reference_mode: str = "current_geometry",
 ) -> dict[str, Any]:
     """Return a fixture copy for one named near-edge interface profile."""
     key = str(profile).strip()
@@ -304,6 +338,43 @@ def build_full_physics_trace_fixture(
     return doc
 
 
+def build_curved_profile_fixture(
+    *,
+    base_doc: dict[str, Any],
+    lane: str,
+    trace_radius: float,
+) -> dict[str, Any]:
+    """Return a tensionless curved-profile lane with compatible boundaries."""
+    doc = build_full_physics_trace_fixture(
+        base_doc=base_doc,
+        lane=str(lane),
+        trace_radius=float(trace_radius),
+        planar_geometry=False,
+    )
+    disk_ring = _find_group_vertex_ids(doc["vertices"], "disk")
+    if not disk_ring:
+        raise ValueError("curved-profile fixture requires a tagged disk boundary")
+
+    gp = dict(doc.get("global_parameters") or {})
+    gp["rim_slope_match_mode"] = "physical_edge_staggered_v1"
+    gp["rim_slope_match_scaffold_projector_mode"] = "continuity_v2"
+    gp["bending_tilt_base_term_boundary_group_out"] = "disk"
+    gp["parity_outer_shells"] = 0
+    gp["parity_outer_shells_d"] = 0.0
+    gp["theory_radius"] = float(_vertex_radius(doc["vertices"][int(disk_ring[0])]))
+    doc["global_parameters"] = gp
+
+    outer_definition = dict((doc.get("definitions") or {}).get("outer_rim") or {})
+    outer_definition["constraints"] = [
+        constraint
+        for constraint in list(outer_definition.get("constraints") or [])
+        if constraint != "pin_to_plane"
+    ]
+    outer_definition["pin_to_circle_mode"] = "slide"
+    doc["definitions"]["outer_rim"] = outer_definition
+    return doc
+
+
 def build_trace_ring_fixture(
     *,
     base_doc: dict[str, Any],
@@ -320,6 +391,50 @@ def build_trace_ring_fixture(
         outer_shells_d=0.0,
         planar_geometry=planar_geometry,
     )
+
+
+def build_free_outer_refinement_fixture(
+    *,
+    base_doc: dict[str, Any],
+    label: str,
+    trace_radius: float,
+    free_radii: list[float],
+    planar_geometry: bool = False,
+) -> dict[str, Any]:
+    """Insert unconstrained membrane rings between the trace and coarse mesh."""
+    doc = _build_outer_shell_scaffold_fixture_with_radii(
+        base_doc=base_doc,
+        label=label,
+        trace_radius=float(trace_radius),
+        support_radii=[float(radius) for radius in free_radii],
+        release_ring_radius=None,
+        planar_geometry=planar_geometry,
+        outer_shells=len(free_radii),
+        outer_shells_d=0.0,
+        scaffold_mode="free_refinement",
+        free_inserted_rings=True,
+    )
+    gp = dict(doc.get("global_parameters") or {})
+    gp["bending_tilt_base_term_reference_mode"] = "current_geometry"
+    gp["rim_slope_match_mode"] = "physical_edge_staggered_v1"
+    gp["rim_slope_match_scaffold_projector_mode"] = "continuity_v2"
+    gp["bending_tilt_base_term_boundary_group_out"] = "disk"
+    gp["parity_outer_shells"] = 0
+    gp["parity_outer_shells_d"] = 0.0
+    disk_ring = _find_group_vertex_ids(doc["vertices"], "disk")
+    if not disk_ring:
+        raise ValueError("free outer refinement requires a tagged disk boundary")
+    gp["theory_radius"] = float(_vertex_radius(doc["vertices"][int(disk_ring[0])]))
+    doc["global_parameters"] = gp
+    outer_definition = dict((doc.get("definitions") or {}).get("outer_rim") or {})
+    outer_definition["constraints"] = [
+        constraint
+        for constraint in list(outer_definition.get("constraints") or [])
+        if constraint != "pin_to_plane"
+    ]
+    outer_definition["pin_to_circle_mode"] = "slide"
+    doc["definitions"]["outer_rim"] = outer_definition
+    return doc
 
 
 def build_outer_shell_scaffold_fixture(
@@ -403,6 +518,7 @@ def _build_outer_shell_scaffold_fixture_with_radii(
     outer_shells: int,
     outer_shells_d: float,
     scaffold_mode: str,
+    free_inserted_rings: bool = False,
 ) -> dict[str, Any]:
     """Return a fixture copy with explicit trace/support/release ring radii."""
     doc = copy.deepcopy(base_doc)
@@ -424,7 +540,11 @@ def _build_outer_shell_scaffold_fixture_with_radii(
         raise ValueError("trace_radius must lie strictly between R and the current rim")
     if int(outer_shells) < 0:
         raise ValueError("outer_shells must be >= 0")
-    if int(outer_shells) > 0 and float(outer_shells_d) <= 0.0:
+    if (
+        int(outer_shells) > 0
+        and float(outer_shells_d) <= 0.0
+        and not free_inserted_rings
+    ):
         raise ValueError("outer_shells_d must be > 0 when outer_shells > 0")
     support_radii = [float(radius) for radius in support_radii]
     if any(radius <= float(trace_radius) for radius in support_radii):
@@ -452,6 +572,7 @@ def _build_outer_shell_scaffold_fixture_with_radii(
         out["pin_to_circle_radius"] = float(trace_radius)
         out["pin_to_circle_normal"] = [0.0, 0.0, 1.0]
         out["pin_to_circle_point"] = [0.0, 0.0, 0.0]
+        out["pin_to_circle_mode"] = "slide"
         if planar_geometry:
             if "pin_to_plane" not in constraints:
                 constraints.append("pin_to_plane")
@@ -469,6 +590,26 @@ def _build_outer_shell_scaffold_fixture_with_radii(
         out = dict(opts)
         out.pop("rim_slope_match_group", None)
         out.pop("preset", None)
+        if free_inserted_rings:
+            out.pop("outer_shell_scaffold_index", None)
+            out["outer_shell_free_index"] = int(idx)
+            constraints = [
+                c
+                for c in list(out.get("constraints") or [])
+                if c not in {"pin_to_circle", "pin_to_plane"}
+            ]
+            if constraints:
+                out["constraints"] = constraints
+            else:
+                out.pop("constraints", None)
+            for key in (
+                "pin_to_circle_group",
+                "pin_to_circle_radius",
+                "pin_to_circle_normal",
+                "pin_to_circle_point",
+            ):
+                out.pop(key, None)
+            return out
         out["outer_shell_scaffold_index"] = int(idx)
         constraints = list(out.get("constraints") or [])
         constraints = [c for c in constraints if c != "pin_to_plane"]
@@ -479,6 +620,7 @@ def _build_outer_shell_scaffold_fixture_with_radii(
         out["pin_to_circle_radius"] = float(radius)
         out["pin_to_circle_normal"] = [0.0, 0.0, 1.0]
         out["pin_to_circle_point"] = [0.0, 0.0, 0.0]
+        out["pin_to_circle_mode"] = "slide"
         return out
 
     def _release_ring_options(opts: dict[str, Any]) -> dict[str, Any]:
@@ -559,12 +701,13 @@ def _build_outer_shell_scaffold_fixture_with_radii(
     new_edges: list[list[int]] = []
     for ring_ids in ring_id_groups[1:-1]:
         new_edges.extend(_ring_cycle_edges(ring_ids))
-    for inner_ids, outer_ids in zip(ring_id_groups[:-1], ring_id_groups[1:]):
+    physical_ring_pairs = list(zip(ring_id_groups[:-1], ring_id_groups[1:]))[1:]
+    for inner_ids, outer_ids in physical_ring_pairs:
         new_edges.extend(_annulus_edges(inner_ids, outer_ids))
     edge_lookup = _append_edges(edges, new_edges)
 
     scaffold_faces: list[list[int | str]] = []
-    for inner_ids, outer_ids in zip(ring_id_groups[:-1], ring_id_groups[1:]):
+    for inner_ids, outer_ids in physical_ring_pairs:
         scaffold_faces.extend(
             _annulus_faces(
                 inner_ids=inner_ids, outer_ids=outer_ids, edge_lookup=edge_lookup
@@ -584,7 +727,7 @@ def _build_outer_shell_scaffold_fixture_with_radii(
 
     gp = dict(doc.get("global_parameters") or {})
     gp["theory_parity_lane"] = str(label)
-    gp["bending_tilt_base_term_reference_mode"] = "flat_reference_zero_J0"
+    gp["bending_tilt_base_term_reference_mode"] = "current_geometry"
     gp["parity_trace_layer_radius"] = float(trace_radius)
     gp["parity_outer_shells"] = int(outer_shells)
     gp["parity_outer_shells_d"] = float(outer_shells_d)
@@ -599,6 +742,8 @@ __all__ = [
     "INTERFACE_PROFILES",
     "SOURCE_INNER_RADIUS",
     "SOURCE_OUTER_RADIUS",
+    "build_curved_profile_fixture",
+    "build_free_outer_refinement_fixture",
     "build_full_physics_trace_fixture",
     "build_gap_filled_outer_shell_scaffold_fixture",
     "build_outer_shell_scaffold_fixture",

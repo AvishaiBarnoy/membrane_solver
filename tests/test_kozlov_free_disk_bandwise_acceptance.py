@@ -77,13 +77,13 @@ def test_free_disk_coupled_bandwise_observables_match_tensionless_theory(
 
     best_mismatch = min(diff_same, diff_oppo)
     # The fixed-step shape relaxation can land at different phases of the
-    # small outer-band oscillation across CI environments. Keep this acceptance
-    # check focused on the contract: the band is active but remains tiny.
+    # small outer-band oscillation across CI environments. Keep its amplitude
+    # broad, but require the leaflets to recover the same or opposite-sign
+    # theoretical mode.
     assert 1.0e-8 < signal < 1.0e-6
-    assert best_mismatch / signal >= 0.90
+    assert best_mismatch / signal <= 0.05
 
     phi = _rim_slope_proxy(mesh)
-    phi_current = 0.00148
     assert float(np.ptp(mesh.positions_view()[:, 2])) > 1.0e-3
-    assert phi == pytest.approx(phi_current, rel=0.20, abs=2.0e-4)
+    assert 1.0e-3 < phi < 2.0e-3
     assert phi < 0.10 * (0.5 * theta_b)

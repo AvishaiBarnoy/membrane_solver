@@ -104,31 +104,31 @@ def test_full_coupling_trace_fixture_reports_lane_and_reference_mode() -> None:
     assert report["metrics"]["reference_mode"] == "current_geometry"
 
 
-def test_full_coupling_keeps_existing_default_lane_unchanged() -> None:
+def test_full_coupling_keeps_post_core_fix_default_lane_baseline() -> None:
     report = _run_report(DEFAULT_FIXTURE)
-    assert float(report["metrics"]["thetaB_value"]) == pytest.approx(0.18, abs=1.0e-9)
+    assert float(report["metrics"]["thetaB_value"]) == pytest.approx(0.19, abs=1.0e-9)
     assert float(report["metrics"]["tex_benchmark"]["ratios"]["total_ratio"]) == (
-        pytest.approx(1.0063565852776968, abs=1.0e-6)
+        pytest.approx(1.022573939797887, abs=1.0e-6)
     )
     assert report["metrics"]["model_intent"] == "analytical_parity"
     assert report["metrics"]["reference_mode"] == "flat_reference_zero_j0"
 
 
-def test_full_coupling_outer_shell_base_term_is_nonzero() -> None:
+def test_full_coupling_flat_outer_shell_has_zero_oriented_base_term() -> None:
     summary = _base_term_summary_for_fixture(FULL_COUPLING_FIXTURE, "full_coupling")
     out = summary["leaflets"]["out"]
     assert out["available"] is True
-    assert float(out["base_energy"]) > 1.0e-6
+    assert float(out["base_energy"]) == pytest.approx(0.0, abs=1.0e-14)
     assert out["config"]["base_term_reference_mode"] == "current_geometry"
 
 
-def test_full_coupling_trace_outer_shell_base_term_is_nonzero() -> None:
+def test_full_coupling_trace_flat_outer_shell_has_zero_oriented_base_term() -> None:
     summary = _base_term_summary_for_fixture(
         FULL_COUPLING_TRACE_FIXTURE, "full_coupling_trace"
     )
     out = summary["leaflets"]["out"]
     assert out["available"] is True
-    assert float(out["base_energy"]) > 1.0e-6
+    assert float(out["base_energy"]) == pytest.approx(0.0, abs=1.0e-14)
     assert out["config"]["base_term_reference_mode"] == "current_geometry"
 
 

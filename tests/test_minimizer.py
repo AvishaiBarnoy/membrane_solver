@@ -469,6 +469,7 @@ def test_minimize_converges_when_grad_norm_below_tol():
     out = minim.minimize(n_steps=5)
     assert out["terminated_early"] is True
     assert out["iterations"] == 1
+    assert cm.calls == ["mesh_operation", "finalize"]
 
 
 def test_minimize_terminates_after_max_zero_steps():

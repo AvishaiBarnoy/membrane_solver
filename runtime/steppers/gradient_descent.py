@@ -42,6 +42,12 @@ class GradientDescent(BaseStepper):
         trial_energy_fn: Callable[[np.ndarray], float] | None = None,
     ) -> tuple[bool, float, float]:
         """Apply one gradient descent step with backtracking line search."""
+        max_iter = int(
+            getattr(mesh, "global_parameters", {}).get(
+                "shape_line_search_max_iter", self.max_iter
+            )
+            or self.max_iter
+        )
 
         if isinstance(grad, np.ndarray):
             direction = -grad
@@ -53,7 +59,7 @@ class GradientDescent(BaseStepper):
                 step_size,
                 energy_fn,
                 mesh.vertex_ids,
-                max_iter=self.max_iter,
+                max_iter=max_iter,
                 beta=self.beta,
                 c=self.c,
                 gamma=self.gamma,
@@ -69,7 +75,7 @@ class GradientDescent(BaseStepper):
             grad,
             step_size,
             energy_fn,
-            max_iter=self.max_iter,
+            max_iter=max_iter,
             beta=self.beta,
             c=self.c,
             gamma=self.gamma,

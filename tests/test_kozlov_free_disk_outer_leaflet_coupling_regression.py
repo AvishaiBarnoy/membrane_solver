@@ -59,6 +59,13 @@ def test_kozlov_free_disk_outer_leaflet_tilt_becomes_nontrivial() -> None:
     )
 
     minim.minimize(n_steps=3)
+    # The minimizer's loop relaxes tilts before each shape update.  Perform one
+    # fixed-shape relaxation so this test measures the outer response to the
+    # final curved geometry rather than the pre-update tilt state.
+    minim._relax_leaflet_tilts(  # noqa: SLF001 - intentional regression probe
+        positions=mesh.positions_view(),
+        mode="coupled",
+    )
 
     mask = _outer_band_mask(mesh, r_min=1.5, r_max=10.5)
     assert int(np.sum(mask)) > 0

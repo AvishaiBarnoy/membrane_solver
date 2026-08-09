@@ -129,6 +129,101 @@ def _safe_ratio(num: float, den: float) -> float:
     return float(float(num) / max(float(den), 1e-18))
 
 
+def _analytic_radial_amplitude(
+    *,
+    radii: np.ndarray,
+    theta: float,
+    radius: float,
+    lambda_value: float,
+) -> np.ndarray:
+    from scipy import special
+
+    r = np.asarray(radii, dtype=float)
+    x = float(radius) / max(float(lambda_value), 1e-18)
+    i1_x = float(special.iv(1, x))
+    k1_x = float(special.kv(1, x))
+    if abs(i1_x) < 1e-18 or abs(k1_x) < 1e-18:
+        raise ValueError("Invalid KH normalization for analytic radial field.")
+
+    scaled_r = np.clip(r / max(float(lambda_value), 1e-18), 0.0, None)
+    amplitude = np.zeros_like(scaled_r)
+    inner = r <= float(radius)
+    amplitude[inner] = (
+        float(theta) * np.asarray(special.iv(1, scaled_r[inner]), dtype=float) / i1_x
+    )
+    amplitude[~inner] = (
+        float(theta) * np.asarray(special.kv(1, scaled_r[~inner]), dtype=float) / k1_x
+    )
+    return amplitude
+
+
+def _field_profile_errors(
+    *,
+    positions: np.ndarray,
+    tri_rows: np.ndarray,
+    tri_area: np.ndarray,
+    tilts: np.ndarray,
+    theta: float,
+    radius: float,
+    lambda_value: float,
+) -> dict[str, dict[str, float | int]]:
+    from tools.diagnostics.flat_disk_kh_term_audit import _radial_frames
+
+    r, r_hat, phi_hat = _radial_frames(positions)
+    expected = _analytic_radial_amplitude(
+        radii=r,
+        theta=float(theta),
+        radius=float(radius),
+        lambda_value=float(lambda_value),
+    )
+    actual_radial = np.einsum("ij,ij->i", tilts, r_hat)
+    actual_azimuthal = np.einsum("ij,ij->i", tilts, phi_hat)
+
+    dual = np.zeros(positions.shape[0], dtype=float)
+    share = np.asarray(tri_area, dtype=float) / 3.0
+    np.add.at(dual, tri_rows[:, 0], share)
+    np.add.at(dual, tri_rows[:, 1], share)
+    np.add.at(dual, tri_rows[:, 2], share)
+
+    lam = float(lambda_value)
+    rad = float(radius)
+    masks = {
+        "disk_core": r < max(0.0, rad - lam),
+        "rim_band": np.abs(r - rad) <= lam,
+        "outer_near": (r > rad + lam) & (r <= rad + 4.0 * lam),
+        "outer_tail": (r > rad + 4.0 * lam) & (r <= rad + 8.0 * lam),
+    }
+    out: dict[str, dict[str, float | int]] = {}
+    theta_scale = max(abs(float(theta)), 1e-18)
+    for name, mask in masks.items():
+        mask = np.asarray(mask, dtype=bool)
+        if not np.any(mask):
+            raise ValueError(f"Empty profile-error band: {name}")
+        weights = dual[mask]
+        expected_band = expected[mask]
+        radial_error = actual_radial[mask] - expected_band
+        azimuthal = actual_azimuthal[mask]
+        expected_norm_sq = float(np.sum(weights * expected_band**2))
+        out[name] = {
+            "vertex_count": int(np.count_nonzero(mask)),
+            "radial_relative_l2": float(
+                np.sqrt(
+                    float(np.sum(weights * radial_error**2))
+                    / max(expected_norm_sq, 1e-30)
+                )
+            ),
+            "azimuthal_relative_l2": float(
+                np.sqrt(
+                    float(np.sum(weights * azimuthal**2)) / max(expected_norm_sq, 1e-30)
+                )
+            ),
+            "radial_abs_max_over_theta": float(
+                np.max(np.abs(radial_error)) / theta_scale
+            ),
+        }
+    return out
+
+
 def _section_energy_summary(
     *, mesh_bands: dict[str, float], theory_bands: dict[str, float]
 ) -> dict[str, dict[str, float]]:
@@ -168,28 +263,16 @@ def _frozen_analytic_tilts(
     radius: float,
     lambda_value: float,
 ) -> np.ndarray:
-    from scipy import special
-
     from tools.diagnostics.flat_disk_kh_term_audit import _radial_frames
 
     r, r_hat, _ = _radial_frames(positions)
-    x = float(radius) / max(float(lambda_value), 1e-18)
-    i1_x = float(special.iv(1, x))
-    k1_x = float(special.kv(1, x))
-    if abs(i1_x) < 1e-18 or abs(k1_x) < 1e-18:
-        raise ValueError("Invalid KH normalization for frozen analytic field.")
-
-    rin = np.clip(r / max(float(lambda_value), 1e-18), 0.0, None)
-    amp = np.zeros_like(rin)
-    inner = r <= float(radius)
-    outer = ~inner
-    amp[inner] = (
-        float(theta) * np.asarray(special.iv(1, rin[inner]), dtype=float) / i1_x
+    amplitude = _analytic_radial_amplitude(
+        radii=r,
+        theta=float(theta),
+        radius=float(radius),
+        lambda_value=float(lambda_value),
     )
-    amp[outer] = (
-        float(theta) * np.asarray(special.kv(1, rin[outer]), dtype=float) / k1_x
-    )
-    return r_hat * amp[:, None]
+    return r_hat * amplitude[:, None]
 
 
 def run_flat_disk_kh_outer_vertex_audit(
@@ -198,6 +281,9 @@ def run_flat_disk_kh_outer_vertex_audit(
     optimize_preset: str = "kh_strict_outerfield_tight",
     theta: float = 0.138,
     include_frozen_analytic: bool = False,
+    relax_max_repeats: int = 5,
+    relax_energy_abs_tol: float = 1.0e-8,
+    refine_level: int | None = None,
 ) -> dict[str, Any]:
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
@@ -228,6 +314,8 @@ def run_flat_disk_kh_outer_vertex_audit(
         raise FileNotFoundError(f"Fixture not found: {fixture_path}")
 
     controls = _resolve_controls(optimize_preset)
+    if refine_level is not None:
+        controls["refine_level"] = int(refine_level)
     params = physical_to_dimensionless_theory_params(
         kappa_physical=10.0,
         kappa_t_physical=10.0,
@@ -276,17 +364,41 @@ def run_flat_disk_kh_outer_vertex_audit(
         smoothness_model="splay_twist",
         splay_modulus_scale_in=1.0,
         tilt_mass_mode_in="consistent",
+        tilt_solver="cg",
+        tilt_post_relax_inner_steps=40,
+        tilt_post_relax_step_size=0.005,
+        tilt_post_relax_passes=1,
     )
     minim = _build_minimizer(mesh)
     minim.enforce_constraints_after_mesh_ops(mesh)
     mesh.project_tilts_to_tangent()
-    total_energy = float(
-        _run_theta_relaxation(
-            minim,
-            theta_value=float(theta),
-            reset_outer=True,
+    max_repeats = int(relax_max_repeats)
+    if max_repeats < 1:
+        raise ValueError("relax_max_repeats must be >= 1")
+    energy_tol = float(relax_energy_abs_tol)
+    if energy_tol < 0.0:
+        raise ValueError("relax_energy_abs_tol must be >= 0")
+    total_energy = float("nan")
+    previous_energy = None
+    repeats_applied = 0
+    relax_converged = False
+    for repeat in range(max_repeats):
+        total_energy = float(
+            _run_theta_relaxation(
+                minim,
+                theta_value=float(theta),
+                reset_outer=repeat == 0,
+                reset_inner=repeat == 0,
+            )
         )
-    )
+        repeats_applied += 1
+        if (
+            previous_energy is not None
+            and abs(total_energy - previous_energy) <= energy_tol
+        ):
+            relax_converged = True
+            break
+        previous_energy = total_energy
 
     positions = mesh.positions_view()
     tri_area, _, _, _, tri_rows = mesh.p1_triangle_shape_gradient_cache(
@@ -357,6 +469,17 @@ def run_flat_disk_kh_outer_vertex_audit(
     bands_by_field: dict[str, list[dict[str, float | int | str]]] = {
         "solved": solved_bands
     }
+    profile_error_by_field = {
+        "solved": _field_profile_errors(
+            positions=positions,
+            tri_rows=tri_rows_i,
+            tri_area=tri_area_f,
+            tilts=solved_tilts,
+            theta=float(theta),
+            radius=radius,
+            lambda_value=lam,
+        )
+    }
 
     _, r_hat, _ = _radial_frames(positions)
     t_rad = np.einsum("ij,ij->i", solved_tilts, r_hat)
@@ -385,6 +508,15 @@ def run_flat_disk_kh_outer_vertex_audit(
         tri_rows=tri_rows_i,
         tri_area=tri_area_f,
         tilts=mesh.tilts_in_view(),
+        radius=radius,
+        lambda_value=lam,
+    )
+    profile_error_by_field["radial_only"] = _field_profile_errors(
+        positions=positions,
+        tri_rows=tri_rows_i,
+        tri_area=tri_area_f,
+        tilts=mesh.tilts_in_view(),
+        theta=float(theta),
         radius=radius,
         lambda_value=lam,
     )
@@ -425,6 +557,15 @@ def run_flat_disk_kh_outer_vertex_audit(
             radius=radius,
             lambda_value=lam,
         )
+        profile_error_by_field["frozen_analytic"] = _field_profile_errors(
+            positions=positions,
+            tri_rows=tri_rows_i,
+            tri_area=tri_area_f,
+            tilts=mesh.tilts_in_view(),
+            theta=float(theta),
+            radius=radius,
+            lambda_value=lam,
+        )
 
     mesh.set_tilts_in_from_array(solved_tilts)
     mesh.project_tilts_to_tangent()
@@ -436,6 +577,10 @@ def run_flat_disk_kh_outer_vertex_audit(
             "optimize_preset": str(optimize_preset),
             "theta": float(theta),
             "include_frozen_analytic": bool(include_frozen_analytic),
+            "relax_max_repeats": max_repeats,
+            "relax_energy_abs_tol": energy_tol,
+            "relax_repeats_applied": repeats_applied,
+            "relax_converged": relax_converged,
             "continuum_field_model": "vector_field_radial_amplitude",
             "combined_reference_profile": "I1_inside_K1_outside",
             "smoothness_only_reference_profile": "r_over_R_inside_R_over_r_outside",
@@ -454,6 +599,7 @@ def run_flat_disk_kh_outer_vertex_audit(
         },
         "bands": solved_bands,
         "bands_by_field": bands_by_field,
+        "profile_error_by_field": profile_error_by_field,
         "section_energy_by_field": section_energy_by_field,
         "section_energy_by_field_finite_outer_reference": (
             section_energy_by_field_finite_outer_reference
@@ -467,6 +613,9 @@ def main() -> int:
     ap.add_argument("--optimize-preset", default="kh_strict_outerfield_tight")
     ap.add_argument("--theta", type=float, default=0.138)
     ap.add_argument("--include-frozen-analytic", action="store_true")
+    ap.add_argument("--relax-max-repeats", type=int, default=5)
+    ap.add_argument("--relax-energy-abs-tol", type=float, default=1.0e-8)
+    ap.add_argument("--refine-level", type=int)
     ap.add_argument("--output", default=str(DEFAULT_OUT))
     args = ap.parse_args()
 
@@ -475,6 +624,9 @@ def main() -> int:
         optimize_preset=args.optimize_preset,
         theta=args.theta,
         include_frozen_analytic=bool(args.include_frozen_analytic),
+        relax_max_repeats=int(args.relax_max_repeats),
+        relax_energy_abs_tol=float(args.relax_energy_abs_tol),
+        refine_level=args.refine_level,
     )
     out = Path(args.output)
     if not out.is_absolute():

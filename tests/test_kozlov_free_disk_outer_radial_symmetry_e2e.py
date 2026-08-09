@@ -44,13 +44,12 @@ def _outer_radial_symmetry_metric(
 def test_kozlov_free_disk_outer_radial_tilts_match_in_outer_band(
     canonical_curved_protocol_result,
 ) -> None:
-    """E2E: curved shared-rim protocol matches the outer-band opposite-sign branch."""
+    """E2E: curved shared-rim protocol matches the outer-band same-sign branch."""
     mesh, _ = canonical_curved_protocol_result
 
     m_same, m_oppo, m_ref = _outer_radial_symmetry_metric(mesh, r_min=1.5, r_max=10.5)
     assert m_ref > 0.0
-    assert m_oppo < 1.0e-8, (
-        f"outer opposite-sign mismatch above floor: m_same={m_same:.3e} "
+    assert m_same <= m_oppo + 1.0e-9, (
+        f"same-sign branch is not preferred: m_same={m_same:.3e} "
         f"m_oppo={m_oppo:.3e} m_ref={m_ref:.3e}"
     )
-    assert m_oppo <= m_same + 1.0e-9

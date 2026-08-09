@@ -29,10 +29,13 @@ from .bt_diagnostics import (
 from .bt_divergence import (
     _inner_bending_tilt_dE_ddiv,
     _inner_recovered_divergence,
+    _inner_recovered_divergence_area_pullback,
     _inner_recovered_divergence_pullback,
+    _inner_recovery_triangle_domains,
 )
 from .bt_gradient import (
     _accumulate_ambient_p1_divergence_shape_gradient,
+    _accumulate_triangle_area_shape_gradient,
     _backpropagate_bending_tilt_shape_gradient,
 )
 from .bt_params import (
@@ -312,18 +315,28 @@ def compute_energy_and_gradient_array_leaflet(
         if tri_area is None:
             tri_area = mesh.p1_triangle_shape_gradient_cache(positions)[0]
         tri_area = np.asarray(tri_area, dtype=float)
-        div_eval_tri, _, div_eval_vertex_area = _inner_recovered_divergence(
-            global_params=global_params,
+        recovery_triangle_domains = _inner_recovery_triangle_domains(
+            mesh,
+            global_params,
             cache_tag=cache_tag,
             tri_rows=tri_rows,
-            tri_area=tri_area,
-            div_tri=div_term,
-            n_vertices=len(mesh.vertex_ids),
-            ctx=ctx,
-            scratch_tag=f"btl_{cache_tag}",
+        )
+        div_eval_tri, div_eval_vertex_div, div_eval_vertex_area = (
+            _inner_recovered_divergence(
+                global_params=global_params,
+                cache_tag=cache_tag,
+                tri_rows=tri_rows,
+                tri_area=tri_area,
+                div_tri=div_term,
+                n_vertices=len(mesh.vertex_ids),
+                triangle_domains=recovery_triangle_domains,
+                ctx=ctx,
+                scratch_tag=f"btl_{cache_tag}",
+            )
         )
     else:
         div_eval_tri = div_term
+        div_eval_vertex_div = None
         div_eval_vertex_area = None
     reconstruction_stats = None
     if not use_recovered_div:
@@ -408,6 +421,7 @@ def compute_energy_and_gradient_array_leaflet(
                     tri_area=tri_area,
                     coeff_div_eval=float(div_sign) * dE_ddiv_base,
                     v_area=div_eval_vertex_area,
+                    triangle_domains=recovery_triangle_domains,
                     ctx=ctx,
                     scratch_tag=f"btl_{cache_tag}",
                 )
@@ -437,13 +451,15 @@ def compute_energy_and_gradient_array_leaflet(
         mesh, global_params, model=model, kappa_key=kappa_key, cache_tag=cache_tag
     )
 
-    k_mag = np.linalg.norm(k_vecs, axis=1)
-    H_vor = k_mag / (2.0 * safe_areas_vor)
+    # The J·div(t) cross-term requires oriented curvature.  Using |K| is
+    # equivalent only for J² and becomes non-differentiable as J crosses zero.
+    normals = _vertex_normals(mesh, positions, tri_rows)
+    signed_k = np.einsum("ij,ij->i", k_vecs, normals)
+    H_vor = signed_k / (2.0 * safe_areas_vor)
 
     is_interior = _interior_mask_leaflet(
         mesh, global_params, cache_tag=cache_tag, index_map=index_map
     )
-
     base_term = (2.0 * H_vor) - c0_arr
     if (
         _base_term_reference_mode(global_params, cache_tag=cache_tag)
@@ -548,16 +564,14 @@ def compute_energy_and_gradient_array_leaflet(
     )
 
     mode = _gradient_mode(global_params)
-    normals = _vertex_normals(mesh, positions, tri_rows)
     if ctx is not None:
         K_dir = ctx.scratch_array(
             f"btl_{cache_tag}_K_dir", shape=k_vecs.shape, dtype=k_vecs.dtype
         )
     else:
         K_dir = np.zeros_like(k_vecs)
-    mask_k = k_mag > 1e-15
-    K_dir[mask_k] = k_vecs[mask_k] / k_mag[mask_k][:, None]
-    K_dir[~mask_k] = normals[~mask_k]
+    # d(K·n)/dK = n; the K·dn contribution vanishes because K is normal.
+    K_dir[:] = normals
 
     flat_reference = (
         _base_term_reference_mode(global_params, cache_tag=cache_tag)
@@ -590,10 +604,10 @@ def compute_energy_and_gradient_array_leaflet(
     }
 
     if suppress_shape_cross:
-        fA_eff = 0.5 * kappa_arr * (base_term**2 + div_eff**2)
+        corner_fA_eff = 0.5 * kappa_tri * (base_tri**2 + div_eval_tri[:, None] ** 2)
         fA_vor = -2.0 * kappa_arr * base_term * ratio * H_vor
     else:
-        fA_eff = 0.5 * kappa_arr * term**2
+        corner_fA_eff = 0.5 * kappa_tri * term_tri**2
         fA_vor = -2.0 * kappa_arr * term * ratio * H_vor
     if flat_reference:
         fA_vor = np.zeros_like(fA_vor)
@@ -607,6 +621,7 @@ def compute_energy_and_gradient_array_leaflet(
             scaffold_shape_before = grad_arr[scaffold_shape_trace_rows].copy()
 
     dE_ddiv = None
+    dE_drecovery_area = None
     if tilt_grad_arr is not None or (
         mode == "analytic" and transport_model == "ambient_v1"
     ):
@@ -624,6 +639,18 @@ def compute_energy_and_gradient_array_leaflet(
         if str(cache_tag) == "in":
             setattr(mesh, "_last_bending_tilt_in_update_mode_stats", mode_stats)
         if use_recovered_div:
+            dE_drecovery_area = _inner_recovered_divergence_area_pullback(
+                global_params=global_params,
+                cache_tag=cache_tag,
+                tri_rows=tri_rows,
+                div_tri=div_term,
+                coeff_div_eval=dE_ddiv_base,
+                v_div=div_eval_vertex_div,
+                v_area=div_eval_vertex_area,
+                triangle_domains=recovery_triangle_domains,
+                ctx=ctx,
+                scratch_tag=f"btl_{cache_tag}",
+            )
             dE_ddiv = _inner_recovered_divergence_pullback(
                 global_params=global_params,
                 cache_tag=cache_tag,
@@ -631,6 +658,7 @@ def compute_energy_and_gradient_array_leaflet(
                 tri_area=tri_area,
                 coeff_div_eval=float(div_sign) * dE_ddiv_base,
                 v_area=div_eval_vertex_area,
+                triangle_domains=recovery_triangle_domains,
                 ctx=ctx,
                 scratch_tag=f"btl_{cache_tag}",
             )
@@ -661,7 +689,7 @@ def compute_energy_and_gradient_array_leaflet(
             weights=weights,
             tri_keep=tri_keep,
             is_interior=is_interior,
-            fA_eff=fA_eff,
+            corner_fA_eff=corner_fA_eff,
             fA_vor=fA_vor,
             factor_K_vec=factor_K_vec,
             grad_arr=grad_arr,
@@ -676,6 +704,13 @@ def compute_energy_and_gradient_array_leaflet(
                 tilts=tilts,
                 tri_rows=tri_rows,
                 coefficient=dE_ddiv,
+                grad_arr=grad_arr,
+            )
+        if dE_drecovery_area is not None:
+            _accumulate_triangle_area_shape_gradient(
+                positions=positions,
+                tri_rows=tri_rows,
+                coefficient=dE_drecovery_area,
                 grad_arr=grad_arr,
             )
 

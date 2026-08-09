@@ -198,7 +198,11 @@ def _boundary_directions(
 
     tagged_pts = positions[rows]
     normal = _resolve_normal(global_params, tagged_pts)
-    if str(group) == "disk":
+    has_explicit_trace = (
+        global_params is not None
+        and global_params.get("parity_trace_layer_radius") is not None
+    )
+    if str(group) == "disk" and not has_explicit_trace:
         rows = _augment_disk_ring_rows_geometrically(
             rows,
             positions=positions,
