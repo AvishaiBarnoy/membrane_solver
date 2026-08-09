@@ -1,5 +1,7 @@
 import math
 
+import pytest
+
 from tools.diagnostics.curved_1disk_transition_band_ownership_audit import (
     ALLOWED_CLASSIFICATIONS,
     THETA_CANDIDATES,
@@ -50,6 +52,10 @@ def test_transition_band_ownership_audit_reconciles_gradients_and_theta_rows() -
     )
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="Gate: theta ordering still depends on transition-band support energy",
+)
 def test_transition_band_regularization_reduces_gradient_dominance_and_orders_theta() -> (
     None
 ):

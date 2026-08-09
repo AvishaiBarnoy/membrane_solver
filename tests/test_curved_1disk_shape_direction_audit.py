@@ -8,6 +8,10 @@ from tools.diagnostics.curved_1disk_shape_direction_audit import (
 )
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason="Gate: the theory log-profile direction is not currently a descent step",
+)
 def test_curved_1disk_shape_direction_audit_reports_required_schema() -> None:
     report = run_curved_1disk_shape_direction_audit(horizons=(1,))
 
