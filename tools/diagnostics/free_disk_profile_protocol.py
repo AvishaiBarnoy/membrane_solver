@@ -578,10 +578,19 @@ def _physical_rim_and_first_shell_radius(mesh) -> tuple[float, float]:
     # physical shared rim. Use the outer edge of that tagged band so the first
     # selected shell is truly outside the rim.
     rim_radius = float(np.max(r[np.asarray(rim_rows, dtype=int)]))
-    shell_radii = np.unique(np.round(r[r > rim_radius + 1.0e-3], 3))
-    if shell_radii.size == 0:
+    tri_rows, _weights = mesh.triangle_row_cache()
+    rim_mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    rim_mask[np.asarray(rim_rows, dtype=int)] = True
+    incident = np.any(rim_mask[np.asarray(tri_rows, dtype=int)], axis=1)
+    candidate_rows = np.unique(np.asarray(tri_rows, dtype=int)[incident])
+    candidate_radii = r[candidate_rows]
+    candidate_radii = candidate_radii[candidate_radii > rim_radius + 1.0e-3]
+    if candidate_radii.size == 0:
         raise AssertionError("No free shell found outside the rim")
-    return rim_radius, float(shell_radii[0])
+    # Refinement puts circumferential edge midpoints slightly inside their
+    # parent radial ring. They are not a distinct radial support shell; retain
+    # the outer radius represented by the parent-ring vertices.
+    return rim_radius, float(np.max(candidate_radii))
 
 
 def activate_local_outer_shell(mesh, *, z_bump: float = 1.5e-4) -> float:
@@ -725,26 +734,25 @@ def measure_free_disk_curved_bilayer_near_rim(
     theta_in = np.einsum("ij,ij->i", mesh.tilts_in_view(), r_hat)
     theta_out = np.einsum("ij,ij->i", mesh.tilts_out_view(), r_hat)
 
-    free_radii = sorted(
-        {
-            round(float(rr), 6)
-            for rr in r
-            if rr > float(rim_radius) + 1.0e-6 and rr < 12.0 - 1.0e-6
-        }
-    )
-    if not free_radii:
-        raise AssertionError("No free ring found outside the physical disk edge")
-    ring_r = float(free_radii[0])
-
     disk_rows = np.where(np.isclose(r, float(rim_radius), atol=1.0e-6))[0]
-    outer_rows = np.where(np.isclose(r, ring_r, atol=1.0e-6))[0]
+    outer_rows = np.asarray(
+        [
+            row
+            for row, vid in enumerate(mesh.vertex_ids)
+            if (getattr(mesh.vertices[int(vid)], "options", None) or {}).get(
+                "rim_slope_match_group"
+            )
+            == "outer"
+        ],
+        dtype=int,
+    )
+    if outer_rows.size == 0:
+        raise AssertionError("No activated outer slope ring found")
+    ring_r = float(np.median(r[outer_rows]))
     if disk_rows.size == 0:
         raise AssertionError(
             f"No rows found near the physical disk edge r={rim_radius}"
         )
-    if outer_rows.size == 0:
-        raise AssertionError(f"No rows found near the first free ring r={ring_r}")
-
     disk_z = float(np.median(positions[disk_rows, 2]))
     outer_z = float(np.median(positions[outer_rows, 2]))
     dr = float(np.median(r[outer_rows]) - np.median(r[disk_rows]))
