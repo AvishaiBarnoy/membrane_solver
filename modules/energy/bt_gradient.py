@@ -93,6 +93,7 @@ def _backpropagate_bending_tilt_shape_gradient(
     tri_rows: np.ndarray,
     tri_rows_full: np.ndarray,
     weights: np.ndarray,
+    weights_full: np.ndarray,
     tri_keep: np.ndarray,
     is_interior: np.ndarray,
     corner_fA_eff: np.ndarray,
@@ -142,14 +143,19 @@ def _backpropagate_bending_tilt_shape_gradient(
     e0, e1, e2 = v2 - v1, v0 - v2, v1 - v0
     c0, c1, c2 = weights[:, 0], weights[:, 1], weights[:, 2]
 
+    # Curvature vectors and their Voronoi areas are computed on the complete
+    # mesh. Their pullback must therefore use that same triangle operator even
+    # when leaflet energy integration excludes interface triangles.
+    k_rows = np.asarray(tri_rows_full, dtype=np.int32)
+    k_weights = np.asarray(weights_full, dtype=float)
+    k0, k1, k2 = k_rows[:, 0], k_rows[:, 1], k_rows[:, 2]
+    kv0, kv1, kv2 = positions[k0], positions[k1], positions[k2]
+
     cached = _cached_cotan_gradients(
         mesh,
         positions=positions,
-        tri_rows=tri_rows_full if tri_keep.size else tri_rows,
+        tri_rows=k_rows,
     )
-    if cached is not None and tri_keep.size:
-        cached = tuple(arr[tri_keep] for arr in cached)
-
     # Term 1: Variation assuming cotans constant (L constant)
     transition_operator_stats = {
         "enabled": False,
@@ -171,13 +177,13 @@ def _backpropagate_bending_tilt_shape_gradient(
         )
         grad_linear = -grad_linear_raw
     else:
-        grad_linear = -_apply_beltrami_laplacian(weights, tri_rows, factor_K_vec)
+        grad_linear = -_apply_beltrami_laplacian(k_weights, k_rows, factor_K_vec)
 
     # Term 2: Variation of L (cotangents)
     fK = factor_K_vec
-    dE_dc0 = -0.5 * np.einsum("ij,ij->i", fK[v1_idxs] - fK[v2_idxs], v1 - v2)
-    dE_dc1 = -0.5 * np.einsum("ij,ij->i", fK[v2_idxs] - fK[v0_idxs], v2 - v0)
-    dE_dc2 = -0.5 * np.einsum("ij,ij->i", fK[v0_idxs] - fK[v1_idxs], v0 - v1)
+    dE_dc0 = -0.5 * np.einsum("ij,ij->i", fK[k1] - fK[k2], kv1 - kv2)
+    dE_dc1 = -0.5 * np.einsum("ij,ij->i", fK[k2] - fK[k0], kv2 - kv0)
+    dE_dc2 = -0.5 * np.einsum("ij,ij->i", fK[k0] - fK[k1], kv0 - kv1)
 
     if cached is not None:
         (
@@ -195,11 +201,11 @@ def _backpropagate_bending_tilt_shape_gradient(
             gc2v,
         ) = cached
     else:
-        u0, v0_vec = v1 - v0, v2 - v0
+        u0, v0_vec = kv1 - kv0, kv2 - kv0
         g_c0_u, g_c0_v = _grad_cotan(u0, v0_vec)
-        u1, v1_vec = v2 - v1, v0 - v1
+        u1, v1_vec = kv2 - kv1, kv0 - kv1
         g_c1_u, g_c1_v = _grad_cotan(u1, v1_vec)
-        u2, v2_vec = v0 - v2, v1 - v2
+        u2, v2_vec = kv0 - kv2, kv1 - kv2
         g_c2_u, g_c2_v = _grad_cotan(u2, v2_vec)
 
     if ctx is not None:
@@ -211,18 +217,40 @@ def _backpropagate_bending_tilt_shape_gradient(
     else:
         grad_cot = np.zeros_like(positions)
     val0, val1, val2 = dE_dc0[:, None], dE_dc1[:, None], dE_dc2[:, None]
-    np.add.at(grad_cot, v1_idxs, val0 * g_c0_u)
-    np.add.at(grad_cot, v2_idxs, val0 * g_c0_v)
-    np.add.at(grad_cot, v0_idxs, val0 * -(g_c0_u + g_c0_v))
-    np.add.at(grad_cot, v2_idxs, val1 * g_c1_u)
-    np.add.at(grad_cot, v0_idxs, val1 * g_c1_v)
-    np.add.at(grad_cot, v1_idxs, val1 * -(g_c1_u + g_c1_v))
-    np.add.at(grad_cot, v0_idxs, val2 * g_c2_u)
-    np.add.at(grad_cot, v1_idxs, val2 * g_c2_v)
-    np.add.at(grad_cot, v2_idxs, val2 * -(g_c2_u + g_c2_v))
+    np.add.at(grad_cot, k1, val0 * g_c0_u)
+    np.add.at(grad_cot, k2, val0 * g_c0_v)
+    np.add.at(grad_cot, k0, val0 * -(g_c0_u + g_c0_v))
+    np.add.at(grad_cot, k2, val1 * g_c1_u)
+    np.add.at(grad_cot, k0, val1 * g_c1_v)
+    np.add.at(grad_cot, k1, val1 * -(g_c1_u + g_c1_v))
+    np.add.at(grad_cot, k0, val2 * g_c2_u)
+    np.add.at(grad_cot, k1, val2 * g_c2_v)
+    np.add.at(grad_cot, k2, val2 * -(g_c2_u + g_c2_v))
 
     # --- Area Gradients (Step 2: Propagate area reassignment) ---
 
+    cached = _cached_cotan_gradients(
+        mesh,
+        positions=positions,
+        tri_rows=tri_rows,
+    )
+    if cached is not None and tri_keep.size and cached[0].shape[0] == tri_keep.shape[0]:
+        cached = tuple(arr[tri_keep] for arr in cached)
+    if cached is not None:
+        (
+            _area_g_c0_u,
+            _area_g_c0_v,
+            _area_g_c1_u,
+            _area_g_c1_v,
+            _area_g_c2_u,
+            _area_g_c2_v,
+            gc0u,
+            gc0v,
+            gc1u,
+            gc1v,
+            gc2u,
+            gc2v,
+        ) = cached
     # Match the redistribution contract in ``_compute_effective_areas`` exactly.
     # The leaflet interior mask may additionally exclude theory/interface groups,
     # but those rows are not geometric boundary rows and their raw corner areas

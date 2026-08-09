@@ -1,11 +1,54 @@
 import math
 
+import numpy as np
 import pytest
 
 from tools.diagnostics.curved_1disk_shape_direction_audit import (
     ALLOWED_CLASSIFICATIONS,
+    _direction_catalog,
+    _prepare_minimizer,
     run_curved_1disk_shape_direction_audit,
 )
+from tools.diagnostics.curved_1disk_trumpet_descent_audit import _apply_z_mode
+from tools.diagnostics.utils import capture_state, restore_state
+
+
+def test_curved_1disk_leaflet_shape_gradients_match_log_direction() -> None:
+    minim = _prepare_minimizer(0.1845693593)
+    mesh = minim.mesh
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    minim._sync_evaluation_manager()
+    evaluator = minim._evaluation_manager
+
+    _energy, full_gradient = minim.compute_energy_and_gradient_array()
+    direction = _direction_catalog(mesh, full_gradient[:, 2])["outer_log_trumpet"]
+    state = capture_state(mesh)
+    epsilon = 1.0e-6
+
+    for name in ("bending_tilt_in", "bending_tilt_out"):
+        module = minim.energy_modules[minim.energy_module_names.index(name)]
+        gradient = np.zeros_like(positions)
+        evaluator._call_module_array(
+            module, positions=positions, index_map=index_map, grad_arr=gradient
+        )
+        energies = []
+        for sign in (1.0, -1.0):
+            restore_state(mesh, *state)
+            _apply_z_mode(mesh, direction, sign * epsilon)
+            energies.append(
+                evaluator._call_module_array(
+                    module,
+                    positions=mesh.positions_view(),
+                    index_map=index_map,
+                    grad_arr=None,
+                )
+            )
+        analytic = float(np.dot(gradient[:, 2], direction))
+        central = float((energies[0] - energies[1]) / (2.0 * epsilon))
+        assert analytic == pytest.approx(central, rel=0.02, abs=2.0e-3)
+
+    restore_state(mesh, *state)
 
 
 def test_curved_1disk_shape_direction_audit_reports_required_schema() -> None:
