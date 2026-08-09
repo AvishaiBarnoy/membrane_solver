@@ -25,9 +25,7 @@ def test_free_disk_two_stage_protocol_produces_fittable_radial_profiles(
     assert curvature_fit is not None
     assert height_fit is not None
 
-    # Fixed-step line-search trajectories differ slightly across BLAS/platform
-    # implementations; retain function-level K1 agreement within two percent.
-    assert float(outer_fit["rel_rmse"]) < 0.02
+    assert float(outer_fit["rel_rmse"]) < 0.01
     assert float(curvature_fit["rel_rmse"]) < 0.02
     assert float(height_fit["rel_rmse"]) < 0.30
 

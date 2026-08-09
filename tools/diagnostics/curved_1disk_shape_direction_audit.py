@@ -193,7 +193,10 @@ def _probe_direction(
     mesh = minim.mesh
     state = capture_state(mesh)
     _apply_z_mode(mesh, direction, float(epsilon))
-    minim._enforce_constraints()
+    # Catalog directions are restricted to free outer-height rows and are
+    # already feasible. Re-enforcing all constraints here also advances the
+    # non-idempotent staggered leaflet boundary projection, contaminating the
+    # directional energy delta with an unrelated tilt-state change.
     if relax_tilts:
         minim._relax_leaflet_tilts(
             positions=mesh.positions_view(),

@@ -56,7 +56,7 @@ def _refine_once(mesh, *, steps: int = REFINE_STEPS):
 
 
 def _shell_profile(mesh) -> list[dict[str, float]]:
-    """Return ring-median profile rows keyed by rounded radius."""
+    """Return ring-median profiles grouped by circumferential connectivity."""
     from tools.diagnostics.utils import positions_radii
 
     positions = mesh.positions_view()
@@ -73,11 +73,55 @@ def _shell_profile(mesh) -> list[dict[str, float]]:
     fields = compute_curvature_fields(mesh, positions, mesh.vertex_index_to_row)
     mean_curvature = fields.mean_curvature
 
-    rows: list[dict[str, float]] = []
-    for radius_key in sorted({round(float(r), 6) for r in radii if r > 1.0e-12}):
-        mask = np.isclose(radii, float(radius_key), atol=1.0e-6)
-        if not np.any(mask):
+    tri_rows, _weights = mesh.triangle_row_cache()
+    edges = np.unique(
+        np.sort(
+            np.vstack(
+                (
+                    tri_rows[:, (0, 1)],
+                    tri_rows[:, (1, 2)],
+                    tri_rows[:, (2, 0)],
+                )
+            ),
+            axis=1,
+        ),
+        axis=0,
+    )
+    parent = np.arange(len(mesh.vertex_ids), dtype=int)
+
+    def find(row: int) -> int:
+        while parent[row] != row:
+            parent[row] = parent[parent[row]]
+            row = int(parent[row])
+        return row
+
+    for row_a, row_b in edges:
+        midpoint = positions[int(row_a), :2] + positions[int(row_b), :2]
+        midpoint_norm = float(np.linalg.norm(midpoint))
+        if midpoint_norm <= 1.0e-12:
             continue
+        radial = midpoint / midpoint_norm
+        edge = positions[int(row_b), :2] - positions[int(row_a), :2]
+        radial_step = abs(float(np.dot(edge, radial)))
+        tangential_step = abs(float(edge[0] * radial[1] - edge[1] * radial[0]))
+        if tangential_step < 2.0 * radial_step:
+            continue
+        root_a = find(int(row_a))
+        root_b = find(int(row_b))
+        if root_a != root_b:
+            parent[root_b] = root_a
+
+    groups: dict[int, list[int]] = {}
+    for row, radius in enumerate(radii):
+        if float(radius) > 1.0e-12:
+            groups.setdefault(find(row), []).append(row)
+
+    rows: list[dict[str, float]] = []
+    for group_rows in sorted(
+        groups.values(), key=lambda values: np.median(radii[values])
+    ):
+        mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
+        mask[np.asarray(group_rows, dtype=int)] = True
         rows.append(
             {
                 "radius": float(np.median(radii[mask])),

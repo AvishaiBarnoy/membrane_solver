@@ -64,8 +64,8 @@ constraint_modules:
 - rigid_disk
 - pin_to_plane
 - pin_to_circle
-- rim_slope_match_out
 - tilt_thetaB_boundary_in
+- rim_slope_match_out
 definitions:
   disk:
     tilt_thetaB_group_in: disk

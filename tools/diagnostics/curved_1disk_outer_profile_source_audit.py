@@ -27,7 +27,6 @@ from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import THEORY_TH
 from tools.diagnostics.curved_1disk_theory_benchmark import (
     OUTER_K1_WINDOW,
     OUTER_LOG_WINDOW,
-    SHAPE_STEPS,
     _relative_rmse,
     _run_canonical_schedule,
     _shell_profile,
@@ -60,6 +59,7 @@ ALLOWED_CLASSIFICATIONS = {
     "far_boundary_or_window_artifact",
     "inconclusive",
 }
+SOURCE_AUDIT_SHAPE_STEPS = 10
 SIGN_CONVENTION_CLASSIFICATIONS = {
     "diagnostic_leaflet_sign_convention_mismatch",
     "runtime_relaxation_drives_antisymmetric_state",
@@ -618,7 +618,9 @@ def _case_report(*, label: str, theta_b: float, selected: bool) -> dict[str, obj
     traces.append(_shell_trace(mesh, label="after_tilt_relaxation"))
     gradient_probe = _module_tilt_gradient_probe(minim)
     perturbations = _perturbation_probes(minim)
-    minim.minimize(n_steps=SHAPE_STEPS)
+    # Isolate the first propagation response. The canonical 60-step benchmark
+    # mixes this source signal with the later profile-collapse phase.
+    minim.minimize(n_steps=SOURCE_AUDIT_SHAPE_STEPS)
     traces.append(_shell_trace(mesh, label="after_shape_minimize"))
     mesh.project_tilts_to_tangent()
     mesh.increment_version()

@@ -1,7 +1,5 @@
 import math
 
-import pytest
-
 from tools.diagnostics.curved_1disk_outer_profile_source_audit import (
     ALLOWED_CLASSIFICATIONS,
     SIGN_CONVENTION_CLASSIFICATIONS,
@@ -156,10 +154,6 @@ def test_curved_1disk_outer_profile_source_sign_convention_probe() -> None:
         assert "runtime leaflet coupling" in probe["recommendation"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Gate: leaflet relaxation currently drives an antisymmetric outer state",
-)
 def test_curved_1disk_outer_profile_source_classifies_k1_ok_log_suppressed() -> None:
     report = run_curved_1disk_outer_profile_source_audit(include_selected=False)
     diagnosis = report["diagnosis"]
