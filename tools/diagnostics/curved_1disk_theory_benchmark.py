@@ -55,7 +55,7 @@ def _refine_once(mesh, *, steps: int = REFINE_STEPS):
     return mesh
 
 
-def _shell_profile(mesh) -> list[dict[str, float]]:
+def _circumferential_shell_profile(mesh) -> list[dict[str, float]]:
     """Return ring-median profiles grouped by circumferential connectivity."""
     from tools.diagnostics.utils import positions_radii
 
@@ -122,6 +122,45 @@ def _shell_profile(mesh) -> list[dict[str, float]]:
     ):
         mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
         mask[np.asarray(group_rows, dtype=int)] = True
+        rows.append(
+            {
+                "radius": float(np.median(radii[mask])),
+                "theta_in": float(np.median(theta_in[mask])),
+                "theta_out": float(np.median(theta_out[mask])),
+                "theta_shared": float(
+                    0.5 * (np.median(theta_in[mask]) + np.median(theta_out[mask]))
+                ),
+                "z": float(np.median(positions[mask, 2])),
+                "J": float(np.median(mean_curvature[mask])),
+                "count": int(np.sum(mask)),
+            }
+        )
+    return rows
+
+
+def _shell_profile(mesh) -> list[dict[str, float]]:
+    """Return ring-median profile rows keyed by rounded radius."""
+    from tools.diagnostics.utils import positions_radii
+
+    positions = mesh.positions_view()
+    radii = positions_radii(mesh)
+    tilts_in = mesh.tilts_in_view()
+    tilts_out = mesh.tilts_out_view()
+    r_hat = np.zeros_like(positions)
+    good = radii > 1.0e-12
+    r_hat[good, 0] = positions[good, 0] / radii[good]
+    r_hat[good, 1] = positions[good, 1] / radii[good]
+    theta_in = np.einsum("ij,ij->i", tilts_in, r_hat)
+    theta_out = np.einsum("ij,ij->i", tilts_out, r_hat)
+    mean_curvature = compute_curvature_fields(
+        mesh, positions, mesh.vertex_index_to_row
+    ).mean_curvature
+
+    rows: list[dict[str, float]] = []
+    for radius_key in sorted({round(float(r), 6) for r in radii if r > 1.0e-12}):
+        mask = np.isclose(radii, float(radius_key), atol=1.0e-6)
+        if not np.any(mask):
+            continue
         rows.append(
             {
                 "radius": float(np.median(radii[mask])),

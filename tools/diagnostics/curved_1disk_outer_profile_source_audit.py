@@ -27,6 +27,7 @@ from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import THEORY_TH
 from tools.diagnostics.curved_1disk_theory_benchmark import (
     OUTER_K1_WINDOW,
     OUTER_LOG_WINDOW,
+    _circumferential_shell_profile,
     _relative_rmse,
     _run_canonical_schedule,
     _shell_profile,
@@ -454,7 +455,7 @@ def _is_good_k1_channel(row: dict[str, object]) -> bool:
 def _profile_fit_controls(mesh, *, theta_b: float) -> dict[str, object]:
     params = tex_reference_params()
     theory = compute_curved_disk_theory(params)
-    shell_rows = _shell_profile(mesh)
+    shell_rows = _circumferential_shell_profile(mesh)
     radius = float(params.radius)
     radii = [float(row["radius"]) for row in shell_rows]
     max_radius = float(max(radii))
