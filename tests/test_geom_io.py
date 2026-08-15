@@ -14,6 +14,11 @@ from sample_meshes import write_sample_geometry
 
 from geometry.entities import Mesh
 from geometry.geom_io import load_data, parse_geometry, save_geometry
+from geometry.input_normalization import (
+    apply_pin_to_plane_aliases_in_place,
+    canonical_constraint_name,
+    normalize_constraint_names,
+)
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.refinement import refine_polygonal_facets
 
@@ -244,6 +249,52 @@ def test_parse_geometry_normalizes_pin_surface_group_aliases():
     assert mesh.vertices[0].options["pin_to_plane_point"] == [0.0, 0.0, 0.0]
     assert mesh.global_parameters.get("pin_to_plane_mode") == "fixed"
     assert mesh.global_parameters.get("pin_surface_group_to_shape_mode") is None
+
+
+def test_constraint_name_normalization_preserves_supported_forms_and_logs(caplog):
+    with caplog.at_level("INFO", logger="membrane_solver"):
+        normalized = normalize_constraint_names(
+            ["pin_surface_group_to_shape", "pin_to_circle"]
+        )
+
+    assert normalized == ["pin_to_plane", "pin_to_circle"]
+    assert normalize_constraint_names("pin_surface_group_to_shape") == ["pin_to_plane"]
+    assert normalize_constraint_names(None) == []
+    assert canonical_constraint_name("global_area") == "global_area"
+    assert (
+        "Constraint alias 'pin_surface_group_to_shape' mapped to 'pin_to_plane'."
+        in caplog.text
+    )
+
+
+def test_constraint_name_normalization_rejects_invalid_container_type():
+    with pytest.raises(
+        TypeError, match="constraint modules should be in a list or a single string"
+    ):
+        normalize_constraint_names(("pin_to_plane",))
+
+
+def test_pin_to_plane_alias_canonicalization_mutates_in_place_and_is_idempotent():
+    options = {
+        "pin_surface_group_to_shape_mode": "fixed",
+        "pin_surface_group_to_shape_normal": [0.0, 0.0, 1.0],
+        "pin_to_plane_normal": [1.0, 0.0, 0.0],
+    }
+
+    result = apply_pin_to_plane_aliases_in_place(options)
+
+    assert result is options
+    assert options == {
+        "pin_to_plane_mode": "fixed",
+        "pin_to_plane_normal": [1.0, 0.0, 0.0],
+    }
+    assert apply_pin_to_plane_aliases_in_place(options) is options
+    assert options == {
+        "pin_to_plane_mode": "fixed",
+        "pin_to_plane_normal": [1.0, 0.0, 0.0],
+    }
+    non_dict = ["pin_surface_group_to_shape"]
+    assert apply_pin_to_plane_aliases_in_place(non_dict) is non_dict
 
 
 def test_pin_surface_group_alias_enforces_pin_to_plane_projection():

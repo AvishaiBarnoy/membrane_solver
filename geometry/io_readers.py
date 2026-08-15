@@ -9,22 +9,15 @@ from core.expr_eval import eval_expr
 from core.ordered_unique_list import OrderedUniqueList
 from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
-from runtime.refinement import refine_polygonal_facets
+from geometry.input_normalization import (
+    apply_pin_to_plane_aliases_in_place,
+    normalize_constraint_names,
+)
+from geometry.polygon_triangulation import refine_polygonal_facets
 
 from .io_writers import save_geometry as save_geometry
 
 logger = logging.getLogger("membrane_solver")
-
-_CONSTRAINT_NAME_ALIASES = {
-    "pin_surface_group_to_shape": "pin_to_plane",
-}
-
-_PIN_TO_PLANE_KEY_ALIASES = {
-    "pin_surface_group_to_shape_mode": "pin_to_plane_mode",
-    "pin_surface_group_to_shape_group": "pin_to_plane_group",
-    "pin_surface_group_to_shape_normal": "pin_to_plane_normal",
-    "pin_surface_group_to_shape_point": "pin_to_plane_point",
-}
 
 
 def load_data(filename):
@@ -57,43 +50,9 @@ def parse_geometry(data: dict) -> Mesh:
     # Initialize global parameters
     mesh.global_parameters = GlobalParameters()
 
-    def _canonical_constraint_name(name: str) -> str:
-        canonical = _CONSTRAINT_NAME_ALIASES.get(name, name)
-        if canonical != name:
-            logger.info(
-                "Constraint alias '%s' mapped to '%s'.",
-                name,
-                canonical,
-            )
-        return canonical
-
-    def _normalize_constraint_names(raw_constraints) -> list[str]:
-        if raw_constraints is None:
-            return []
-        if isinstance(raw_constraints, str):
-            values = [raw_constraints]
-        elif isinstance(raw_constraints, list):
-            values = list(raw_constraints)
-        else:
-            err_msg = "constraint modules should be in a list or a single string"
-            logger.error(err_msg)
-            raise TypeError(err_msg)
-        return [_canonical_constraint_name(str(value)) for value in values]
-
-    def _apply_pin_to_plane_aliases(options: dict) -> dict:
-        if not isinstance(options, dict):
-            return options
-        for alias_key, canonical_key in _PIN_TO_PLANE_KEY_ALIASES.items():
-            if alias_key not in options:
-                continue
-            if canonical_key not in options:
-                options[canonical_key] = options[alias_key]
-            options.pop(alias_key, None)
-        return options
-
     # Override global parameters with values from the input file.
     input_global_params = dict(data.get("global_parameters", {}) or {})
-    _apply_pin_to_plane_aliases(input_global_params)
+    apply_pin_to_plane_aliases_in_place(input_global_params)
     mesh.global_parameters.update(input_global_params)
 
     def _coerce_float_param(key: str) -> None:
@@ -242,7 +201,7 @@ def parse_geometry(data: dict) -> Mesh:
     # Allow explicit constraint modules at the top level (e.g. "global_area")
     # in addition to those inferred from per‑entity "constraints" options.
     constraint_module_names = OrderedUniqueList(
-        _normalize_constraint_names(data.get("constraint_modules", []))
+        normalize_constraint_names(data.get("constraint_modules", []))
     )
     # If the input specifies a global target surface area, automatically load
     # the corresponding constraint so users do not have to list the module
@@ -266,8 +225,8 @@ def parse_geometry(data: dict) -> Mesh:
             # We keep the 'preset' key so we can filter entities by preset later.
             if "preset" not in merged:
                 merged["preset"] = preset_name
-            return _apply_pin_to_plane_aliases(merged)
-        return _apply_pin_to_plane_aliases(raw_options)
+            return apply_pin_to_plane_aliases_in_place(merged)
+        return apply_pin_to_plane_aliases_in_place(raw_options)
 
     def normalize_constraints(options: dict, *, fixed_setter) -> list[str]:
         """Normalize an entity 'constraints' option to a list and handle 'fixed'.
@@ -281,7 +240,7 @@ def parse_geometry(data: dict) -> Mesh:
                 fixed_setter(True)
             return []
 
-        constraints = _normalize_constraint_names(raw)
+        constraints = normalize_constraint_names(raw)
 
         if "fixed" in constraints:
             fixed_setter(True)
@@ -705,7 +664,7 @@ def parse_geometry(data: dict) -> Mesh:
                         energy_module_names.add(energy_spec)
 
                 constraint_spec = body.options.get("constraints", [])
-                body_constraints = _normalize_constraint_names(constraint_spec)
+                body_constraints = normalize_constraint_names(constraint_spec)
 
                 if (
                     target_volume is not None
@@ -776,7 +735,7 @@ def parse_geometry(data: dict) -> Mesh:
             # Merge root-level constraints (if provided)
             merged_constraints = []
             if constraint_spec is not None:
-                merged_constraints = _normalize_constraint_names(constraint_spec)
+                merged_constraints = normalize_constraint_names(constraint_spec)
             if merged_constraints:
                 existing = body_options.get("constraints")
                 if existing is None:
@@ -832,7 +791,7 @@ def parse_geometry(data: dict) -> Mesh:
             # behave like FIXEDVOL in Evolver, on top of any explicit
             # constraints configured.
             constraint_spec = body.options.get("constraints", [])
-            body_constraints = _normalize_constraint_names(constraint_spec)
+            body_constraints = normalize_constraint_names(constraint_spec)
 
             if (
                 volume is not None
