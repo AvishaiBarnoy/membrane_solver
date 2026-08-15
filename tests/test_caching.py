@@ -107,6 +107,15 @@ def test_manual_version_increment():
     assert mesh._version == v + 1
 
 
+def test_touch_geometry_is_the_canonical_coordinate_mutation_hook():
+    mesh = create_simple_mesh()
+    version = mesh._version
+
+    mesh.touch_geometry()
+
+    assert mesh._version == version + 1
+
+
 def test_stepper_increments_version():
     """Verify that the line search (used by steppers) increments mesh version."""
     from runtime.steppers.line_search import backtracking_line_search

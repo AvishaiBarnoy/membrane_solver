@@ -152,9 +152,14 @@ class GeometryCache:
 
         if positions is None:
             positions, _ = self.soa_views(mesh)
+            use_cache = True
+        else:
+            canonical_positions, _ = self.soa_views(mesh)
+            use_cache = positions is canonical_positions
 
         if (
-            self._triangle_geom_mesh_version == int(mesh._version)
+            use_cache
+            and self._triangle_geom_mesh_version == int(mesh._version)
             and self._triangle_geom_loops_version == int(mesh._facet_loops_version)
             and self._triangle_geom_vertex_ids_version == int(mesh._vertex_ids_version)
             and self.get("triangle_areas") is not None
@@ -168,11 +173,12 @@ class GeometryCache:
         normals = np.cross(v1 - v0, v2 - v0)
         areas = 0.5 * np.linalg.norm(normals, axis=1)
 
-        self.set("triangle_areas", areas)
-        self.set("triangle_normals", normals)
-        self._triangle_geom_mesh_version = int(mesh._version)
-        self._triangle_geom_loops_version = int(mesh._facet_loops_version)
-        self._triangle_geom_vertex_ids_version = int(mesh._vertex_ids_version)
+        if use_cache:
+            self.set("triangle_areas", areas)
+            self.set("triangle_normals", normals)
+            self._triangle_geom_mesh_version = int(mesh._version)
+            self._triangle_geom_loops_version = int(mesh._facet_loops_version)
+            self._triangle_geom_vertex_ids_version = int(mesh._vertex_ids_version)
         return areas, normals
 
     def triangle_areas(
@@ -195,8 +201,17 @@ class GeometryCache:
         if tri_rows is None or tri_rows.size == 0:
             return np.zeros(n_verts, dtype=float)
 
+        canonical_positions = None
+        if positions is None:
+            positions, _ = self.soa_views(mesh)
+            use_cache = True
+        else:
+            canonical_positions, _ = self.soa_views(mesh)
+            use_cache = positions is canonical_positions
+
         if (
-            self._bary_mesh_version == int(mesh._version)
+            use_cache
+            and self._bary_mesh_version == int(mesh._version)
             and self._bary_loops_version == int(mesh._facet_loops_version)
             and self._bary_vertex_ids_version == int(mesh._vertex_ids_version)
             and self.get("barycentric_vertex_areas") is not None
@@ -211,10 +226,11 @@ class GeometryCache:
             np.add.at(vertex_areas, tri_rows[:, 1], area_thirds)
             np.add.at(vertex_areas, tri_rows[:, 2], area_thirds)
 
-        self.set("barycentric_vertex_areas", vertex_areas)
-        self._bary_mesh_version = int(mesh._version)
-        self._bary_loops_version = int(mesh._facet_loops_version)
-        self._bary_vertex_ids_version = int(mesh._vertex_ids_version)
+        if use_cache:
+            self.set("barycentric_vertex_areas", vertex_areas)
+            self._bary_mesh_version = int(mesh._version)
+            self._bary_loops_version = int(mesh._facet_loops_version)
+            self._bary_vertex_ids_version = int(mesh._vertex_ids_version)
         return vertex_areas
 
     def p1_triangle_shape_gradients(
@@ -231,9 +247,14 @@ class GeometryCache:
 
         if positions is None:
             positions, _ = self.soa_views(mesh)
+            use_cache = True
+        else:
+            canonical_positions, _ = self.soa_views(mesh)
+            use_cache = positions is canonical_positions
 
         if (
-            self._p1_mesh_version == int(mesh._version)
+            use_cache
+            and self._p1_mesh_version == int(mesh._version)
             and self._p1_loops_version == int(mesh._facet_loops_version)
             and self._p1_vertex_ids_version == int(mesh._vertex_ids_version)
             and self.get("p1_area") is not None
@@ -266,13 +287,14 @@ class GeometryCache:
         g2 = _fast_cross(n, e2) / denom[:, None]
         area = 0.5 * np.sqrt(np.maximum(n2, 0.0))
 
-        self.set("p1_area", area)
-        self.set("p1_g0", g0)
-        self.set("p1_g1", g1)
-        self.set("p1_g2", g2)
-        self._p1_mesh_version = int(mesh._version)
-        self._p1_loops_version = int(mesh._facet_loops_version)
-        self._p1_vertex_ids_version = int(mesh._vertex_ids_version)
+        if use_cache:
+            self.set("p1_area", area)
+            self.set("p1_g0", g0)
+            self.set("p1_g1", g1)
+            self.set("p1_g2", g2)
+            self._p1_mesh_version = int(mesh._version)
+            self._p1_loops_version = int(mesh._facet_loops_version)
+            self._p1_vertex_ids_version = int(mesh._vertex_ids_version)
         return area, g0, g1, g2, tri_rows
 
 

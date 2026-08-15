@@ -149,6 +149,40 @@ def test_triangle_areas_normals_refresh_after_position_update() -> None:
     assert normals2 is not normals1
 
 
+def test_context_triangle_geometry_does_not_reuse_cache_for_distinct_trial_arrays() -> (
+    None
+):
+    mesh = _build_mesh()
+    ctx = EnergyContext()
+    baseline = mesh.positions_view().copy(order="F")
+    trial = baseline.copy(order="F")
+    trial[0, 2] += 0.25
+
+    baseline_areas, baseline_normals = ctx.geometry.triangle_areas_normals(
+        mesh, baseline
+    )
+    trial_areas, trial_normals = ctx.geometry.triangle_areas_normals(mesh, trial)
+
+    assert not np.allclose(trial_areas, baseline_areas)
+    assert not np.allclose(trial_normals, baseline_normals)
+
+
+def test_context_barycentric_and_p1_geometry_do_not_reuse_trial_array_cache() -> None:
+    mesh = _build_mesh()
+    ctx = EnergyContext()
+    baseline = mesh.positions_view().copy(order="F")
+    trial = baseline.copy(order="F")
+    trial[0, 2] += 0.25
+
+    baseline_bary = ctx.geometry.barycentric_vertex_areas(mesh, baseline)
+    trial_bary = ctx.geometry.barycentric_vertex_areas(mesh, trial)
+    baseline_p1 = ctx.geometry.p1_triangle_shape_gradients(mesh, baseline)
+    trial_p1 = ctx.geometry.p1_triangle_shape_gradients(mesh, trial)
+
+    assert not np.allclose(trial_bary, baseline_bary)
+    assert not np.allclose(trial_p1[0], baseline_p1[0])
+
+
 def test_p1_triangle_shape_gradients_match_mesh_cache() -> None:
     mesh = _build_mesh()
     positions = mesh.positions_view()

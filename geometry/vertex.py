@@ -46,9 +46,9 @@ class Vertex:
                 mesh = self.__dict__.get("_mesh")
                 if mesh is not None:
                     if name == "fixed":
-                        mesh._touch_fixed_flags()
+                        mesh.touch_fixed_flags()
                     else:
-                        mesh._touch_tilt_fixed_flags()
+                        mesh.touch_tilt_fixed_flags()
             return
         if name in ("tilt", "tilt_in", "tilt_out"):
             arr = np.asarray(value, dtype=float)

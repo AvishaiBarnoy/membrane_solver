@@ -16,9 +16,14 @@ from core.parameters.global_parameters import GlobalParameters
 from geometry.body import Body
 from geometry.cache_checks import (
     barycentric_cache_valid,
+    connectivity_cache_valid,
+    field_mask_cache_valid,
+    geometry_freeze_cache_active,
     is_cached_positions,
     p1_triangle_cache_valid,
+    topology_cache_valid,
     triangle_areas_cache_valid,
+    vector_field_cache_needs_rebind,
     vertex_normals_cache_valid,
 )
 from geometry.cache_writes import (
@@ -149,36 +154,43 @@ class Mesh:
     _version: int = 0
     _vertex_ids_version: int = 0
 
-    def increment_version(self):
+    def touch_geometry(self) -> None:
+        """Record a coordinate mutation and invalidate geometry-dependent caches."""
         self._version += 1
 
-    def _touch_fixed_flags(self) -> None:
+    def increment_version(self) -> None:
+        """Compatibility wrapper for :meth:`touch_geometry`."""
+        self.touch_geometry()
+
+    def touch_fixed_flags(self) -> None:
+        """Record mutation of vertex fixed-position flags."""
         self._fixed_flags_version += 1
 
-    def _touch_tilt_fixed_flags(self) -> None:
+    def _touch_fixed_flags(self) -> None:
+        """Compatibility wrapper for :meth:`touch_fixed_flags`."""
+        self.touch_fixed_flags()
+
+    def touch_tilt_fixed_flags(self) -> None:
+        """Record mutation of vertex tilt-fixed flags."""
         self._tilt_fixed_flags_version += 1
+
+    def _touch_tilt_fixed_flags(self) -> None:
+        """Compatibility wrapper for :meth:`touch_tilt_fixed_flags`."""
+        self.touch_tilt_fixed_flags()
 
     def _geometry_cache_active(self, positions: Optional[np.ndarray]) -> bool:
         """Return True when positions correspond to the active geometry cache."""
-        if positions is None:
-            positions = getattr(self, "_positions_cache", None)
-
-        if positions is getattr(self, "_positions_cache", None):
-            return self._positions_cache_version == self._version
-
-        if self._geometry_freeze_depth <= 0:
-            return False
-
-        if self._geometry_freeze_version != self._version:
-            return False
-
-        if self._geometry_freeze_loops_version != self._facet_loops_version:
-            return False
-
-        if self._geometry_freeze_positions_id is None:
-            return False
-
-        return id(positions) == self._geometry_freeze_positions_id
+        return geometry_freeze_cache_active(
+            positions=positions,
+            positions_cache=getattr(self, "_positions_cache", None),
+            positions_cache_version=self._positions_cache_version,
+            mesh_version=self._version,
+            freeze_depth=self._geometry_freeze_depth,
+            freeze_version=self._geometry_freeze_version,
+            freeze_loops_version=self._geometry_freeze_loops_version,
+            loops_version=self._facet_loops_version,
+            freeze_positions_id=self._geometry_freeze_positions_id,
+        )
 
     @contextmanager
     def geometry_freeze(self, positions: Optional[np.ndarray] = None):
@@ -201,20 +213,26 @@ class Mesh:
                 self._geometry_freeze_loops_version = -1
                 self._geometry_freeze_positions_id = None
 
-    def increment_topology_version(self) -> None:
+    def touch_topology(self) -> None:
         """Invalidate caches that depend on mesh connectivity."""
         self._topology_version += 1
         self._connectivity_cache_version = -1
         self._boundary_vertex_cache_version = -1
 
+    def increment_topology_version(self) -> None:
+        """Compatibility wrapper for :meth:`touch_topology`."""
+        self.touch_topology()
+
     @property
     def fixed_mask(self) -> np.ndarray:
         """Return a boolean array of fixed status for vertices."""
-        if (
-            self._fixed_mask_cache is not None
-            and self._fixed_mask_version == self._fixed_flags_version
-            and self._fixed_mask_vertex_version == self._vertex_ids_version
-            and len(self._fixed_mask_cache) == len(self.vertices)
+        if field_mask_cache_valid(
+            cached_mask=self._fixed_mask_cache,
+            cached_flags_version=self._fixed_mask_version,
+            flags_version=self._fixed_flags_version,
+            cached_vertex_version=self._fixed_mask_vertex_version,
+            vertex_version=self._vertex_ids_version,
+            expected_size=len(self.vertices),
         ):
             return self._fixed_mask_cache
 
@@ -304,7 +322,10 @@ class Mesh:
     @property
     def boundary_vertex_ids(self) -> set[int]:
         """Return the set of vertex IDs that lie on the boundary of an open mesh."""
-        if self._boundary_vertex_cache_version == self._topology_version:
+        if topology_cache_valid(
+            cached_version=self._boundary_vertex_cache_version,
+            topology_version=self._topology_version,
+        ):
             return set(self._boundary_vertex_cache)
 
         self.build_connectivity_maps()
@@ -327,9 +348,11 @@ class Mesh:
 
     def build_connectivity_maps(self):
         counts = (len(self.vertices), len(self.edges), len(self.facets))
-        if (
-            self._connectivity_cache_version == self._topology_version
-            and self._connectivity_cache_counts == counts
+        if connectivity_cache_valid(
+            cached_version=self._connectivity_cache_version,
+            topology_version=self._topology_version,
+            cached_counts=self._connectivity_cache_counts,
+            current_counts=counts,
         ):
             return
 
@@ -392,11 +415,12 @@ class Mesh:
         """Return a dense ``(N_vertices, 3)`` array of vertex tilt vectors."""
         self.build_position_cache()
         n_verts = len(self.vertex_ids)
-        needs_rebind = (
-            self._tilts_cache is None
-            or self._tilts_cache.shape != (n_verts, 3)
-            or self._tilt_cache_counts != n_verts
-            or self._tilt_cache_vertex_version != self._vertex_ids_version
+        needs_rebind = vector_field_cache_needs_rebind(
+            cached_values=self._tilts_cache,
+            expected_count=n_verts,
+            cached_count=self._tilt_cache_counts,
+            cached_vertex_version=self._tilt_cache_vertex_version,
+            vertex_version=self._vertex_ids_version,
         )
         if needs_rebind:
             old_cache = (
@@ -428,11 +452,12 @@ class Mesh:
         """Return a dense ``(N_vertices, 3)`` array of inner-leaflet tilt vectors."""
         self.build_position_cache()
         n_verts = len(self.vertex_ids)
-        needs_rebind = (
-            self._tilts_in_cache is None
-            or self._tilts_in_cache.shape != (n_verts, 3)
-            or self._tilts_in_cache_counts != n_verts
-            or self._tilts_in_cache_vertex_version != self._vertex_ids_version
+        needs_rebind = vector_field_cache_needs_rebind(
+            cached_values=self._tilts_in_cache,
+            expected_count=n_verts,
+            cached_count=self._tilts_in_cache_counts,
+            cached_vertex_version=self._tilts_in_cache_vertex_version,
+            vertex_version=self._vertex_ids_version,
         )
         if needs_rebind:
             old_cache = (
@@ -465,11 +490,12 @@ class Mesh:
         """Return a dense ``(N_vertices, 3)`` array of outer-leaflet tilt vectors."""
         self.build_position_cache()
         n_verts = len(self.vertex_ids)
-        needs_rebind = (
-            self._tilts_out_cache is None
-            or self._tilts_out_cache.shape != (n_verts, 3)
-            or self._tilts_out_cache_counts != n_verts
-            or self._tilts_out_cache_vertex_version != self._vertex_ids_version
+        needs_rebind = vector_field_cache_needs_rebind(
+            cached_values=self._tilts_out_cache,
+            expected_count=n_verts,
+            cached_count=self._tilts_out_cache_counts,
+            cached_vertex_version=self._tilts_out_cache_vertex_version,
+            vertex_version=self._vertex_ids_version,
         )
         if needs_rebind:
             old_cache = (

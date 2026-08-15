@@ -105,6 +105,16 @@ class _SingleTiltDictGradientModule:
         )
 
 
+class _LegacyModuleWithoutComputeGradientKeyword:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def compute_energy_and_gradient(self, mesh, global_params, param_resolver):
+        _ = mesh, global_params, param_resolver
+        self.calls.append({})
+        return 2.5, {}
+
+
 class _ScaledTiltArrayGradientModule:
     USES_TILT = True
 
@@ -136,6 +146,17 @@ def test_evaluation_manager_adapts_resolver_alias_and_ctx() -> None:
     assert energy == pytest.approx(3.0)
     assert module.seen_ctx is ctx
     assert module.seen_resolver is manager.param_resolver
+
+
+def test_evaluation_manager_legacy_energy_fallback_handles_missing_keyword() -> None:
+    mesh = _single_vertex_mesh()
+    module = _LegacyModuleWithoutComputeGradientKeyword()
+    manager = _manager(mesh, [module], ["legacy"])
+
+    energy = manager.compute_energy_array_total(positions=mesh.positions_view())
+
+    assert energy == pytest.approx(2.5)
+    assert module.calls == [{}]
 
 
 def test_evaluation_manager_resets_energy_only_scratch_between_modules() -> None:

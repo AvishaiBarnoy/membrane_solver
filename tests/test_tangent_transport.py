@@ -11,6 +11,7 @@ from geometry.tangent_transport import (
     minimal_rotation_transport,
     transport_vectors,
     transport_vertex_tilts_to_triangle_planes,
+    triangle_plane_transport_cache_key,
     triangle_plane_transport_data,
 )
 
@@ -120,3 +121,26 @@ def test_triangle_plane_transport_data_reuses_cache_only_for_live_mesh_geometry(
     )
     assert uncached is not cached_a
     assert np.allclose(uncached["tri_normals"], cached_a["tri_normals"], atol=1e-12)
+
+
+def test_triangle_plane_transport_cache_misses_after_topology_epoch_change() -> None:
+    mesh = _build_single_triangle_mesh()
+    positions = mesh.positions_view()
+    tri_rows, _ = mesh.triangle_row_cache()
+    cached = triangle_plane_transport_data(mesh, positions, tri_rows, cache_tag="unit")
+
+    mesh.touch_topology()
+    refreshed = triangle_plane_transport_data(
+        mesh, positions, tri_rows, cache_tag="unit"
+    )
+
+    assert refreshed is not cached
+    assert np.allclose(refreshed["tri_normals"], cached["tri_normals"])
+
+
+def test_triangle_plane_transport_cache_key_preserves_version_and_tag_contract() -> (
+    None
+):
+    assert triangle_plane_transport_cache_key(
+        mesh_version=np.int64(3), topology_version=4, cache_tag=5
+    ) == (3, 4, "5")

@@ -5,6 +5,13 @@ from __future__ import annotations
 import numpy as np
 
 
+def triangle_plane_transport_cache_key(
+    *, mesh_version: int, topology_version: int, cache_tag: object
+) -> tuple[int, int, str]:
+    """Build the legacy dependency key for mesh-owned transport data."""
+    return int(mesh_version), int(topology_version), str(cache_tag)
+
+
 def _normalize_rows(vectors: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Return row-normalized vectors and their norms."""
     vectors = np.asarray(vectors, dtype=float)
@@ -158,10 +165,10 @@ def triangle_plane_transport_data(
 
     cache_key = None
     if cacheable:
-        cache_key = (
-            int(mesh._version),
-            int(getattr(mesh, "_topology_version", -1)),
-            str(cache_tag),
+        cache_key = triangle_plane_transport_cache_key(
+            mesh_version=mesh._version,
+            topology_version=getattr(mesh, "_topology_version", -1),
+            cache_tag=cache_tag,
         )
         cached = getattr(mesh, "_triangle_plane_transport_cache", None)
         if isinstance(cached, dict) and cache_key in cached:
