@@ -53,6 +53,33 @@ def test_line_tension_energy_and_gradient_linear_with_length():
     assert g1[0] > 0.0
 
 
+def test_line_tension_energy_only_array_path_matches_gradient_path():
+    mesh = _build_simple_mesh()
+    resolver = ParameterResolver(mesh.global_parameters)
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+
+    energy_only = line_module.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+    )
+    gradient = np.zeros_like(positions)
+    energy_with_gradient = line_module.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=gradient,
+    )
+
+    assert energy_only == energy_with_gradient
+    assert np.any(gradient)
+
+
 def test_line_tension_shrinks_segment_during_minimization():
     mesh = _build_simple_mesh()
     gp = mesh.global_parameters

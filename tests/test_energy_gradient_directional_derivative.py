@@ -7,7 +7,9 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.parameters.global_parameters import GlobalParameters
+from core.parameters.resolver import ParameterResolver
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
+from modules.energy import body_area_penalty, edge_length_penalty
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
@@ -59,6 +61,65 @@ def _set_mesh_positions(mesh: Mesh, positions: np.ndarray) -> None:
     for row, vid in enumerate(mesh.vertex_ids):
         mesh.vertices[int(vid)].position[:] = positions[row]
     mesh.increment_version()
+
+
+def test_edge_length_penalty_energy_only_array_path_matches_gradient_path():
+    mesh = _tetra_mesh_with_body()
+    for edge in mesh.edges.values():
+        edge.options["energy"] = ["edge_length_penalty"]
+        edge.options["target_length"] = 0.75
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    global_params = GlobalParameters({"edge_stiffness": 2.5})
+
+    energy_only = edge_length_penalty.compute_energy_array(
+        mesh,
+        global_params,
+        None,
+        positions=positions,
+        index_map=index_map,
+    )
+    gradient = np.zeros_like(positions)
+    energy_with_gradient = edge_length_penalty.compute_energy_and_gradient_array(
+        mesh,
+        global_params,
+        None,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=gradient,
+    )
+
+    assert energy_only == pytest.approx(energy_with_gradient)
+    assert np.any(gradient)
+
+
+def test_body_area_penalty_energy_only_array_path_matches_gradient_path():
+    mesh = _tetra_mesh_with_body()
+    mesh.bodies[0].options["area_target"] = 1.0
+    positions = mesh.positions_view()
+    index_map = mesh.vertex_index_to_row
+    global_params = GlobalParameters({"area_stiffness": 2.5})
+    resolver = ParameterResolver(global_params)
+
+    energy_only = body_area_penalty.compute_energy_array(
+        mesh,
+        global_params,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+    )
+    gradient = np.zeros_like(positions)
+    energy_with_gradient = body_area_penalty.compute_energy_and_gradient_array(
+        mesh,
+        global_params,
+        resolver,
+        positions=positions,
+        index_map=index_map,
+        grad_arr=gradient,
+    )
+
+    assert energy_only == pytest.approx(energy_with_gradient)
+    assert np.any(gradient)
 
 
 def _directional_derivative_error(

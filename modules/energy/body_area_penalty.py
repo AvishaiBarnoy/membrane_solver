@@ -25,6 +25,40 @@ import numpy as np
 logger = logging.getLogger("membrane_solver")
 
 
+def compute_energy_array(
+    mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+) -> float:
+    """Return the dense-array body-area penalty without assembling gradients."""
+    energy = 0.0
+    default_k = float(getattr(global_params, "area_stiffness", 0.0) or 0.0)
+
+    for body in mesh.bodies.values():
+        target = body.options.get("area_target")
+        if target is None:
+            continue
+
+        k = param_resolver.get(body, "area_stiffness")
+        k = default_k if k is None else float(k)
+        if k == 0.0:
+            continue
+
+        area = sum(
+            mesh.facets[facet_idx].compute_area_and_gradient(
+                mesh, positions=positions, index_map=index_map
+            )[0]
+            for facet_idx in body.facet_indices
+        )
+        delta = area - float(target)
+        energy += 0.5 * k * delta * delta
+
+    return float(energy)
+
+
 def compute_energy_and_gradient(
     mesh,
     global_params,

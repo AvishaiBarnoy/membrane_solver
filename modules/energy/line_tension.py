@@ -56,6 +56,34 @@ def _edge_length_and_grad(
     return length, grad
 
 
+def compute_energy_array(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: Dict[int, int],
+) -> float:
+    """Return dense-array line tension energy without assembling gradients."""
+    default_gamma = float(global_params.get("line_tension", 0.0) or 0.0)
+    energy = 0.0
+
+    for idx in _edges_with_line_tension(mesh):
+        edge = mesh.edges[idx]
+        gamma = edge.options.get("line_tension", default_gamma)
+        if not gamma:
+            continue
+        tail_row = index_map.get(edge.tail_index)
+        head_row = index_map.get(edge.head_index)
+        if tail_row is None or head_row is None:
+            continue
+        length = float(np.linalg.norm(positions[head_row] - positions[tail_row]))
+        if length >= 1e-15:
+            energy += float(gamma) * length
+
+    return float(energy)
+
+
 def compute_energy_and_gradient(
     mesh: Mesh,
     global_params,

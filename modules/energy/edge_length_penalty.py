@@ -22,6 +22,36 @@ def _edges_to_constrain(mesh: Mesh) -> Iterator[int]:
             yield int(idx)
 
 
+def compute_energy_array(
+    mesh: Mesh,
+    global_params,
+    param_resolver,
+    *,
+    positions: np.ndarray,
+    index_map: dict[int, int],
+) -> float:
+    """Return edge-length penalty energy without allocating a gradient array."""
+    k = float(global_params.get("edge_stiffness", 100.0))
+    total_energy = 0.0
+
+    for idx in _edges_to_constrain(mesh):
+        edge = mesh.edges[idx]
+        target_length = edge.options.get("target_length")
+        if target_length is None:
+            continue
+
+        tail_row = index_map.get(edge.tail_index)
+        head_row = index_map.get(edge.head_index)
+        if tail_row is None or head_row is None:
+            continue
+
+        length = np.linalg.norm(positions[head_row] - positions[tail_row])
+        if length >= 1e-15:
+            total_energy += 0.5 * k * (length - target_length) ** 2
+
+    return total_energy
+
+
 def compute_energy_and_gradient_array(
     mesh: Mesh,
     global_params,
