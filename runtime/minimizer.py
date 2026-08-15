@@ -1,6 +1,5 @@
 # runtime/minimizer.py
 
-import inspect
 import logging
 from typing import Callable, Dict, List, Optional
 
@@ -30,12 +29,21 @@ from runtime.minimizer_helpers import (
     build_reduced_line_search_trial_energy_fn,
     get_cached_tilt_fixed_mask,
 )
+from runtime.optimization_state import capture_tilt_state, restore_tilt_state
 from runtime.projections.curved_disk import project_curved_free_disk_shape_dofs
 from runtime.projections.tilt import (
     project_tilts_to_tangent_array,
 )
+from runtime.rejected_step_fallback import (
+    shape_scaffold_rejected_step_fallback_enabled,
+    shape_scaffold_rejected_step_fallback_mode,
+    try_shape_scaffold_trace_z_fallback,
+)
+from runtime.stepper_capabilities import (
+    supports_trial_energy_fn,
+    trial_energy_step_kwargs,
+)
 from runtime.steppers.base import BaseStepper
-from runtime.steppers.line_search import backtracking_line_search_array
 from runtime.steppers.tilt_relaxation import TiltRelaxationManager
 
 from . import mesh_quality_repair as _mesh_quality_repair
@@ -54,15 +62,6 @@ def _maybe_auto_mesh_quality_repair(minimizer, *, iteration: int) -> bool:
         )
     finally:
         _mesh_quality_repair.equiangulate_iteration = previous
-
-
-def _scaffold_trace_rows(mesh: Mesh) -> np.ndarray:
-    rows: list[int] = []
-    for row, vid in enumerate(mesh.vertex_ids):
-        opts = getattr(mesh.vertices[int(vid)], "options", {}) or {}
-        if str(opts.get("pin_to_circle_group") or "") == "trace_layer":
-            rows.append(int(row))
-    return np.asarray(rows, dtype=int)
 
 
 class Minimizer:
@@ -257,43 +256,16 @@ class Minimizer:
     def _stepper_supports_trial_energy_fn(self) -> bool:
         """Return whether the active stepper accepts ``trial_energy_fn``."""
         if self._stepper_accepts_trial_energy_fn is None:
-            accepts = False
-            step_fn = getattr(self.stepper, "step", None)
-            if step_fn is not None:
-                try:
-                    sig = inspect.signature(step_fn)
-                    accepts = "trial_energy_fn" in sig.parameters
-                except (TypeError, ValueError):
-                    accepts = False
-            self._stepper_accepts_trial_energy_fn = accepts
+            self._stepper_accepts_trial_energy_fn = supports_trial_energy_fn(
+                self.stepper
+            )
         return bool(self._stepper_accepts_trial_energy_fn)
 
     def _shape_scaffold_rejected_step_fallback_mode(self) -> str:
-        raw = self.global_params.get("shape_scaffold_rejected_step_fallback", "off")
-        mode = str(raw or "off").strip().lower()
-        allowed = {"off", "trace_z"}
-        if mode not in allowed:
-            raise ValueError(
-                "Unknown shape_scaffold_rejected_step_fallback "
-                f"{raw!r}; expected one of {sorted(allowed)}"
-            )
-        return mode
+        return shape_scaffold_rejected_step_fallback_mode(self.global_params)
 
     def _shape_scaffold_rejected_step_fallback_enabled(self) -> bool:
-        if self._shape_scaffold_rejected_step_fallback_mode() != "trace_z":
-            return False
-        mesh_op_mode = str(
-            self.global_params.get("rim_slope_match_scaffold_mesh_operation_mode", "")
-            or ""
-        ).strip()
-        preserve_groups = self.global_params.get(
-            "pin_to_circle_mesh_operation_preserve_normal_groups", []
-        )
-        if isinstance(preserve_groups, str):
-            preserve_groups = [preserve_groups]
-        return mesh_op_mode == "preserve_trace_v1" and "trace_layer" in set(
-            preserve_groups or []
-        )
+        return shape_scaffold_rejected_step_fallback_enabled(self.global_params)
 
     def _try_shape_scaffold_trace_z_fallback(
         self,
@@ -304,128 +276,43 @@ class Minimizer:
         reduced_flag: bool,
         accept_rule: str | None,
     ) -> tuple[bool, float, float]:
-        stats: dict[str, object] = {
-            "mode": self._shape_scaffold_rejected_step_fallback_mode(),
-            "attempted": False,
-            "accepted": False,
-            "attempted_count": int(
+        result = try_shape_scaffold_trace_z_fallback(
+            mesh=self.mesh,
+            global_params=self.global_params,
+            stepper=self.stepper,
+            grad_arr=grad_arr,
+            step_size_in=step_size_in,
+            energy_fn=energy_fn,
+            reduced_flag=reduced_flag,
+            accept_rule=accept_rule,
+            constraint_enforcer=self._enforce_constraints
+            if self._has_enforceable_constraints
+            else None,
+            attempted_count=int(
                 getattr(
-                    self,
-                    "_shape_scaffold_rejected_step_fallback_attempted_count",
-                    0,
+                    self, "_shape_scaffold_rejected_step_fallback_attempted_count", 0
                 )
             ),
-            "accepted_count": int(
+            accepted_count=int(
                 getattr(
-                    self,
-                    "_shape_scaffold_rejected_step_fallback_accepted_count",
-                    0,
+                    self, "_shape_scaffold_rejected_step_fallback_accepted_count", 0
                 )
             ),
-            "reason": "",
-            "trace_count": 0,
-            "trace_descent_z_mean": 0.0,
-            "trace_dz_mean": 0.0,
-            "trace_dz_max": 0.0,
-            "energy_before": float("nan"),
-            "energy_after": float("nan"),
-            "step_size_in": float(step_size_in),
-            "step_size_out": float(step_size_in),
-        }
-        self._last_shape_scaffold_rejected_step_fallback_stats = stats
-        if not self._shape_scaffold_rejected_step_fallback_enabled():
-            stats["reason"] = "disabled"
-            return False, step_size_in, float("nan")
-
-        trace_rows = _scaffold_trace_rows(self.mesh)
-        stats["trace_count"] = int(trace_rows.size)
-        if trace_rows.size == 0:
-            stats["reason"] = "no_trace_rows"
-            return False, step_size_in, float("nan")
-
-        direction = np.zeros_like(grad_arr)
-        direction[trace_rows, 2] = -np.asarray(grad_arr[trace_rows, 2], dtype=float)
-        trace_descent_z = direction[trace_rows, 2]
-        trace_descent_z_mean = float(np.mean(trace_descent_z))
-        stats["trace_descent_z_mean"] = trace_descent_z_mean
-        if not np.isfinite(trace_descent_z_mean) or trace_descent_z_mean <= 0.0:
-            stats["reason"] = "non_positive_trace_z_descent"
-            return False, step_size_in, float("nan")
-
-        before_positions = self.mesh.positions_view().copy(order="F")
-        energy_before = float(energy_fn())
-        stats["energy_before"] = energy_before
-        stats["attempted"] = True
-        self._shape_scaffold_rejected_step_fallback_attempted_count = (
-            int(
-                getattr(
-                    self,
-                    "_shape_scaffold_rejected_step_fallback_attempted_count",
-                    0,
-                )
-            )
-            + 1
+            publish_stats=lambda stats: setattr(
+                self, "_last_shape_scaffold_rejected_step_fallback_stats", stats
+            ),
+            record_attempt=self._record_shape_scaffold_rejected_step_fallback_attempt,
+            record_accept=self._record_shape_scaffold_rejected_step_fallback_accept,
         )
-        stats["attempted_count"] = int(
-            self._shape_scaffold_rejected_step_fallback_attempted_count
-        )
-        setattr(self.mesh, "_line_search_reduced_energy", bool(reduced_flag))
-        if reduced_flag and accept_rule is not None:
-            setattr(self.mesh, "_line_search_reduced_accept_rule", str(accept_rule))
-        try:
-            success, new_step, accepted_energy = backtracking_line_search_array(
-                self.mesh,
-                direction,
-                grad_arr,
-                step_size_in,
-                energy_fn,
-                self.mesh.vertex_ids,
-                max_iter=getattr(self.stepper, "max_iter", 10),
-                beta=getattr(self.stepper, "beta", 0.7),
-                c=getattr(self.stepper, "c", 1e-4),
-                gamma=getattr(self.stepper, "gamma", 1.5),
-                alpha_max_factor=getattr(self.stepper, "alpha_max_factor", 10.0),
-                constraint_enforcer=self._enforce_constraints
-                if self._has_enforceable_constraints
-                else None,
-            )
-        finally:
-            if hasattr(self.mesh, "_line_search_reduced_energy"):
-                delattr(self.mesh, "_line_search_reduced_energy")
-            if hasattr(self.mesh, "_line_search_reduced_accept_rule"):
-                delattr(self.mesh, "_line_search_reduced_accept_rule")
+        return result.success, result.step_size, result.energy
 
-        after_positions = self.mesh.positions_view()
-        trace_dz = after_positions[trace_rows, 2] - before_positions[trace_rows, 2]
-        stats.update(
-            {
-                "accepted": bool(success),
-                "reason": "accepted" if success else "line_search_rejected",
-                "step_size_out": float(new_step),
-                "energy_after": float(accepted_energy),
-                "trace_dz_mean": float(np.mean(trace_dz)) if trace_dz.size else 0.0,
-                "trace_dz_max": float(np.max(trace_dz)) if trace_dz.size else 0.0,
-            }
-        )
-        if success:
-            self._shape_scaffold_rejected_step_fallback_accepted_count = (
-                int(
-                    getattr(
-                        self,
-                        "_shape_scaffold_rejected_step_fallback_accepted_count",
-                        0,
-                    )
-                )
-                + 1
-            )
-        stats["accepted_count"] = int(
-            getattr(
-                self,
-                "_shape_scaffold_rejected_step_fallback_accepted_count",
-                0,
-            )
-        )
-        return bool(success), float(new_step), float(accepted_energy)
+    def _record_shape_scaffold_rejected_step_fallback_attempt(self) -> int:
+        self._shape_scaffold_rejected_step_fallback_attempted_count += 1
+        return int(self._shape_scaffold_rejected_step_fallback_attempted_count)
+
+    def _record_shape_scaffold_rejected_step_fallback_accept(self) -> int:
+        self._shape_scaffold_rejected_step_fallback_accepted_count += 1
+        return int(self._shape_scaffold_rejected_step_fallback_accepted_count)
 
     def _soa_views(self) -> tuple[np.ndarray, Dict[int, int], np.ndarray]:
         """Return cached SoA views for positions, index map, and a scratch buffer."""
@@ -1247,8 +1134,9 @@ STEP SIZE:\t {self.step_size}
                 )
                 if guard_factor > 0.0:
                     pre_energy = float(self.compute_energy())
-                    pre_tin = self.mesh.tilts_in_view().copy(order="F")
-                    pre_tout = self.mesh.tilts_out_view().copy(order="F")
+                    tilt_snapshot = capture_tilt_state(
+                        self.mesh, uses_leaflet_tilts=True
+                    )
                     threshold = max(guard_min, abs(pre_energy) * guard_factor)
                     max_retries = int(
                         self.global_params.get("tilt_relax_energy_guard_retries", 4)
@@ -1270,7 +1158,11 @@ STEP SIZE:\t {self.step_size}
                             self.mesh.increment_version()
                             break
                         # Roll back and retry with a smaller tilt step.
-                        self._set_leaflet_tilts_from_arrays_fast(pre_tin, pre_tout)
+                        restore_tilt_state(
+                            self.mesh,
+                            tilt_snapshot,
+                            set_leaflet_tilts=self._set_leaflet_tilts_from_arrays_fast,
+                        )
                         trial_step *= 0.5
                         self.global_params.set("tilt_step_size", trial_step)
                         if logger.isEnabledFor(logging.DEBUG):
@@ -1287,7 +1179,11 @@ STEP SIZE:\t {self.step_size}
                     # Restore the original tilt step size.
                     self.global_params.set("tilt_step_size", orig_tilt_step)
                     if not accepted:
-                        self._set_leaflet_tilts_from_arrays_fast(pre_tin, pre_tout)
+                        restore_tilt_state(
+                            self.mesh,
+                            tilt_snapshot,
+                            set_leaflet_tilts=self._set_leaflet_tilts_from_arrays_fast,
+                        )
                         if logger.isEnabledFor(logging.WARNING):
                             logger.warning(
                                 "Tilt relaxation energy spike: %.6g -> %.6g "
@@ -1368,9 +1264,10 @@ STEP SIZE:\t {self.step_size}
                 setattr(self.mesh, "_line_search_reduced_accept_rule", accept_rule)
 
             try:
-                step_kwargs = {}
-                if self._stepper_supports_trial_energy_fn():
-                    step_kwargs["trial_energy_fn"] = trial_energy_fn
+                step_kwargs = trial_energy_step_kwargs(
+                    supports_trial_energy=self._stepper_supports_trial_energy_fn(),
+                    trial_energy_fn=trial_energy_fn,
+                )
                 step_success, self.step_size, accepted_energy = self.stepper.step(
                     self.mesh,
                     grad_arr,

@@ -128,6 +128,11 @@ class DummyConstraintManager:
         self.calls.append(kwargs.get("context"))
 
 
+class RecordingConstraintManager(DummyConstraintManager):
+    def enforce_tilt_constraints(self, mesh, **kwargs):
+        self.calls.append(f"tilt:{kwargs.get('context')}")
+
+
 class DummyStepper:
     def __init__(self, results):
         self._results = list(results)
@@ -623,6 +628,49 @@ def test_minimize_successful_run_preserves_final_constraint_projection_context()
     assert out["terminated_early"] is False
     assert cm.calls[0] == "mesh_operation"
     assert cm.calls[-1] == "finalize"
+
+
+def test_constraint_lifecycle_preserves_context_projection_and_version_cadence(
+    monkeypatch,
+):
+    mesh = build_min_mesh()
+    gp = GlobalParameters()
+    cm = RecordingConstraintManager()
+    minim = Minimizer(
+        mesh,
+        gp,
+        DummyStepper([]),
+        DummyEnergyManager(DummyEnergyModule()),
+        cm,
+        quiet=True,
+    )
+    events: list[str] = []
+    increment_version = mesh.increment_version
+    project_tilts = mesh.project_tilts_to_tangent
+
+    def record_increment_version():
+        events.append("version")
+        increment_version()
+
+    def record_project_tilts():
+        events.append("project")
+        project_tilts()
+
+    monkeypatch.setattr(mesh, "increment_version", record_increment_version)
+    monkeypatch.setattr(mesh, "project_tilts_to_tangent", record_project_tilts)
+
+    minim._enforce_constraints()
+    assert cm.calls == ["minimize", "tilt:None"]
+    assert events == []
+
+    minim.enforce_constraints_after_mesh_ops()
+    assert cm.calls[-2:] == ["mesh_operation", "tilt:None"]
+    assert events == ["version"]
+    assert minim._last_mesh_op_tilt_constraints_enforced is True
+
+    minim._finalize_constraints()
+    assert cm.calls[-1] == "finalize"
+    assert events[-2:] == ["project", "version"]
 
 
 def test_minimize_energy_consistency_logs_debug(caplog, monkeypatch):

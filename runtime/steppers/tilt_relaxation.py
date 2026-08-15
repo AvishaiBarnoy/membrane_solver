@@ -7,17 +7,17 @@ from typing import TYPE_CHECKING, Any, Callable
 
 import numpy as np
 
-from geometry.entities import _fast_cross
-from modules.energy.leaflet_presence import (
-    leaflet_absent_vertex_mask,
-    leaflet_present_triangle_mask,
-)
 from runtime.preconditioners import build_tilt_cg_preconditioner
 from runtime.projections.tilt import (
     build_leaflet_trial_tilts,
     project_leaflet_tilts_with_optional_axisymmetry,
     project_tilts_to_tangent_array,
 )
+from runtime.tilt_problem_data import (
+    _tilt_vertex_areas_from_triangles,  # noqa: F401
+    build_leaflet_tilt_problem_data,
+)
+from runtime.tilt_relaxation_policy import resolve_tilt_relaxation_policy
 
 if TYPE_CHECKING:
     from core.parameters.global_parameters import GlobalParameters
@@ -26,23 +26,6 @@ if TYPE_CHECKING:
     from runtime.constraint_manager import ConstraintModuleManager
 
 logger = logging.getLogger("membrane_solver")
-
-
-def _tilt_vertex_areas_from_triangles(
-    *, n_vertices: int, tri_rows: np.ndarray, positions: np.ndarray
-) -> np.ndarray:
-    """Return barycentric per-vertex areas based on triangle areas."""
-    tri_pos = positions[tri_rows]
-    v0 = tri_pos[:, 0, :]
-    v1 = tri_pos[:, 1, :]
-    v2 = tri_pos[:, 2, :]
-    areas = 0.5 * np.linalg.norm(_fast_cross(v1 - v0, v2 - v0), axis=1)
-    vertex_areas = np.zeros(n_vertices, dtype=float)
-    a3 = areas / 3.0
-    np.add.at(vertex_areas, tri_rows[:, 0], a3)
-    np.add.at(vertex_areas, tri_rows[:, 1], a3)
-    np.add.at(vertex_areas, tri_rows[:, 2], a3)
-    return vertex_areas
 
 
 def _apply_inner_coupled_update_mode_to_delta(
@@ -481,28 +464,13 @@ class TiltRelaxationManager:
             "cg_fallback_update_norms_in": {},
             "cg_fallback_update_norms_out": {},
         }
-        cg_rejection_fallback = (
-            str(global_params.get("tilt_cg_rejection_fallback", "off") or "off")
-            .strip()
-            .lower()
-        )
-        if cg_rejection_fallback not in {"off", "gd"}:
-            raise ValueError("tilt_cg_rejection_fallback must be 'off' or 'gd'.")
+        policy = resolve_tilt_relaxation_policy(global_params)
+        cg_rejection_fallback = policy.cg_rejection_fallback
         self.last_leaflet_relaxation_stats["cg_rejection_fallback"] = str(
             cg_rejection_fallback
         )
-        projection_cadence = (
-            str(global_params.get("tilt_projection_cadence", "per_step") or "per_step")
-            .strip()
-            .lower()
-        )
-        if projection_cadence not in {"per_step", "per_pass"}:
-            raise ValueError(
-                "tilt_projection_cadence must be 'per_step' or 'per_pass'."
-            )
-        projection_interval = int(global_params.get("tilt_projection_interval", 1) or 1)
-        if projection_interval < 1:
-            raise ValueError("tilt_projection_interval must be >= 1.")
+        projection_cadence = policy.projection_cadence
+        projection_interval = policy.projection_interval
         self.last_tilt_projection_stats = {
             "projection_cadence": str(projection_cadence),
             "projection_interval": int(projection_interval),
@@ -670,40 +638,24 @@ class TiltRelaxationManager:
             if tri_rows is None or len(tri_rows) == 0:
                 return
 
-            # OPTIMIZATION: Use the mesh's cached barycentric areas for the inner leaflet.
-            # This is mathematically equivalent to the previous local calculation but avoids redundant O(N) work.
-            tilt_vertex_areas_in = mesh.barycentric_vertex_areas(positions=positions)
-
-            absent_mask_out = leaflet_absent_vertex_mask(
-                mesh, global_params, leaflet="out"
+            problem_data = build_leaflet_tilt_problem_data(
+                mesh=mesh,
+                global_params=global_params,
+                positions=positions,
+                tri_rows=tri_rows,
+                fixed_mask_in=fixed_mask_in,
+                fixed_mask_out=fixed_mask_out,
+                tilts_in=tilts_in,
+                tilts_out=tilts_out,
             )
 
-            # OPTIMIZATION: If no vertices are absent, the outer leaflet has the same vertex areas as the inner.
-            if not np.any(absent_mask_out):
-                tilt_vertex_areas_out = tilt_vertex_areas_in
-            else:
-                tri_keep_out = leaflet_present_triangle_mask(
-                    mesh, tri_rows, absent_vertex_mask=absent_mask_out
-                )
-                tri_rows_out = tri_rows[tri_keep_out] if tri_keep_out.size else tri_rows
-                tilt_vertex_areas_out = (
-                    np.zeros(len(mesh.vertex_ids), dtype=float)
-                    if tri_rows_out.size == 0
-                    else _tilt_vertex_areas_from_triangles(
-                        n_vertices=len(mesh.vertex_ids),
-                        tri_rows=tri_rows_out,
-                        positions=positions,
-                    )
-                )
+            tilt_vertex_areas_in = problem_data.vertex_areas_in
+            tilt_vertex_areas_out = problem_data.vertex_areas_out
             self.last_leaflet_relaxation_stats["active_outer_area_rows"] = int(
                 np.sum(np.asarray(tilt_vertex_areas_out, dtype=float) > 0.0)
             )
-            tilt_fixed_vals_in = (
-                tilts_in[fixed_mask_in].copy() if np.any(fixed_mask_in) else None
-            )
-            tilt_fixed_vals_out = (
-                tilts_out[fixed_mask_out].copy() if np.any(fixed_mask_out) else None
-            )
+            tilt_fixed_vals_in = problem_data.fixed_values_in
+            tilt_fixed_vals_out = problem_data.fixed_values_out
 
             tilt_in_grad = ctx.scratch_array(
                 "leaflet_tilt_in_grad",

@@ -12,6 +12,9 @@ from typing import Any, Callable
 
 import numpy as np
 
+from geometry.cache_checks import field_mask_cache_valid
+from runtime.optimization_state import capture_tilt_state, restore_tilt_state
+
 
 def capture_diagnostic_state(
     mesh, global_params, *, uses_leaflet_tilts: bool
@@ -57,11 +60,13 @@ def get_cached_tilt_fixed_mask(
     """Return cached tilt fixed mask (or recompute when mesh versions changed)."""
     flags_version = mesh._tilt_fixed_flags_version
     vertex_version = mesh._vertex_ids_version
-    if (
-        cached_mask is not None
-        and cached_flags_version == flags_version
-        and cached_vertex_version == vertex_version
-        and len(cached_mask) == len(mesh.vertices)
+    if field_mask_cache_valid(
+        cached_mask=cached_mask,
+        cached_flags_version=cached_flags_version,
+        flags_version=flags_version,
+        cached_vertex_version=cached_vertex_version,
+        vertex_version=vertex_version,
+        expected_size=len(mesh.vertices),
     ):
         return cached_mask, flags_version, vertex_version
 
@@ -172,30 +177,21 @@ def _build_reduced_line_search_callbacks(
             else:
                 gp.unset(key)
 
-    def _capture_tilt_state() -> dict[str, np.ndarray]:
-        if uses_leaflet_tilts:
-            return {
-                "tilts_in": mesh.tilts_in_view().copy(order="F"),
-                "tilts_out": mesh.tilts_out_view().copy(order="F"),
-            }
-        return {"tilts": mesh.tilts_view().copy(order="F")}
-
-    def _restore_tilt_state(snapshot: dict[str, np.ndarray]) -> None:
-        if "tilts_in" in snapshot and "tilts_out" in snapshot:
-            set_leaflet_tilts_fast_fn(snapshot["tilts_in"], snapshot["tilts_out"])
-            return
-        if "tilts" in snapshot:
-            mesh.set_tilts_from_array(snapshot["tilts"])
-
-    canonical_trial_tilts: dict[str, np.ndarray] | None = None
+    canonical_trial_tilts = None
 
     def _evaluate(positions: np.ndarray | None) -> float:
         nonlocal canonical_trial_tilts
         if positions is not None:
             if canonical_trial_tilts is None:
-                canonical_trial_tilts = _capture_tilt_state()
+                canonical_trial_tilts = capture_tilt_state(
+                    mesh, uses_leaflet_tilts=uses_leaflet_tilts
+                )
             else:
-                _restore_tilt_state(canonical_trial_tilts)
+                restore_tilt_state(
+                    mesh,
+                    canonical_trial_tilts,
+                    set_leaflet_tilts=set_leaflet_tilts_fast_fn,
+                )
         tilt_mode = str(gp.get("tilt_solve_mode", "fixed") or "fixed")
         mode_norm = tilt_mode.strip().lower()
         if positions is None:
@@ -233,7 +229,9 @@ def _build_reduced_line_search_callbacks(
                 tilt_snapshot = None
                 pre_e = None
                 if guard_factor > 0.0:
-                    tilt_snapshot = _capture_tilt_state()
+                    tilt_snapshot = capture_tilt_state(
+                        mesh, uses_leaflet_tilts=uses_leaflet_tilts
+                    )
                     pre_e = float(raw_eval())
 
                 if uses_leaflet_tilts:
@@ -269,7 +267,11 @@ def _build_reduced_line_search_callbacks(
                     threshold = max(guard_min, abs(pre_e) * guard_factor)
                     if e > threshold:
                         assert tilt_snapshot is not None
-                        _restore_tilt_state(tilt_snapshot)
+                        restore_tilt_state(
+                            mesh,
+                            tilt_snapshot,
+                            set_leaflet_tilts=set_leaflet_tilts_fast_fn,
+                        )
                         if logger_obj.isEnabledFor(logging.DEBUG):
                             logger_obj.debug(
                                 "Line-search tilt guard: E %.6g -> %.6g "

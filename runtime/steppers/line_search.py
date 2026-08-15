@@ -4,6 +4,11 @@ from typing import Callable, Dict
 import numpy as np
 
 from geometry.entities import Mesh
+from runtime.optimization_state import (
+    capture_position_state,
+    commit_position_rows,
+    restore_position_state,
+)
 from runtime.topology import (
     check_max_normal_change,
     check_max_normal_change_positions,
@@ -287,7 +292,8 @@ def backtracking_line_search_array(
     movable_rows = np.flatnonzero(~fixed_mask)
     movable_vids = mesh.vertex_ids[movable_rows]
     movable_vertices = [mesh.vertices[vidx] for vidx in movable_vids]
-    baseline_positions = mesh.positions_view().copy(order="F")
+    position_snapshot = capture_position_state(mesh)
+    baseline_positions = position_snapshot.positions
     original_positions = {
         int(vidx): baseline_positions[row].copy() for row, vidx in enumerate(vertex_ids)
     }
@@ -395,10 +401,12 @@ def backtracking_line_search_array(
                     trial_energy,
                     accept,
                 )
-                for row, vidx, vertex in zip(
-                    movable_rows, movable_vids, movable_vertices
-                ):
-                    vertex.position[:] = trial_positions[row]
+                commit_position_rows(
+                    mesh,
+                    vertex_ids=position_snapshot.vertex_ids,
+                    rows=movable_rows,
+                    positions=trial_positions,
+                )
                 mesh.increment_version()
                 new_step = min(alpha * gamma, alpha_max)
                 return True, new_step, float(trial_energy)
@@ -436,8 +444,7 @@ def backtracking_line_search_array(
 
         if not is_safe_small_step:
             if not check_max_normal_change(mesh, original_positions):
-                for vidx, pos in original_positions.items():
-                    mesh.vertices[vidx].position[:] = pos
+                restore_position_state(mesh, position_snapshot)
                 if needs_tilt_restore:
                     mesh.set_tilts_from_array(original_tilts)
                     mesh.set_tilts_in_from_array(original_tilts_in)
@@ -472,8 +479,7 @@ def backtracking_line_search_array(
             new_step = min(alpha * gamma, alpha_max)
             return True, new_step, float(trial_energy)
 
-        for vidx, pos in original_positions.items():
-            mesh.vertices[vidx].position[:] = pos
+        restore_position_state(mesh, position_snapshot)
         if needs_tilt_restore:
             mesh.set_tilts_from_array(original_tilts)
             mesh.set_tilts_in_from_array(original_tilts_in)
@@ -490,8 +496,7 @@ def backtracking_line_search_array(
         "Line search failed after %d backtracks; reverting positions and shrinking step size.",
         backtracks,
     )
-    for vidx, pos in original_positions.items():
-        mesh.vertices[vidx].position[:] = pos
+    restore_position_state(mesh, position_snapshot)
     if needs_tilt_restore:
         mesh.set_tilts_from_array(original_tilts)
         mesh.set_tilts_in_from_array(original_tilts_in)
