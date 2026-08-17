@@ -405,6 +405,9 @@ basename, `.log` suffix).
 
 ## Architecture overview
 
+- The active repository-wide modernization strategy, subsystem ownership map,
+  protected-lane registry, cache inventory, and refactoring order live in
+  `docs/REPOSITORY_MODERNIZATION_PLAN.md`.
 - A living dependency diagram is stored at `docs/mermaid_diagram.txt` (render with any Mermaid-compatible viewer). It ties CLI entry points, geometry entities, runtime managers, and modules together.
 - Shared exception types (e.g., `InvalidEdgeIndexError`) live in `exceptions.py` so both geometry and runtime code can surface actionable error messages.
 - Runtime components (`runtime/topology.py`, `runtime/refinement.py`, etc.) now have targeted regression tests to keep mesh maintenance stable as new energy/constraint modules land.
