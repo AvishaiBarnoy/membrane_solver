@@ -11,6 +11,7 @@ global_parameters:
   tilt_modulus_out: 225.0
   bending_tilt_assume_J0_presets_in:
   - disk
+  bending_tilt_base_term_reference_mode: current_geometry
   rim_slope_match_group: rim
   rim_slope_match_outer_group: outer
   rim_slope_match_disk_group: disk

@@ -33,6 +33,10 @@ def test_stage_a_fixture_builder_preserves_geometry_and_remaps_physics() -> None
     assert gp["tilt_rim_source_group"] == "disk"
     assert float(gp["tilt_rim_source_strength"]) == STAGE_A_RIM_SOURCE_STRENGTH
     assert gp["tilt_rim_source_edge_mode"] == "all"
+    assert (
+        gp["bending_tilt_base_term_reference_mode"]
+        == (source_doc["global_parameters"]["bending_tilt_base_term_reference_mode"])
+    )
 
     assert "tilt_thetaB_contact_in" not in base_doc["energy_modules"]
     assert "tilt_rim_source_bilayer" in base_doc["energy_modules"]
