@@ -92,6 +92,31 @@ jobs:
         run: |
           pytest -q -m "unit" --cov=. --cov-report=xml
 
+  theory-critical:
+    name: Theory correctness (blocking)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e .
+
+      - name: Verify and run critical theory tests
+        run: |
+          pytest -q -o addopts='' tests/test_theory_critical_ci_manifest.py
+          mapfile -t theory_tests < <(grep -v '^#' tests/manifest/theory_critical_pr.txt | grep -v '^$')
+          pytest -q -o addopts='' "${theory_tests[@]}"
+
   regression-flat-disk:
     name: Regression flat-disk (py3.12)
     runs-on: ubuntu-latest

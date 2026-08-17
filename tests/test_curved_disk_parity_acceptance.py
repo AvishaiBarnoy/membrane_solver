@@ -267,6 +267,14 @@ def test_curved_profile_topology_audit_separates_clean_and_folded_lanes():
             "kozlov_1disk_3d_free_disk_theory_parity_physical_edge_default.yaml"
         )
     )
+    # The tracked physical-edge fixture is collision-free and monotone now.
+    # Create an explicit folded control by moving its radius-5 ring inside the
+    # preceding radius-2.886 ring.
+    for vertex in folded.vertices.values():
+        radius = float(np.linalg.norm(vertex.position[:2]))
+        if abs(radius - 5.0) <= 1.0e-9:
+            vertex.position[:2] *= 2.66 / radius
+    folded.increment_version()
 
     clean_report = axisymmetric_ring_topology_diagnostics(clean)
     folded_report = axisymmetric_ring_topology_diagnostics(folded)
@@ -275,7 +283,7 @@ def test_curved_profile_topology_audit_separates_clean_and_folded_lanes():
     assert clean_report["inversion_count"] == 0
     assert folded_report["is_monotone"] is False
     assert folded_report["inversions"] == [
-        {"inner_radius": 2.833333333, "outer_radius": 2.66}
+        {"inner_radius": 2.886, "outer_radius": 2.66}
     ]
 
 
