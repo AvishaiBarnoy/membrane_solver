@@ -601,11 +601,11 @@ def _physical_rim_and_first_shell_rows(mesh) -> tuple[float, np.ndarray]:
 
 
 def _physical_rim_and_first_shell_radius(mesh) -> tuple[float, float]:
-    """Return the physical rim radius and representative first-shell radius."""
+    """Return the physical rim radius and parent-circle first-shell radius."""
     rim_radius, shell_rows = _physical_rim_and_first_shell_rows(mesh)
     positions = mesh.positions_view()
     r = np.linalg.norm(positions[:, :2], axis=1)
-    return rim_radius, float(np.median(r[shell_rows]))
+    return rim_radius, float(np.max(r[shell_rows]))
 
 
 def activate_local_outer_shell(mesh, *, z_bump: float = 1.5e-4) -> float:
@@ -616,11 +616,22 @@ def activate_local_outer_shell(mesh, *, z_bump: float = 1.5e-4) -> float:
     positions = mesh.positions_view()
     r = np.linalg.norm(positions[:, :2], axis=1)
     _rim_radius, shell_rows = _physical_rim_and_first_shell_rows(mesh)
-    shell_radius = float(np.median(r[shell_rows]))
+    shell_radius = float(np.max(r[shell_rows]))
 
-    for row in shell_rows:
+    # Linear refinement places circumferential edge midpoints on chords, just
+    # inside the parent circle. Restore the single-radius shell required by the
+    # axisymmetric support boundary before applying its common height.
+    shell_xy = positions[shell_rows, :2]
+    shell_r = r[shell_rows]
+    good = shell_r > 1.0e-12
+    if not np.all(good):
+        raise AssertionError("Outer support shell contains a row on the axis")
+    projected_xy = shell_xy * (shell_radius / shell_r)[:, None]
+
+    for local_row, row in enumerate(shell_rows):
         vid = int(mesh.vertex_ids[int(row)])
         mesh.vertices[vid].options["rim_slope_match_group"] = "outer"
+        mesh.vertices[vid].position[:2] = projected_xy[local_row]
         mesh.vertices[vid].position[2] = float(z_bump)
 
     mesh.increment_version()
