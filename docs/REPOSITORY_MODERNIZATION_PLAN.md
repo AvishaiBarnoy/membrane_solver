@@ -1,6 +1,6 @@
 # Repository Modernization Plan
 
-Status: **Phase 5 integration in progress; scientific requalification separate**
+Status: **structural modernization complete; scientific requalification separate**
 
 This is the sole repository-level authority for modernization scope, ownership,
 phase status, and remaining work. Detailed files below are operational contracts,
@@ -96,20 +96,20 @@ Key reviewed commits:
 
 ### Phase 5 — integration and scientific separation
 
-In progress. Integration reviews the accumulated tree by logical change set,
-runs focused tests, and commits only coherent artifacts. Completed integration:
+Structural integration is complete. The accumulated tree was reviewed by
+logical change set, focused tests were run, and only coherent artifacts were
+committed:
 
 - `ddc9994` removed two obsolete tools (73 lines);
 - `4f1d68d` classified expensive test lanes and activated `exhaustive`;
 - an oversized diagnostics extraction was rejected after its full cluster
-  measured net +2,949 lines.
+  measured net +2,949 lines;
+- `e2e2d39` replaced 2,516 lines of draft planning documents with a 657-line
+  authority/contract set;
+- `0b67fec` added focused input validation for the retained runtime probe.
 
-Remaining integration work:
-
-1. Commit this compact documentation/contract set after reference validation.
-2. Review the standalone runtime-probe test on its own merits.
-3. Leave fixture and theory-acceptance changes unstaged until scientific
-   requalification is explicitly authorized.
+Fixture and theory-acceptance changes remain unstaged until scientific
+requalification is explicitly authorized.
 
 Scientific requalification is not required to close structural integration. It
 must remain a separate change set governed by the theory workflow contract and
