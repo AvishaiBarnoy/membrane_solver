@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -10,6 +11,8 @@ sys.path.insert(0, str(ROOT))
 from tools.diagnostics.flat_disk_curved_3d_ablation_sweep import (
     run_flat_disk_curved_3d_ablation_sweep,
 )
+
+pytestmark = pytest.mark.slow
 
 
 def test_flat_disk_curved_3d_ablation_sweep_returns_ranked_candidates() -> None:

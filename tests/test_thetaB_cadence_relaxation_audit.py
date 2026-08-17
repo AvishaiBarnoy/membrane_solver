@@ -4,6 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from tools.diagnostics.thetaB_cadence_relaxation_audit import (
@@ -748,6 +749,8 @@ def test_thetaB_cadence_markdown_report_renders_core_sections() -> None:
     assert "## Base-Term Reference Sweep" in text
 
 
+@pytest.mark.slow
+@pytest.mark.script
 def test_thetaB_cadence_cli_schema_writes_yaml_and_markdown(tmp_path) -> None:
     out_yaml = tmp_path / "cadence.yaml"
     out_md = tmp_path / "cadence.md"

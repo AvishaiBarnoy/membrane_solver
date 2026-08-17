@@ -12,6 +12,8 @@ from tools.diagnostics.flat_disk_kh_rim_fidelity import (  # noqa: E402
     run_flat_disk_kh_rim_fidelity,
 )
 
+pytestmark = [pytest.mark.regression, pytest.mark.slow]
+
 
 @pytest.mark.regression
 def test_flat_disk_kh_rim_fidelity_metrics_are_finite_and_bounded() -> None:

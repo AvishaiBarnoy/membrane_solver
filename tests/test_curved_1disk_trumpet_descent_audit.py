@@ -7,6 +7,8 @@ from tools.diagnostics.curved_1disk_trumpet_descent_audit import (
     run_curved_1disk_trumpet_descent_audit,
 )
 
+pytestmark = pytest.mark.slow
+
 
 def test_curved_1disk_trumpet_descent_audit_reports_required_schema() -> None:
     report = run_curved_1disk_trumpet_descent_audit(epsilons=(1.0e-5,))

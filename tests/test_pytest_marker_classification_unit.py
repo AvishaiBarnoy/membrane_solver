@@ -61,3 +61,15 @@ def test_collection_hook_still_applies_filename_based_marker_when_missing() -> N
     pytest_collection_modifyitems(config=None, items=[item])
 
     assert item.mark_names == {"e2e"}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("marker", ["acceptance", "slow", "script", "exhaustive"])
+def test_collection_hook_respects_each_explicit_nondefault_category(
+    marker: str,
+) -> None:
+    item = _FakeItem(str(Path("tests") / "test_unrelated_name.py"), marks=[marker])
+
+    pytest_collection_modifyitems(config=None, items=[item])
+
+    assert item.mark_names == {marker}

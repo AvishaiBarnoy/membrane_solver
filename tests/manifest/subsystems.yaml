@@ -1,0 +1,142 @@
+schema_version: 1
+status: partial-source-ownership-map
+purpose: >-
+  Human- and tool-readable impact map. This file is not consumed by pytest and
+  does not alter test selection.
+classification_contract: tests/manifest/TAXONOMY.md
+maintenance:
+  update_when:
+    - a source module gains, loses, or changes a protected behavior
+    - a test is reclassified, consolidated, or moved to another lane
+    - a change manifest completes
+  do_not_use_for:
+    - implicit pytest marker selection
+    - deciding that an unlisted test is irrelevant
+subsystems:
+  test_taxonomy:
+    owners:
+      - pytest.ini
+      - tests/conftest.py
+      - docs/SLOW_TEST_DEDUP_PLAN.md
+    focused_tests: []
+    slow_or_acceptance_tests:
+      - tests/test_flat_disk_one_leaflet_benchmark_e2e.py
+      - tests/test_flat_disk_kh_term_audit_regression.py
+      - tests/test_theory_parity_against_tex_acceptance.py
+    lanes: [default, flat_disk, theory_parity]
+    known_gap: the source-to-test ownership map remains intentionally partial;
+      category coverage is instead guaranteed by the collection hook
+  minimization_lifecycle:
+    owners:
+      - runtime/minimizer.py
+      - runtime/rejected_step_fallback.py
+      - runtime/evaluation_manager.py
+      - runtime/constraint_manager.py
+      - runtime/steppers/line_search.py
+    focused_tests:
+      - tests/test_minimizer.py
+      - tests/test_minimizer_array_only.py
+      - tests/test_minimizer_soa_cache.py
+      - tests/test_accepted_energy_consistency_debug_only.py
+      - tests/test_array_dict_assembly_parity.py
+      - tests/test_kkt_projection.py
+    protected_behaviors:
+      - rejected-step fallback eligibility, statistics, and reset timing
+    slow_or_acceptance_tests:
+      - tests/test_bending_tilt_leaflet_e2e.py
+      - tests/test_kozlov_free_disk_thetaB_convergence_e2e.py
+    lanes: [default, stage_a_emergent, physical_edge_default]
+  geometry_cache:
+    owners:
+      - docs/CACHE_DEPENDENCY_TABLE.md
+      - geometry/mesh.py
+      - geometry/cache_checks.py
+      - geometry/cache_writes.py
+      - runtime/energy_context.py
+    focused_tests:
+      - tests/test_energy_context.py
+      - tests/test_geometry_cache_checks.py
+      - tests/test_geometry_cache_writes.py
+      - tests/test_caching.py
+      - tests/test_connectivity_caching.py
+      - tests/test_p1_triangle_shape_gradient_cache_unit.py
+    slow_or_acceptance_tests: []
+    lanes: [default]
+  tilt_relaxation:
+    owners:
+      - docs/TILT_SOLVE_MODE_MATRIX.md
+      - runtime/steppers/tilt_relaxation.py
+      - runtime/preconditioners.py
+      - runtime/projections/tilt.py
+    focused_tests:
+      - tests/test_tilt_solve_modes.py
+      - tests/test_tilt_leaflet_solve_modes.py
+      - tests/test_tilt_solve_mode_coupled_fallback.py
+      - tests/test_tilt_relax_energy_guard.py
+      - tests/test_tilt_tangent_projection.py
+      - tests/test_preconditioners.py
+      - tests/test_tilt_vertex_area_cache_matches_module_regression.py
+    slow_or_acceptance_tests:
+      - tests/test_tilt_source_decay_e2e.py
+    lanes: [default, stage_a_emergent, shared_rim_staggered_v1]
+  energy_constraint_interfaces:
+    owners:
+      - docs/ENERGY_CONSTRAINT_API_CONTRACT.md
+      - runtime/energy_manager.py
+      - runtime/evaluation_manager.py
+      - runtime/constraint_manager.py
+      - modules/energy
+      - modules/constraints
+    focused_tests:
+      - tests/test_evaluation_manager_regression.py
+      - tests/test_constraint_manager.py
+      - tests/test_energy_gradient_directional_derivative.py
+      - tests/test_bending_tilt_leaflet_energy.py
+      - tests/test_rim_slope_match_out_constraint.py
+    slow_or_acceptance_tests:
+      - tests/test_theory_parity_against_tex_acceptance.py
+    lanes: [default, physical_edge_default, shared_rim_staggered_v1]
+  topology_maintenance:
+    owners:
+      - docs/TOPOLOGY_TRANSFER_CONTRACT.md
+      - runtime/refinement.py
+      - runtime/equiangulation.py
+      - runtime/vertex_average.py
+      - runtime/mesh_quality_repair.py
+    focused_tests:
+      - tests/test_refinement.py
+      - tests/test_refinement_preserves_presets.py
+      - tests/test_equiangulation.py
+      - tests/test_runtime_topology.py
+      - tests/test_topology_invariants_regression.py
+    slow_or_acceptance_tests:
+      - tests/test_gauss_bonnet_annulus_refinement.py
+    lanes: [default, theory_parity]
+  tools_reproducibility:
+    owners:
+      - docs/THEORY_PARITY_WORKFLOW_CONTRACT.md
+      - tools/reproduce_theory_parity.py
+      - tools/reproduce_flat_disk_one_leaflet.py
+      - tools/diagnostics
+    focused_tests:
+      - tests/test_flat_disk_kh_term_audit_core.py
+      - tests/test_scaffold_energy_imbalance_audit.py
+      - tests/test_tilt_benchmark_runner.py
+    slow_or_acceptance_tests:
+      - tests/test_reproduce_theory_parity_acceptance.py
+      - tests/test_flat_disk_one_leaflet_benchmark_e2e.py
+      - tests/test_thetaB_cadence_relaxation_audit.py
+    lanes: [flat_disk, theory_parity, scaffold]
+  configuration_compatibility:
+    owners:
+      - core/parameters/global_parameters.py
+      - core/parameters/resolver.py
+      - geometry/io_readers.py
+      - geometry/input_normalization.py
+    focused_tests:
+      - tests/test_geom_io.py
+      - tests/test_geom_io_tilts.py
+      - tests/test_refactor_compatibility.py
+      - tests/test_commands_io_and_minimization.py
+    slow_or_acceptance_tests: []
+    lanes: [default, legacy, theory_parity]

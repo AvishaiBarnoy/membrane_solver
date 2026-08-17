@@ -1,7 +1,7 @@
 """Pytest configuration and test categorization.
 
-We keep the codebase's existing flat `tests/` layout, but categorize tests into
-`unit`, `regression`, and `e2e` via markers so CI can run targeted subsets.
+We keep the codebase's existing flat `tests/` layout, but categorize every test
+into a documented marker taxonomy so CI can run targeted subsets.
 """
 
 from __future__ import annotations
@@ -17,6 +17,17 @@ from tools.diagnostics.free_disk_profile_protocol import (
     run_free_disk_curved_bilayer_protocol,
     run_free_disk_two_stage_profile_protocol,
 )
+
+_CATEGORY_MARKERS = {
+    "unit",
+    "regression",
+    "e2e",
+    "acceptance",
+    "benchmark",
+    "slow",
+    "script",
+    "exhaustive",
+}
 
 
 @pytest.fixture(scope="session")
@@ -34,15 +45,15 @@ def canonical_profile_protocol_result():
 def pytest_collection_modifyitems(
     config: pytest.Config, items: list[pytest.Item]
 ) -> None:
-    """Auto-apply test category markers based on filename conventions."""
+    """Assign a fallback category when a test has no explicit taxonomy marker."""
     for item in items:
         path = pathlib.Path(str(item.fspath))
         name = path.name.lower()
         explicit = {mark.name for mark in item.iter_markers()}
 
-        # Respect explicit test-level markers in mixed files so CI lanes stay
+        # Respect any explicit category marker in mixed files so CI lanes stay
         # disjoint even when filenames still carry legacy suffixes like `_e2e`.
-        if {"unit", "regression", "e2e", "benchmark"} & explicit:
+        if _CATEGORY_MARKERS & explicit:
             continue
 
         if "benchmark" in name:

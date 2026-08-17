@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 import yaml
 
 from geometry.geom_io import load_data, parse_geometry
@@ -19,6 +20,8 @@ from tools.diagnostics.scaffold_energy_imbalance_audit import (
     run_audit,
 )
 from tools.reproduce_theory_parity import _build_context
+
+pytestmark = [pytest.mark.slow, pytest.mark.script]
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "diagnostics" / "scaffold_energy_imbalance_audit.py"

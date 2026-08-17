@@ -4,6 +4,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+pytestmark = [pytest.mark.slow, pytest.mark.script]
+
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]

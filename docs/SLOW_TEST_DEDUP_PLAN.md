@@ -17,8 +17,11 @@ Current observed runtime:
 
 ## Current state
 
-The explicit slow suite is now green. The remaining problem is overlap, not
-correctness.
+The explicit slow suite is now green. The manifest workstream has implemented
+the `exhaustive` marker, excluded it from the default and main-slow selections,
+and documented the command contract in
+[`tests/manifest/TAXONOMY.md`](../tests/manifest/TAXONOMY.md). The remaining
+problem is overlap, not correctness.
 
 The dominant cost comes from repeated calls to the same benchmark and script
 entry points:
@@ -205,8 +208,8 @@ after reclassifying the overlapping modules above.
 
 ### Nightly / exhaustive
 
-Add a new marker, for example `exhaustive`, for overlap-heavy tests that still
-have value but should not stay in the main slow path.
+The `exhaustive` marker is active for overlap-heavy tests that still have value
+but should not stay in the main slow path.
 
 Candidate first moves:
 
@@ -216,11 +219,11 @@ Candidate first moves:
 - theory parity auxiliary audit modules
 - KH audit wrapper regressions
 
-## Next dedup PR
+## Follow-up dedup work
 
-1. Add an `exhaustive` marker in `pytest.ini`.
-2. Move the clearly overlapping benchmark/theory modules above from the main
-   slow suite to the exhaustive tier.
+1. Measure runtime, not merely collection counts, for each behavior cluster.
+2. Retain or move candidates only after showing their behavior is covered by a
+   representative test; do not delete scientific lanes.
 3. Re-run:
    - `pytest -q`
    - `pytest -q -o addopts='' -m "(acceptance or benchmark or e2e or slow or script) and not exhaustive"`

@@ -17,6 +17,8 @@ from tools.diagnostics.curved_disk_theory import (
     topological_leaflet_bending_tilt_regions,
 )
 
+pytestmark = [pytest.mark.acceptance, pytest.mark.slow]
+
 
 def test_curved_theory_tensionless_baseline():
     """Verify that the curved theory matches the Section 2.2 benchmark in 1_disk_3d.tex."""

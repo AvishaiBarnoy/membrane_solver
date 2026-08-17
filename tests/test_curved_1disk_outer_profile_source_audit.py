@@ -1,10 +1,14 @@
 import math
 
+import pytest
+
 from tools.diagnostics.curved_1disk_outer_profile_source_audit import (
     ALLOWED_CLASSIFICATIONS,
     SIGN_CONVENTION_CLASSIFICATIONS,
     run_curved_1disk_outer_profile_source_audit,
 )
+
+pytestmark = pytest.mark.slow
 
 
 def test_curved_1disk_outer_profile_source_audit_reports_schema() -> None:

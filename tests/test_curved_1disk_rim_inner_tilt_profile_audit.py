@@ -1,10 +1,14 @@
 import math
 
+import pytest
+
 from tools.diagnostics.curved_1disk_rim_inner_tilt_profile_audit import (
     PROFILE_CLASSIFICATIONS,
     RIM_CLASSIFICATIONS,
     run_curved_1disk_rim_inner_tilt_profile_audit,
 )
+
+pytestmark = pytest.mark.slow
 
 
 def test_curved_1disk_rim_inner_tilt_profile_audit_reports_schema() -> None:

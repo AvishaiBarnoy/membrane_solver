@@ -1,10 +1,14 @@
 import math
 
+import pytest
+
 from tools.diagnostics.curved_1disk_transition_band_ownership_audit import (
     ALLOWED_CLASSIFICATIONS,
     THETA_CANDIDATES,
     run_curved_1disk_transition_band_ownership_audit,
 )
+
+pytestmark = pytest.mark.slow
 
 
 def test_transition_band_ownership_audit_reports_required_schema() -> None:

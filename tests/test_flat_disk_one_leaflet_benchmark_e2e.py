@@ -16,6 +16,8 @@ from runtime.refinement import refine_triangle_mesh
 from tools.diagnostics.flat_disk_kh_error_source_audit import (
     run_flat_disk_kh_fractional_refinement_trend,
 )
+
+pytestmark = [pytest.mark.e2e, pytest.mark.benchmark, pytest.mark.slow]
 from tools.diagnostics.flat_disk_kh_term_audit import (
     run_flat_disk_kh_outerfield_averaged_sweep,
     run_flat_disk_kh_term_audit,

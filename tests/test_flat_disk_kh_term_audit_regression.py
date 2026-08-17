@@ -24,6 +24,8 @@ from tools.diagnostics.flat_disk_kh_term_audit import (
     run_flat_disk_kh_term_audit_refine_sweep,
 )
 
+pytestmark = [pytest.mark.regression, pytest.mark.slow]
+
 
 def _freeze_cache_value(value):
     """Return an lru-cache-safe representation for audit helper kwargs."""

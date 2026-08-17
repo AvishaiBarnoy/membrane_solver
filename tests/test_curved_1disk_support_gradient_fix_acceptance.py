@@ -1,8 +1,12 @@
+import pytest
+
 from tools.diagnostics.curved_1disk_shape_direction_audit import (
     run_curved_1disk_shape_direction_audit,
 )
 from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import THEORY_THETA_B
 from tools.diagnostics.curved_1disk_theory_benchmark import _run_curved_theta_candidate
+
+pytestmark = [pytest.mark.acceptance, pytest.mark.slow]
 
 
 def test_curved_1disk_support_transition_band_no_longer_dominates_shape_update() -> (

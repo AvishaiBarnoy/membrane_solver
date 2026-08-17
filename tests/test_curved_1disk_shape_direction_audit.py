@@ -12,6 +12,8 @@ from tools.diagnostics.curved_1disk_shape_direction_audit import (
 from tools.diagnostics.curved_1disk_trumpet_descent_audit import _apply_z_mode
 from tools.diagnostics.utils import capture_state, restore_state
 
+pytestmark = pytest.mark.slow
+
 
 def test_curved_1disk_leaflet_shape_gradients_match_log_direction() -> None:
     minim = _prepare_minimizer(0.1845693593)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from tools.free_one_disc_shape_parity_audit import _unit, run_shape_parity_audit
 
@@ -20,6 +21,7 @@ def test_unit_handles_zero_direction() -> None:
     np.testing.assert_array_equal(_unit(values), values)
 
 
+@pytest.mark.slow
 def test_oriented_curvature_tilt_cross_shape_pullback_matches_energy() -> None:
     report = run_shape_parity_audit(
         angular_sectors=12,

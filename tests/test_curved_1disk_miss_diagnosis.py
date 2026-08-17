@@ -4,6 +4,8 @@ from tools.diagnostics.curved_1disk_miss_diagnosis import (
     run_curved_1disk_miss_diagnosis,
 )
 
+pytestmark = pytest.mark.slow
+
 
 def _benchmark_report() -> dict[str, object]:
     return {

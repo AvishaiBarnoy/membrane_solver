@@ -10,6 +10,8 @@ from tools.diagnostics.flat_disk_kh_outer_vertex_audit import (
     run_flat_disk_kh_outer_vertex_audit,
 )
 
+pytestmark = [pytest.mark.regression, pytest.mark.slow]
+
 
 @pytest.mark.regression
 def test_flat_disk_kh_outer_vertex_audit_reports_finite_bands() -> None:
