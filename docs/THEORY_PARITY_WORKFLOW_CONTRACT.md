@@ -48,10 +48,10 @@ The current implementation passes derivative, guardrail, director/profile, and
 coarse extrapolated-response checks. Continuum-scale free-side trace
 continuation remains the responsibility of the separate explicit-trace lane.
 
-## Implemented pure-helper boundary
+## Driver ownership
 
-YAML serialization, report metadata/context, report validation, expansion
-metadata/state construction, expansion-state transition policy, ring geometry,
-and profile math now have dedicated pure helper modules with direct tests.
-Protocol running, metric collection, activation, and persistent state I/O stay
-in the driver.
+The broad pure-helper extraction was rejected during Phase 5 because its full
+production-and-test cluster increased repository size. Serialization, protocol
+running, metric collection, activation, and persistent state I/O therefore
+remain driver-owned. A future extraction requires a net reduction or a concrete
+multi-consumer contract.
