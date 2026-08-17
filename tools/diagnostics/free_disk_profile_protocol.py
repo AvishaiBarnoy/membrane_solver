@@ -352,7 +352,15 @@ def shared_rim_shell_area_audit(mesh) -> dict[str, float]:
     if not disk_unique:
         raise AssertionError("No disk ring found inside the shared rim")
     disk_prev_r = float(disk_unique[-1])
-    outer_unique = sorted({float(rr) for rr in r if rr > outer_r + 1.0e-6})
+    outer_mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
+    outer_mask[outer_rows] = True
+    outer_unique = sorted(
+        {
+            float(rr)
+            for row, rr in enumerate(r)
+            if not outer_mask[row] and rr > outer_r + 1.0e-6
+        }
+    )
     if not outer_unique:
         raise AssertionError("No outer ring found beyond the activated support ring")
     next_outer_r = float(outer_unique[0])
@@ -562,8 +570,8 @@ def optimize_free_disk_theta_b(mesh, *, scans: int = 4) -> float:
     return float(mesh.global_parameters.get("tilt_thetaB_value") or 0.0)
 
 
-def _physical_rim_and_first_shell_radius(mesh) -> tuple[float, float]:
-    """Return the physical rim radius and the first free-shell radius."""
+def _physical_rim_and_first_shell_rows(mesh) -> tuple[float, np.ndarray]:
+    """Return the physical rim radius and complete adjacent free-shell rows."""
     positions = mesh.positions_view()
     r = np.linalg.norm(positions[:, :2], axis=1)
     rim_rows: list[int] = []
@@ -583,14 +591,21 @@ def _physical_rim_and_first_shell_radius(mesh) -> tuple[float, float]:
     rim_mask[np.asarray(rim_rows, dtype=int)] = True
     incident = np.any(rim_mask[np.asarray(tri_rows, dtype=int)], axis=1)
     candidate_rows = np.unique(np.asarray(tri_rows, dtype=int)[incident])
-    candidate_radii = r[candidate_rows]
-    candidate_radii = candidate_radii[candidate_radii > rim_radius + 1.0e-3]
-    if candidate_radii.size == 0:
+    shell_rows = candidate_rows[r[candidate_rows] > rim_radius + 1.0e-3]
+    if shell_rows.size == 0:
         raise AssertionError("No free shell found outside the rim")
-    # Refinement puts circumferential edge midpoints slightly inside their
-    # parent radial ring. They are not a distinct radial support shell; retain
-    # the outer radius represented by the parent-ring vertices.
-    return rim_radius, float(np.max(candidate_radii))
+    # A refined circumferential shell contains both parent-ring vertices and
+    # chord midpoints. Their Euclidean radii differ slightly even though they
+    # form one topological shell, so retain every adjacent exterior row.
+    return rim_radius, np.asarray(shell_rows, dtype=int)
+
+
+def _physical_rim_and_first_shell_radius(mesh) -> tuple[float, float]:
+    """Return the physical rim radius and representative first-shell radius."""
+    rim_radius, shell_rows = _physical_rim_and_first_shell_rows(mesh)
+    positions = mesh.positions_view()
+    r = np.linalg.norm(positions[:, :2], axis=1)
+    return rim_radius, float(np.median(r[shell_rows]))
 
 
 def activate_local_outer_shell(mesh, *, z_bump: float = 1.5e-4) -> float:
@@ -600,11 +615,8 @@ def activate_local_outer_shell(mesh, *, z_bump: float = 1.5e-4) -> float:
     """
     positions = mesh.positions_view()
     r = np.linalg.norm(positions[:, :2], axis=1)
-    rim_radius, shell_radius = _physical_rim_and_first_shell_radius(mesh)
-
-    shell_rows = np.where(np.isclose(r, shell_radius, atol=1.0e-3))[0]
-    if shell_rows.size == 0:
-        raise AssertionError("No rows found on the first shell outside the rim")
+    _rim_radius, shell_rows = _physical_rim_and_first_shell_rows(mesh)
+    shell_radius = float(np.median(r[shell_rows]))
 
     for row in shell_rows:
         vid = int(mesh.vertex_ids[int(row)])
