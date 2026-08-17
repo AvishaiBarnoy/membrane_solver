@@ -55,8 +55,8 @@ def _refine_once(mesh, *, steps: int = REFINE_STEPS):
     return mesh
 
 
-def _shell_profile(mesh) -> list[dict[str, float]]:
-    """Return ring-median profile rows keyed by rounded radius."""
+def _circumferential_shell_profile(mesh) -> list[dict[str, float]]:
+    """Return ring-median profiles grouped by circumferential connectivity."""
     from tools.diagnostics.utils import positions_radii
 
     positions = mesh.positions_view()
@@ -72,6 +72,89 @@ def _shell_profile(mesh) -> list[dict[str, float]]:
 
     fields = compute_curvature_fields(mesh, positions, mesh.vertex_index_to_row)
     mean_curvature = fields.mean_curvature
+
+    tri_rows, _weights = mesh.triangle_row_cache()
+    edges = np.unique(
+        np.sort(
+            np.vstack(
+                (
+                    tri_rows[:, (0, 1)],
+                    tri_rows[:, (1, 2)],
+                    tri_rows[:, (2, 0)],
+                )
+            ),
+            axis=1,
+        ),
+        axis=0,
+    )
+    parent = np.arange(len(mesh.vertex_ids), dtype=int)
+
+    def find(row: int) -> int:
+        while parent[row] != row:
+            parent[row] = parent[parent[row]]
+            row = int(parent[row])
+        return row
+
+    for row_a, row_b in edges:
+        midpoint = positions[int(row_a), :2] + positions[int(row_b), :2]
+        midpoint_norm = float(np.linalg.norm(midpoint))
+        if midpoint_norm <= 1.0e-12:
+            continue
+        radial = midpoint / midpoint_norm
+        edge = positions[int(row_b), :2] - positions[int(row_a), :2]
+        radial_step = abs(float(np.dot(edge, radial)))
+        tangential_step = abs(float(edge[0] * radial[1] - edge[1] * radial[0]))
+        if tangential_step < 2.0 * radial_step:
+            continue
+        root_a = find(int(row_a))
+        root_b = find(int(row_b))
+        if root_a != root_b:
+            parent[root_b] = root_a
+
+    groups: dict[int, list[int]] = {}
+    for row, radius in enumerate(radii):
+        if float(radius) > 1.0e-12:
+            groups.setdefault(find(row), []).append(row)
+
+    rows: list[dict[str, float]] = []
+    for group_rows in sorted(
+        groups.values(), key=lambda values: np.median(radii[values])
+    ):
+        mask = np.zeros(len(mesh.vertex_ids), dtype=bool)
+        mask[np.asarray(group_rows, dtype=int)] = True
+        rows.append(
+            {
+                "radius": float(np.median(radii[mask])),
+                "theta_in": float(np.median(theta_in[mask])),
+                "theta_out": float(np.median(theta_out[mask])),
+                "theta_shared": float(
+                    0.5 * (np.median(theta_in[mask]) + np.median(theta_out[mask]))
+                ),
+                "z": float(np.median(positions[mask, 2])),
+                "J": float(np.median(mean_curvature[mask])),
+                "count": int(np.sum(mask)),
+            }
+        )
+    return rows
+
+
+def _shell_profile(mesh) -> list[dict[str, float]]:
+    """Return ring-median profile rows keyed by rounded radius."""
+    from tools.diagnostics.utils import positions_radii
+
+    positions = mesh.positions_view()
+    radii = positions_radii(mesh)
+    tilts_in = mesh.tilts_in_view()
+    tilts_out = mesh.tilts_out_view()
+    r_hat = np.zeros_like(positions)
+    good = radii > 1.0e-12
+    r_hat[good, 0] = positions[good, 0] / radii[good]
+    r_hat[good, 1] = positions[good, 1] / radii[good]
+    theta_in = np.einsum("ij,ij->i", tilts_in, r_hat)
+    theta_out = np.einsum("ij,ij->i", tilts_out, r_hat)
+    mean_curvature = compute_curvature_fields(
+        mesh, positions, mesh.vertex_index_to_row
+    ).mean_curvature
 
     rows: list[dict[str, float]] = []
     for radius_key in sorted({round(float(r), 6) for r in radii if r > 1.0e-12}):
@@ -291,12 +374,13 @@ def _run_curved_theta_candidate(
     theta_b: float,
     *,
     curved_path: str | Path | None = None,
+    shape_steps: int = SHAPE_STEPS,
 ) -> dict[str, object]:
     """Run one refined curved candidate and return mesh, near-rim stats, and energy."""
     mesh = _refine_once(load_free_disk_curved_bilayer_mesh(curved_path))
     configure_free_disk_curved_bilayer_stage2(mesh, theta_b=float(theta_b), z_bump=None)
     minim = _configure_shape_relax(mesh, theta_b=float(theta_b))
-    minim.minimize(n_steps=SHAPE_STEPS)
+    minim.minimize(n_steps=int(shape_steps))
     breakdown = minim.compute_energy_breakdown()
     row = measure_free_disk_curved_bilayer_near_rim(mesh, theta_b=float(theta_b))
     row["total_energy"] = float(sum(float(v) for v in breakdown.values()))

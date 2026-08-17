@@ -1,3 +1,4 @@
+import json
 import math
 
 from tools.diagnostics.curved_1disk_transition_band_ownership_audit import (
@@ -57,9 +58,16 @@ def test_transition_band_regularization_reduces_gradient_dominance_and_orders_th
 
     totals = report["region_ownership"]["totals"]
     assert float(totals["gradient_transition_fraction"]) < 0.95
-    assert (
-        report["diagnosis"]["classification"]
-        != "theta_ordering_depends_on_support_energy"
+    classification = report["diagnosis"]["classification"]
+    ordering_context = {
+        "classification": classification,
+        "gradient_residual": report["module_gradient_reconciliation"][
+            "sum_projected_minus_full_norm"
+        ],
+        "theta_candidate_ordering": report["theta_candidate_ordering"],
+    }
+    assert classification != "theta_ordering_depends_on_support_energy", json.dumps(
+        ordering_context, sort_keys=True
     )
 
     theta_rows = report["theta_candidate_ordering"]

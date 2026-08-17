@@ -129,7 +129,7 @@ def _leaflet_triangle_payload(
         mesh,
         global_params,
         tri_rows_full,
-        keep_physical_outer_edge=str(cache_tag) == "out",
+        keep_physical_outer_edge=True,
     )
     if transition_mask is not None:
         keep_non_transition = ~transition_mask

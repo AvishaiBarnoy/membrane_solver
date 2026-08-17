@@ -26,10 +26,17 @@ from tools.diagnostics.curved_1disk_shape_direction_audit import (
     _prepare_minimizer,
 )
 from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import THEORY_THETA_B
-from tools.diagnostics.curved_1disk_theory_benchmark import _run_curved_theta_candidate
+from tools.diagnostics.curved_1disk_theory_benchmark import (
+    SHAPE_STEPS,
+    _run_curved_theta_candidate,
+)
 from tools.diagnostics.utils import radius_labels, row_region
 
 THETA_CANDIDATES = (0.06, 0.12, THEORY_THETA_B)
+# Candidate ordering is more sensitive than the canonical benchmark observables.
+# Give each independently initialized candidate a second canonical relaxation
+# interval so the audit compares relaxed states rather than 60-step transients.
+OWNERSHIP_AUDIT_SHAPE_STEPS = 2 * SHAPE_STEPS
 ALLOWED_CLASSIFICATIONS = {
     "support_gradient_matches_energy_ownership",
     "support_gradient_exceeds_energy_ownership",
@@ -250,7 +257,9 @@ def _safe_ratio(numer: float, denom: float) -> float:
 def _theta_candidate_rows(theta_values: Sequence[float]) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for theta in theta_values:
-        result = _run_curved_theta_candidate(float(theta))
+        result = _run_curved_theta_candidate(
+            float(theta), shape_steps=OWNERSHIP_AUDIT_SHAPE_STEPS
+        )
         mesh = result["mesh"]
         row_energy = _row_energy_by_module(mesh)
         transition = _row_masks(mesh)["transition_band"]

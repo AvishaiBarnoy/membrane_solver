@@ -341,13 +341,18 @@ def test_current_geometry_base_reference_still_has_curvature_energy_when_unset()
     ctx = _build_context(DEFAULT_FIXTURE)
     mesh = ctx.mesh
     mesh.global_parameters.unset("bending_tilt_base_term_reference_mode")
+    # The repaired scaffold fixture is planar, so current-geometry curvature
+    # is correctly zero until an explicitly curved geometry is supplied.
+    for vertex in mesh.vertices.values():
+        x, y, _ = vertex.position
+        vertex.position = np.asarray([x, y, 1.0e-3 * (x * x + y * y)])
     mesh.set_tilts_in_from_array(np.zeros_like(mesh.tilts_in_view()))
     mesh.set_tilts_out_from_array(np.zeros_like(mesh.tilts_out_view()))
     mesh.increment_version()
 
     breakdown = ctx.minimizer.compute_energy_breakdown()
-    assert float(breakdown.get("bending_tilt_in") or 0.0) > 10.0
-    assert float(breakdown.get("bending_tilt_out") or 0.0) > 10.0
+    assert float(breakdown.get("bending_tilt_in") or 0.0) > 1.0e-3
+    assert float(breakdown.get("bending_tilt_out") or 0.0) > 1.0e-3
 
 
 def test_scaffold_energy_imbalance_audit_quick_resolution_matrix() -> None:

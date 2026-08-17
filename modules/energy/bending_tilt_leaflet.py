@@ -257,6 +257,7 @@ def compute_energy_and_gradient_array_leaflet(
     vertex_areas_vor = np.asarray(payload["vertex_areas_vor"], dtype=float)
     tri_rows_full = np.asarray(payload["tri_rows_full"], dtype=np.int32)
     weights = np.asarray(payload["weights"], dtype=float)
+    weights_full = np.asarray(payload["weights_full"], dtype=float)
     tri_rows = np.asarray(payload["tri_rows"], dtype=np.int32)
     tri_keep = np.asarray(payload["tri_keep"], dtype=bool)
     tri_area = payload.get("tri_area")
@@ -687,6 +688,7 @@ def compute_energy_and_gradient_array_leaflet(
             tri_rows=tri_rows,
             tri_rows_full=tri_rows_full,
             weights=weights,
+            weights_full=weights_full,
             tri_keep=tri_keep,
             is_interior=is_interior,
             corner_fA_eff=corner_fA_eff,
