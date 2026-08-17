@@ -374,12 +374,13 @@ def _run_curved_theta_candidate(
     theta_b: float,
     *,
     curved_path: str | Path | None = None,
+    shape_steps: int = SHAPE_STEPS,
 ) -> dict[str, object]:
     """Run one refined curved candidate and return mesh, near-rim stats, and energy."""
     mesh = _refine_once(load_free_disk_curved_bilayer_mesh(curved_path))
     configure_free_disk_curved_bilayer_stage2(mesh, theta_b=float(theta_b), z_bump=None)
     minim = _configure_shape_relax(mesh, theta_b=float(theta_b))
-    minim.minimize(n_steps=SHAPE_STEPS)
+    minim.minimize(n_steps=int(shape_steps))
     breakdown = minim.compute_energy_breakdown()
     row = measure_free_disk_curved_bilayer_near_rim(mesh, theta_b=float(theta_b))
     row["total_energy"] = float(sum(float(v) for v in breakdown.values()))
