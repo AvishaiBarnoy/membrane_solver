@@ -36,6 +36,7 @@ from tools.diagnostics.free_disk_profile_protocol import (
     measure_free_disk_curved_bilayer_near_rim,
     optimize_free_disk_theta_b,
 )
+from tools.diagnostics.utils import capture_state, restore_state
 
 REFINE_STEPS = 1
 THETA_SCANS = 4
@@ -375,16 +376,54 @@ def _run_curved_theta_candidate(
     *,
     curved_path: str | Path | None = None,
     shape_steps: int = SHAPE_STEPS,
+    shape_checkpoints: tuple[int, ...] | None = None,
 ) -> dict[str, object]:
     """Run one refined curved candidate and return mesh, near-rim stats, and energy."""
     mesh = _refine_once(load_free_disk_curved_bilayer_mesh(curved_path))
     configure_free_disk_curved_bilayer_stage2(mesh, theta_b=float(theta_b), z_bump=None)
     minim = _configure_shape_relax(mesh, theta_b=float(theta_b))
-    minim.minimize(n_steps=int(shape_steps))
+    checkpoint_rows: list[dict[str, float | int]] = []
+    selected_checkpoint = int(shape_steps)
+    if shape_checkpoints is None:
+        minim.minimize(n_steps=int(shape_steps))
+    else:
+        checkpoints = tuple(int(step) for step in shape_checkpoints)
+        if not checkpoints or checkpoints != tuple(sorted(set(checkpoints))):
+            raise ValueError(
+                "shape_checkpoints must be nonempty, unique, and increasing"
+            )
+        if checkpoints[0] <= 0:
+            raise ValueError("shape_checkpoints must contain positive step counts")
+        elapsed = 0
+        best_energy = float("inf")
+        best_state = None
+        for checkpoint in checkpoints:
+            minim.minimize(n_steps=int(checkpoint - elapsed))
+            elapsed = checkpoint
+            checkpoint_breakdown = minim.compute_energy_breakdown()
+            checkpoint_energy = float(
+                sum(float(value) for value in checkpoint_breakdown.values())
+            )
+            checkpoint_rows.append(
+                {"shape_steps": int(checkpoint), "total_energy": checkpoint_energy}
+            )
+            if checkpoint_energy < best_energy:
+                best_energy = checkpoint_energy
+                best_state = capture_state(mesh)
+                selected_checkpoint = int(checkpoint)
+        if best_state is None:
+            raise AssertionError("No curved theta checkpoint state was selected")
+        restore_state(mesh, *best_state)
     breakdown = minim.compute_energy_breakdown()
     row = measure_free_disk_curved_bilayer_near_rim(mesh, theta_b=float(theta_b))
     row["total_energy"] = float(sum(float(v) for v in breakdown.values()))
-    return {"mesh": mesh, "near_rim": row, "breakdown": breakdown}
+    return {
+        "mesh": mesh,
+        "near_rim": row,
+        "breakdown": breakdown,
+        "shape_checkpoint_energies": checkpoint_rows,
+        "selected_shape_checkpoint": selected_checkpoint,
+    }
 
 
 def _run_canonical_schedule(
