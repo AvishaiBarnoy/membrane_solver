@@ -41,6 +41,17 @@ def test_transition_band_ownership_audit_reconciles_gradients_and_theta_rows() -
 
     theta_rows = report["theta_candidate_ordering"]
     assert [float(row["theta_B"]) for row in theta_rows] == list(THETA_CANDIDATES)
+    for row in theta_rows:
+        checkpoints = row["shape_checkpoint_energies"]
+        assert [int(item["shape_steps"]) for item in checkpoints] == [60, 120, 180, 240]
+        selected_step = int(row["selected_shape_checkpoint"])
+        selected_checkpoint = next(
+            item for item in checkpoints if int(item["shape_steps"]) == selected_step
+        )
+        assert float(row["total_energy"]) == float(selected_checkpoint["total_energy"])
+        assert float(row["total_energy"]) == min(
+            float(item["total_energy"]) for item in checkpoints
+        )
     assert sum(bool(row["selected_by_total_energy"]) for row in theta_rows) == 1
     assert (
         sum(

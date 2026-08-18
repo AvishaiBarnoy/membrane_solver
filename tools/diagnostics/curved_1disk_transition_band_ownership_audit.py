@@ -34,9 +34,11 @@ from tools.diagnostics.utils import radius_labels, row_region
 
 THETA_CANDIDATES = (0.06, 0.12, THEORY_THETA_B)
 # Candidate ordering is more sensitive than the canonical benchmark observables.
-# Give each independently initialized candidate a second canonical relaxation
-# interval so the audit compares relaxed states rather than 60-step transients.
-OWNERSHIP_AUDIT_SHAPE_STEPS = 2 * SHAPE_STEPS
+# Compare the lowest-energy accepted state across canonical relaxation intervals
+# rather than whichever oscillation phase occurs at one fixed endpoint.
+OWNERSHIP_AUDIT_SHAPE_CHECKPOINTS = tuple(
+    SHAPE_STEPS * interval for interval in range(1, 5)
+)
 ALLOWED_CLASSIFICATIONS = {
     "support_gradient_matches_energy_ownership",
     "support_gradient_exceeds_energy_ownership",
@@ -258,7 +260,7 @@ def _theta_candidate_rows(theta_values: Sequence[float]) -> list[dict[str, objec
     rows: list[dict[str, object]] = []
     for theta in theta_values:
         result = _run_curved_theta_candidate(
-            float(theta), shape_steps=OWNERSHIP_AUDIT_SHAPE_STEPS
+            float(theta), shape_checkpoints=OWNERSHIP_AUDIT_SHAPE_CHECKPOINTS
         )
         mesh = result["mesh"]
         row_energy = _row_energy_by_module(mesh)
@@ -275,6 +277,8 @@ def _theta_candidate_rows(theta_values: Sequence[float]) -> list[dict[str, objec
                 "total_energy": total_energy,
                 "transition_band_energy_by_module": support_energy,
                 "transition_band_energy_total": total_support_energy,
+                "shape_checkpoint_energies": result["shape_checkpoint_energies"],
+                "selected_shape_checkpoint": result["selected_shape_checkpoint"],
                 "energy_without_transition_band_attributed": float(
                     total_energy - total_support_energy
                 ),

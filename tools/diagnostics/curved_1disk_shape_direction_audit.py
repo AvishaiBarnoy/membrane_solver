@@ -28,6 +28,7 @@ from tools.diagnostics.curved_1disk_trumpet_descent_audit import (
 )
 from tools.diagnostics.utils import (
     capture_state,
+    coordinate_delta_above_roundoff,
     energy_total,
     radius_labels,
     restore_state,
@@ -276,7 +277,7 @@ def _accepted_update_replay(
         mesh.increment_version()
         energy_after_tangent_projection = float(minim.compute_energy())
         dz = after_no_projection[:, 2] - before[:, 2]
-        dxy = np.linalg.norm(after_no_projection[:, :2] - before[:, :2], axis=1)
+        dxy = coordinate_delta_above_roundoff(before[:, :2], after_no_projection[:, :2])
         dz_unit = _unit_l2(dz)
         rows.append(
             {
