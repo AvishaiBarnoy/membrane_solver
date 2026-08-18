@@ -24,6 +24,7 @@ from tools.diagnostics.curved_1disk_shape_propagation_blocker import (
 from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import THEORY_THETA_B
 from tools.diagnostics.utils import (
     capture_state,
+    coordinate_delta_above_roundoff,
     energy_total,
     restore_state,
     row_region,
@@ -281,7 +282,7 @@ def _accepted_update_alignment(
         result = minim.minimize(n_steps=int(n_steps))
         after = mesh.positions_view().copy(order="F")
         dz = after[:, 2] - before[:, 2]
-        dxy = np.linalg.norm(after[:, :2] - before[:, :2], axis=1)
+        dxy = coordinate_delta_above_roundoff(before[:, :2], after[:, :2])
         mode_rows: dict[str, dict[str, float]] = {}
         for name, mode in modes.items():
             mode = np.asarray(mode, dtype=float)

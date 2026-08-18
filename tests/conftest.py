@@ -19,15 +19,15 @@ from tools.diagnostics.free_disk_profile_protocol import (
 )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def canonical_curved_protocol_result():
-    """Cache the canonical curved shared-rim protocol run across test files."""
+    """Return an isolated canonical curved shared-rim protocol run."""
     return run_free_disk_curved_bilayer_protocol()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def canonical_profile_protocol_result():
-    """Cache the two-stage profile protocol run across test files."""
+    """Return an isolated canonical two-stage profile protocol run."""
     return run_free_disk_two_stage_profile_protocol()
 
 

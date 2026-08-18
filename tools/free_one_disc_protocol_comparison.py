@@ -123,7 +123,6 @@ def coupled_stationarity(context) -> dict[str, Any]:
     # not make the next relaxation depend on whether an audit was requested.
     mesh._curvature_cache = {}
     mesh._curvature_version = -1
-    mesh.increment_version()
     return result
 
 

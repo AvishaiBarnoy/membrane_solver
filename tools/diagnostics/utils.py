@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 
 import numpy as np
 
@@ -27,8 +28,25 @@ def apply_global_parameter_overrides(mesh, overrides: dict[str, object] | None) 
 
 
 def energy_total(breakdown: dict[str, float]) -> float:
-    """Return total energy from an energy-breakdown mapping."""
-    return float(sum(float(v) for v in breakdown.values()))
+    """Return a compensated total from an energy-breakdown mapping."""
+    return float(math.fsum(float(v) for v in breakdown.values()))
+
+
+def coordinate_delta_above_roundoff(
+    before: np.ndarray, after: np.ndarray
+) -> np.ndarray:
+    """Return row-wise coordinate deltas with aggregate SVD noise removed."""
+    before_arr = np.asarray(before, dtype=float)
+    after_arr = np.asarray(after, dtype=float)
+    delta = np.linalg.norm(after_arr - before_arr, axis=1)
+    scale = max(
+        1.0,
+        float(np.max(np.linalg.norm(before_arr, axis=1))),
+        float(np.max(np.linalg.norm(after_arr, axis=1))),
+    )
+    roundoff = 64.0 * np.finfo(float).eps * len(delta) * scale
+    delta[delta <= roundoff] = 0.0
+    return delta
 
 
 def positions_radii(mesh, positions: np.ndarray | None = None) -> np.ndarray:
