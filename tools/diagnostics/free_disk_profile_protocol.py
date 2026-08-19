@@ -3,6 +3,10 @@
 
 from __future__ import annotations
 
+import base64
+import pickle
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -36,6 +40,7 @@ _energy_total = energy_total
 _triangle_region_masks = triangle_region_masks
 
 ROOT = Path(__file__).resolve().parents[2]
+_PROFILE_PROTOCOL_RESULT_PREFIX = "PROFILE_PROTOCOL_RESULT_V1:"
 DEFAULT_FREE_DISK_FIXTURE = (
     ROOT / "tests" / "fixtures" / "kozlov_1disk_3d_free_disk_theory_parity.yaml"
 )
@@ -683,14 +688,13 @@ def configure_free_disk_curved_bilayer_stage2(
     return activate_local_outer_shell(mesh, z_bump=float(z_bump))
 
 
-def run_free_disk_two_stage_profile_protocol(
+def _run_free_disk_two_stage_profile_protocol_in_process(
     *,
     path: str | Path | None = None,
     theta_scans: int = 4,
-    shape_steps: int = 200,
+    shape_steps: int = 40,
     z_bump: float = 1.5e-4,
 ):
-    """Return ``(mesh, theta_b)`` after the approved two-stage profile protocol."""
     theta_mesh = load_free_disk_theory_mesh(path)
     theta_b = optimize_free_disk_theta_b(theta_mesh, scans=theta_scans)
     if theta_b <= 0.0:
@@ -702,6 +706,81 @@ def run_free_disk_two_stage_profile_protocol(
     minim = _configure_shape_relax(mesh, theta_b=theta_b)
     minim.minimize(n_steps=int(shape_steps))
     return mesh, theta_b
+
+
+def run_free_disk_two_stage_profile_protocol(
+    *,
+    path: str | Path | None = None,
+    theta_scans: int = 4,
+    shape_steps: int = 40,
+    z_bump: float = 1.5e-4,
+    isolate_process: bool = True,
+):
+    """Return ``(mesh, theta_b)`` after the approved two-stage profile protocol.
+
+    The canonical diagnostic runs in a spawned interpreter so optional-kernel
+    caches and numerical state accumulated by earlier diagnostics cannot alter
+    its fixed-step trajectory.  ``isolate_process=False`` remains available to
+    callers that explicitly need to run inside the current process.
+    """
+    kwargs = {
+        "path": str(path) if path is not None else None,
+        "theta_scans": int(theta_scans),
+        "shape_steps": int(shape_steps),
+        "z_bump": float(z_bump),
+    }
+    if not isolate_process:
+        mesh, theta_b = _run_free_disk_two_stage_profile_protocol_in_process(**kwargs)
+        mesh.global_parameters.set("profile_protocol_process_isolated", False)
+        return mesh, theta_b
+
+    command = [
+        sys.executable,
+        "-m",
+        "tools.diagnostics.free_disk_profile_protocol",
+        "--profile-protocol-worker",
+        kwargs["path"] or "",
+        str(kwargs["theta_scans"]),
+        str(kwargs["shape_steps"]),
+        repr(kwargs["z_bump"]),
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    encoded = next(
+        (
+            line.removeprefix(_PROFILE_PROTOCOL_RESULT_PREFIX)
+            for line in reversed(completed.stdout.splitlines())
+            if line.startswith(_PROFILE_PROTOCOL_RESULT_PREFIX)
+        ),
+        None,
+    )
+    if encoded is None:
+        raise RuntimeError("Profile protocol worker did not return a framed result")
+    mesh, theta_b = pickle.loads(base64.b64decode(encoded))
+    mesh.global_parameters.set("profile_protocol_process_isolated", True)
+    return mesh, theta_b
+
+
+def _profile_protocol_worker_main(args: list[str]) -> int:
+    if len(args) != 4:
+        raise ValueError("Profile protocol worker requires four arguments")
+    path_text, theta_scans_text, shape_steps_text, z_bump_text = args
+    result = _run_free_disk_two_stage_profile_protocol_in_process(
+        path=path_text or None,
+        theta_scans=int(theta_scans_text),
+        shape_steps=int(shape_steps_text),
+        z_bump=float(z_bump_text),
+    )
+    encoded = base64.b64encode(
+        pickle.dumps(result, protocol=pickle.HIGHEST_PROTOCOL)
+    ).decode("ascii")
+    print(f"{_PROFILE_PROTOCOL_RESULT_PREFIX}{encoded}")
+    return 0
 
 
 def run_free_disk_curved_bilayer_protocol(
@@ -1018,3 +1097,7 @@ __all__ = [
     "shared_rim_shell_area_audit",
     "summarize_free_disk_curved_elastic_growth",
 ]
+
+
+if __name__ == "__main__" and sys.argv[1:2] == ["--profile-protocol-worker"]:
+    raise SystemExit(_profile_protocol_worker_main(sys.argv[2:]))
