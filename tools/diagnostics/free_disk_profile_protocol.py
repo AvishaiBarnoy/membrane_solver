@@ -687,7 +687,7 @@ def run_free_disk_two_stage_profile_protocol(
     *,
     path: str | Path | None = None,
     theta_scans: int = 4,
-    shape_steps: int = 40,
+    shape_steps: int = 200,
     z_bump: float = 1.5e-4,
 ):
     """Return ``(mesh, theta_b)`` after the approved two-stage profile protocol."""
@@ -698,6 +698,7 @@ def run_free_disk_two_stage_profile_protocol(
 
     mesh = load_free_disk_theory_mesh(path)
     activate_local_outer_shell(mesh, z_bump=z_bump)
+    mesh.global_parameters.set("profile_protocol_shape_steps", int(shape_steps))
     minim = _configure_shape_relax(mesh, theta_b=theta_b)
     minim.minimize(n_steps=int(shape_steps))
     return mesh, theta_b
