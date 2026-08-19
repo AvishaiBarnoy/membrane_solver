@@ -14,6 +14,7 @@ def test_free_disk_two_stage_protocol_produces_fittable_radial_profiles(
 ) -> None:
     mesh, theta_b = canonical_profile_protocol_result
     assert theta_b > 0.0
+    assert int(mesh.global_parameters.get("profile_protocol_shape_steps") or 0) == 200
 
     report = analyze_mesh_profiles(mesh, bins=16, flip_tilt_out=True)
 
