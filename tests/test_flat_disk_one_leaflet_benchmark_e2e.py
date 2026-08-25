@@ -1612,119 +1612,145 @@ def test_run_theta_relaxation_can_preserve_inner_state_between_repeats() -> None
 
 
 @pytest.mark.regression
-def test_flat_disk_rejects_invalid_tilt_divergence_mode() -> None:
-    with pytest.raises(
-        ValueError,
-        match="tilt_divergence_mode_in must be 'native' or 'vertex_recovered'",
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            theta_mode="scan",
-            theta_min=0.0,
-            theta_max=0.0014,
-            theta_count=8,
-            tilt_divergence_mode_in="bad_mode",
-        )
-
-
-@pytest.mark.regression
-def test_flat_disk_invalid_tilt_projection_and_post_relax_controls_raise() -> None:
-    with pytest.raises(
-        ValueError, match="tilt_projection_cadence must be 'per_step' or 'per_pass'"
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_projection_cadence="bad_mode",
-        )
-    with pytest.raises(ValueError, match="tilt_projection_interval must be >= 1"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_projection_interval=0,
-        )
-    with pytest.raises(ValueError, match="tilt_post_relax_inner_steps must be >= 0"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_post_relax_inner_steps=-1,
-        )
-    with pytest.raises(ValueError, match="tilt_post_relax_step_size must be >= 0"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_post_relax_step_size=-1.0e-3,
-        )
-    with pytest.raises(ValueError, match="tilt_post_relax_passes must be >= 1"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_post_relax_passes=0,
-        )
-    with pytest.raises(
-        ValueError,
-        match="inner_coupled_update_mode must be 'off' or 'rim_matched_radial_continuation_v1'",
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            inner_coupled_update_mode="bad_mode",
-        )
-    with pytest.raises(
-        ValueError,
-        match="tilt_transport_model must be 'ambient_v1' or 'connection_v1'",
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_transport_model="bad_mode",
-        )
-    with pytest.raises(
-        ValueError,
-        match="tilt_mass_mode_out must be 'auto', 'lumped', or 'consistent'",
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_mass_mode_out="bad_mode",
-        )
-    with pytest.raises(
-        ValueError,
-        match="curved_theta_objective_ablation_mode must be 'off' or 'inner_outer_rescaled'",
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="free",
-            geometry_lane="free_z",
-            parameterization="kh_physical",
-            theta_mode="optimize",
-            curved_theta_objective_ablation_mode="bad_mode",
-        )
-    with pytest.raises(
-        ValueError, match="curved theta objective ablation scales must be > 0"
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="free",
-            geometry_lane="free_z",
-            parameterization="kh_physical",
-            theta_mode="optimize",
-            curved_theta_objective_ablation_mode="inner_outer_rescaled",
-            curved_theta_objective_ablation_inner_scale=0.0,
-        )
+@pytest.mark.parametrize(
+    ("overrides", "error"),
+    [
+        pytest.param(
+            {
+                "smoothness_model": "splay_twist",
+                "theta_mode": "scan",
+                "theta_min": 0.0,
+                "theta_max": 0.0014,
+                "theta_count": 8,
+                "tilt_divergence_mode_in": "bad_mode",
+            },
+            "tilt_divergence_mode_in must be 'native' or 'vertex_recovered'",
+            id="tilt-divergence-mode",
+        ),
+        pytest.param(
+            {"tilt_projection_cadence": "bad_mode"},
+            "tilt_projection_cadence must be 'per_step' or 'per_pass'",
+            id="tilt-projection-cadence",
+        ),
+        pytest.param(
+            {"tilt_projection_interval": 0},
+            "tilt_projection_interval must be >= 1",
+            id="tilt-projection-interval",
+        ),
+        pytest.param(
+            {"tilt_post_relax_inner_steps": -1},
+            "tilt_post_relax_inner_steps must be >= 0",
+            id="post-relax-inner-steps",
+        ),
+        pytest.param(
+            {"tilt_post_relax_step_size": -1.0e-3},
+            "tilt_post_relax_step_size must be >= 0",
+            id="post-relax-step-size",
+        ),
+        pytest.param(
+            {"tilt_post_relax_passes": 0},
+            "tilt_post_relax_passes must be >= 1",
+            id="post-relax-passes",
+        ),
+        pytest.param(
+            {"inner_coupled_update_mode": "bad_mode"},
+            "inner_coupled_update_mode must be 'off' or 'rim_matched_radial_continuation_v1'",
+            id="inner-coupled-update-mode",
+        ),
+        pytest.param(
+            {"tilt_transport_model": "bad_mode"},
+            "tilt_transport_model must be 'ambient_v1' or 'connection_v1'",
+            id="tilt-transport-model",
+        ),
+        pytest.param(
+            {"tilt_mass_mode_out": "bad_mode"},
+            "tilt_mass_mode_out must be 'auto', 'lumped', or 'consistent'",
+            id="tilt-mass-mode-out",
+        ),
+        pytest.param(
+            {
+                "outer_mode": "free",
+                "geometry_lane": "free_z",
+                "parameterization": "kh_physical",
+                "theta_mode": "optimize",
+                "curved_theta_objective_ablation_mode": "bad_mode",
+            },
+            "curved_theta_objective_ablation_mode must be 'off' or 'inner_outer_rescaled'",
+            id="curved-objective-ablation-mode",
+        ),
+        pytest.param(
+            {
+                "outer_mode": "free",
+                "geometry_lane": "free_z",
+                "parameterization": "kh_physical",
+                "theta_mode": "optimize",
+                "curved_theta_objective_ablation_mode": "inner_outer_rescaled",
+                "curved_theta_objective_ablation_inner_scale": 0.0,
+            },
+            "curved theta objective ablation scales must be > 0",
+            id="curved-objective-ablation-scale",
+        ),
+        pytest.param(
+            {
+                "smoothness_model": "splay_twist",
+                "theta_mode": "optimize",
+                "splay_modulus_scale_in": 0.0,
+            },
+            "splay_modulus_scale_in must be > 0",
+            id="splay-modulus-scale",
+        ),
+        pytest.param(
+            {"parameterization": "invalid_mode"},
+            "parameterization must be",
+            id="parameterization",
+        ),
+        pytest.param(
+            {
+                "smoothness_model": "splay_twist",
+                "theta_mode": "optimize",
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 2.0,
+                "outer_local_refine_rmax_lambda": 2.0,
+            },
+            "outer_local_refine_rmax_lambda must be > outer_local_refine_rmin_lambda",
+            id="outer-local-refine-bounds",
+        ),
+        pytest.param(
+            {
+                "smoothness_model": "splay_twist",
+                "theta_mode": "optimize",
+                "local_edge_flip_steps": 1,
+                "local_edge_flip_rmin_lambda": 2.0,
+                "local_edge_flip_rmax_lambda": 2.0,
+            },
+            "local_edge_flip_rmax_lambda must be > local_edge_flip_rmin_lambda",
+            id="local-edge-flip-bounds",
+        ),
+        pytest.param(
+            {
+                "smoothness_model": "splay_twist",
+                "theta_mode": "optimize",
+                "outer_local_vertex_average_steps": 1,
+                "outer_local_vertex_average_rmin_lambda": 4.0,
+                "outer_local_vertex_average_rmax_lambda": 4.0,
+            },
+            (
+                "outer_local_vertex_average_rmax_lambda must be > "
+                "outer_local_vertex_average_rmin_lambda"
+            ),
+            id="outer-local-vertex-average-bounds",
+        ),
+    ],
+)
+def test_flat_disk_invalid_controls_raise(overrides: dict, error: str) -> None:
+    kwargs = {
+        "fixture": DEFAULT_FIXTURE,
+        "refine_level": 1,
+        "outer_mode": "disabled",
+        **overrides,
+    }
+    with pytest.raises(ValueError, match=error):
+        run_flat_disk_one_leaflet_benchmark(**kwargs)
 
 
 @pytest.mark.benchmark
@@ -1773,68 +1799,6 @@ def test_flat_disk_kh_strict_preset_improves_score_vs_baseline() -> None:
 
 
 @pytest.mark.regression
-def test_flat_disk_invalid_splay_modulus_scale_raises() -> None:
-    with pytest.raises(ValueError, match="splay_modulus_scale_in must be > 0"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            theta_mode="optimize",
-            splay_modulus_scale_in=0.0,
-        )
-
-
-@pytest.mark.regression
-def test_flat_disk_invalid_parameterization_raises() -> None:
-    with pytest.raises(ValueError, match="parameterization must be"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            parameterization="invalid_mode",
-        )
-
-
-@pytest.mark.regression
-def test_flat_disk_invalid_outer_local_refine_bounds_raises() -> None:
-    with pytest.raises(
-        ValueError,
-        match=(
-            "outer_local_refine_rmax_lambda must be > outer_local_refine_rmin_lambda"
-        ),
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            theta_mode="optimize",
-            outer_local_refine_steps=1,
-            outer_local_refine_rmin_lambda=2.0,
-            outer_local_refine_rmax_lambda=2.0,
-        )
-
-
-@pytest.mark.regression
-def test_flat_disk_invalid_local_edge_flip_bounds_raises() -> None:
-    with pytest.raises(
-        ValueError,
-        match=("local_edge_flip_rmax_lambda must be > local_edge_flip_rmin_lambda"),
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            theta_mode="optimize",
-            local_edge_flip_steps=1,
-            local_edge_flip_rmin_lambda=2.0,
-            local_edge_flip_rmax_lambda=2.0,
-        )
-
-
-@pytest.mark.regression
 def test_flat_disk_outer_local_vertex_average_controls_reported() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1855,27 +1819,6 @@ def test_flat_disk_outer_local_vertex_average_controls_reported() -> None:
     assert float(
         report["meta"]["outer_local_vertex_average_rmax_lambda"]
     ) == pytest.approx(6.0)
-
-
-@pytest.mark.regression
-def test_flat_disk_invalid_outer_local_vertex_average_bounds_raises() -> None:
-    with pytest.raises(
-        ValueError,
-        match=(
-            "outer_local_vertex_average_rmax_lambda must be > "
-            "outer_local_vertex_average_rmin_lambda"
-        ),
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            theta_mode="optimize",
-            outer_local_vertex_average_steps=1,
-            outer_local_vertex_average_rmin_lambda=4.0,
-            outer_local_vertex_average_rmax_lambda=4.0,
-        )
 
 
 @pytest.mark.regression
