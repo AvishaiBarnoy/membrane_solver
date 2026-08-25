@@ -498,53 +498,141 @@ def test_flat_disk_optimize_preset_kh_strict_balanced_tradeoff_vs_fast() -> None
 
 
 @pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_energy_tight_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_energy_tight",
-    )
+@pytest.mark.parametrize(
+    ("preset", "expected_meta", "parity_limit", "polish_objective"),
+    [
+        pytest.param(
+            "kh_strict_energy_tight",
+            {
+                "refine_level": 1,
+                "rim_local_refine_steps": 2,
+                "rim_local_refine_band_lambda": 8.0,
+            },
+            1.10,
+            "energy_factor",
+            id="energy-tight",
+        ),
+        pytest.param(
+            "kh_strict_partition_tight",
+            {
+                "refine_level": 1,
+                "rim_local_refine_steps": 2,
+                "rim_local_refine_band_lambda": 10.0,
+            },
+            1.2,
+            None,
+            id="partition-tight",
+        ),
+        pytest.param(
+            "kh_strict_section_tight",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 4.0,
+            },
+            1.25,
+            "energy_factor",
+            id="section-tight",
+        ),
+        pytest.param(
+            "kh_strict_outerfield_tight",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 3.0,
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 1.0,
+                "outer_local_refine_rmax_lambda": 8.0,
+            },
+            1.2,
+            "energy_factor",
+            id="outerfield-tight",
+        ),
+        pytest.param(
+            "kh_strict_outerfield_quality",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 3.0,
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 1.0,
+                "outer_local_refine_rmax_lambda": 8.0,
+                "local_edge_flip_steps": 1,
+                "local_edge_flip_rmin_lambda": 2.0,
+                "local_edge_flip_rmax_lambda": 6.0,
+            },
+            1.2,
+            "energy_factor",
+            id="outerfield-quality",
+        ),
+        pytest.param(
+            "kh_strict_outerfield_tailmatch",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 3.0,
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 1.0,
+                "outer_local_refine_rmax_lambda": 8.0,
+                "local_edge_flip_steps": 1,
+                "local_edge_flip_rmin_lambda": 0.5,
+                "local_edge_flip_rmax_lambda": 8.0,
+            },
+            1.2,
+            "energy_factor",
+            id="outerfield-tailmatch",
+        ),
+        pytest.param(
+            "kh_strict_outertail_balanced",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 3.0,
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 1.0,
+                "outer_local_refine_rmax_lambda": 10.0,
+            },
+            1.2,
+            "energy_factor",
+            id="outertail-balanced",
+        ),
+        pytest.param(
+            "kh_strict_outerfield_averaged",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 3.0,
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 1.0,
+                "outer_local_refine_rmax_lambda": 8.0,
+                "local_edge_flip_steps": 0,
+                "outer_local_vertex_average_steps": 2,
+                "outer_local_vertex_average_rmin_lambda": 4.0,
+                "outer_local_vertex_average_rmax_lambda": 12.0,
+            },
+            1.2,
+            "energy_factor",
+            id="outerfield-averaged",
+        ),
+    ],
+)
+def test_flat_disk_optimize_preset_controls(
+    preset: str,
+    expected_meta: dict[str, int | float],
+    parity_limit: float,
+    polish_objective: str | None,
+) -> None:
+    report = _kh_opt_report(refine_level=1, optimize_preset=preset)
 
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_energy_tight"
-    assert int(report["meta"]["refine_level"]) == 1
-    assert int(report["meta"]["rim_local_refine_steps"]) == 2
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(8.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.10
-    assert float(report["parity"]["energy_factor"]) <= 1.10
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_partition_tight_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_partition_tight",
-    )
-
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_partition_tight"
-    assert int(report["meta"]["refine_level"]) == 1
-    assert int(report["meta"]["rim_local_refine_steps"]) == 2
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(10.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_section_tight_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,  # should be overridden by section-tight preset
-        optimize_preset="kh_strict_section_tight",
-    )
-
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_section_tight"
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(4.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.25
-    assert float(report["parity"]["energy_factor"]) <= 1.25
+    assert report["meta"]["optimize_preset_effective"] == preset
+    for key, expected in expected_meta.items():
+        assert report["meta"][key] == pytest.approx(expected)
+    polish = report["optimize"]["parity_polish"]
+    assert polish is not None
+    if polish_objective is not None:
+        assert polish["objective"] == polish_objective
+    assert float(report["parity"]["theta_factor"]) <= parity_limit
+    assert float(report["parity"]["energy_factor"]) <= parity_limit
 
 
 @pytest.mark.benchmark
@@ -637,126 +725,6 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
     assert float(outerband_tight["parity"]["energy_factor"]) <= (
         float(section_tight["parity"]["energy_factor"]) * 1.0005
     )
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_outerfield_tight",
-    )
-
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_tight"
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
-    assert int(report["meta"]["outer_local_refine_steps"]) == 1
-    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_outerfield_quality_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_outerfield_quality",
-    )
-
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_quality"
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
-    assert int(report["meta"]["outer_local_refine_steps"]) == 1
-    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
-    assert int(report["meta"]["local_edge_flip_steps"]) == 1
-    assert float(report["meta"]["local_edge_flip_rmin_lambda"]) == pytest.approx(2.0)
-    assert float(report["meta"]["local_edge_flip_rmax_lambda"]) == pytest.approx(6.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_outerfield_tailmatch_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_outerfield_tailmatch",
-    )
-
-    assert (
-        report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_tailmatch"
-    )
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
-    assert int(report["meta"]["outer_local_refine_steps"]) == 1
-    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
-    assert int(report["meta"]["local_edge_flip_steps"]) == 1
-    assert float(report["meta"]["local_edge_flip_rmin_lambda"]) == pytest.approx(0.5)
-    assert float(report["meta"]["local_edge_flip_rmax_lambda"]) == pytest.approx(8.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_outertail_balanced_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_outertail_balanced",
-    )
-
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_outertail_balanced"
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
-    assert int(report["meta"]["outer_local_refine_steps"]) == 1
-    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(
-        10.0
-    )
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_outerfield_averaged_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_outerfield_averaged",
-    )
-
-    assert (
-        report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_averaged"
-    )
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
-    assert int(report["meta"]["outer_local_refine_steps"]) == 1
-    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
-    assert int(report["meta"]["local_edge_flip_steps"]) == 0
-    assert int(report["meta"]["outer_local_vertex_average_steps"]) == 2
-    assert float(
-        report["meta"]["outer_local_vertex_average_rmin_lambda"]
-    ) == pytest.approx(4.0)
-    assert float(
-        report["meta"]["outer_local_vertex_average_rmax_lambda"]
-    ) == pytest.approx(12.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
 
 
 @pytest.mark.benchmark
