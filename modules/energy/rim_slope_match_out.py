@@ -64,10 +64,16 @@ import numpy as np
 from geometry.entities import Mesh
 from geometry.plane_ops import (
     fit_plane_normal,
-    order_by_angle,
     orthonormal_basis_from_normal,
 )
 from modules.constraints.local_interface_shells import build_local_interface_shell_data
+from modules.constraints.rim_slope_match_params import _uses_outer_shell_tilt_matching
+from modules.constraints.rim_slope_match_utils import (
+    _arc_length_params,
+    _arc_length_weights,
+    _interp_ring_positions,
+    _order_by_angle,
+)
 
 logger = logging.getLogger("membrane_solver")
 _WARNED_DISK_EQUALS_RIM = False
@@ -131,13 +137,6 @@ def _resolve_matching_mode(param_resolver) -> str:
     return mode
 
 
-def _uses_outer_shell_tilt_matching(matching_mode: str) -> bool:
-    return matching_mode in {
-        "shared_rim_staggered_v1",
-        "physical_edge_staggered_v1",
-    }
-
-
 def _resolve_normal(param_resolver) -> np.ndarray | None:
     raw = param_resolver.get(None, "rim_slope_match_normal")
     if raw is None:
@@ -167,66 +166,6 @@ def _collect_group_rows(mesh: Mesh, group: str) -> np.ndarray:
             if row is not None:
                 rows.append(int(row))
     return np.asarray(rows, dtype=int)
-
-
-def _order_by_angle(
-    positions: np.ndarray, *, center: np.ndarray, normal: np.ndarray
-) -> np.ndarray:
-    return order_by_angle(positions, center=center, normal=normal)
-
-
-def _arc_length_weights(positions: np.ndarray, order: np.ndarray) -> np.ndarray:
-    n = len(order)
-    if n == 0:
-        return np.zeros(0, dtype=float)
-    pos = positions[order]
-    diffs_next = pos[(np.arange(n) + 1) % n] - pos
-    diffs_prev = pos - pos[(np.arange(n) - 1) % n]
-    l_next = np.linalg.norm(diffs_next, axis=1)
-    l_prev = np.linalg.norm(diffs_prev, axis=1)
-    return 0.5 * (l_next + l_prev)
-
-
-def _arc_length_params(positions: np.ndarray) -> tuple[np.ndarray, float]:
-    n = len(positions)
-    if n == 0:
-        return np.zeros(0, dtype=float), 0.0
-    diffs = positions[(np.arange(n) + 1) % n] - positions
-    seg = np.linalg.norm(diffs, axis=1)
-    total = float(np.sum(seg))
-    if total <= 0.0:
-        return np.zeros(n, dtype=float), 0.0
-    s = np.concatenate(([0.0], np.cumsum(seg[:-1], dtype=float)))
-    s /= total
-    return s, total
-
-
-def _interp_ring_positions(
-    positions: np.ndarray, s_targets: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
-    n = len(positions)
-    if n == 0 or s_targets.size == 0:
-        return None
-    s_out, total = _arc_length_params(positions)
-    if total <= 0.0 or s_out.size < 2:
-        return None
-    idx1 = np.searchsorted(s_out, s_targets, side="right") % n
-    idx0 = (idx1 - 1) % n
-    s0 = s_out[idx0]
-    s1 = s_out[idx1]
-    s1_adj = s1.copy()
-    s_targets_adj = s_targets.copy()
-    wrap = s1_adj <= s0
-    s1_adj[wrap] += 1.0
-    s_targets_adj = np.where(s_targets_adj < s0, s_targets_adj + 1.0, s_targets_adj)
-    denom = s1_adj - s0
-    t = np.zeros_like(s_targets_adj)
-    mask = denom > 1e-12
-    t[mask] = (s_targets_adj[mask] - s0[mask]) / denom[mask]
-    w1 = t
-    w0 = 1.0 - t
-    interp = positions[idx0] * w0[:, None] + positions[idx1] * w1[:, None]
-    return interp, idx0, idx1, w0, w1
 
 
 def _tilt_match_rows_and_directions(
