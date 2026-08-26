@@ -21,7 +21,6 @@ required_array_api_modules:
   - surface
   - tilt
   - tilt_coupling
-  - tilt_disk_contact_in
   - tilt_disk_target_in
   - tilt_disk_target_out
   - tilt_in
