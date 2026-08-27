@@ -1,8 +1,3 @@
-import os
-import sys
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from tools.theory_parity_guarded_gate import evaluate_guarded_gate
 
 
