@@ -7,37 +7,7 @@ from runtime.minimizer import Minimizer
 from runtime.steppers.bfgs import BFGS
 from runtime.steppers.conjugate_gradient import ConjugateGradient
 from runtime.steppers.gradient_descent import GradientDescent
-
-
-def _tetra_mesh(target_volume=0.2):
-    verts = [
-        [0.0, 0.0, 0.0],
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0],
-    ]
-    edges = [[0, 1], [1, 2], [2, 0], [0, 3], [1, 3], [2, 3]]
-    faces = [
-        ["r2", "r1", "r0"],  # (0, 2, 1)
-        [0, 4, "r3"],  # (0, 1, 3)
-        [3, "r5", 2],  # (0, 3, 2)
-        [1, 5, "r4"],  # (1, 2, 3)
-    ]
-    bodies = {
-        "faces": [[0, 1, 2, 3]],
-        "target_volume": [target_volume],
-    }
-    return {
-        "vertices": verts,
-        "edges": edges,
-        "faces": faces,
-        "bodies": bodies,
-        "global_parameters": {
-            "surface_tension": 1.0,
-            "volume_constraint_mode": "lagrange",
-        },
-        "instructions": [],
-    }
+from tests.sample_meshes import tetra_volume_constraint_data as _tetra_mesh
 
 
 def _square_patch():

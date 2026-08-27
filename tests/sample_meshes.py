@@ -171,6 +171,34 @@ def tetra_mesh_with_body() -> Mesh:
     return mesh
 
 
+def tetra_volume_constraint_data(target_volume: float = 0.2) -> dict:
+    """Return the oriented tetrahedron data used by volume constraint tests."""
+    return {
+        "vertices": [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        "edges": [[0, 1], [1, 2], [2, 0], [0, 3], [1, 3], [2, 3]],
+        "faces": [
+            ["r2", "r1", "r0"],
+            [0, 4, "r3"],
+            [3, "r5", 2],
+            [1, 5, "r4"],
+        ],
+        "bodies": {
+            "faces": [[0, 1, 2, 3]],
+            "target_volume": [target_volume],
+        },
+        "global_parameters": {
+            "surface_tension": 1.0,
+            "volume_constraint_mode": "lagrange",
+        },
+        "instructions": [],
+    }
+
+
 def square_mesh_with_center(*, z_offset: float) -> Mesh:
     """Return a four-triangle unit square with an adjustable center height."""
     mesh = Mesh()
