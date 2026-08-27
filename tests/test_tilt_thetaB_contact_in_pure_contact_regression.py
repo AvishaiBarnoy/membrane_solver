@@ -6,13 +6,7 @@ from core.parameters.resolver import ParameterResolver
 from geometry.entities import Mesh, Vertex
 from geometry.geom_io import load_data, parse_geometry
 from modules.energy import tilt_thetaB_contact_in
-
-
-def _fixture_path(name: str) -> str:
-    import os
-
-    here = os.path.dirname(__file__)
-    return os.path.join(here, "fixtures", name)
+from tests.kozlov_test_utils import fixture_path as _fixture_path
 
 
 def _disk_rows(mesh, group: str) -> np.ndarray:

@@ -1,18 +1,16 @@
-import os
-
 import numpy as np
 import pytest
 
 from geometry.geom_io import load_data, parse_geometry
 from runtime.refinement import refine_triangle_mesh
-from tests.kozlov_test_utils import build_minimizer
+from tests.kozlov_test_utils import (
+    build_minimizer,
+)
+from tests.kozlov_test_utils import (
+    fixture_path as _fixture_path,
+)
 
 pytestmark = pytest.mark.e2e
-
-
-def _fixture_path(name: str) -> str:
-    here = os.path.dirname(__file__)
-    return os.path.join(here, "fixtures", name)
 
 
 def _relax(mesh, *, inner_steps: int):
