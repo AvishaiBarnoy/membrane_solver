@@ -2,28 +2,14 @@ import numpy as np
 import pytest
 
 from core.parameters.global_parameters import GlobalParameters
-from geometry.entities import Edge, Facet, Mesh, Vertex
 from runtime.steppers.line_search import backtracking_line_search_array
-
-
-def _build_triangle_mesh() -> Mesh:
-    mesh = Mesh()
-    mesh.vertices = {
-        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
-        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
-        2: Vertex(2, np.array([0.0, 1.0, 0.0])),
-    }
-    mesh.edges = {1: Edge(1, 0, 1), 2: Edge(2, 1, 2), 3: Edge(3, 2, 0)}
-    mesh.facets = {0: Facet(0, edge_indices=[1, 2, 3])}
-    mesh.build_facet_vertex_loops()
-    mesh.build_position_cache()
-    return mesh
+from tests.sample_meshes import single_triangle_mesh
 
 
 def test_array_line_search_fast_path_uses_trial_positions_without_mutating_mesh() -> (
     None
 ):
-    mesh = _build_triangle_mesh()
+    mesh = single_triangle_mesh()
     vertex_ids = tuple(int(v) for v in mesh.vertex_ids.tolist())
     x0 = mesh.positions_view().copy()
 
@@ -69,7 +55,7 @@ def test_array_line_search_fast_path_uses_trial_positions_without_mutating_mesh(
 
 
 def test_array_line_search_fast_path_failure_keeps_mesh_state_pristine() -> None:
-    mesh = _build_triangle_mesh()
+    mesh = single_triangle_mesh()
     vertex_ids = tuple(int(v) for v in mesh.vertex_ids.tolist())
     x0 = mesh.positions_view().copy()
 
@@ -112,7 +98,7 @@ def test_array_line_search_fast_path_failure_keeps_mesh_state_pristine() -> None
 
 
 def test_array_line_search_can_scale_initial_step_by_minimum_edge() -> None:
-    mesh = _build_triangle_mesh()
+    mesh = single_triangle_mesh()
     mesh.global_parameters = GlobalParameters({"shape_step_edge_fraction": 0.1})
     vertex_ids = tuple(int(v) for v in mesh.vertex_ids.tolist())
     x0 = mesh.positions_view().copy()
@@ -146,7 +132,7 @@ def test_array_line_search_can_scale_initial_step_by_minimum_edge() -> None:
 
 
 def test_array_line_search_reduced_fast_path_accepts_trial_state() -> None:
-    mesh = _build_triangle_mesh()
+    mesh = single_triangle_mesh()
     mesh.global_parameters = GlobalParameters()
     vertex_ids = tuple(int(v) for v in mesh.vertex_ids.tolist())
     x0 = mesh.positions_view().copy()
@@ -208,7 +194,7 @@ def test_array_line_search_reduced_fast_path_accepts_trial_state() -> None:
 
 
 def test_array_line_search_reduced_fast_path_restores_baseline_on_reject() -> None:
-    mesh = _build_triangle_mesh()
+    mesh = single_triangle_mesh()
     mesh.global_parameters = GlobalParameters()
     vertex_ids = tuple(int(v) for v in mesh.vertex_ids.tolist())
     x0 = mesh.positions_view().copy()
@@ -270,7 +256,7 @@ def test_array_line_search_reduced_fast_path_restores_baseline_on_reject() -> No
 
 
 def test_array_line_search_reduced_mode_with_constraints_falls_back() -> None:
-    mesh = _build_triangle_mesh()
+    mesh = single_triangle_mesh()
     vertex_ids = tuple(int(v) for v in mesh.vertex_ids.tolist())
     mesh._line_search_reduced_energy = True
     mesh._line_search_reduced_accept_rule = "decrease_only"

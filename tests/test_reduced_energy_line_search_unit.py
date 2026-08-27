@@ -2,25 +2,12 @@ import numpy as np
 import pytest
 
 from core.parameters.global_parameters import GlobalParameters
-from geometry.entities import Edge, Facet, Mesh, Vertex
+from geometry.entities import Mesh
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
-
-
-def _build_single_triangle_leaflet_mesh() -> Mesh:
-    mesh = Mesh()
-    mesh.vertices = {
-        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
-        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
-        2: Vertex(2, np.array([0.0, 1.0, 0.0])),
-    }
-    mesh.edges = {1: Edge(1, 0, 1), 2: Edge(2, 1, 2), 3: Edge(3, 2, 0)}
-    mesh.facets = {0: Facet(0, edge_indices=[1, 2, 3])}
-    mesh.build_facet_vertex_loops()
-    mesh.build_position_cache()
-    return mesh
+from tests.sample_meshes import single_triangle_mesh
 
 
 def _build_minimizer(mesh: Mesh, gp: GlobalParameters) -> Minimizer:
@@ -39,7 +26,7 @@ def _build_minimizer(mesh: Mesh, gp: GlobalParameters) -> Minimizer:
 def test_line_search_reduced_energy_relaxes_tilts_and_restores_param_overrides() -> (
     None
 ):
-    mesh = _build_single_triangle_leaflet_mesh()
+    mesh = single_triangle_mesh()
     rng = np.random.default_rng(0)
     tin0 = rng.normal(size=(len(mesh.vertex_ids), 3))
     tout0 = rng.normal(size=(len(mesh.vertex_ids), 3))
@@ -81,7 +68,7 @@ def test_line_search_reduced_energy_relaxes_tilts_and_restores_param_overrides()
 
 
 def test_line_search_energy_fn_projects_leaflet_tilts_to_tangent() -> None:
-    mesh = _build_single_triangle_leaflet_mesh()
+    mesh = single_triangle_mesh()
 
     # Deliberately give both leaflets a non-tangent component on the z=0 plane.
     tin0 = np.zeros((len(mesh.vertex_ids), 3))
@@ -122,7 +109,7 @@ def test_line_search_energy_fn_projects_leaflet_tilts_to_tangent() -> None:
 
 
 def test_reduced_trial_energy_fn_keeps_geometry_cache_active() -> None:
-    mesh = _build_single_triangle_leaflet_mesh()
+    mesh = single_triangle_mesh()
 
     gp = GlobalParameters(
         {
@@ -173,7 +160,7 @@ def test_reduced_trial_energy_fn_keeps_geometry_cache_active() -> None:
 
 
 def test_reduced_trial_energy_is_repeatable_and_order_independent() -> None:
-    mesh = _build_single_triangle_leaflet_mesh()
+    mesh = single_triangle_mesh()
     tin0 = np.zeros((len(mesh.vertex_ids), 3), dtype=float)
     tout0 = np.zeros_like(tin0)
     tin0[:, 0] = 0.25
@@ -221,7 +208,7 @@ def test_reduced_trial_energy_is_repeatable_and_order_independent() -> None:
 
 
 def test_reduced_trial_energy_batches_until_tilt_tolerance() -> None:
-    mesh = _build_single_triangle_leaflet_mesh()
+    mesh = single_triangle_mesh()
     gp = GlobalParameters(
         {
             "tilt_modulus_in": 1.0,

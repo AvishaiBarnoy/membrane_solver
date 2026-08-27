@@ -81,6 +81,21 @@ def cube_soft_volume_input(volume_mode: str = "penalty") -> dict:
     return data
 
 
+def single_triangle_mesh() -> Mesh:
+    """Return the canonical cached triangle used by focused runtime tests."""
+    mesh = Mesh()
+    mesh.vertices = {
+        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
+        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
+        2: Vertex(2, np.array([0.0, 1.0, 0.0])),
+    }
+    mesh.edges = {1: Edge(1, 0, 1), 2: Edge(2, 1, 2), 3: Edge(3, 2, 0)}
+    mesh.facets = {0: Facet(0, edge_indices=[1, 2, 3])}
+    mesh.build_facet_vertex_loops()
+    mesh.build_position_cache()
+    return mesh
+
+
 SQUARE_PERIMETER_GEOMETRY = {
     "vertices": [
         [0.0, 0.0, 0.0],

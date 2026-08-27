@@ -1,25 +1,11 @@
 import numpy as np
 
-from geometry.entities import Edge, Facet, Mesh, Vertex
 from runtime.steppers.line_search import backtracking_line_search_array
-
-
-def _build_triangle_mesh() -> Mesh:
-    mesh = Mesh()
-    mesh.vertices = {
-        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
-        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
-        2: Vertex(2, np.array([0.0, 1.0, 0.0])),
-    }
-    mesh.edges = {1: Edge(1, 0, 1), 2: Edge(2, 1, 2), 3: Edge(3, 2, 0)}
-    mesh.facets = {0: Facet(0, edge_indices=[1, 2, 3])}
-    mesh.build_facet_vertex_loops()
-    mesh.build_position_cache()
-    return mesh
+from tests.sample_meshes import single_triangle_mesh
 
 
 def test_line_search_restores_tilts_on_reject_when_reduced_energy_enabled() -> None:
-    mesh = _build_triangle_mesh()
+    mesh = single_triangle_mesh()
     vertex_ids = tuple(int(v) for v in mesh.vertex_ids.tolist())
 
     # Set an explicit initial tilt state.
