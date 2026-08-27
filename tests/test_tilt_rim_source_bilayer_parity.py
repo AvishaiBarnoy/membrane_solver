@@ -7,56 +7,13 @@ from modules.energy import (
     tilt_rim_source_in,
     tilt_rim_source_out,
 )
+from tests.sample_meshes import annulus_source_mesh_data
 
 
 def _annulus_source_mesh(*, n: int = 10) -> dict:
-    vertices: list[list] = []
-    for i in range(n):
-        theta = 2.0 * np.pi * i / n
-        vertices.append(
-            [
-                float(np.cos(theta)),
-                float(np.sin(theta)),
-                0.0,
-                {
-                    "pin_to_circle_group": "inner",
-                    "pin_to_circle_mode": "fit",
-                    "pin_to_circle_normal": [0.0, 0.0, 1.0],
-                },
-            ]
-        )
-    for i in range(n):
-        theta = 2.0 * np.pi * i / n
-        vertices.append([float(2.0 * np.cos(theta)), float(2.0 * np.sin(theta)), 0.0])
-
-    edges: list[list[int]] = []
-    inner_edges = []
-    outer_edges = []
-    spokes = []
-    for i in range(n):
-        inner_edges.append(len(edges))
-        edges.append([i, (i + 1) % n])
-    for i in range(n):
-        outer_edges.append(len(edges))
-        edges.append([n + i, n + ((i + 1) % n)])
-    for i in range(n):
-        spokes.append(len(edges))
-        edges.append([i, n + i])
-
-    faces: list[list] = []
-    for i in range(n):
-        i_next = (i + 1) % n
-        faces.append(
-            [
-                inner_edges[i],
-                spokes[i_next],
-                f"r{outer_edges[i]}",
-                f"r{spokes[i]}",
-            ]
-        )
-
-    return {
-        "global_parameters": {
+    return annulus_source_mesh_data(
+        n=n,
+        global_parameters={
             "tilt_rim_source_center": [0.0, 0.0, 0.0],
             "tilt_rim_source_group": "inner",
             "tilt_rim_source_strength": 1.0,
@@ -65,12 +22,8 @@ def _annulus_source_mesh(*, n: int = 10) -> dict:
             "tilt_rim_source_group_out": "inner",
             "tilt_rim_source_strength_out": 1.0,
         },
-        "energy_modules": [],
-        "vertices": vertices,
-        "edges": edges,
-        "faces": faces,
-        "instructions": [],
-    }
+        energy_modules=[],
+    )
 
 
 def _set_radial_tilts(mesh) -> None:

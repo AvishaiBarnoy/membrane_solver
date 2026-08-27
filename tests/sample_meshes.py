@@ -286,6 +286,56 @@ def ring_vertices(n_theta: int, radius: float, z: float, options: dict) -> list[
     return vertices
 
 
+def annulus_source_mesh_data(
+    *, n: int, global_parameters: dict, energy_modules: list[str]
+) -> dict:
+    """Return a two-ring annulus with an option-tagged inner boundary."""
+    vertices: list[list] = []
+    for index in range(n):
+        theta = 2.0 * np.pi * index / n
+        vertices.append(
+            [
+                float(np.cos(theta)),
+                float(np.sin(theta)),
+                0.0,
+                {
+                    "pin_to_circle_group": "inner",
+                    "pin_to_circle_mode": "fit",
+                    "pin_to_circle_normal": [0.0, 0.0, 1.0],
+                },
+            ]
+        )
+    for index in range(n):
+        theta = 2.0 * np.pi * index / n
+        vertices.append([float(2.0 * np.cos(theta)), float(2.0 * np.sin(theta)), 0.0])
+
+    inner_edges = [[index, (index + 1) % n] for index in range(n)]
+    outer_edges = [[n + index, n + ((index + 1) % n)] for index in range(n)]
+    spokes = [[index, n + index] for index in range(n)]
+    edges = [*inner_edges, *outer_edges, *spokes]
+
+    faces = []
+    for index in range(n):
+        next_index = (index + 1) % n
+        faces.append(
+            [
+                index,
+                (2 * n) + next_index,
+                f"r{n + index}",
+                f"r{(2 * n) + index}",
+            ]
+        )
+
+    return {
+        "global_parameters": global_parameters,
+        "energy_modules": energy_modules,
+        "vertices": vertices,
+        "edges": edges,
+        "faces": faces,
+        "instructions": [],
+    }
+
+
 def parsed_two_triangle_square_mesh() -> Mesh:
     """Return the parsed two-triangle square used by row/operation tests."""
     mesh = parse_geometry(
