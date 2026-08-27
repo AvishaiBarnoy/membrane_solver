@@ -13,6 +13,9 @@ from modules.energy.bt_gradient import (
     _accumulate_ambient_p1_divergence_shape_gradient,
 )
 from tests.sample_meshes import SAMPLE_GEOMETRY
+from tests.sample_meshes import (
+    planar_patch_with_center_data as _planar_patch_with_center,
+)
 
 
 def test_ambient_p1_divergence_shape_pullback_matches_directional_derivative() -> None:
@@ -48,38 +51,6 @@ def test_ambient_p1_divergence_shape_pullback_matches_directional_derivative() -
     assert float(np.sum(gradient * direction)) == pytest.approx(
         finite_difference, rel=1.0e-7, abs=1.0e-8
     )
-
-
-def _planar_patch_with_center() -> dict:
-    """Return a flat square split into four triangles around a center vertex."""
-    return {
-        "vertices": {
-            0: [0.0, 0.0, 0.0, {"fixed": True}],
-            1: [1.0, 0.0, 0.0, {"fixed": True}],
-            2: [1.0, 1.0, 0.0, {"fixed": True}],
-            3: [0.0, 1.0, 0.0, {"fixed": True}],
-            4: [0.5, 0.5, 0.0, {"fixed": True}],
-        },
-        "edges": {
-            1: [0, 1],
-            2: [1, 2],
-            3: [2, 3],
-            4: [3, 0],
-            5: [0, 4],
-            6: [1, 4],
-            7: [2, 4],
-            8: [3, 4],
-        },
-        "faces": {
-            0: [1, 6, "r5"],
-            1: [2, 7, "r6"],
-            2: [3, 8, "r7"],
-            3: [4, 5, "r8"],
-        },
-        "energy_modules": [],
-        "global_parameters": {"surface_tension": 0.0},
-        "instructions": [],
-    }
 
 
 @pytest.mark.parametrize(
