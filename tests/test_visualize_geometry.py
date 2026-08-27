@@ -1,6 +1,3 @@
-import os
-import sys
-
 import matplotlib
 
 # Use a non-interactive backend suitable for testing.
@@ -11,8 +8,6 @@ import numpy as np
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 
 # Ensure project root is on sys.path for direct test execution.
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from geometry.entities import Edge, Mesh, Vertex
 from geometry.geom_io import parse_geometry
 from tests.sample_meshes import SAMPLE_GEOMETRY

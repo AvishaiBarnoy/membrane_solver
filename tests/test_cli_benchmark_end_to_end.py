@@ -4,8 +4,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.append(os.getcwd())
-
 from geometry.geom_io import load_data, parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager

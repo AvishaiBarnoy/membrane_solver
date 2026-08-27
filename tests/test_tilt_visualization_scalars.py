@@ -1,6 +1,3 @@
-import os
-import sys
-
 import matplotlib
 
 # Use a non-interactive backend suitable for testing.
@@ -8,8 +5,6 @@ matplotlib.use("Agg")
 
 import numpy as np
 import pytest
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import parse_geometry
 from visualization.plotting import triangle_tilt_divergence, triangle_tilt_magnitudes
