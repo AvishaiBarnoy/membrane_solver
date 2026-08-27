@@ -99,6 +99,45 @@ class BenchmarkPolishConfig:
             raise ValueError("theta_polish_points must be odd.")
 
 
+def _resolve_tilt_mass_mode(value: str, *, leaflet: str, auto_default: str) -> str:
+    mode = str(value).strip().lower()
+    if mode == "auto":
+        return str(auto_default)
+    if mode not in {"lumped", "consistent"}:
+        raise ValueError(
+            f"tilt_mass_mode_{leaflet} must be 'auto', 'lumped', or 'consistent'."
+        )
+    return mode
+
+
+def _resolve_tilt_transport_model(value: str) -> str:
+    mode = str(value).strip().lower()
+    if mode not in {"ambient_v1", "connection_v1"}:
+        raise ValueError(
+            "tilt_transport_model must be 'ambient_v1' or 'connection_v1'."
+        )
+    return mode
+
+
+def _resolve_tilt_divergence_mode_in(value: str) -> str:
+    mode = str(value).strip().lower()
+    if mode not in {"native", "vertex_recovered"}:
+        raise ValueError(
+            "tilt_divergence_mode_in must be 'native' or 'vertex_recovered'."
+        )
+    return mode
+
+
+def _resolve_inner_coupled_update_mode(value: str) -> str:
+    mode = str(value).strip().lower()
+    if mode not in {"off", "rim_matched_radial_continuation_v1"}:
+        raise ValueError(
+            "inner_coupled_update_mode must be 'off' or "
+            "'rim_matched_radial_continuation_v1'."
+        )
+    return mode
+
+
 def _resolve_optimize_preset(
     *,
     optimize_preset: str,
@@ -606,6 +645,71 @@ def _vertex_average_locally_in_annulus(
     return out
 
 
+def _prepare_benchmark_mesh(
+    *,
+    fixture: Path,
+    refine_level: int,
+    radius: float,
+    lambda_value: float,
+    rim_local_refine: tuple[int, float],
+    outer_local_refine: tuple[int, float, float],
+    local_edge_flip: tuple[int, float, float],
+    outer_local_vertex_average: tuple[int, float, float],
+):
+    """Load and apply the shared flat-benchmark mesh preparation sequence."""
+    _ensure_repo_root_on_sys_path()
+    from runtime.refinement import refine_triangle_mesh
+
+    rim_steps, rim_band = rim_local_refine
+    outer_steps, outer_rmin, outer_rmax = outer_local_refine
+    flip_steps, flip_rmin, flip_rmax = local_edge_flip
+    average_steps, average_rmin, average_rmax = outer_local_vertex_average
+    mesh = _load_mesh_from_fixture(fixture)
+    for _ in range(int(refine_level)):
+        mesh = refine_triangle_mesh(mesh)
+    if int(rim_steps) > 0:
+        mesh = _refine_mesh_locally_near_rim(
+            mesh,
+            local_steps=int(rim_steps),
+            rim_radius=float(radius),
+            band_half_width=float(rim_band) * float(lambda_value),
+        )
+    if int(outer_steps) > 0:
+        mesh = _refine_mesh_locally_in_outer_annulus(
+            mesh,
+            local_steps=int(outer_steps),
+            r_min=float(radius) + float(outer_rmin) * float(lambda_value),
+            r_max=float(radius) + float(outer_rmax) * float(lambda_value),
+        )
+    if int(flip_steps) > 0:
+        mesh = _flip_edges_locally_in_annulus(
+            mesh,
+            local_steps=int(flip_steps),
+            r_min=max(
+                0.0,
+                float(radius) + float(flip_rmin) * float(lambda_value),
+            ),
+            r_max=max(
+                0.0,
+                float(radius) + float(flip_rmax) * float(lambda_value),
+            ),
+        )
+    if int(average_steps) > 0:
+        mesh = _vertex_average_locally_in_annulus(
+            mesh,
+            local_steps=int(average_steps),
+            r_min=max(
+                0.0,
+                float(radius) + float(average_rmin) * float(lambda_value),
+            ),
+            r_max=max(
+                0.0,
+                float(radius) + float(average_rmax) * float(lambda_value),
+            ),
+        )
+    return mesh
+
+
 def _collect_disk_boundary_rows(mesh, *, group: str = "disk") -> np.ndarray:
     rows: list[int] = []
     for vid in mesh.vertex_ids:
@@ -948,11 +1052,7 @@ def _configure_benchmark_mesh(
     mass_mode_out_value = str(tilt_mass_mode_out).strip().lower()
     if mass_mode_out_value not in {"lumped", "consistent"}:
         raise ValueError("tilt_mass_mode_out must be 'lumped' or 'consistent'.")
-    transport_model_value = str(tilt_transport_model).strip().lower()
-    if transport_model_value not in {"ambient_v1", "connection_v1"}:
-        raise ValueError(
-            "tilt_transport_model must be 'ambient_v1' or 'connection_v1'."
-        )
+    transport_model_value = _resolve_tilt_transport_model(tilt_transport_model)
     projection_cadence = str(tilt_projection_cadence).strip().lower()
     if projection_cadence not in {"per_step", "per_pass"}:
         raise ValueError("tilt_projection_cadence must be 'per_step' or 'per_pass'.")
@@ -968,15 +1068,9 @@ def _configure_benchmark_mesh(
     post_relax_passes = int(tilt_post_relax_passes)
     if post_relax_passes <= 0:
         raise ValueError("tilt_post_relax_passes must be >= 1.")
-    inner_coupled_update_mode_value = str(inner_coupled_update_mode).strip().lower()
-    if inner_coupled_update_mode_value not in {
-        "off",
-        "rim_matched_radial_continuation_v1",
-    }:
-        raise ValueError(
-            "inner_coupled_update_mode must be 'off' or "
-            "'rim_matched_radial_continuation_v1'."
-        )
+    inner_coupled_update_mode_value = _resolve_inner_coupled_update_mode(
+        inner_coupled_update_mode
+    )
     ablation_mode_value = str(curved_theta_objective_ablation_mode).strip().lower()
     if ablation_mode_value not in {"off", "inner_outer_rescaled"}:
         raise ValueError(
@@ -1468,7 +1562,14 @@ def _rim_boundary_realization_metrics(
     }
 
 
-def _leakage_metrics(mesh, *, radius: float) -> dict[str, float]:
+def _leakage_metrics(
+    mesh,
+    *,
+    radius: float,
+    lambda_value: float | None = None,
+    rim_half_width_lambda: float = 0.0,
+    outer_near_width_lambda: float = 0.0,
+) -> dict[str, float]:
     """Report azimuthal leakage t_phi relative to radial component t_r."""
     positions = mesh.positions_view()
     r, r_hat = _radial_unit_vectors(positions)
@@ -1487,12 +1588,36 @@ def _leakage_metrics(mesh, *, radius: float) -> dict[str, float]:
         den = float(np.median(np.abs(t_rad[mask])))
         return float(num / max(den, 1e-18))
 
+    def _median_abs(values: np.ndarray, mask: np.ndarray) -> float:
+        if not np.any(mask):
+            return float("nan")
+        return float(np.median(np.abs(values[mask])))
+
     inner_mask = r < float(radius)
     outer_mask = r > float(radius)
-    return {
+    result = {
         "inner_tphi_over_trad_median": _ratio(inner_mask),
         "outer_tphi_over_trad_median": _ratio(outer_mask),
     }
+    if lambda_value is None:
+        return result
+
+    rim_w = max(0.0, float(rim_half_width_lambda) * float(lambda_value))
+    outer_near_w = max(0.0, float(outer_near_width_lambda) * float(lambda_value))
+    disk_core_end = max(0.0, float(radius) - rim_w)
+    rim_end = max(disk_core_end, float(radius) + rim_w)
+    outer_near_end = max(rim_end, float(radius) + outer_near_w)
+    bands = {
+        "disk_core": r < disk_core_end,
+        "rim_band": (r >= disk_core_end) & (r <= rim_end),
+        "outer_near": (r > rim_end) & (r <= outer_near_end),
+        "outer_far": r > outer_near_end,
+    }
+    for name, mask in bands.items():
+        result[f"{name}_tphi_abs_median"] = _median_abs(t_phi, mask)
+        result[f"{name}_trad_abs_median"] = _median_abs(t_rad, mask)
+        result[f"{name}_tphi_over_trad_median"] = _ratio(mask)
+    return result
 
 
 def _contact_diagnostics(
@@ -1616,7 +1741,6 @@ def run_flat_disk_one_leaflet_benchmark(
     """Run the flat one-leaflet benchmark and return a report dict."""
     t_run_start = perf_counter()
     _ensure_repo_root_on_sys_path()
-    from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
         compute_flat_disk_kh_physical_theory,
         compute_flat_disk_theory,
@@ -1925,32 +2049,16 @@ def run_flat_disk_one_leaflet_benchmark(
     mode = str(parameterization).lower()
     if mode not in {"legacy", "kh_physical"}:
         raise ValueError("parameterization must be 'legacy' or 'kh_physical'.")
-    mass_mode_raw = str(tilt_mass_mode_in).strip().lower()
-    if mass_mode_raw == "auto":
-        mass_mode = "consistent" if mode == "kh_physical" else "lumped"
-    elif mass_mode_raw in {"lumped", "consistent"}:
-        mass_mode = mass_mode_raw
-    else:
-        raise ValueError("tilt_mass_mode_in must be 'auto', 'lumped', or 'consistent'.")
-    mass_mode_out_raw = str(tilt_mass_mode_out).strip().lower()
-    if mass_mode_out_raw == "auto":
-        mass_mode_out = "lumped"
-    elif mass_mode_out_raw in {"lumped", "consistent"}:
-        mass_mode_out = mass_mode_out_raw
-    else:
-        raise ValueError(
-            "tilt_mass_mode_out must be 'auto', 'lumped', or 'consistent'."
-        )
-    transport_model_raw = str(tilt_transport_model).strip().lower()
-    if transport_model_raw not in {"ambient_v1", "connection_v1"}:
-        raise ValueError(
-            "tilt_transport_model must be 'ambient_v1' or 'connection_v1'."
-        )
-    div_mode_raw = str(tilt_divergence_mode_in).strip().lower()
-    if div_mode_raw not in {"native", "vertex_recovered"}:
-        raise ValueError(
-            "tilt_divergence_mode_in must be 'native' or 'vertex_recovered'."
-        )
+    mass_mode = _resolve_tilt_mass_mode(
+        tilt_mass_mode_in,
+        leaflet="in",
+        auto_default="consistent" if mode == "kh_physical" else "lumped",
+    )
+    mass_mode_out = _resolve_tilt_mass_mode(
+        tilt_mass_mode_out, leaflet="out", auto_default="lumped"
+    )
+    transport_model_raw = _resolve_tilt_transport_model(tilt_transport_model)
+    div_mode_raw = _resolve_tilt_divergence_mode_in(tilt_divergence_mode_in)
     projection_cadence = str(tilt_projection_cadence).strip().lower()
     if projection_cadence not in {"per_step", "per_pass"}:
         raise ValueError("tilt_projection_cadence must be 'per_step' or 'per_pass'.")
@@ -1966,15 +2074,9 @@ def run_flat_disk_one_leaflet_benchmark(
     post_relax_passes = int(tilt_post_relax_passes)
     if post_relax_passes < 1:
         raise ValueError("tilt_post_relax_passes must be >= 1.")
-    inner_coupled_update_mode_value = str(inner_coupled_update_mode).strip().lower()
-    if inner_coupled_update_mode_value not in {
-        "off",
-        "rim_matched_radial_continuation_v1",
-    }:
-        raise ValueError(
-            "inner_coupled_update_mode must be 'off' or "
-            "'rim_matched_radial_continuation_v1'."
-        )
+    inner_coupled_update_mode_value = _resolve_inner_coupled_update_mode(
+        inner_coupled_update_mode
+    )
     if curved_theta_objective_ablation_mode_requested not in {
         "off",
         "inner_outer_rescaled",
@@ -2095,64 +2197,31 @@ def run_flat_disk_one_leaflet_benchmark(
             polish_cfg.validate()
 
     t_mesh_prep_start = perf_counter()
-    mesh = _load_mesh_from_fixture(fixture_path)
-    for _ in range(int(effective_refine_level)):
-        mesh = refine_triangle_mesh(mesh)
-    if int(effective_rim_local_refine_steps) > 0:
-        band_half_width = float(effective_rim_local_refine_band_lambda) * float(
-            theory.lambda_value
-        )
-        mesh = _refine_mesh_locally_near_rim(
-            mesh,
-            local_steps=int(effective_rim_local_refine_steps),
-            rim_radius=float(theory.radius),
-            band_half_width=band_half_width,
-        )
-    if int(effective_outer_local_refine_steps) > 0:
-        mesh = _refine_mesh_locally_in_outer_annulus(
-            mesh,
-            local_steps=int(effective_outer_local_refine_steps),
-            r_min=float(theory.radius)
-            + float(effective_outer_local_refine_rmin_lambda)
-            * float(theory.lambda_value),
-            r_max=float(theory.radius)
-            + float(effective_outer_local_refine_rmax_lambda)
-            * float(theory.lambda_value),
-        )
-    if int(effective_local_edge_flip_steps) > 0:
-        mesh = _flip_edges_locally_in_annulus(
-            mesh,
-            local_steps=int(effective_local_edge_flip_steps),
-            r_min=max(
-                0.0,
-                float(theory.radius)
-                + float(effective_local_edge_flip_rmin_lambda)
-                * float(theory.lambda_value),
-            ),
-            r_max=max(
-                0.0,
-                float(theory.radius)
-                + float(effective_local_edge_flip_rmax_lambda)
-                * float(theory.lambda_value),
-            ),
-        )
-    if int(effective_outer_local_vertex_average_steps) > 0:
-        mesh = _vertex_average_locally_in_annulus(
-            mesh,
-            local_steps=int(effective_outer_local_vertex_average_steps),
-            r_min=max(
-                0.0,
-                float(theory.radius)
-                + float(effective_outer_local_vertex_average_rmin_lambda)
-                * float(theory.lambda_value),
-            ),
-            r_max=max(
-                0.0,
-                float(theory.radius)
-                + float(effective_outer_local_vertex_average_rmax_lambda)
-                * float(theory.lambda_value),
-            ),
-        )
+    mesh = _prepare_benchmark_mesh(
+        fixture=fixture_path,
+        refine_level=int(effective_refine_level),
+        radius=float(theory.radius),
+        lambda_value=float(theory.lambda_value),
+        rim_local_refine=(
+            effective_rim_local_refine_steps,
+            effective_rim_local_refine_band_lambda,
+        ),
+        outer_local_refine=(
+            effective_outer_local_refine_steps,
+            effective_outer_local_refine_rmin_lambda,
+            effective_outer_local_refine_rmax_lambda,
+        ),
+        local_edge_flip=(
+            effective_local_edge_flip_steps,
+            effective_local_edge_flip_rmin_lambda,
+            effective_local_edge_flip_rmax_lambda,
+        ),
+        outer_local_vertex_average=(
+            effective_outer_local_vertex_average_steps,
+            effective_outer_local_vertex_average_rmin_lambda,
+            effective_outer_local_vertex_average_rmax_lambda,
+        ),
+    )
     mesh_load_refine_seconds = float(perf_counter() - t_mesh_prep_start)
 
     t_setup_start = perf_counter()

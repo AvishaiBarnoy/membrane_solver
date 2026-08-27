@@ -120,17 +120,13 @@ def _theory_split_coeffs(theory: Any) -> tuple[float, float, float]:
 
 def _kh_reference_profiles(*, smoothness_model: str) -> dict[str, str]:
     """Return explicit continuum reference labels for flat KH diagnostics."""
-    smooth = str(smoothness_model).strip().lower()
-    return {
-        "continuum_field_model": "vector_field_radial_amplitude",
-        "combined_reference_profile": "I1_inside_K1_outside",
-        "smoothness_only_reference_profile": (
-            "r_over_R_inside_R_over_r_outside"
-            if smooth == "dirichlet"
-            else "not_applicable_for_splay_twist"
-        ),
-        "scalar_tex_profile": "I0_inside_K0_outside",
-    }
+    from tools.reproduce_flat_disk_one_leaflet import (
+        _flat_benchmark_reference_profiles,
+    )
+
+    return _flat_benchmark_reference_profiles(
+        parameterization="kh_physical", smoothness_model=smoothness_model
+    )
 
 
 def _radial_frames(positions: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -766,27 +762,13 @@ def _boundary_realization_metrics(
     theta_value: float,
 ) -> dict[str, float]:
     """Measure realized radial tilt on the rim shell vs imposed theta_B."""
-    pos = mesh.positions_view()
-    r, r_hat, _ = _radial_frames(pos)
-    shell_tol = max(1e-6, 0.02 * float(radius))
-    rim_mask = np.abs(r - float(radius)) <= shell_tol
-    rows = np.flatnonzero(rim_mask)
-    if rows.size == 0:
-        return {
-            "rim_samples": 0,
-            "rim_theta_error_abs_median": float("nan"),
-            "rim_theta_error_abs_max": float("nan"),
-            "rim_theta_realized_median": float("nan"),
-        }
-    t_in = mesh.tilts_in_view()
-    t_rad = np.einsum("ij,ij->i", t_in[rows], r_hat[rows])
-    err = t_rad - float(theta_value)
-    return {
-        "rim_samples": int(rows.size),
-        "rim_theta_error_abs_median": float(np.median(np.abs(err))),
-        "rim_theta_error_abs_max": float(np.max(np.abs(err))),
-        "rim_theta_realized_median": float(np.median(t_rad)),
-    }
+    from tools.reproduce_flat_disk_one_leaflet import (
+        _rim_boundary_realization_metrics,
+    )
+
+    return _rim_boundary_realization_metrics(
+        mesh, radius=float(radius), theta_value=float(theta_value)
+    )
 
 
 def _leakage_metrics(
@@ -798,52 +780,15 @@ def _leakage_metrics(
     outer_near_width_lambda: float,
 ) -> dict[str, float]:
     """Report azimuthal (t_phi) leakage relative to radial component."""
-    pos = mesh.positions_view()
-    r, r_hat, phi_hat = _radial_frames(pos)
-    t_in = mesh.tilts_in_view()
-    t_rad = np.einsum("ij,ij->i", t_in, r_hat)
-    t_phi = np.einsum("ij,ij->i", t_in, phi_hat)
+    from tools.reproduce_flat_disk_one_leaflet import _leakage_metrics as shared_metrics
 
-    def _ratio(mask: np.ndarray) -> float:
-        if not np.any(mask):
-            return float("nan")
-        num = float(np.median(np.abs(t_phi[mask])))
-        den = float(np.median(np.abs(t_rad[mask])))
-        return float(num / max(den, 1e-18))
-
-    def _median_abs(values: np.ndarray, mask: np.ndarray) -> float:
-        if not np.any(mask):
-            return float("nan")
-        return float(np.median(np.abs(values[mask])))
-
-    inner_mask = r < float(radius)
-    outer_mask = r > float(radius)
-    rim_w = max(0.0, float(rim_half_width_lambda) * float(lambda_value))
-    outer_near_w = max(0.0, float(outer_near_width_lambda) * float(lambda_value))
-    r_disk_core_end = max(0.0, float(radius) - rim_w)
-    r_rim_end = max(r_disk_core_end, float(radius) + rim_w)
-    r_outer_near_end = max(r_rim_end, float(radius) + outer_near_w)
-
-    disk_core_mask = r < r_disk_core_end
-    rim_band_mask = (r >= r_disk_core_end) & (r <= r_rim_end)
-    outer_near_mask = (r > r_rim_end) & (r <= r_outer_near_end)
-    outer_far_mask = r > r_outer_near_end
-    return {
-        "inner_tphi_over_trad_median": _ratio(inner_mask),
-        "outer_tphi_over_trad_median": _ratio(outer_mask),
-        "disk_core_tphi_abs_median": _median_abs(t_phi, disk_core_mask),
-        "disk_core_trad_abs_median": _median_abs(t_rad, disk_core_mask),
-        "disk_core_tphi_over_trad_median": _ratio(disk_core_mask),
-        "rim_band_tphi_abs_median": _median_abs(t_phi, rim_band_mask),
-        "rim_band_trad_abs_median": _median_abs(t_rad, rim_band_mask),
-        "rim_band_tphi_over_trad_median": _ratio(rim_band_mask),
-        "outer_near_tphi_abs_median": _median_abs(t_phi, outer_near_mask),
-        "outer_near_trad_abs_median": _median_abs(t_rad, outer_near_mask),
-        "outer_near_tphi_over_trad_median": _ratio(outer_near_mask),
-        "outer_far_tphi_abs_median": _median_abs(t_phi, outer_far_mask),
-        "outer_far_trad_abs_median": _median_abs(t_rad, outer_far_mask),
-        "outer_far_tphi_over_trad_median": _ratio(outer_far_mask),
-    }
+    return shared_metrics(
+        mesh,
+        radius=float(radius),
+        lambda_value=float(lambda_value),
+        rim_half_width_lambda=float(rim_half_width_lambda),
+        outer_near_width_lambda=float(outer_near_width_lambda),
+    )
 
 
 def _pearson_correlation(x_vals: Sequence[float], y_vals: Sequence[float]) -> float:
@@ -1141,7 +1086,6 @@ def _run_single_level(
     theta_relax_energy_abs_tol: float = 1.0e-10,
     theta_relax_plateau_patience: int = 2,
 ) -> dict[str, Any]:
-    from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import (
         compute_flat_disk_kh_physical_theory,
         physical_to_dimensionless_theory_params,
@@ -1149,12 +1093,12 @@ def _run_single_level(
     from tools.reproduce_flat_disk_one_leaflet import (
         _build_minimizer,
         _configure_benchmark_mesh,
-        _flip_edges_locally_in_annulus,
-        _load_mesh_from_fixture,
-        _refine_mesh_locally_in_outer_annulus,
-        _refine_mesh_locally_near_rim,
+        _prepare_benchmark_mesh,
+        _resolve_inner_coupled_update_mode,
+        _resolve_tilt_divergence_mode_in,
+        _resolve_tilt_mass_mode,
+        _resolve_tilt_transport_model,
         _run_theta_relaxation,
-        _vertex_average_locally_in_annulus,
     )
 
     params = physical_to_dimensionless_theory_params(
@@ -1167,96 +1111,42 @@ def _run_single_level(
     theory = compute_flat_disk_kh_physical_theory(params)
     c_in, c_out, b_contact = _theory_split_coeffs(theory)
 
-    mesh = _load_mesh_from_fixture(fixture)
-    for _ in range(int(refine_level)):
-        mesh = refine_triangle_mesh(mesh)
-    if int(rim_local_refine_steps) > 0:
-        mesh = _refine_mesh_locally_near_rim(
-            mesh,
-            local_steps=int(rim_local_refine_steps),
-            rim_radius=float(theory.radius),
-            band_half_width=float(rim_local_refine_band_lambda)
-            * float(theory.lambda_value),
-        )
-    if int(outer_local_refine_steps) > 0:
-        mesh = _refine_mesh_locally_in_outer_annulus(
-            mesh,
-            local_steps=int(outer_local_refine_steps),
-            r_min=float(theory.radius)
-            + float(outer_local_refine_rmin_lambda) * float(theory.lambda_value),
-            r_max=float(theory.radius)
-            + float(outer_local_refine_rmax_lambda) * float(theory.lambda_value),
-        )
-    if int(local_edge_flip_steps) > 0:
-        mesh = _flip_edges_locally_in_annulus(
-            mesh,
-            local_steps=int(local_edge_flip_steps),
-            r_min=max(
-                0.0,
-                float(theory.radius)
-                + float(local_edge_flip_rmin_lambda) * float(theory.lambda_value),
-            ),
-            r_max=max(
-                0.0,
-                float(theory.radius)
-                + float(local_edge_flip_rmax_lambda) * float(theory.lambda_value),
-            ),
-        )
-    if int(outer_local_vertex_average_steps) > 0:
-        mesh = _vertex_average_locally_in_annulus(
-            mesh,
-            local_steps=int(outer_local_vertex_average_steps),
-            r_min=max(
-                0.0,
-                float(theory.radius)
-                + float(outer_local_vertex_average_rmin_lambda)
-                * float(theory.lambda_value),
-            ),
-            r_max=max(
-                0.0,
-                float(theory.radius)
-                + float(outer_local_vertex_average_rmax_lambda)
-                * float(theory.lambda_value),
-            ),
-        )
+    mesh = _prepare_benchmark_mesh(
+        fixture=fixture,
+        refine_level=int(refine_level),
+        radius=float(theory.radius),
+        lambda_value=float(theory.lambda_value),
+        rim_local_refine=(rim_local_refine_steps, rim_local_refine_band_lambda),
+        outer_local_refine=(
+            outer_local_refine_steps,
+            outer_local_refine_rmin_lambda,
+            outer_local_refine_rmax_lambda,
+        ),
+        local_edge_flip=(
+            local_edge_flip_steps,
+            local_edge_flip_rmin_lambda,
+            local_edge_flip_rmax_lambda,
+        ),
+        outer_local_vertex_average=(
+            outer_local_vertex_average_steps,
+            outer_local_vertex_average_rmin_lambda,
+            outer_local_vertex_average_rmax_lambda,
+        ),
+    )
     positions = mesh.positions_view()
     mesh_r_max = float(np.max(np.linalg.norm(positions[:, :2], axis=1)))
 
-    mass_mode_raw = str(tilt_mass_mode_in).strip().lower()
-    if mass_mode_raw == "auto":
-        mass_mode = "consistent"
-    elif mass_mode_raw in {"lumped", "consistent"}:
-        mass_mode = mass_mode_raw
-    else:
-        raise ValueError("tilt_mass_mode_in must be 'auto', 'lumped', or 'consistent'.")
-    mass_mode_out_raw = str(tilt_mass_mode_out).strip().lower()
-    if mass_mode_out_raw == "auto":
-        mass_mode_out = "lumped"
-    elif mass_mode_out_raw in {"lumped", "consistent"}:
-        mass_mode_out = mass_mode_out_raw
-    else:
-        raise ValueError(
-            "tilt_mass_mode_out must be 'auto', 'lumped', or 'consistent'."
-        )
-    transport_model_value = str(tilt_transport_model).strip().lower()
-    if transport_model_value not in {"ambient_v1", "connection_v1"}:
-        raise ValueError(
-            "tilt_transport_model must be 'ambient_v1' or 'connection_v1'."
-        )
-    inner_coupled_update_mode_value = str(inner_coupled_update_mode).strip().lower()
-    if inner_coupled_update_mode_value not in {
-        "off",
-        "rim_matched_radial_continuation_v1",
-    }:
-        raise ValueError(
-            "inner_coupled_update_mode must be 'off' or "
-            "'rim_matched_radial_continuation_v1'."
-        )
-    div_mode = str(tilt_divergence_mode_in).strip().lower()
-    if div_mode not in {"native", "vertex_recovered"}:
-        raise ValueError(
-            "tilt_divergence_mode_in must be 'native' or 'vertex_recovered'."
-        )
+    mass_mode = _resolve_tilt_mass_mode(
+        tilt_mass_mode_in, leaflet="in", auto_default="consistent"
+    )
+    mass_mode_out = _resolve_tilt_mass_mode(
+        tilt_mass_mode_out, leaflet="out", auto_default="lumped"
+    )
+    transport_model_value = _resolve_tilt_transport_model(tilt_transport_model)
+    inner_coupled_update_mode_value = _resolve_inner_coupled_update_mode(
+        inner_coupled_update_mode
+    )
+    div_mode = _resolve_tilt_divergence_mode_in(tilt_divergence_mode_in)
     ratio_version_mode = str(ratio_version).strip().lower()
     if ratio_version_mode not in {"v1", "v2"}:
         raise ValueError("ratio_version must be 'v1' or 'v2'.")
