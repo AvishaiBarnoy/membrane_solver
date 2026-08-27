@@ -1,5 +1,3 @@
-import os
-import sys
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
@@ -9,7 +7,6 @@ import numpy as np
 import pytest
 import yaml
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 ROOT = Path(__file__).resolve().parent.parent
 
 from tools.diagnostics.flat_disk_kh_term_audit import (

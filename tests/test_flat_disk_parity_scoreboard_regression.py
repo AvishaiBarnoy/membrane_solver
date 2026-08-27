@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.flat_disk_parity_scoreboard import (  # noqa: E402
     run_flat_disk_parity_scoreboard,

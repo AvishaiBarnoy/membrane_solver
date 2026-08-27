@@ -1,4 +1,3 @@
-import os
 import subprocess
 import sys
 from copy import deepcopy
@@ -8,8 +7,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import yaml
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data
 from runtime.refinement import refine_triangle_mesh
