@@ -1,9 +1,4 @@
-import os
-import sys
-
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.entities import GlobalParameters, Mesh, Vertex  # noqa: E402
 from modules.constraints import rigid_disk  # noqa: E402
