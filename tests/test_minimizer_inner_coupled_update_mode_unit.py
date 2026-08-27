@@ -1,10 +1,5 @@
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.parameters.global_parameters import GlobalParameters
 from runtime.steppers.tilt_relaxation import _apply_inner_coupled_update_mode_to_delta

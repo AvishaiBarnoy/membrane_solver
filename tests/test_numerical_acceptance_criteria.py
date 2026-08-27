@@ -1,13 +1,6 @@
 import math
-import os
-import sys
 
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
-
-from sample_meshes import cube_soft_volume_input
 
 from geometry.entities import Edge, Facet, Mesh, Vertex
 from geometry.geom_io import parse_geometry
@@ -15,6 +8,7 @@ from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
+from tests.sample_meshes import cube_soft_volume_input
 
 
 def _build_square_mesh_with_center(*, z_offset: float) -> Mesh:
