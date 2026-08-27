@@ -1,9 +1,4 @@
-import os
-import sys
-
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from runtime.projections.tilt import (
     build_leaflet_trial_tilts,

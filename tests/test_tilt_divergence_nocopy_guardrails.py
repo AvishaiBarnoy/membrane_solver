@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import os
-import sys
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import geometry.tilt_operators as tilt_ops
 from geometry.tilt_operators import p1_triangle_divergence, p1_triangle_shape_gradients

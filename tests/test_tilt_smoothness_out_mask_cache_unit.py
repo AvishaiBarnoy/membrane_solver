@@ -1,8 +1,3 @@
-import os
-import sys
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from geometry.geom_io import load_data, parse_geometry  # noqa: E402
 from modules.energy import tilt_smoothness as base_smoothness  # noqa: E402
 from modules.energy import tilt_smoothness_out  # noqa: E402

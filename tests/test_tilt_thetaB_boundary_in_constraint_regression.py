@@ -1,9 +1,6 @@
 import os
-import sys
 
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry
 from modules.constraints import tilt_thetaB_boundary_in
@@ -12,8 +9,6 @@ from runtime.refinement import refine_triangle_mesh
 
 
 def _fixture_path(name: str) -> str:
-    import os
-
     here = os.path.dirname(__file__)
     return os.path.join(here, "fixtures", name)
 

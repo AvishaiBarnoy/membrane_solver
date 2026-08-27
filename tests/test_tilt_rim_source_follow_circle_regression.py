@@ -1,9 +1,4 @@
-import os
-import sys
-
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.parameters.resolver import ParameterResolver
 from geometry.geom_io import parse_geometry

@@ -1,11 +1,5 @@
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from sample_meshes import cube_soft_volume_input  # noqa: E402
 
 from core.parameters.resolver import ParameterResolver  # noqa: E402
