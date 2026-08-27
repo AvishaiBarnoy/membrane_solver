@@ -7,11 +7,8 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from modules.energy.bt_selection import _collect_group_rows, _collect_preset_rows
-from runtime.constraint_manager import ConstraintModuleManager  # noqa: E402
-from runtime.energy_manager import EnergyModuleManager  # noqa: E402
-from runtime.minimizer import Minimizer  # noqa: E402
 from runtime.refinement import refine_triangle_mesh  # noqa: E402
-from runtime.steppers.gradient_descent import GradientDescent  # noqa: E402
+from tests.kozlov_test_utils import build_minimizer as _build_minimizer  # noqa: E402
 from tools.diagnostics.free_disk_profile_protocol import (  # noqa: E402
     configure_free_disk_curved_bilayer_stage2,
     load_free_disk_curved_bilayer_mesh,
@@ -20,17 +17,6 @@ from tools.diagnostics.free_disk_profile_protocol import (  # noqa: E402
 )
 
 pytestmark = pytest.mark.regression
-
-
-def _build_minimizer(mesh) -> Minimizer:
-    return Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
 
 
 def _free_disk_rows(mesh) -> np.ndarray:
