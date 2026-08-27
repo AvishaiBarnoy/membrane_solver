@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 
-from geometry.entities import Edge, Facet, Mesh, Vertex
 from geometry.tilt_operators import (
     compute_divergence_from_basis,
     compute_p1_basis,
@@ -10,31 +9,7 @@ from geometry.tilt_operators import (
 )
 from modules.energy import bending_tilt_leaflet as bt_leaflet
 from runtime.energy_context import EnergyContext
-
-
-def _build_two_triangle_mesh() -> Mesh:
-    # Square split into two triangles.
-    mesh = Mesh()
-    mesh.vertices = {
-        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
-        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
-        2: Vertex(2, np.array([1.0, 1.0, 0.0])),
-        3: Vertex(3, np.array([0.0, 1.0, 0.0])),
-    }
-    mesh.edges = {
-        1: Edge(1, 0, 1),
-        2: Edge(2, 1, 2),
-        3: Edge(3, 2, 3),
-        4: Edge(4, 3, 0),
-        5: Edge(5, 0, 2),  # diagonal
-    }
-    mesh.facets = {
-        0: Facet(0, edge_indices=[1, 2, -5]),
-        1: Facet(1, edge_indices=[5, 3, 4]),
-    }
-    mesh.build_facet_vertex_loops()
-    mesh.build_position_cache()
-    return mesh
+from tests.sample_meshes import two_triangle_square_mesh as _build_two_triangle_mesh
 
 
 def test_p1_triangle_divergence_matches_cached_shape_gradients() -> None:

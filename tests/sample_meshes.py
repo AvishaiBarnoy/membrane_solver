@@ -96,6 +96,31 @@ def single_triangle_mesh() -> Mesh:
     return mesh
 
 
+def two_triangle_square_mesh() -> Mesh:
+    """Return a cached unit square split along the 0-to-2 diagonal."""
+    mesh = Mesh()
+    mesh.vertices = {
+        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
+        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
+        2: Vertex(2, np.array([1.0, 1.0, 0.0])),
+        3: Vertex(3, np.array([0.0, 1.0, 0.0])),
+    }
+    mesh.edges = {
+        1: Edge(1, 0, 1),
+        2: Edge(2, 1, 2),
+        3: Edge(3, 2, 3),
+        4: Edge(4, 3, 0),
+        5: Edge(5, 0, 2),
+    }
+    mesh.facets = {
+        0: Facet(0, edge_indices=[1, 2, -5]),
+        1: Facet(1, edge_indices=[5, 3, 4]),
+    }
+    mesh.build_facet_vertex_loops()
+    mesh.build_position_cache()
+    return mesh
+
+
 SQUARE_PERIMETER_GEOMETRY = {
     "vertices": [
         [0.0, 0.0, 0.0],
