@@ -1,9 +1,4 @@
-import os
-import sys
-
 import numpy as np
-
-sys.path.insert(0, os.getcwd())
 
 from geometry.geom_io import load_data, parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
