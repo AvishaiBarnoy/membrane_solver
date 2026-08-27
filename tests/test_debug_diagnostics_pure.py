@@ -97,8 +97,10 @@ def test_debug_energy_context_does_not_call_breakdown(caplog, monkeypatch) -> No
     assert called["count"] == 1
 
 
-def test_debug_minimize_loop_does_not_probe_diagnostic_energy(monkeypatch) -> None:
-    logging.getLogger("membrane_solver").setLevel(logging.DEBUG)
+def test_debug_minimize_loop_does_not_probe_diagnostic_energy(
+    monkeypatch, caplog
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="membrane_solver")
     mesh = parse_geometry(
         load_data("tests/fixtures/kozlov_free_disk_coarse_refinable.yaml")
     )
