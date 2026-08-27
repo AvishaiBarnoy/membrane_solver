@@ -9,22 +9,8 @@ from commands.executor import execute_command_line
 from core.parameters.resolver import ParameterResolver
 from geometry.geom_io import load_data, parse_geometry
 from modules.energy import tilt_rim_source_bilayer
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as _build_minimizer
 from tools.build_stage_a_fixtures import BASE_FIXTURE
-
-
-def _build_minimizer(mesh) -> Minimizer:
-    return Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
 
 
 def _load_stage_a_state(commands: list[str]):

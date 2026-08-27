@@ -4,10 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as build_minimizer
 
 FIXTURE_DIR = Path(__file__).with_name("fixtures")
 
@@ -59,17 +56,3 @@ def outer_free_ring_rows(mesh, positions: np.ndarray) -> np.ndarray:
     radii_arr = np.asarray(radii, dtype=float)
     rows_arr = np.asarray(rows, dtype=int)
     return rows_arr[np.abs(radii_arr - float(np.max(radii_arr))) <= 1e-6]
-
-
-def build_minimizer(mesh, *, tol: float | None = None) -> Minimizer:
-    """Return the standard quiet minimizer used by Kozlov scenarios."""
-    kwargs = {} if tol is None else {"tol": float(tol)}
-    return Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-        **kwargs,
-    )
