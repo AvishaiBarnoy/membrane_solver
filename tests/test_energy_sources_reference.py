@@ -1,12 +1,7 @@
 import numpy as np
 
-from commands.context import CommandContext
 from commands.executor import execute_command_line
-from geometry.geom_io import parse_geometry
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_command_context as _build_context
 
 
 def _annulus_source_mesh(*, n: int = 10) -> dict:
@@ -67,19 +62,6 @@ def _annulus_source_mesh(*, n: int = 10) -> dict:
         "faces": faces,
         "instructions": [],
     }
-
-
-def _build_context(mesh_data: dict) -> CommandContext:
-    mesh = parse_geometry(mesh_data)
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
-    return CommandContext(mesh, minim, minim.stepper)
 
 
 def _set_radial_tilt_in(mesh) -> None:

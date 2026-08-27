@@ -1,5 +1,7 @@
 """Shared minimizer construction for focused tests."""
 
+from commands.context import CommandContext
+from geometry.geom_io import parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
@@ -18,3 +20,10 @@ def build_minimizer(mesh, *, tol: float | None = None) -> Minimizer:
         quiet=True,
         **kwargs,
     )
+
+
+def build_command_context(data: dict) -> CommandContext:
+    """Parse geometry data and attach the standard quiet minimizer."""
+    mesh = parse_geometry(data)
+    minimizer = build_minimizer(mesh)
+    return CommandContext(mesh, minimizer, minimizer.stepper)
