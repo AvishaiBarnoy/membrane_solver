@@ -7,25 +7,7 @@ import pytest
 
 import fortran_kernels.loader as loader
 from geometry.curvature import compute_curvature_data
-from geometry.entities import Edge, Facet, Mesh, Vertex
-
-
-def _single_triangle_mesh() -> Mesh:
-    mesh = Mesh()
-    mesh.vertices = {
-        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
-        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
-        2: Vertex(2, np.array([0.0, 1.0, 0.0])),
-    }
-    mesh.edges = {
-        1: Edge(1, 0, 1),
-        2: Edge(2, 1, 2),
-        3: Edge(3, 2, 0),
-    }
-    mesh.facets = {0: Facet(0, [1, 2, 3])}
-    mesh.build_facet_vertex_loops()
-    mesh.build_position_cache()
-    return mesh
+from tests.sample_meshes import single_triangle_mesh as _single_triangle_mesh
 
 
 def test_curvature_kernel_optional_area_outputs_are_supported(
