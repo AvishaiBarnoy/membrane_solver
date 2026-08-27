@@ -1,9 +1,4 @@
-import os
-import sys
-
 import numpy as np
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from sample_meshes import write_sample_geometry
 
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
