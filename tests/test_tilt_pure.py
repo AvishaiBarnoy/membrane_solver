@@ -3,19 +3,13 @@ import pytest
 
 from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
-from geometry.entities import Mesh
 from modules.energy import tilt
-from tests.sample_meshes import single_triangle_mesh as _build_single_triangle_mesh
-
-
-def _set_mesh_positions(mesh: Mesh, positions: np.ndarray) -> None:
-    mesh.build_position_cache()
-    if positions.shape != (len(mesh.vertex_ids), 3):
-        raise ValueError("positions must have shape (N_vertices, 3)")
-
-    for row, vid in enumerate(mesh.vertex_ids):
-        mesh.vertices[int(vid)].position[:] = positions[row]
-    mesh.increment_version()
+from tests.sample_meshes import (
+    set_mesh_positions as _set_mesh_positions,
+)
+from tests.sample_meshes import (
+    single_triangle_mesh as _build_single_triangle_mesh,
+)
 
 
 def test_tilt_energy_single_triangle_matches_closed_form():

@@ -121,6 +121,17 @@ def two_triangle_square_mesh() -> Mesh:
     return mesh
 
 
+def set_mesh_positions(mesh: Mesh, positions: np.ndarray) -> None:
+    """Update vertex positions in row order and invalidate geometry caches."""
+    mesh.build_position_cache()
+    if positions.shape != (len(mesh.vertex_ids), 3):
+        raise ValueError("positions must have shape (N_vertices, 3)")
+
+    for row, vid in enumerate(mesh.vertex_ids):
+        mesh.vertices[int(vid)].position[:] = positions[row]
+    mesh.increment_version()
+
+
 SQUARE_PERIMETER_GEOMETRY = {
     "vertices": [
         [0.0, 0.0, 0.0],
