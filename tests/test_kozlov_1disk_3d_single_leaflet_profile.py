@@ -3,6 +3,9 @@ import pytest
 
 from geometry.geom_io import parse_geometry
 from tests.kozlov_test_utils import (
+    build_1disk_profile_data,
+)
+from tests.kozlov_test_utils import (
     build_minimizer as _build_minimizer,
 )
 from tests.kozlov_test_utils import (
@@ -21,174 +24,8 @@ from tests.kozlov_test_utils import (
 pytestmark = pytest.mark.e2e
 
 
-def _build_mesh() -> dict:
-    """Build a minimal single-leaflet-profile input without loading from `meshes/`."""
-
-    def ring_vertices(r: float, *, n: int, z: float = 0.0) -> list[list[float]]:
-        out: list[list[float]] = []
-        for k in range(n):
-            ang = 2.0 * np.pi * k / n
-            out.append(
-                [float(r) * float(np.cos(ang)), float(r) * float(np.sin(ang)), float(z)]
-            )
-        return out
-
-    n = 12
-    radii: list[tuple[float, dict | None, float]] = [
-        (1.0 / 3.0, {"preset": "disk"}, 0.0),
-        (2.0 / 3.0, {"preset": "disk", "rim_slope_match_group": "disk"}, 0.0),
-        (1.0, {"preset": "rim"}, 0.0),
-        (11.0 / 6.0, {"rim_slope_match_group": "outer"}, 0.001),
-        (3.0, None, 0.0),
-        (4.5, None, 0.0),
-        (6.0, {"preset": "outer_rim"}, 0.0),
-    ]
-
-    vertices: list[list] = [
-        [
-            0.0,
-            0.0,
-            0.0,
-            {
-                "preset": "disk",
-                "tilt_fixed_in": True,
-                "tilt_fixed_out": True,
-                "tilt_in": [0.0, 0.0, 0.0],
-                "tilt_out": [0.0, 0.0, 0.0],
-                "fixed": True,
-            },
-        ]
-    ]
-    ring_vids: list[list[int]] = []
-    vid = 1
-    for r, opts, z in radii:
-        vids: list[int] = []
-        for x, y, zc in ring_vertices(r, n=n, z=z):
-            if opts is None:
-                vertices.append([x, y, zc])
-            else:
-                vertices.append([x, y, zc, dict(opts)])
-            vids.append(vid)
-            vid += 1
-        ring_vids.append(vids)
-
-    edges: list[list[int]] = []
-    edge_map: dict[tuple[int, int], int] = {}
-
-    def get_edge(u: int, v: int) -> tuple[int, bool]:
-        a, b = (u, v) if u < v else (v, u)
-        idx = edge_map.get((a, b))
-        if idx is None:
-            idx = len(edges)
-            edges.append([a, b])
-            edge_map[(a, b)] = idx
-        tail, head = edges[idx]
-        return idx, (tail == u and head == v)
-
-    def face_edges(v0: int, v1: int, v2: int) -> list:
-        out: list = []
-        for u, v in ((v0, v1), (v1, v2), (v2, v0)):
-            ei, ok = get_edge(u, v)
-            out.append(ei if ok else f"r{ei}")
-        return out
-
-    faces: list[list] = []
-
-    def add_tri(v0: int, v1: int, v2: int) -> None:
-        faces.append(face_edges(v0, v1, v2))
-
-    disk_inner = ring_vids[0]
-    for k in range(n):
-        add_tri(0, disk_inner[k], disk_inner[(k + 1) % n])
-    for A, B in zip(ring_vids, ring_vids[1:]):
-        for k in range(n):
-            a0 = A[k]
-            a1 = A[(k + 1) % n]
-            b0 = B[k]
-            b1 = B[(k + 1) % n]
-            add_tri(a0, a1, b0)
-            add_tri(b0, a1, b1)
-
-    return {
-        "global_parameters": {
-            "surface_tension": 0.0,
-            "bending_energy_model": "helfrich",
-            "spontaneous_curvature": 0.0,
-            "bending_modulus_in": 2.0,
-            "bending_modulus_out": 2.0,
-            "tilt_modulus_in": 2.0,
-            "tilt_modulus_out": 2.0,
-            "tilt_disk_target_group_in": "disk",
-            "tilt_disk_target_strength_in": 50.0,
-            "tilt_disk_target_theta_B": 1.0,
-            "tilt_disk_target_lambda": 1.0,
-            "tilt_disk_target_center": [0.0, 0.0, 0.0],
-            "tilt_disk_target_normal": [0.0, 0.0, 1.0],
-            "rim_slope_match_group": "rim",
-            "rim_slope_match_outer_group": "outer",
-            "rim_slope_match_disk_group": "disk",
-            "rim_slope_match_strength": 200.0,
-            "rim_slope_match_center": [0.0, 0.0, 0.0],
-            "rim_slope_match_normal": [0.0, 0.0, 1.0],
-            "tilt_solve_mode": "coupled",
-            "tilt_step_size": 0.15,
-            "tilt_inner_steps": 40,
-            "tilt_tol": 1.0e-10,
-            "step_size": 0.01,
-            "step_size_mode": "fixed",
-            "pin_to_plane_normal": [0.0, 0.0, 1.0],
-            "pin_to_plane_point": [0.0, 0.0, 0.0],
-        },
-        "constraint_modules": ["pin_to_plane", "pin_to_circle"],
-        "definitions": {
-            "disk": {
-                "constraints": ["pin_to_plane"],
-                "tilt_disk_target_group_in": "disk",
-                "pin_to_plane_normal": [0.0, 0.0, 1.0],
-                "pin_to_plane_point": [0.0, 0.0, 0.0],
-            },
-            "rim": {
-                "constraints": ["pin_to_plane", "pin_to_circle"],
-                "pin_to_plane_normal": [0.0, 0.0, 1.0],
-                "pin_to_plane_point": [0.0, 0.0, 0.0],
-                "pin_to_circle_group": "rim",
-                "pin_to_circle_radius": 1.0,
-                "pin_to_circle_normal": [0.0, 0.0, 1.0],
-                "pin_to_circle_point": [0.0, 0.0, 0.0],
-                "pin_to_circle_mode": "fixed",
-                "rim_slope_match_group": "rim",
-            },
-            "outer_rim": {
-                "constraints": ["pin_to_plane", "pin_to_circle"],
-                "pin_to_plane_normal": [0.0, 0.0, 1.0],
-                "pin_to_plane_point": [0.0, 0.0, 0.0],
-                "pin_to_circle_group": "outer",
-                "pin_to_circle_radius": 6.0,
-                "pin_to_circle_normal": [0.0, 0.0, 1.0],
-                "pin_to_circle_point": [0.0, 0.0, 0.0],
-                "pin_to_circle_mode": "fixed",
-                "tilt_fixed_in": True,
-                "tilt_fixed_out": True,
-            },
-        },
-        "energy_modules": [
-            "bending_tilt_in",
-            "bending_tilt_out",
-            "tilt_in",
-            "tilt_out",
-            "tilt_smoothness_in",
-            "tilt_smoothness_out",
-            "tilt_disk_target_in",
-            "rim_slope_match_out",
-        ],
-        "vertices": vertices,
-        "edges": edges,
-        "faces": faces,
-    }
-
-
 def test_single_leaflet_profile_behavior() -> None:
-    mesh = parse_geometry(_build_mesh())
+    mesh = parse_geometry(build_1disk_profile_data(bilayer=False))
     minim = _build_minimizer(mesh)
     minim.minimize(n_steps=60)
 
