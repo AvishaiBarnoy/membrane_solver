@@ -2,7 +2,15 @@ import numpy as np
 import pytest
 
 from geometry.geom_io import parse_geometry
-from tests.kozlov_test_utils import build_minimizer as _build_minimizer
+from tests.kozlov_test_utils import (
+    build_minimizer as _build_minimizer,
+)
+from tests.kozlov_test_utils import (
+    collect_group_rows as _collect_group_rows,
+)
+from tests.kozlov_test_utils import (
+    radial_unit_vectors as _radial_unit_vectors,
+)
 
 pytestmark = pytest.mark.e2e
 
@@ -179,24 +187,6 @@ def _build_mesh() -> dict:
         "edges": edges,
         "faces": faces,
     }
-
-
-def _collect_group_rows(mesh, key: str, value: str) -> np.ndarray:
-    rows: list[int] = []
-    for vid in mesh.vertex_ids:
-        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-        if opts.get(key) == value:
-            rows.append(mesh.vertex_index_to_row[int(vid)])
-    return np.asarray(rows, dtype=int)
-
-
-def _radial_unit_vectors(positions: np.ndarray) -> np.ndarray:
-    r = np.linalg.norm(positions[:, :2], axis=1)
-    r_hat = np.zeros_like(positions)
-    good = r > 1e-12
-    r_hat[good, 0] = positions[good, 0] / r[good]
-    r_hat[good, 1] = positions[good, 1] / r[good]
-    return r_hat
 
 
 def test_bilayer_profile_tilts_decay_in_outer_region() -> None:

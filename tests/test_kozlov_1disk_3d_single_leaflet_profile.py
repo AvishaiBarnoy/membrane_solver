@@ -2,7 +2,21 @@ import numpy as np
 import pytest
 
 from geometry.geom_io import parse_geometry
-from tests.kozlov_test_utils import build_minimizer as _build_minimizer
+from tests.kozlov_test_utils import (
+    build_minimizer as _build_minimizer,
+)
+from tests.kozlov_test_utils import (
+    collect_group_rows as _collect_group_rows,
+)
+from tests.kozlov_test_utils import (
+    order_by_angle as _order_by_angle,
+)
+from tests.kozlov_test_utils import (
+    outer_free_ring_rows as _outer_free_ring_rows,
+)
+from tests.kozlov_test_utils import (
+    radial_unit_vectors as _radial_unit_vectors,
+)
 
 pytestmark = pytest.mark.e2e
 
@@ -171,49 +185,6 @@ def _build_mesh() -> dict:
         "edges": edges,
         "faces": faces,
     }
-
-
-def _collect_group_rows(mesh, key: str, value: str) -> np.ndarray:
-    rows: list[int] = []
-    for vid in mesh.vertex_ids:
-        opts = getattr(mesh.vertices[int(vid)], "options", None) or {}
-        if opts.get(key) == value:
-            rows.append(mesh.vertex_index_to_row[int(vid)])
-    return np.asarray(rows, dtype=int)
-
-
-def _order_by_angle(positions: np.ndarray) -> np.ndarray:
-    angles = np.arctan2(positions[:, 1], positions[:, 0])
-    return np.argsort(angles)
-
-
-def _radial_unit_vectors(positions: np.ndarray) -> np.ndarray:
-    r = np.linalg.norm(positions[:, :2], axis=1)
-    r_hat = np.zeros_like(positions)
-    good = r > 1e-12
-    r_hat[good, 0] = positions[good, 0] / r[good]
-    r_hat[good, 1] = positions[good, 1] / r[good]
-    return r_hat
-
-
-def _outer_free_ring_rows(mesh, positions: np.ndarray) -> np.ndarray:
-    rows: list[int] = []
-    radii: list[float] = []
-    for vid in mesh.vertex_ids:
-        v = mesh.vertices[int(vid)]
-        opts = getattr(v, "options", None) or {}
-        if opts.get("pin_to_circle_group") == "outer":
-            continue
-        row = mesh.vertex_index_to_row[int(vid)]
-        rows.append(row)
-        radii.append(float(np.linalg.norm(positions[row, :2])))
-    if not rows:
-        return np.zeros(0, dtype=int)
-    radii_arr = np.asarray(radii, dtype=float)
-    r_max = float(np.max(radii_arr))
-    tol = 1e-6
-    rows_arr = np.asarray(rows, dtype=int)
-    return rows_arr[np.abs(radii_arr - r_max) <= tol]
 
 
 def test_single_leaflet_profile_behavior() -> None:
