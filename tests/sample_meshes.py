@@ -4,7 +4,9 @@ import math
 
 import numpy as np
 
+from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
+from geometry.geom_io import parse_geometry
 
 SAMPLE_GEOMETRY = {
     "vertices": [
@@ -130,6 +132,117 @@ def set_mesh_positions(mesh: Mesh, positions: np.ndarray) -> None:
     for row, vid in enumerate(mesh.vertex_ids):
         mesh.vertices[int(vid)].position[:] = positions[row]
     mesh.increment_version()
+
+
+def tetra_mesh_with_body() -> Mesh:
+    """Return the asymmetric tetrahedron used by array/dict parity tests."""
+    mesh = Mesh()
+    points = np.array(
+        [
+            [0.1, 0.2, 0.05],
+            [1.1, -0.1, 0.3],
+            [0.4, 1.2, -0.2],
+            [0.5, 0.4, 1.5],
+        ],
+        dtype=float,
+    )
+    for index, point in enumerate(points):
+        mesh.vertices[index] = Vertex(index, point)
+
+    faces = [[0, 1, 2], [0, 2, 3], [0, 3, 1], [1, 3, 2]]
+    edge_map: dict[tuple[int, int], int] = {}
+    next_edge = 1
+    for facet_id, (a, b, c) in enumerate(faces):
+        edge_ids = []
+        for tail, head in ((a, b), (b, c), (c, a)):
+            key = (min(tail, head), max(tail, head))
+            if key not in edge_map:
+                edge_map[key] = next_edge
+                mesh.edges[next_edge] = Edge(next_edge, tail, head)
+                next_edge += 1
+            edge_id = edge_map[key]
+            edge = mesh.edges[edge_id]
+            edge_ids.append(edge_id if edge.tail_index == tail else -edge_id)
+        mesh.facets[facet_id] = Facet(facet_id, edge_ids)
+
+    mesh.bodies[0] = Body(0, list(mesh.facets.keys()), target_volume=0.5)
+    mesh.build_connectivity_maps()
+    mesh.build_facet_vertex_loops()
+    return mesh
+
+
+def square_mesh_with_center(*, z_offset: float) -> Mesh:
+    """Return a four-triangle unit square with an adjustable center height."""
+    mesh = Mesh()
+    mesh.vertices = {
+        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
+        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
+        2: Vertex(2, np.array([1.0, 1.0, 0.0])),
+        3: Vertex(3, np.array([0.0, 1.0, 0.0])),
+        4: Vertex(4, np.array([0.5, 0.5, float(z_offset)])),
+    }
+    mesh.edges = {
+        1: Edge(1, 0, 1),
+        2: Edge(2, 1, 2),
+        3: Edge(3, 2, 3),
+        4: Edge(4, 3, 0),
+        5: Edge(5, 0, 4),
+        6: Edge(6, 1, 4),
+        7: Edge(7, 2, 4),
+        8: Edge(8, 3, 4),
+    }
+    mesh.facets = {
+        1: Facet(1, [1, 6, -5]),
+        2: Facet(2, [2, 7, -6]),
+        3: Facet(3, [3, 8, -7]),
+        4: Facet(4, [4, 5, -8]),
+    }
+    mesh.build_connectivity_maps()
+    mesh.build_facet_vertex_loops()
+    return mesh
+
+
+def single_vertex_mesh() -> Mesh:
+    """Return the initialized one-vertex mesh used by manager tests."""
+    mesh = Mesh()
+    mesh.vertices = {0: Vertex(0, np.zeros(3, dtype=float))}
+    mesh.edges = {}
+    mesh.facets = {}
+    mesh.energy_modules = []
+    mesh.constraint_modules = []
+    mesh.global_parameters = GlobalParameters()
+    mesh.build_position_cache()
+    return mesh
+
+
+def ring_vertices(n_theta: int, radius: float, z: float, options: dict) -> list[list]:
+    """Return option-tagged vertices on a horizontal ring."""
+    vertices: list[list] = []
+    for index in range(n_theta):
+        theta = 2.0 * np.pi * index / float(n_theta)
+        x = float(radius * np.cos(theta))
+        y = float(radius * np.sin(theta))
+        vertices.append([x, y, z, dict(options)])
+    return vertices
+
+
+def parsed_two_triangle_square_mesh() -> Mesh:
+    """Return the parsed two-triangle square used by row/operation tests."""
+    mesh = parse_geometry(
+        {
+            "vertices": [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+            ],
+            "edges": [[0, 1], [1, 2], [2, 3], [3, 0], [0, 2]],
+            "faces": [[0, 1, "r4"], [4, 2, 3]],
+        }
+    )
+    mesh.build_facet_vertex_loops()
+    mesh.build_position_cache()
+    return mesh
 
 
 SQUARE_PERIMETER_GEOMETRY = {

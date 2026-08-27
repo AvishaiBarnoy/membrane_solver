@@ -2,16 +2,7 @@ import numpy as np
 
 from geometry.geom_io import parse_geometry
 from modules.constraints import tilt_leaflet_match_rim
-
-
-def _ring(n_theta: int, r: float, z: float, opts: dict) -> list[list]:
-    verts: list[list] = []
-    for i in range(n_theta):
-        theta = 2.0 * np.pi * i / float(n_theta)
-        x = float(r * np.cos(theta))
-        y = float(r * np.sin(theta))
-        verts.append([x, y, z, dict(opts)])
-    return verts
+from tests.sample_meshes import ring_vertices as _ring
 
 
 def _build_mesh(n_theta: int = 12):

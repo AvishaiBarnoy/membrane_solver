@@ -5,24 +5,11 @@ import importlib
 import numpy as np
 import pytest
 
-from core.parameters.global_parameters import GlobalParameters
-from geometry.entities import Mesh, Vertex
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
-
-
-def _single_vertex_mesh() -> Mesh:
-    mesh = Mesh()
-    mesh.vertices = {0: Vertex(0, np.zeros(3, dtype=float))}
-    mesh.edges = {}
-    mesh.facets = {}
-    mesh.energy_modules = []
-    mesh.constraint_modules = []
-    mesh.global_parameters = GlobalParameters()
-    mesh.build_position_cache()
-    return mesh
+from tests.sample_meshes import single_vertex_mesh as _single_vertex_mesh
 
 
 class _SingleTiltEnergyModule:
