@@ -1,12 +1,9 @@
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 import yaml
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.sweep_theory_protocol_suffixes import rank_candidates
 

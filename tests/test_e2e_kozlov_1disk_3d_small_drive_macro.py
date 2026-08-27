@@ -1,10 +1,7 @@
 import os
-import sys
 from dataclasses import dataclass
 
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from commands.executor import execute_command_line
 from geometry.geom_io import load_data, parse_geometry
