@@ -1,12 +1,9 @@
-import sys
 from pathlib import Path
 
 import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-
 from tools.reproduce_flat_disk_one_leaflet import run_flat_disk_one_leaflet_benchmark
 
 

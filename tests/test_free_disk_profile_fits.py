@@ -1,11 +1,5 @@
-import sys
-from pathlib import Path
-
 import numpy as np
 from scipy.special import i1, k0, k1
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
 
 from tools.diagnostics.free_disk_profile_fits import (
     _bandwise_residual_summary,

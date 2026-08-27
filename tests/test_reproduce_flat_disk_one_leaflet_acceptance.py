@@ -9,7 +9,6 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "reproduce_flat_disk_one_leaflet.py"
 
-sys.path.insert(0, str(ROOT))
 from tools.reproduce_flat_disk_one_leaflet import (  # noqa: E402
     DEFAULT_FIXTURE,
     run_flat_disk_one_leaflet_benchmark,

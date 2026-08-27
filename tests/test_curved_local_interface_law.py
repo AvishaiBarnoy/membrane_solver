@@ -1,11 +1,5 @@
-import sys
-from pathlib import Path
-
 import numpy as np
 import pytest
-
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
 
 from core.parameters.resolver import ParameterResolver
 from geometry.geom_io import load_data, parse_geometry
