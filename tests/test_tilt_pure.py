@@ -1,29 +1,11 @@
-import os
-import sys
-
 import numpy as np
 import pytest
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
-from geometry.entities import Edge, Facet, Mesh, Vertex
+from geometry.entities import Mesh
 from modules.energy import tilt
-
-
-def _build_single_triangle_mesh() -> Mesh:
-    mesh = Mesh()
-    mesh.vertices = {
-        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
-        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
-        2: Vertex(2, np.array([0.0, 1.0, 0.0])),
-    }
-    mesh.edges = {1: Edge(1, 0, 1), 2: Edge(2, 1, 2), 3: Edge(3, 2, 0)}
-    mesh.facets = {0: Facet(0, edge_indices=[1, 2, 3])}
-    mesh.build_facet_vertex_loops()
-    mesh.build_position_cache()
-    return mesh
+from tests.sample_meshes import single_triangle_mesh as _build_single_triangle_mesh
 
 
 def _set_mesh_positions(mesh: Mesh, positions: np.ndarray) -> None:
