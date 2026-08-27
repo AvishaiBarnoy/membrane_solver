@@ -1,10 +1,5 @@
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import parse_geometry  # noqa: E402
 from modules.energy import bending_tilt_out as bending_tilt_out_module  # noqa: E402
