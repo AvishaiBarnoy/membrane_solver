@@ -1,11 +1,6 @@
 """Consolidated tests for area constraints (global, body, and facet)."""
 
-import os
-import sys
-
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from modules.constraints import body_area as body_area_constraint

@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-import os
-import sys
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Edge, Facet, Mesh, Vertex

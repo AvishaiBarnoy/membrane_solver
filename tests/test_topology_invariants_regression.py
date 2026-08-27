@@ -1,13 +1,5 @@
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
-
-from sample_meshes import square_annulus_mesh
 
 from runtime.diagnostics.gauss_bonnet import (
     extract_boundary_loops,
@@ -15,6 +7,7 @@ from runtime.diagnostics.gauss_bonnet import (
     gauss_bonnet_invariant,
 )
 from runtime.refinement import refine_triangle_mesh
+from tests.sample_meshes import square_annulus_mesh
 
 
 def _signed_area_xy(loop) -> float:

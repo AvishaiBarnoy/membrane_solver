@@ -1,14 +1,9 @@
-import os
-import sys
-
 import matplotlib
 import numpy as np
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.entities import Edge, Facet, Mesh, Vertex
 from runtime.diagnostics.patches import patch_boundary_edges, patch_boundary_lengths

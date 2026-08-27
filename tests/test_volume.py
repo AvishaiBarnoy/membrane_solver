@@ -1,13 +1,9 @@
 """Consolidated tests for volume energy, gradients, and constraints."""
 
-import os
-import sys
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
