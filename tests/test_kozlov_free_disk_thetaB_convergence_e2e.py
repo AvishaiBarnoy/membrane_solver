@@ -1,11 +1,8 @@
 import os
-import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry  # noqa: E402
 from tools.diagnostics.free_disk_profile_protocol import (  # noqa: E402

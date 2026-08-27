@@ -1,10 +1,7 @@
 import os
-import sys
 
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry  # noqa: E402
 from runtime.refinement import refine_triangle_mesh  # noqa: E402

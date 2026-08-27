@@ -1,10 +1,5 @@
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from modules.energy.bt_selection import _collect_group_rows, _collect_preset_rows
 from runtime.refinement import refine_triangle_mesh  # noqa: E402

@@ -1,11 +1,7 @@
 def test_kozlov_free_disk_disk_region_is_pinned_flat() -> None:
     """Regression: slide-mode pin_to_plane keeps a patch planar (but allows translation)."""
-    import os
-    import sys
 
     import numpy as np
-
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
     from geometry.geom_io import parse_geometry  # noqa: E402
     from runtime.constraint_manager import ConstraintModuleManager  # noqa: E402
