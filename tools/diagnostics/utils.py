@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 import logging
 import math
+from pathlib import Path
+from typing import Any
 
 import numpy as np
+import yaml
 
 logger = logging.getLogger("membrane_solver")
 
@@ -16,6 +20,47 @@ _BOUNDARY_KEYS = (
     "tilt_thetaB_group",
     "tilt_thetaB_group_in",
 )
+
+
+def _write_temp_fixture(doc: dict[str, Any], directory: Path, label: str) -> Path:
+    path = directory / f"{label}.yaml"
+    path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+    return path
+
+
+def _build_variant_doc(base_fixture: Path, overrides: dict[str, Any]) -> dict[str, Any]:
+    doc = yaml.safe_load(base_fixture.read_text(encoding="utf-8")) or {}
+    gp = dict(doc.get("global_parameters") or {})
+    for key, value in (overrides or {}).items():
+        gp[key] = copy.deepcopy(value)
+    doc["global_parameters"] = gp
+    return doc
+
+
+def _mean_and_max(values: np.ndarray) -> dict[str, float]:
+    if values.size == 0:
+        return {"mean": 0.0, "max": 0.0}
+    return {"mean": float(np.mean(values)), "max": float(np.max(values))}
+
+
+def _field_stats_by_region(mesh) -> dict[str, Any]:
+    masks = row_region_mask_dict(mesh)
+    tin = np.asarray(mesh.tilts_in_view(), dtype=float)
+    tout = np.asarray(mesh.tilts_out_view(), dtype=float)
+    tin_norm = np.linalg.norm(tin, axis=1)
+    tout_norm = np.linalg.norm(tout, axis=1)
+    tin_rad = radial_projection(mesh, tin)
+    tout_rad = radial_projection(mesh, tout)
+    out: dict[str, Any] = {}
+    for region, mask in masks.items():
+        out[region] = {
+            "count": int(np.sum(mask)),
+            "tilt_in_norm": _mean_and_max(tin_norm[mask]),
+            "tilt_out_norm": _mean_and_max(tout_norm[mask]),
+            "tilt_in_radial": _mean_and_max(np.abs(tin_rad[mask])),
+            "tilt_out_radial": _mean_and_max(np.abs(tout_rad[mask])),
+        }
+    return out
 
 
 def apply_global_parameter_overrides(mesh, overrides: dict[str, object] | None) -> None:

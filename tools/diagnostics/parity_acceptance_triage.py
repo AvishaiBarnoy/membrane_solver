@@ -18,6 +18,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 from tools.diagnostics.scaffold_energy_imbalance_audit import (  # noqa: E402
     _base_term_summary_for_fixture,
 )
+from tools.diagnostics.utils import _write_temp_fixture  # noqa: E402
 from tools.reproduce_theory_parity import (  # noqa: E402
     DEFAULT_PROTOCOL,
     _build_context,
@@ -55,15 +56,6 @@ GHOST_BAD_BRANCH_BASELINE = {
 FIXED_THETA_SWEEP_VALUES = (0.18, 0.20, 0.21, 0.24, 0.30)
 
 
-def _get_path(dct: dict[str, Any], path: str, default: Any = None) -> Any:
-    cur: Any = dct
-    for key in path.split("."):
-        if not isinstance(cur, dict) or key not in cur:
-            return default
-        cur = cur[key]
-    return cur
-
-
 def _as_float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -77,12 +69,6 @@ def _run_report(
     ctx = _build_context(mesh_path)
     _run_protocol_with_parity_activation(ctx, protocol=protocol)
     return _collect_report_from_context(ctx=ctx, mesh_path=mesh_path, protocol=protocol)
-
-
-def _write_temp_fixture(doc: dict[str, Any], directory: Path, label: str) -> Path:
-    path = directory / f"{label}.yaml"
-    path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
-    return path
 
 
 def _build_physical_edge_profile_fixture(profile: str, lane: str) -> dict[str, Any]:
