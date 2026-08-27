@@ -9,10 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from geometry.curvature import compute_curvature_data  # noqa: E402
 from geometry.geom_io import parse_geometry  # noqa: E402
-from runtime.constraint_manager import ConstraintModuleManager  # noqa: E402
-from runtime.energy_manager import EnergyModuleManager  # noqa: E402
-from runtime.minimizer import Minimizer  # noqa: E402
-from runtime.steppers.gradient_descent import GradientDescent  # noqa: E402
+from tests.kozlov_test_utils import build_minimizer  # noqa: E402
 
 
 def _ring_vertices(r: float, *, n: int) -> list[list[float]]:
@@ -167,14 +164,7 @@ def test_kozlov_free_disk_flat_state_has_large_boundary_curvature_baseline() -> 
     mesh.set_tilts_out_from_array(np.zeros((n, 3), dtype=float))
     mesh.global_parameters.set("tilt_thetaB_value", 0.0)
 
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = build_minimizer(mesh)
     breakdown = minim.compute_energy_breakdown()
 
     # In the continuum theory, flat + zero tilt must have ~0 elastic energy.

@@ -7,11 +7,8 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
 from runtime.refinement import refine_triangle_mesh
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.kozlov_test_utils import build_minimizer
 
 pytestmark = pytest.mark.e2e
 
@@ -21,7 +18,7 @@ def _fixture_path(name: str) -> str:
     return os.path.join(here, "fixtures", name)
 
 
-def _relax(mesh, *, inner_steps: int) -> Minimizer:
+def _relax(mesh, *, inner_steps: int):
     mesh.global_parameters.update(
         {
             "tilt_solve_mode": "nested",
@@ -30,14 +27,7 @@ def _relax(mesh, *, inner_steps: int) -> Minimizer:
             "tilt_tol": 1e-12,
         }
     )
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = build_minimizer(mesh)
     minim.enforce_constraints_after_mesh_ops(mesh)
     mesh.increment_version()
     mesh._positions_cache = None

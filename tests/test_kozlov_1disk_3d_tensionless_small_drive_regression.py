@@ -7,10 +7,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.kozlov_test_utils import build_minimizer
 
 
 def _mesh_path() -> str:
@@ -63,14 +60,7 @@ def test_kozlov_1disk_3d_tensionless_small_drive_physical_scaling() -> None:
         }
     )
 
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = build_minimizer(mesh)
     minim.minimize(n_steps=25)
 
     positions = mesh.positions_view()
