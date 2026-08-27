@@ -2,10 +2,7 @@ import numpy as np
 import pytest
 
 from geometry.geom_io import parse_geometry
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as _build_minimizer
 
 pytestmark = pytest.mark.e2e
 
@@ -122,18 +119,6 @@ def _leaflet_patch_input(*, module: str) -> dict:
         },
         "instructions": [],
     }
-
-
-def _build_minimizer(mesh) -> Minimizer:
-    """Return a minimizer for the provided mesh."""
-    return Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
 
 
 def test_bending_tilt_in_relaxes_inner_leaflet_only() -> None:
