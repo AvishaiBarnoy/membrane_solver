@@ -1,8 +1,3 @@
-import os
-import sys
-
-sys.path.append(os.getcwd())
-
 from commands.context import CommandContext
 from commands.executor import execute_command_line
 from geometry.geom_io import parse_geometry

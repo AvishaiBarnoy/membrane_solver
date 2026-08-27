@@ -1,10 +1,6 @@
-import os
-import sys
 from types import SimpleNamespace
 
 import numpy as np
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from commands.meta import (
     HelpCommand,

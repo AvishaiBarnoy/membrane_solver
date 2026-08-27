@@ -1,13 +1,10 @@
 # tests/test_constraint_manager.py
 
-import os
+import json
 import sys
 from unittest.mock import MagicMock
 
 import pytest
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import json
 
 from geometry.geom_io import load_data, parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager

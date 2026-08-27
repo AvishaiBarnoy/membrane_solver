@@ -1,15 +1,11 @@
 """Consolidated tests for the Minimizer class."""
 
 import logging
-import os
-import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Edge, Facet, Mesh, Vertex

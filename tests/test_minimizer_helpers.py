@@ -1,9 +1,4 @@
-import os
-import sys
-
 import numpy as np
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import parse_geometry
 from runtime.minimizer_helpers import (
