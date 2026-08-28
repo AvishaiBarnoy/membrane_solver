@@ -145,9 +145,6 @@ jobs:
             tests/test_flat_disk_kh_error_source_audit_regression.py \
             tests/test_flat_disk_kh_outer_vertex_audit_regression.py \
             tests/test_flat_disk_kh_outerfield_v2_regression.py \
-            tests/test_flat_disk_kh_partition_ablation_regression.py \
-            tests/test_flat_disk_kh_region_parity_regression.py \
-            tests/test_flat_disk_kh_rim_fidelity_regression.py \
             tests/test_flat_disk_kh_term_audit_core.py \
             tests/test_flat_disk_kh_term_audit_regression.py \
             tests/test_flat_disk_one_leaflet_benchmark_e2e.py \
@@ -180,9 +177,6 @@ jobs:
             --ignore=tests/test_flat_disk_kh_error_source_audit_regression.py \
             --ignore=tests/test_flat_disk_kh_outer_vertex_audit_regression.py \
             --ignore=tests/test_flat_disk_kh_outerfield_v2_regression.py \
-            --ignore=tests/test_flat_disk_kh_partition_ablation_regression.py \
-            --ignore=tests/test_flat_disk_kh_region_parity_regression.py \
-            --ignore=tests/test_flat_disk_kh_rim_fidelity_regression.py \
             --ignore=tests/test_flat_disk_kh_term_audit_core.py \
             --ignore=tests/test_flat_disk_kh_term_audit_regression.py \
             --ignore=tests/test_flat_disk_one_leaflet_benchmark_e2e.py \
