@@ -5,10 +5,7 @@ import importlib
 import numpy as np
 import pytest
 
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as _build_minimizer
 from tests.sample_meshes import single_vertex_mesh as _single_vertex_mesh
 
 
@@ -305,14 +302,7 @@ def test_tilt_smoothness_front_modules_keep_legacy_helper_shims(monkeypatch) -> 
 
 def test_minimizer_evaluation_manager_bridge_syncs_mutable_state() -> None:
     mesh = _single_vertex_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
 
     assert hasattr(minim, "_evaluation_manager")
     new_mesh = _single_vertex_mesh()
@@ -333,14 +323,7 @@ def test_minimizer_evaluation_manager_bridge_syncs_mutable_state() -> None:
 
 def test_minimizer_delegates_single_tilt_energy_path_with_sync() -> None:
     mesh = _single_vertex_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [_NonTiltEnergyModule(), _SingleTiltEnergyModule()]
     minim.energy_module_names = ["non_tilt", "tilt"]
 
@@ -357,14 +340,7 @@ def test_minimizer_delegates_single_tilt_energy_path_with_sync() -> None:
 
 def test_minimizer_delegates_total_energy_path_with_sync() -> None:
     mesh = _single_vertex_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [
         _NonTiltEnergyArrayRejectsTiltsModule(),
         _ShapeEnergyGradientModule(),
@@ -380,14 +356,7 @@ def test_minimizer_delegates_total_energy_path_with_sync() -> None:
 
 def test_minimizer_delegates_shape_gradient_assembly_with_sync() -> None:
     mesh = _single_vertex_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [_ShapeEnergyGradientModule()]
     minim.energy_module_names = ["shape"]
 
@@ -401,14 +370,7 @@ def test_minimizer_delegates_shape_gradient_assembly_with_sync() -> None:
 
 def test_minimizer_delegates_energy_breakdown_with_sync() -> None:
     mesh = _single_vertex_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [_ShapeEnergyGradientModule(), _LegacyEnergyModule()]
     minim.energy_module_names = ["shape", "legacy"]
     mesh._curvature_cache = {"stale": object()}
@@ -425,14 +387,7 @@ def test_minimizer_delegates_energy_breakdown_with_sync() -> None:
 
 def test_minimizer_delegates_total_energy_with_projected_tilts_path() -> None:
     mesh = _single_vertex_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [
         _NonTiltEnergyArrayRejectsTiltsModule(),
         _SingleTiltEnergyArrayModule(),
@@ -452,14 +407,7 @@ def test_minimizer_delegates_total_energy_with_projected_tilts_path() -> None:
 
 def test_minimizer_delegates_leaflet_energy_path_with_legacy_fallback() -> None:
     mesh = _single_vertex_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [
         _LeafletRejectsTrialTiltsModule(),
         _LeafletEnergyArrayModule(),
@@ -484,14 +432,7 @@ def test_minimizer_delegates_leaflet_tilt_dependent_fast_paths() -> None:
     mesh = _single_vertex_mesh()
     mesh.global_parameters.set("tilt_modulus_in", 2.0)
     mesh.global_parameters.set("tilt_modulus_out", 3.0)
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [
         _NonLeafletExplodingModule(),
         _LeafletMarkerModule(),
@@ -515,14 +456,7 @@ def test_minimizer_delegates_leaflet_tilt_dependent_fast_paths() -> None:
 
 def test_minimizer_delegates_leaflet_tilt_dependent_legacy_fallback() -> None:
     mesh = _single_vertex_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [
         _NonLeafletExplodingModule(),
         _LeafletRejectsTrialTiltsModule(),
@@ -541,14 +475,7 @@ def test_minimizer_delegates_leaflet_tilt_dependent_legacy_fallback() -> None:
 
 def test_minimizer_delegates_leaflet_gradient_path_with_shape_energy() -> None:
     mesh = _single_vertex_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [
         _ShapeEnergyGradientModule(),
         _LeafletGradientMutatingModule(),
@@ -579,14 +506,7 @@ def test_minimizer_delegates_leaflet_gradient_path_with_shape_energy() -> None:
 def test_minimizer_delegates_leaflet_gradient_tilt_only_keeps_shape_gradient() -> None:
     mesh = _single_vertex_mesh()
     leaflet = _LeafletGradientMutatingModule()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [_ShapeEnergyGradientModule(), leaflet]
     minim.energy_module_names = ["shape", "leaflet"]
 
@@ -610,14 +530,7 @@ def test_minimizer_delegates_leaflet_gradient_fast_paths() -> None:
     mesh = _single_vertex_mesh()
     mesh.global_parameters.set("tilt_modulus_in", 2.0)
     mesh.global_parameters.set("tilt_modulus_out", 3.0)
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [_LeafletMarkerModule(), _LeafletMarkerModule()]
     minim.energy_module_names = ["tilt_in", "tilt_out"]
 
@@ -642,14 +555,7 @@ def test_minimizer_delegates_leaflet_gradient_fast_paths() -> None:
 
 def test_minimizer_delegates_leaflet_gradient_legacy_fallback() -> None:
     mesh = _single_vertex_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [_LeafletGradientRejectsTrialTiltsModule()]
     minim.energy_module_names = ["legacy_leaflet"]
 
@@ -676,14 +582,7 @@ def test_minimizer_delegates_leaflet_gradient_scaled_deltas() -> None:
     mesh.global_parameters.set("benchmark_geometry_lane", "free_z")
     mesh.global_parameters.set("benchmark_parameterization", "kh_physical")
     mesh.global_parameters.set("curved_theta_objective_ablation_inner_scale", 2.0)
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [_LeafletGradientMutatingModule()]
     minim.energy_module_names = ["tilt_smoothness_in"]
 
@@ -706,14 +605,7 @@ def test_minimizer_delegates_leaflet_gradient_scaled_deltas() -> None:
 
 def test_minimizer_delegates_single_tilt_gradient_path_with_sync() -> None:
     mesh = _single_vertex_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager([]),
-        ConstraintModuleManager([]),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.energy_modules = [_NonTiltEnergyModule(), _SingleTiltGradientModule()]
     minim.energy_module_names = ["non_tilt", "tilt"]
 
