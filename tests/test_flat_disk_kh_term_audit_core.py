@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import os
-import sys
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from runtime.refinement import refine_triangle_mesh
 from tools.diagnostics.flat_disk_kh_term_audit import (

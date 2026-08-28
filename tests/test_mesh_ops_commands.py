@@ -1,8 +1,4 @@
-import os
-import sys
 from types import SimpleNamespace
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from commands.mesh_ops import EquiangulateCommand, RefineCommand, VertexAverageCommand
 

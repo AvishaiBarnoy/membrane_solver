@@ -1,8 +1,3 @@
-import os
-import sys
-
-sys.path.insert(0, os.getcwd())
-
 from geometry.geom_io import load_data, parse_geometry, save_geometry
 
 

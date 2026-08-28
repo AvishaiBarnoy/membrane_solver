@@ -1,10 +1,6 @@
 import math
-import os
-import sys
 
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.curvature import compute_angle_defects, compute_curvature_fields
 from geometry.geom_io import load_data, parse_geometry

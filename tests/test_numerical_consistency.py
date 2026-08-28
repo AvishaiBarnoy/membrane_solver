@@ -1,16 +1,9 @@
-import os
-import sys
-from unittest.mock import PropertyMock, patch
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
-from modules import mean_curvature_tilt
 from modules.constraints import body_area as body_area_constraint
 from modules.constraints import volume as volume_constraint
 from modules.energy import (
@@ -402,36 +395,6 @@ def test_tilt_energy_gradient_consistency():
     mesh = create_random_mesh()
     initialize_tilt(mesh)
     check_gradient_consistency_dict(tilt, mesh, tol=1e-4)
-
-
-def test_mean_curvature_tilt_gradient_consistency():
-    mesh = create_random_mesh()
-    initialize_tilt(mesh)
-    # This module is complex; patch missing geometry methods
-    with (
-        patch("geometry.entities.Facet.compute_mean_curvature", create=True) as mock_mc,
-        patch(
-            "geometry.entities.Facet.compute_divergence_of_tilt", create=True
-        ) as mock_div,
-        patch("geometry.entities.Facet.dJ_dvertex", create=True) as mock_dJ,
-        patch("geometry.entities.Facet.dDivT_dvertex", create=True) as mock_dDivT_v,
-        patch("geometry.entities.Facet.dDivT_dtilt", create=True) as mock_dDivT_t,
-        patch("geometry.entities.Facet.area", create=True) as mock_area,
-        patch(
-            "geometry.entities.Facet.vertex_indices",
-            new_callable=PropertyMock,
-            create=True,
-        ) as mock_v_indices,
-    ):
-        mock_mc.return_value = 1.0
-        mock_div.return_value = 0.0
-        mock_dJ.return_value = np.zeros(3)
-        mock_dDivT_v.return_value = np.zeros(3)
-        mock_dDivT_t.return_value = np.zeros(3)
-        mock_area.return_value = 0.5
-        mock_v_indices.return_value = [0, 1, 2]
-
-        check_gradient_consistency_dict(mean_curvature_tilt, mesh, eps=1e-5, tol=1e-3)
 
 
 def test_body_area_constraint_gradient_consistency():

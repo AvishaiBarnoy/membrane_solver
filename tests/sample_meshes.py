@@ -4,7 +4,9 @@ import math
 
 import numpy as np
 
+from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
+from geometry.geom_io import parse_geometry
 
 SAMPLE_GEOMETRY = {
     "vertices": [
@@ -79,6 +81,278 @@ def cube_soft_volume_input(volume_mode: str = "penalty") -> dict:
         }
     )
     return data
+
+
+def single_triangle_mesh() -> Mesh:
+    """Return the canonical cached triangle used by focused runtime tests."""
+    mesh = Mesh()
+    mesh.vertices = {
+        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
+        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
+        2: Vertex(2, np.array([0.0, 1.0, 0.0])),
+    }
+    mesh.edges = {1: Edge(1, 0, 1), 2: Edge(2, 1, 2), 3: Edge(3, 2, 0)}
+    mesh.facets = {0: Facet(0, edge_indices=[1, 2, 3])}
+    mesh.build_facet_vertex_loops()
+    mesh.build_position_cache()
+    return mesh
+
+
+def two_triangle_square_mesh() -> Mesh:
+    """Return a cached unit square split along the 0-to-2 diagonal."""
+    mesh = Mesh()
+    mesh.vertices = {
+        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
+        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
+        2: Vertex(2, np.array([1.0, 1.0, 0.0])),
+        3: Vertex(3, np.array([0.0, 1.0, 0.0])),
+    }
+    mesh.edges = {
+        1: Edge(1, 0, 1),
+        2: Edge(2, 1, 2),
+        3: Edge(3, 2, 3),
+        4: Edge(4, 3, 0),
+        5: Edge(5, 0, 2),
+    }
+    mesh.facets = {
+        0: Facet(0, edge_indices=[1, 2, -5]),
+        1: Facet(1, edge_indices=[5, 3, 4]),
+    }
+    mesh.build_facet_vertex_loops()
+    mesh.build_position_cache()
+    return mesh
+
+
+def set_mesh_positions(mesh: Mesh, positions: np.ndarray) -> None:
+    """Update vertex positions in row order and invalidate geometry caches."""
+    mesh.build_position_cache()
+    if positions.shape != (len(mesh.vertex_ids), 3):
+        raise ValueError("positions must have shape (N_vertices, 3)")
+
+    for row, vid in enumerate(mesh.vertex_ids):
+        mesh.vertices[int(vid)].position[:] = positions[row]
+    mesh.increment_version()
+
+
+def tetra_mesh_with_body() -> Mesh:
+    """Return the asymmetric tetrahedron used by array/dict parity tests."""
+    mesh = Mesh()
+    points = np.array(
+        [
+            [0.1, 0.2, 0.05],
+            [1.1, -0.1, 0.3],
+            [0.4, 1.2, -0.2],
+            [0.5, 0.4, 1.5],
+        ],
+        dtype=float,
+    )
+    for index, point in enumerate(points):
+        mesh.vertices[index] = Vertex(index, point)
+
+    faces = [[0, 1, 2], [0, 2, 3], [0, 3, 1], [1, 3, 2]]
+    edge_map: dict[tuple[int, int], int] = {}
+    next_edge = 1
+    for facet_id, (a, b, c) in enumerate(faces):
+        edge_ids = []
+        for tail, head in ((a, b), (b, c), (c, a)):
+            key = (min(tail, head), max(tail, head))
+            if key not in edge_map:
+                edge_map[key] = next_edge
+                mesh.edges[next_edge] = Edge(next_edge, tail, head)
+                next_edge += 1
+            edge_id = edge_map[key]
+            edge = mesh.edges[edge_id]
+            edge_ids.append(edge_id if edge.tail_index == tail else -edge_id)
+        mesh.facets[facet_id] = Facet(facet_id, edge_ids)
+
+    mesh.bodies[0] = Body(0, list(mesh.facets.keys()), target_volume=0.5)
+    mesh.build_connectivity_maps()
+    mesh.build_facet_vertex_loops()
+    return mesh
+
+
+def tetra_volume_constraint_data(target_volume: float = 0.2) -> dict:
+    """Return the oriented tetrahedron data used by volume constraint tests."""
+    return {
+        "vertices": [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ],
+        "edges": [[0, 1], [1, 2], [2, 0], [0, 3], [1, 3], [2, 3]],
+        "faces": [
+            ["r2", "r1", "r0"],
+            [0, 4, "r3"],
+            [3, "r5", 2],
+            [1, 5, "r4"],
+        ],
+        "bodies": {
+            "faces": [[0, 1, 2, 3]],
+            "target_volume": [target_volume],
+        },
+        "global_parameters": {
+            "surface_tension": 1.0,
+            "volume_constraint_mode": "lagrange",
+        },
+        "instructions": [],
+    }
+
+
+def square_mesh_with_center(*, z_offset: float) -> Mesh:
+    """Return a four-triangle unit square with an adjustable center height."""
+    mesh = Mesh()
+    mesh.vertices = {
+        0: Vertex(0, np.array([0.0, 0.0, 0.0])),
+        1: Vertex(1, np.array([1.0, 0.0, 0.0])),
+        2: Vertex(2, np.array([1.0, 1.0, 0.0])),
+        3: Vertex(3, np.array([0.0, 1.0, 0.0])),
+        4: Vertex(4, np.array([0.5, 0.5, float(z_offset)])),
+    }
+    mesh.edges = {
+        1: Edge(1, 0, 1),
+        2: Edge(2, 1, 2),
+        3: Edge(3, 2, 3),
+        4: Edge(4, 3, 0),
+        5: Edge(5, 0, 4),
+        6: Edge(6, 1, 4),
+        7: Edge(7, 2, 4),
+        8: Edge(8, 3, 4),
+    }
+    mesh.facets = {
+        1: Facet(1, [1, 6, -5]),
+        2: Facet(2, [2, 7, -6]),
+        3: Facet(3, [3, 8, -7]),
+        4: Facet(4, [4, 5, -8]),
+    }
+    mesh.build_connectivity_maps()
+    mesh.build_facet_vertex_loops()
+    return mesh
+
+
+def planar_patch_with_center_data() -> dict:
+    """Return the fixed flat square data used by bending-tilt tests."""
+    return {
+        "vertices": {
+            0: [0.0, 0.0, 0.0, {"fixed": True}],
+            1: [1.0, 0.0, 0.0, {"fixed": True}],
+            2: [1.0, 1.0, 0.0, {"fixed": True}],
+            3: [0.0, 1.0, 0.0, {"fixed": True}],
+            4: [0.5, 0.5, 0.0, {"fixed": True}],
+        },
+        "edges": {
+            1: [0, 1],
+            2: [1, 2],
+            3: [2, 3],
+            4: [3, 0],
+            5: [0, 4],
+            6: [1, 4],
+            7: [2, 4],
+            8: [3, 4],
+        },
+        "faces": {
+            0: [1, 6, "r5"],
+            1: [2, 7, "r6"],
+            2: [3, 8, "r7"],
+            3: [4, 5, "r8"],
+        },
+        "energy_modules": [],
+        "global_parameters": {"surface_tension": 0.0},
+        "instructions": [],
+    }
+
+
+def single_vertex_mesh() -> Mesh:
+    """Return the initialized one-vertex mesh used by manager tests."""
+    mesh = Mesh()
+    mesh.vertices = {0: Vertex(0, np.zeros(3, dtype=float))}
+    mesh.edges = {}
+    mesh.facets = {}
+    mesh.energy_modules = []
+    mesh.constraint_modules = []
+    mesh.global_parameters = GlobalParameters()
+    mesh.build_position_cache()
+    return mesh
+
+
+def ring_vertices(n_theta: int, radius: float, z: float, options: dict) -> list[list]:
+    """Return option-tagged vertices on a horizontal ring."""
+    vertices: list[list] = []
+    for index in range(n_theta):
+        theta = 2.0 * np.pi * index / float(n_theta)
+        x = float(radius * np.cos(theta))
+        y = float(radius * np.sin(theta))
+        vertices.append([x, y, z, dict(options)])
+    return vertices
+
+
+def annulus_source_mesh_data(
+    *, n: int, global_parameters: dict, energy_modules: list[str]
+) -> dict:
+    """Return a two-ring annulus with an option-tagged inner boundary."""
+    vertices: list[list] = []
+    for index in range(n):
+        theta = 2.0 * np.pi * index / n
+        vertices.append(
+            [
+                float(np.cos(theta)),
+                float(np.sin(theta)),
+                0.0,
+                {
+                    "pin_to_circle_group": "inner",
+                    "pin_to_circle_mode": "fit",
+                    "pin_to_circle_normal": [0.0, 0.0, 1.0],
+                },
+            ]
+        )
+    for index in range(n):
+        theta = 2.0 * np.pi * index / n
+        vertices.append([float(2.0 * np.cos(theta)), float(2.0 * np.sin(theta)), 0.0])
+
+    inner_edges = [[index, (index + 1) % n] for index in range(n)]
+    outer_edges = [[n + index, n + ((index + 1) % n)] for index in range(n)]
+    spokes = [[index, n + index] for index in range(n)]
+    edges = [*inner_edges, *outer_edges, *spokes]
+
+    faces = []
+    for index in range(n):
+        next_index = (index + 1) % n
+        faces.append(
+            [
+                index,
+                (2 * n) + next_index,
+                f"r{n + index}",
+                f"r{(2 * n) + index}",
+            ]
+        )
+
+    return {
+        "global_parameters": global_parameters,
+        "energy_modules": energy_modules,
+        "vertices": vertices,
+        "edges": edges,
+        "faces": faces,
+        "instructions": [],
+    }
+
+
+def parsed_two_triangle_square_mesh() -> Mesh:
+    """Return the parsed two-triangle square used by row/operation tests."""
+    mesh = parse_geometry(
+        {
+            "vertices": [
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+            ],
+            "edges": [[0, 1], [1, 2], [2, 3], [3, 0], [0, 2]],
+            "faces": [[0, 1, "r4"], [4, 2, 3]],
+        }
+    )
+    mesh.build_facet_vertex_loops()
+    mesh.build_position_cache()
+    return mesh
 
 
 SQUARE_PERIMETER_GEOMETRY = {

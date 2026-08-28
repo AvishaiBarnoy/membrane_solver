@@ -1,11 +1,8 @@
 import os
-import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry  # noqa: E402
 from tools.diagnostics.free_disk_profile_protocol import (  # noqa: E402
@@ -77,6 +74,7 @@ def test_kozlov_free_disk_flat_thetaB_scan_stays_on_flat_surrogate_branch() -> N
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "PR505 preserves the post-Gate-A diagnostic state; imposed-drive "
@@ -114,6 +112,7 @@ def test_kozlov_free_disk_curved_theta_sweep_scales_linearly_with_imposed_drive(
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "PR501 records the curved free-disk theta branch as known failing "
@@ -144,6 +143,7 @@ def test_kozlov_free_disk_curved_theta_optimizer_beats_flat_stage_seed(
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "PR501 is diagnostic-only and keeps the post-target-fix theta-energy "
@@ -191,6 +191,7 @@ def test_kozlov_free_disk_curved_theta_gap_is_elastic_not_contact_limited(
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "Energy attribution reconciliation changed the dominant term evidence; "
@@ -296,6 +297,7 @@ def test_kozlov_free_disk_post_theta018_tilt_in_growth_is_outer_membrane_dominat
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "Post-Gate-A regional attribution no longer keeps high-theta growth "
@@ -327,6 +329,7 @@ def test_kozlov_free_disk_post_theta018_tilt_in_growth_is_outer_support_band_dom
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "PR501 records the refinement/control-volume behavior as known miss "
@@ -369,6 +372,7 @@ def test_kozlov_free_disk_one_step_refinement_shrinks_support_band_but_not_total
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "PR505 is contract/test-only; one-step refinement theta selection is "
@@ -498,6 +502,7 @@ def test_kozlov_free_disk_tilt_in_audit_matches_runtime_energy(
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "Shared-rim tilt-in exclusion remains an exploratory diagnostic and no "
@@ -540,6 +545,7 @@ def test_kozlov_free_disk_shared_rim_tilt_in_exclusion_reduces_rim_overgrowth() 
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "PR501 preserves the outer-band half-weight diagnostic as a known "
@@ -588,6 +594,7 @@ def test_kozlov_free_disk_outer_band_tilt_in_half_weight_is_cleaner_than_exclusi
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "PR501 keeps the shell-consistent quadrature improvement as diagnostic "
@@ -641,6 +648,7 @@ def test_kozlov_free_disk_outer_shell_consistent_quadrature_lifts_curved_theta_b
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "Post-Gate-A term ownership changed this dominance diagnostic; keep it "
@@ -711,6 +719,7 @@ def test_kozlov_free_disk_outer_excess_is_outer_membrane_tilt_out_dominated(
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "Outer-row tilt-out exclusion is historical diagnostic evidence and "
@@ -753,6 +762,7 @@ def test_kozlov_free_disk_outer_row_tilt_out_exclusion_lifts_curved_thetaB() -> 
 
 
 @pytest.mark.e2e
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     reason=(
         "Outer-band tilt-in exclusion no longer produces the old support-cost "

@@ -8,12 +8,8 @@ def test_kozlov_free_disk_rim_matching_groups_use_disk_edge_and_unpinned_outer_r
     - the disk-edge ring is both circle-pinned and planar,
     - an intermediate outer ring is tagged for rim matching but left unpinned.
     """
-    import os
-    import sys
 
     import numpy as np
-
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
     from geometry.geom_io import parse_geometry  # noqa: E402
 

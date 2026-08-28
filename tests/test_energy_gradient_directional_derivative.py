@@ -1,10 +1,5 @@
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
@@ -12,6 +7,7 @@ from runtime.constraint_manager import ConstraintModuleManager
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
+from tests.sample_meshes import set_mesh_positions as _set_mesh_positions
 
 
 def _tetra_mesh_with_body() -> Mesh:
@@ -49,16 +45,6 @@ def _tetra_mesh_with_body() -> Mesh:
     mesh.build_facet_vertex_loops()
     mesh.build_position_cache()
     return mesh
-
-
-def _set_mesh_positions(mesh: Mesh, positions: np.ndarray) -> None:
-    mesh.build_position_cache()
-    if positions.shape != (len(mesh.vertex_ids), 3):
-        raise ValueError("positions must have shape (N_vertices, 3)")
-
-    for row, vid in enumerate(mesh.vertex_ids):
-        mesh.vertices[int(vid)].position[:] = positions[row]
-    mesh.increment_version()
 
 
 def _directional_derivative_error(

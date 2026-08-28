@@ -10,7 +10,7 @@ from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.refinement import refine_triangle_mesh
 from runtime.steppers.conjugate_gradient import ConjugateGradient
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as _build_minimizer
 
 
 def _planar_grid_mesh(n: int) -> tuple[Mesh, dict[tuple[int, int], int]]:
@@ -67,15 +67,7 @@ def _planar_grid_mesh(n: int) -> tuple[Mesh, dict[tuple[int, int], int]]:
 
 
 def _run_tilt_only_relaxation(mesh: Mesh) -> float:
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        tol=0.0,
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh, tol=0.0)
     e0 = minim.compute_energy()
     minim.minimize(n_steps=1)
     e1 = minim.compute_energy()

@@ -1,14 +1,9 @@
-import os
-import sys
-
 import matplotlib
 
 # Use a non-interactive backend suitable for testing.
 matplotlib.use("Agg")
 
 # Ensure project root is on sys.path for direct test execution.
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from visualization.cli import create_parser
 
 

@@ -9,7 +9,6 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "reproduce_flat_disk_one_leaflet.py"
 
-sys.path.insert(0, str(ROOT))
 from tools.reproduce_flat_disk_one_leaflet import (  # noqa: E402
     DEFAULT_FIXTURE,
     run_flat_disk_one_leaflet_benchmark,
@@ -74,11 +73,17 @@ def _get_path(dct: dict[str, Any], path: str) -> float:
         "legacy_disabled",
         "legacy_free",
         "kh_physical_disabled",
-        "kh_physical_balanced_disabled",
-        "kh_physical_energy_tight_disabled",
-        "kh_physical_section_tight_disabled",
-        "kh_physical_outerband_tight_disabled",
-        "kh_physical_outerfield_tight_disabled",
+        pytest.param("kh_physical_balanced_disabled", marks=pytest.mark.exhaustive),
+        pytest.param("kh_physical_energy_tight_disabled", marks=pytest.mark.exhaustive),
+        pytest.param(
+            "kh_physical_section_tight_disabled", marks=pytest.mark.exhaustive
+        ),
+        pytest.param(
+            "kh_physical_outerband_tight_disabled", marks=pytest.mark.exhaustive
+        ),
+        pytest.param(
+            "kh_physical_outerfield_tight_disabled", marks=pytest.mark.exhaustive
+        ),
     ],
 )
 def test_reproduce_flat_disk_one_leaflet_matches_yaml_baseline_with_tolerances(
@@ -190,6 +195,7 @@ def test_reproduce_flat_disk_one_leaflet_matches_yaml_baseline_with_tolerances(
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_unpinned_preset_preserves_requested_refine_levels() -> None:
     r2 = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -220,6 +226,7 @@ def test_unpinned_preset_preserves_requested_refine_levels() -> None:
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_strict_best_preset_keeps_legacy_refine_pin_to_two() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,

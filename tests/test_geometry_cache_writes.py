@@ -1,10 +1,6 @@
-import os
-import sys
 from types import SimpleNamespace
 
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.cache_writes import (
     store_barycentric_vertex_areas_cache,

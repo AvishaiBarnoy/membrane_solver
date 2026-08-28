@@ -1,9 +1,7 @@
 import os
-import sys
 
 import numpy as np
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Body, Edge, Facet, Mesh, Vertex
 from geometry.geom_io import load_data, parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager

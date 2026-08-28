@@ -1,17 +1,8 @@
-import os
-import sys
-
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data, parse_geometry
 from runtime.refinement import refine_triangle_mesh
-
-
-def _fixture_path(name: str) -> str:
-    here = os.path.dirname(__file__)
-    return os.path.join(here, "fixtures", name)
+from tests.kozlov_test_utils import fixture_path as _fixture_path
 
 
 @pytest.mark.regression

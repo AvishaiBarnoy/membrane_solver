@@ -1,11 +1,6 @@
 from __future__ import annotations
 
-import os
-import sys
-
 import numpy as np
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.curvature import compute_curvature_data
 from geometry.entities import Edge, Facet, Mesh, Vertex

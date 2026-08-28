@@ -1,7 +1,6 @@
 """Consolidated tests for the main CLI entry point."""
 
 import json
-import os
 import sys
 
 import matplotlib
@@ -9,7 +8,6 @@ import pytest
 
 matplotlib.use("Agg")
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 # Force a re-import of the main module to reflect CLI argument changes
 sys.modules.pop("main", None)
 import main as main_module

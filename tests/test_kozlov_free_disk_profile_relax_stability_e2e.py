@@ -1,17 +1,11 @@
 import os
-import sys
 
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from geometry.geom_io import load_data, parse_geometry  # noqa: E402
-from runtime.constraint_manager import ConstraintModuleManager  # noqa: E402
-from runtime.energy_manager import EnergyModuleManager  # noqa: E402
-from runtime.minimizer import Minimizer  # noqa: E402
 from runtime.refinement import refine_triangle_mesh  # noqa: E402
-from runtime.steppers.gradient_descent import GradientDescent  # noqa: E402
 from runtime.vertex_average import vertex_average  # noqa: E402
+from tests.kozlov_test_utils import build_minimizer  # noqa: E402
 
 
 @pytest.mark.e2e
@@ -34,15 +28,7 @@ def test_profile_relax_stability_after_refine():
     gp.set("tilt_tol", 1e-8)
     gp.set("tilt_kkt_projection_during_relaxation", False)
 
-    minim = Minimizer(
-        mesh,
-        gp,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-        tol=1e-6,
-    )
+    minim = build_minimizer(mesh, tol=1e-6)
 
     # Coarse relax.
     minim.minimize(n_steps=20)
@@ -51,15 +37,7 @@ def test_profile_relax_stability_after_refine():
     mesh = refine_triangle_mesh(mesh)
     vertex_average(mesh)
 
-    minim = Minimizer(
-        mesh,
-        gp,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-        tol=1e-6,
-    )
+    minim = build_minimizer(mesh, tol=1e-6)
     minim.minimize(n_steps=20)
     breakdown = minim.compute_energy_breakdown()
 

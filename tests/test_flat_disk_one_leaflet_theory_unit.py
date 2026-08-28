@@ -1,11 +1,6 @@
-import os
-import sys
-
 import numpy as np
 import pytest
 from scipy import special
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.flat_disk_one_leaflet_theory import (
     FlatDiskTheoryParams,

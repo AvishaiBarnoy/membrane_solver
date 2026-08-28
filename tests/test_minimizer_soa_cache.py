@@ -2,10 +2,7 @@ import numpy as np
 
 from core.parameters.global_parameters import GlobalParameters
 from geometry.entities import Edge, Facet, Mesh, Vertex
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as _build_minimizer
 
 
 def build_triangle_mesh():
@@ -25,14 +22,7 @@ def build_triangle_mesh():
 
 def test_minimizer_soa_cache_updates_on_version_bump():
     mesh = build_triangle_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
 
     positions1, index1, grad1 = minim._soa_views()
     assert index1

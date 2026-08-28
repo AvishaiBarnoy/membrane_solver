@@ -56,6 +56,9 @@ from tools.diagnostics.scaffold_energy_imbalance_audit import (  # noqa: E402
     _base_term_summary_for_fixture,
 )
 from tools.diagnostics.utils import (  # noqa: E402
+    _build_variant_doc,
+    _field_stats_by_region,
+    _write_temp_fixture,
     radial_projection,
     row_region_mask_dict,
 )
@@ -419,21 +422,6 @@ def _full_physics_lane_specs() -> list[dict[str, Any]]:
     ]
 
 
-def _write_temp_fixture(doc: dict[str, Any], directory: Path, label: str) -> Path:
-    path = directory / f"{label}.yaml"
-    path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
-    return path
-
-
-def _build_variant_doc(base_fixture: Path, overrides: dict[str, Any]) -> dict[str, Any]:
-    doc = yaml.safe_load(base_fixture.read_text(encoding="utf-8")) or {}
-    gp = dict(doc.get("global_parameters") or {})
-    for key, value in (overrides or {}).items():
-        gp[key] = copy.deepcopy(value)
-    doc["global_parameters"] = gp
-    return doc
-
-
 def _capture_state(ctx) -> dict[str, Any]:
     mesh = ctx.mesh
     return {
@@ -487,12 +475,6 @@ def _temporary_param_patch(
     for key, value in (set_overrides or {}).items():
         gp.set(key, value)
     return present, old
-
-
-def _mean_and_max(values: np.ndarray) -> dict[str, float]:
-    if values.size == 0:
-        return {"mean": 0.0, "max": 0.0}
-    return {"mean": float(np.mean(values)), "max": float(np.max(values))}
 
 
 def _region_l2_summary(
@@ -568,26 +550,6 @@ def _accumulate_tri_gradient(
     np.add.at(grad, tri_rows[:, 1], factor[:, None] * g1)
     np.add.at(grad, tri_rows[:, 2], factor[:, None] * g2)
     return grad
-
-
-def _field_stats_by_region(mesh) -> dict[str, Any]:
-    masks = row_region_mask_dict(mesh)
-    tin = np.asarray(mesh.tilts_in_view(), dtype=float)
-    tout = np.asarray(mesh.tilts_out_view(), dtype=float)
-    tin_norm = np.linalg.norm(tin, axis=1)
-    tout_norm = np.linalg.norm(tout, axis=1)
-    tin_rad = radial_projection(mesh, tin)
-    tout_rad = radial_projection(mesh, tout)
-    out: dict[str, Any] = {}
-    for region, mask in masks.items():
-        out[region] = {
-            "count": int(np.sum(mask)),
-            "tilt_in_norm": _mean_and_max(tin_norm[mask]),
-            "tilt_out_norm": _mean_and_max(tout_norm[mask]),
-            "tilt_in_radial": _mean_and_max(np.abs(tin_rad[mask])),
-            "tilt_out_radial": _mean_and_max(np.abs(tout_rad[mask])),
-        }
-    return out
 
 
 def _region_energy_splits(mesh) -> dict[str, Any]:
@@ -2947,14 +2909,6 @@ def _apply_trace_height_delta(
         return out
     out[trace_rows, 2] += float(delta_phi) * dr
     return out
-
-
-def _breakdown_delta(
-    base: dict[str, float],
-    trial: dict[str, float],
-) -> dict[str, float]:
-    keys = sorted(set(base) | set(trial))
-    return {key: float(trial.get(key, 0.0) - base.get(key, 0.0)) for key in keys}
 
 
 def _dominant_positive_term(delta: dict[str, float]) -> str:

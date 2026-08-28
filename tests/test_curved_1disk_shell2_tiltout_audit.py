@@ -7,6 +7,7 @@ from tools.diagnostics.curved_1disk_shell2_tiltout_audit import (
 
 @pytest.mark.benchmark
 @pytest.mark.slow
+@pytest.mark.exhaustive
 def test_curved_1disk_shell2_tiltout_audit_reports_shell2_departure() -> None:
     """The shell-2 tilt_out audit should report the continuation ladder and departure stage."""
     report = run_curved_1disk_shell2_tiltout_audit()

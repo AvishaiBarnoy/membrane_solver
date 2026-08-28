@@ -1,10 +1,9 @@
-import os
-import sys
-
-sys.path.append(os.getcwd())
+import pytest
 
 from geometry.geom_io import load_data, parse_geometry
 from modules.energy import bending
+
+pytestmark = pytest.mark.unit
 
 
 def _helfrich_energy(path: str) -> float:

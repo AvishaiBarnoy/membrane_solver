@@ -1,14 +1,23 @@
+import pytest
+
 from tools.diagnostics.curved_1disk_shape_direction_audit import (
     run_curved_1disk_shape_direction_audit,
 )
 from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import THEORY_THETA_B
 from tools.diagnostics.curved_1disk_theory_benchmark import _run_curved_theta_candidate
 
+pytestmark = pytest.mark.acceptance
 
-def test_curved_1disk_support_transition_band_no_longer_dominates_shape_update() -> (
-    None
-):
-    report = run_curved_1disk_shape_direction_audit(horizons=(1,))
+
+@pytest.fixture(scope="module")
+def shape_direction_report() -> dict:
+    return run_curved_1disk_shape_direction_audit(horizons=(1,))
+
+
+def test_curved_1disk_support_transition_band_no_longer_dominates_shape_update(
+    shape_direction_report: dict,
+) -> None:
+    report = shape_direction_report
 
     assert report["diagnosis"]["classification"] != "support_shell_gradient_dominates"
     step = report["accepted_update_replay"][0]
@@ -16,8 +25,10 @@ def test_curved_1disk_support_transition_band_no_longer_dominates_shape_update()
     assert support_cos < 0.40
 
 
-def test_curved_1disk_fixed_theta_short_relaxation_moves_log_slope_physical() -> None:
-    report = run_curved_1disk_shape_direction_audit(horizons=(1,))
+def test_curved_1disk_fixed_theta_short_relaxation_moves_log_slope_physical(
+    shape_direction_report: dict,
+) -> None:
+    report = shape_direction_report
 
     step = report["accepted_update_replay"][0]
     assert float(step["profile_after"]["outer_log_slope"]) > 0.0
@@ -25,8 +36,10 @@ def test_curved_1disk_fixed_theta_short_relaxation_moves_log_slope_physical() ->
     assert float(step["z_delta_abs_sum"]) > 0.0
 
 
-def test_curved_1disk_log_direction_remains_valid_descent_after_support_fix() -> None:
-    report = run_curved_1disk_shape_direction_audit(horizons=(1,))
+def test_curved_1disk_log_direction_remains_valid_descent_after_support_fix(
+    shape_direction_report: dict,
+) -> None:
+    report = shape_direction_report
 
     log_probe = next(
         row
@@ -37,6 +50,7 @@ def test_curved_1disk_log_direction_remains_valid_descent_after_support_fix() ->
     assert float(log_probe["total_delta"]) < 0.0
 
 
+@pytest.mark.exhaustive
 def test_curved_1disk_transition_regularization_does_not_prefer_high_branch() -> None:
     theory = _run_curved_theta_candidate(float(THEORY_THETA_B))
     high = _run_curved_theta_candidate(0.22)

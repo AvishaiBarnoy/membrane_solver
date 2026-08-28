@@ -1,9 +1,4 @@
-import os
-import sys
-
 import numpy as np
-
-sys.path.insert(0, os.getcwd())
 
 from geometry.geom_io import load_data, parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
@@ -11,6 +6,7 @@ from runtime.energy_context import EnergyContext
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as _build_minimizer
 
 
 def _build_mesh():
@@ -55,14 +51,7 @@ def test_triangle_rows_cache_refreshes_on_facet_loop_change() -> None:
 
 def test_minimizer_energy_context_reuses_and_rebinds() -> None:
     mesh = _build_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
 
     ctx1 = minim.energy_context()
     p1, idx1 = ctx1.geometry.soa_views(mesh)
@@ -189,14 +178,7 @@ def test_p1_triangle_shape_gradients_refresh_after_position_update() -> None:
 
 def test_minimizer_does_not_bind_active_energy_context_on_mesh() -> None:
     mesh = _build_mesh()
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     assert not hasattr(mesh, "_active_energy_context")
     _ = minim.energy_context()
     assert not hasattr(mesh, "_active_energy_context")

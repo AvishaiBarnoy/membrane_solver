@@ -192,8 +192,10 @@ def build_stage_a_report(
     *,
     base_fixture: Path = BASE_FIXTURE,
     seeded_fixture: Path = SEEDED_FIXTURE,
+    refresh_fixtures: bool = False,
 ) -> dict[str, Any]:
-    write_stage_a_fixtures()
+    if refresh_fixtures:
+        write_stage_a_fixtures()
     theory = compute_flat_disk_theory(tex_reference_params())
     report = {
         "meta": {
@@ -235,7 +237,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    report = build_stage_a_report()
+    report = build_stage_a_report(refresh_fixtures=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(yaml.safe_dump(report, sort_keys=False), encoding="utf-8")
     print(f"wrote: {args.output}")

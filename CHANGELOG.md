@@ -200,7 +200,6 @@ All notable changes to this project are documented here. Dates use YYYY-MM-DD.
 - Milestone C: 3D Kozlov annulus mesh with bilayer tilt↔curvature coupling (`meshes/caveolin/kozlov_annulus_milestone_c_soft_source.yaml`) plus E2E regression tests (including leaflet sign flip).
 - Analytic regression benchmark for the 1-disk model (tensionless: distal/proximal tilts match; `docs/tex/1_disk_3d.pdf`).
 - θ_B bilayer rim source energy module `tilt_rim_source_bilayer` (single source definition; equivalent to `tilt_rim_source_in` + `tilt_rim_source_out` with equal parameters).
-- Acceptance E2E parity test for the named free-disk mesh (`tests/test_kozlov_free_disk_mesh_theory_parity_acceptance_e2e.py`) against `docs/tex/1_disk_3d.tex` with 15% tolerance on `theta_B` and energy plus convergence-trend checks.
 - Curved free-disk acceptance now uses the shared-rim stage-2 protocol as the
   canonical lane: near-rim parity, outer-band parity, and profile-fit coverage
   run on the curved bilayer protocol, while the old coarse free-disk theory

@@ -1,47 +1,14 @@
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
 from geometry.geom_io import parse_geometry
 from modules.energy import bending, bending_tilt
 from tests.sample_meshes import SAMPLE_GEOMETRY
-
-
-def _planar_patch_with_center() -> dict:
-    return {
-        "vertices": {
-            0: [0.0, 0.0, 0.0, {"fixed": True}],
-            1: [1.0, 0.0, 0.0, {"fixed": True}],
-            2: [1.0, 1.0, 0.0, {"fixed": True}],
-            3: [0.0, 1.0, 0.0, {"fixed": True}],
-            4: [0.5, 0.5, 0.0, {"fixed": True}],
-        },
-        "edges": {
-            1: [0, 1],
-            2: [1, 2],
-            3: [2, 3],
-            4: [3, 0],
-            5: [0, 4],
-            6: [1, 4],
-            7: [2, 4],
-            8: [3, 4],
-        },
-        "faces": {
-            0: [1, 6, "r5"],
-            1: [2, 7, "r6"],
-            2: [3, 8, "r7"],
-            3: [4, 5, "r8"],
-        },
-        "energy_modules": [],
-        "global_parameters": {"surface_tension": 0.0},
-        "instructions": [],
-    }
+from tests.sample_meshes import (
+    planar_patch_with_center_data as _planar_patch_with_center,
+)
 
 
 def test_bending_tilt_matches_bending_when_tilts_zero():

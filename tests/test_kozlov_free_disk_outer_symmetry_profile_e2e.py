@@ -1,16 +1,10 @@
 import os
-import sys
 
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from geometry.geom_io import load_data, parse_geometry  # noqa: E402
-from runtime.constraint_manager import ConstraintModuleManager  # noqa: E402
-from runtime.energy_manager import EnergyModuleManager  # noqa: E402
-from runtime.minimizer import Minimizer  # noqa: E402
-from runtime.steppers.gradient_descent import GradientDescent  # noqa: E402
+from tests.kozlov_test_utils import build_minimizer  # noqa: E402
 
 
 def _outer_band_metrics(mesh, *, r_min: float, r_max: float) -> tuple[float, float]:
@@ -76,15 +70,7 @@ def test_kozlov_free_disk_outer_leaflet_symmetry_improves_with_radius() -> None:
     gp.set("step_size_mode", "fixed")
     gp.set("step_size", 1.0e-3)
 
-    minim = Minimizer(
-        mesh,
-        gp,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-        tol=1e-8,
-    )
+    minim = build_minimizer(mesh, tol=1e-8)
     minim.minimize(n_steps=3)
 
     # Three annular bands in the lipid region (exclude the near-disk patch).

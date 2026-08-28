@@ -275,14 +275,27 @@ def scaffold_gapfill_long_report(
     return scaffold_gapfill_long_context_report[1]
 
 
+@pytest.fixture(scope="module")
+def coarse_report() -> dict[str, Any]:
+    return _run_context_report(BASE_FIXTURE, protocol=tuple(DEFAULT_PROTOCOL))
+
+
+@pytest.fixture(scope="module")
+def default_report() -> dict[str, Any]:
+    return _run_context_report(DEFAULT_FIXTURE, protocol=tuple(DEFAULT_PROTOCOL))
+
+
+@pytest.fixture(scope="module")
+def ghost_report() -> dict[str, Any]:
+    return _run_context_report(GHOST_FIXTURE, protocol=tuple(DEFAULT_PROTOCOL))
+
+
 @pytest.mark.acceptance
-def test_physical_edge_ghost_shell_reports_direct_outer_interface_shell() -> None:
+def test_physical_edge_ghost_shell_reports_direct_outer_interface_shell(
+    ghost_report: dict[str, Any],
+) -> None:
     epsilon = 0.005
-    ctx = _build_context(GHOST_FIXTURE)
-    _run_protocol_with_parity_activation(ctx, protocol=DEFAULT_PROTOCOL)
-    report = _collect_report_from_context(
-        ctx=ctx, mesh_path=GHOST_FIXTURE, protocol=DEFAULT_PROTOCOL
-    )
+    report = ghost_report
 
     shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
     traces = report["metrics"]["diagnostics"]["interface_traces_at_R"]
@@ -320,22 +333,10 @@ def test_physical_edge_ghost_shell_reports_direct_outer_interface_shell() -> Non
         "meets its bad-branch relief guardrail"
     ),
 )
-def test_physical_edge_ghost_shell_fixture_relieves_known_bad_branch(tmp_path) -> None:
-    out_yaml = tmp_path / "ghost_report.yaml"
-    subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--mesh",
-            str(GHOST_FIXTURE),
-            "--out",
-            str(out_yaml),
-        ],
-        check=True,
-        cwd=str(ROOT),
-    )
-
-    report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+def test_physical_edge_ghost_shell_fixture_relieves_known_bad_branch(
+    ghost_report: dict[str, Any],
+) -> None:
+    report = ghost_report
     shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
     traces = report["metrics"]["diagnostics"]["interface_traces_at_R"]
     primary = report["metrics"]["diagnostics"]["interface_primary_readout"]
@@ -358,23 +359,9 @@ def test_physical_edge_ghost_shell_fixture_relieves_known_bad_branch(tmp_path) -
     ),
 )
 def test_physical_edge_ghost_shell_improves_direct_interface_behavior_over_bad_branch(
-    tmp_path,
+    ghost_report: dict[str, Any],
 ) -> None:
-    out_yaml = tmp_path / "ghost_report.yaml"
-    subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--mesh",
-            str(GHOST_FIXTURE),
-            "--out",
-            str(out_yaml),
-        ],
-        check=True,
-        cwd=str(ROOT),
-    )
-
-    report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+    report = ghost_report
     shell = report["metrics"]["diagnostics"]["interface_shell_at_R_plus_epsilon"]
     primary = report["metrics"]["diagnostics"]["interface_primary_readout"]
     ratio = float(report["metrics"]["tex_benchmark"]["ratios"]["total_ratio"])
@@ -520,6 +507,7 @@ def test_gate0_scaffold_boundary_mode_is_stationary(
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_scaffold_gapfill_ablation_matrix_reports_finite_diagnostics(tmp_path) -> None:
     base_doc = yaml.safe_load(
         SCAFFOLD_GAPFILL_RELEASE_FIXTURE.read_text(encoding="utf-8")
@@ -601,6 +589,7 @@ def test_scaffold_gapfill_ablation_matrix_reports_finite_diagnostics(tmp_path) -
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 @pytest.mark.xfail(
     strict=True,
     reason=(
@@ -696,16 +685,10 @@ def test_reproduce_theory_parity_matches_tex_targets_with_tolerances(tmp_path) -
 
 
 @pytest.mark.acceptance
-def test_coarse_lane_reports_finite_outer_shell_geometry_for_parity(tmp_path) -> None:
-    out_yaml = tmp_path / "coarse_outer_shell_report.yaml"
-    subprocess.run(
-        [sys.executable, str(SCRIPT), "--out", str(out_yaml)],
-        check=True,
-        cwd=str(ROOT),
-    )
-
-    report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
-    geom = report["metrics"]["diagnostics"]["outer_shell_geometry"]
+def test_coarse_lane_reports_finite_outer_shell_geometry_for_parity(
+    coarse_report: dict[str, Any],
+) -> None:
+    geom = coarse_report["metrics"]["diagnostics"]["outer_shell_geometry"]
 
     assert bool(geom["available"])
     assert geom["construction_mode"] == "parity_disk_local_shell_measurement"
@@ -714,14 +697,12 @@ def test_coarse_lane_reports_finite_outer_shell_geometry_for_parity(tmp_path) ->
 
 
 @pytest.mark.acceptance
-def test_physical_edge_profiled_lane_improves_thetaB_over_coarse_lane(tmp_path) -> None:
-    coarse_out = tmp_path / "coarse_report.yaml"
+@pytest.mark.exhaustive
+def test_physical_edge_profiled_lane_improves_thetaB_over_coarse_lane(
+    tmp_path,
+    coarse_report: dict[str, Any],
+) -> None:
     profiled_out = tmp_path / "profiled_report.yaml"
-    subprocess.run(
-        [sys.executable, str(SCRIPT), "--out", str(coarse_out)],
-        check=True,
-        cwd=str(ROOT),
-    )
 
     fixture_path = _write_temp_fixture(
         _build_physical_edge_profile_fixture("near_edge_v1", "near_edge_v1_acceptance"),
@@ -744,7 +725,7 @@ def test_physical_edge_profiled_lane_improves_thetaB_over_coarse_lane(tmp_path) 
         if fixture_path.exists():
             fixture_path.unlink()
 
-    coarse = yaml.safe_load(coarse_out.read_text(encoding="utf-8"))
+    coarse = coarse_report
     profiled = yaml.safe_load(profiled_out.read_text(encoding="utf-8"))
 
     assert profiled["meta"]["lane"] == "near_edge_v1_acceptance"
@@ -760,30 +741,11 @@ def test_physical_edge_profiled_lane_improves_thetaB_over_coarse_lane(tmp_path) 
 
 @pytest.mark.acceptance
 def test_physical_edge_default_fixture_is_the_default_development_lane(
-    tmp_path,
+    coarse_report: dict[str, Any],
+    default_report: dict[str, Any],
 ) -> None:
-    coarse_out = tmp_path / "coarse_report.yaml"
-    default_out = tmp_path / "default_report.yaml"
-    subprocess.run(
-        [sys.executable, str(SCRIPT), "--out", str(coarse_out)],
-        check=True,
-        cwd=str(ROOT),
-    )
-    subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--mesh",
-            str(DEFAULT_FIXTURE),
-            "--out",
-            str(default_out),
-        ],
-        check=True,
-        cwd=str(ROOT),
-    )
-
-    coarse = yaml.safe_load(coarse_out.read_text(encoding="utf-8"))
-    default = yaml.safe_load(default_out.read_text(encoding="utf-8"))
+    coarse = coarse_report
+    default = default_report
     geom = default["metrics"]["diagnostics"]["outer_shell_geometry"]
     split = default["metrics"]["diagnostics"]["outer_split"]
     traces = default["metrics"]["diagnostics"]["interface_traces_at_R"]
@@ -844,6 +806,7 @@ def test_physical_edge_default_fixture_is_the_default_development_lane(
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_physical_edge_default_releases_kick_after_branch_selection() -> None:
     ctx = _build_context(DEFAULT_FIXTURE)
     ctx.mesh.global_parameters.set("parity_physical_edge_z_bump", 1.0e-3)
@@ -861,16 +824,12 @@ def test_physical_edge_default_releases_kick_after_branch_selection() -> None:
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_tracked_i50_fixture_improves_geometry_and_thetaB_over_coarse_lane(
     tmp_path,
+    coarse_report: dict[str, Any],
 ) -> None:
-    coarse_out = tmp_path / "coarse_report.yaml"
     i50_out = tmp_path / "i50_report.yaml"
-    subprocess.run(
-        [sys.executable, str(SCRIPT), "--out", str(coarse_out)],
-        check=True,
-        cwd=str(ROOT),
-    )
     subprocess.run(
         [
             sys.executable,
@@ -884,7 +843,7 @@ def test_tracked_i50_fixture_improves_geometry_and_thetaB_over_coarse_lane(
         cwd=str(ROOT),
     )
 
-    coarse = yaml.safe_load(coarse_out.read_text(encoding="utf-8"))
+    coarse = coarse_report
     i50 = yaml.safe_load(i50_out.read_text(encoding="utf-8"))
 
     coarse_theta = float(coarse["metrics"]["thetaB_value"])
@@ -900,6 +859,7 @@ def test_tracked_i50_fixture_improves_geometry_and_thetaB_over_coarse_lane(
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_tracked_i60_and_near_edge_fixtures_use_local_shell_physical_edge_mode(
     tmp_path,
 ) -> None:
@@ -947,6 +907,7 @@ def test_tracked_i60_and_near_edge_fixtures_use_local_shell_physical_edge_mode(
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_generated_physical_edge_family_varies_smoothly_around_primary(
     tmp_path,
 ) -> None:
@@ -1078,6 +1039,7 @@ def test_generated_physical_edge_family_varies_smoothly_around_primary(
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_default_lane_reports_real_zero_bump_and_shows_kick_sensitivity(
     tmp_path,
 ) -> None:
@@ -1130,24 +1092,9 @@ def test_default_lane_reports_real_zero_bump_and_shows_kick_sensitivity(
     ),
 )
 def test_physical_edge_default_reports_trace_resolution_and_operator_split(
-    tmp_path,
+    default_report: dict[str, Any],
 ) -> None:
-    out_yaml = tmp_path / "default_report.yaml"
-    subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--mesh",
-            str(DEFAULT_FIXTURE),
-            "--out",
-            str(out_yaml),
-        ],
-        check=True,
-        cwd=str(ROOT),
-    )
-
-    report = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
-    split = report["metrics"]["diagnostics"]["trace_error_split"]
+    split = default_report["metrics"]["diagnostics"]["trace_error_split"]
 
     assert bool(split["available"])
     assert float(split["lambda_delta_r_first_shell"]) > 2.0
@@ -1167,24 +1114,10 @@ def test_physical_edge_default_reports_trace_resolution_and_operator_split(
     ),
 )
 def test_physical_edge_default_improves_free_side_trace_continuation_over_baseline(
-    tmp_path,
+    default_report: dict[str, Any],
 ) -> None:
-    out_yaml = tmp_path / "default_report.yaml"
-    subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--mesh",
-            str(DEFAULT_FIXTURE),
-            "--out",
-            str(out_yaml),
-        ],
-        check=True,
-        cwd=str(ROOT),
-    )
-
     baseline = _load_default_comparison_baseline()
-    current = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+    current = default_report
 
     baseline_traces = baseline["metrics"]["diagnostics"]["interface_traces_at_R"]
     current_traces = current["metrics"]["diagnostics"]["interface_traces_at_R"]
@@ -1208,24 +1141,10 @@ def test_physical_edge_default_improves_free_side_trace_continuation_over_baseli
 
 @pytest.mark.acceptance
 def test_physical_edge_default_keeps_theta_and_energy_in_guardrail_while_fixing_interface(
-    tmp_path,
+    default_report: dict[str, Any],
 ) -> None:
-    out_yaml = tmp_path / "default_report.yaml"
-    subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--mesh",
-            str(DEFAULT_FIXTURE),
-            "--out",
-            str(out_yaml),
-        ],
-        check=True,
-        cwd=str(ROOT),
-    )
-
     baseline = _load_default_baseline()
-    current = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+    current = default_report
 
     current_theta = float(current["metrics"]["thetaB_value"])
     baseline_theta = float(baseline["metrics"]["thetaB_value"])
@@ -1238,24 +1157,10 @@ def test_physical_edge_default_keeps_theta_and_energy_in_guardrail_while_fixing_
 
 @pytest.mark.acceptance
 def test_physical_edge_default_improves_director_and_profile_parity_over_baseline(
-    tmp_path,
+    default_report: dict[str, Any],
 ) -> None:
-    out_yaml = tmp_path / "default_report.yaml"
-    subprocess.run(
-        [
-            sys.executable,
-            str(SCRIPT),
-            "--mesh",
-            str(DEFAULT_FIXTURE),
-            "--out",
-            str(out_yaml),
-        ],
-        check=True,
-        cwd=str(ROOT),
-    )
-
     baseline = _load_default_comparison_baseline()
-    current = yaml.safe_load(out_yaml.read_text(encoding="utf-8"))
+    current = default_report
 
     baseline_profile = baseline["metrics"]["diagnostics"]["outer_profile_parity"]
     current_profile = current["metrics"]["diagnostics"]["outer_profile_parity"]

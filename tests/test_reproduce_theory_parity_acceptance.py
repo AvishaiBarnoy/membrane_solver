@@ -106,6 +106,9 @@ LONG_SCAFFOLD_PROTOCOL = (
     "energy",
 )
 
+pytestmark = pytest.mark.exhaustive
+
+
 PARITY_REQUALIFICATION_XFAIL = pytest.mark.xfail(
     strict=True,
     reason=(

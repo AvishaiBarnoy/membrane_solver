@@ -1,17 +1,11 @@
 import os
-import sys
 
 import numpy as np
 import pytest
 from scipy import special
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from geometry.geom_io import load_data, parse_geometry  # noqa: E402
-from runtime.constraint_manager import ConstraintModuleManager  # noqa: E402
-from runtime.energy_manager import EnergyModuleManager  # noqa: E402
-from runtime.minimizer import Minimizer  # noqa: E402
-from runtime.steppers.gradient_descent import GradientDescent  # noqa: E402
+from tests.kozlov_test_utils import build_minimizer  # noqa: E402
 from tools.diagnostics.free_disk_profile_protocol import (  # noqa: E402
     measure_free_disk_curved_bilayer_near_rim,
 )
@@ -97,19 +91,6 @@ def _symmetric_leaflet_theory_params(gp) -> tuple[float, float, float]:
     return kappa, kappa_t, drive
 
 
-def _build_minimizer(mesh) -> Minimizer:
-    """Return a minimizer suitable for post-run energy breakdowns."""
-    return Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-        tol=1e-6,
-    )
-
-
 @pytest.mark.e2e
 @pytest.mark.xfail(
     reason=(
@@ -139,7 +120,7 @@ def test_kozlov_free_disk_curved_protocol_has_active_outer_relaxation_channels(
 ) -> None:
     """E2E: the curved protocol activates shape and outer-leaflet relaxation."""
     mesh, theta_b = canonical_curved_protocol_result
-    minim = _build_minimizer(mesh)
+    minim = build_minimizer(mesh, tol=1e-6)
     breakdown = minim.compute_energy_breakdown()
 
     rows = _disk_group_rows(mesh, "rim")
@@ -188,7 +169,7 @@ def test_kozlov_free_disk_flat_fixture_remains_flat_diagnostic() -> None:
     gp.set("tilt_thetaB_optimize_delta", 0.02)
     gp.set("tilt_thetaB_optimize_inner_steps", 2)
 
-    minim = _build_minimizer(mesh)
+    minim = build_minimizer(mesh, tol=1e-6)
     tilt_mode = str(gp.get("tilt_solve_mode") or "coupled")
     for i in range(4):
         minim._relax_leaflet_tilts(positions=mesh.positions_view(), mode=tilt_mode)

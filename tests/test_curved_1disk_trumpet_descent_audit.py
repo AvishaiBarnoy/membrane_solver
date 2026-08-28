@@ -8,9 +8,14 @@ from tools.diagnostics.curved_1disk_trumpet_descent_audit import (
 )
 
 
-def test_curved_1disk_trumpet_descent_audit_reports_required_schema() -> None:
-    report = run_curved_1disk_trumpet_descent_audit(epsilons=(1.0e-5,))
+@pytest.fixture(scope="module")
+def report() -> dict:
+    return run_curved_1disk_trumpet_descent_audit(epsilons=(1.0e-5,))
 
+
+def test_curved_1disk_trumpet_descent_audit_reports_required_schema(
+    report: dict,
+) -> None:
     assert report["mode_construction"]["z_only"] is True
     assert report["mode_construction"]["amplitude_is_probe_not_parameter"] is True
     assert report["mode_construction"]["no_energy_rescaling"] is True
@@ -39,9 +44,9 @@ def test_curved_1disk_trumpet_descent_audit_reports_required_schema() -> None:
         assert "outer_log_trumpet" in row["mode_alignment"]
 
 
-def test_curved_1disk_trumpet_descent_audit_reconciles_module_deltas() -> None:
-    report = run_curved_1disk_trumpet_descent_audit(epsilons=(1.0e-5,))
-
+def test_curved_1disk_trumpet_descent_audit_reconciles_module_deltas(
+    report: dict,
+) -> None:
     for mode in report["modes"]:
         alignment = mode["gradient_alignment"]
         assert math.isfinite(float(alignment["raw_dot_mode"]))

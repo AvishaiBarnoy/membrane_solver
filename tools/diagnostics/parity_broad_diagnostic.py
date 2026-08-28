@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import os
 import sys
 import tempfile
@@ -46,7 +45,9 @@ from tools.diagnostics.thetaB_normalization_audit import (  # noqa: E402
     summarize_fixed_theta_sweep,
 )
 from tools.diagnostics.utils import (  # noqa: E402
-    radial_projection,
+    _build_variant_doc,
+    _field_stats_by_region,
+    _write_temp_fixture,
     row_region_mask_dict,
     triangle_region_masks,
 )
@@ -69,12 +70,6 @@ FULL_COUPLING_TRACE_FIXTURE = (
     / "fixtures"
     / "kozlov_1disk_3d_free_disk_physical_edge_full_coupling_trace_eps005_v1.yaml"
 )
-
-
-def _write_temp_fixture(doc: dict[str, Any], directory: Path, label: str) -> Path:
-    path = directory / f"{label}.yaml"
-    path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
-    return path
 
 
 def _variant_specs() -> list[dict[str, Any]]:
@@ -112,15 +107,6 @@ def _variant_specs() -> list[dict[str, Any]]:
     ]
 
 
-def _build_variant_doc(base_fixture: Path, overrides: dict[str, Any]) -> dict[str, Any]:
-    doc = yaml.safe_load(base_fixture.read_text(encoding="utf-8")) or {}
-    gp = dict(doc.get("global_parameters") or {})
-    for key, value in (overrides or {}).items():
-        gp[key] = copy.deepcopy(value)
-    doc["global_parameters"] = gp
-    return doc
-
-
 def _run_context_report(
     *, mesh_path: Path, protocol: tuple[str, ...]
 ) -> tuple[Any, dict[str, Any]]:
@@ -132,35 +118,6 @@ def _run_context_report(
         protocol=protocol,
     )
     return ctx, report
-
-
-def _mean_and_max(values: np.ndarray) -> dict[str, float]:
-    if values.size == 0:
-        return {"mean": 0.0, "max": 0.0}
-    return {
-        "mean": float(np.mean(values)),
-        "max": float(np.max(values)),
-    }
-
-
-def _field_stats_by_region(mesh) -> dict[str, Any]:
-    masks = row_region_mask_dict(mesh)
-    tin = np.asarray(mesh.tilts_in_view(), dtype=float)
-    tout = np.asarray(mesh.tilts_out_view(), dtype=float)
-    tin_norm = np.linalg.norm(tin, axis=1)
-    tout_norm = np.linalg.norm(tout, axis=1)
-    tin_rad = radial_projection(mesh, tin)
-    tout_rad = radial_projection(mesh, tout)
-    out: dict[str, Any] = {}
-    for region, mask in masks.items():
-        out[region] = {
-            "count": int(np.sum(mask)),
-            "tilt_in_norm": _mean_and_max(tin_norm[mask]),
-            "tilt_out_norm": _mean_and_max(tout_norm[mask]),
-            "tilt_in_radial": _mean_and_max(np.abs(tin_rad[mask])),
-            "tilt_out_radial": _mean_and_max(np.abs(tout_rad[mask])),
-        }
-    return out
 
 
 def _triangle_count_by_region(mesh, tri_rows: np.ndarray) -> dict[str, int]:

@@ -1,12 +1,7 @@
 from __future__ import annotations
 
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from benchmarks.benchmark_flat_disk_tilt_mass_mode import benchmark_tilt_mass_mode
 

@@ -1,5 +1,3 @@
-import os
-import sys
 from copy import deepcopy
 from functools import lru_cache
 from pathlib import Path
@@ -9,7 +7,6 @@ import numpy as np
 import pytest
 import yaml
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 ROOT = Path(__file__).resolve().parent.parent
 
 from tools.diagnostics.flat_disk_kh_term_audit import (
@@ -23,6 +20,39 @@ from tools.diagnostics.flat_disk_kh_term_audit import (
     run_flat_disk_kh_term_audit,
     run_flat_disk_kh_term_audit_refine_sweep,
 )
+
+_FINITE_BASE_ROW_FIELDS = """
+theta mesh_total mesh_contact mesh_internal theory_total theory_contact
+theory_internal total_error contact_error internal_error mesh_internal_disk
+mesh_internal_outer theory_internal_disk theory_internal_outer
+internal_disk_error internal_outer_error inner_tphi_over_trad_median
+outer_tphi_over_trad_median disk_core_tphi_abs_median
+disk_core_trad_abs_median disk_core_tphi_over_trad_median
+rim_band_tphi_abs_median rim_band_trad_abs_median rim_band_tphi_over_trad_median
+outer_near_tphi_abs_median outer_near_trad_abs_median
+outer_near_tphi_over_trad_median outer_far_tphi_abs_median
+outer_far_trad_abs_median outer_far_tphi_over_trad_median
+disk_core_hmax_over_hmin_mean rim_band_hmax_over_hmin_mean
+outer_near_hmax_over_hmin_mean outer_far_hmax_over_hmin_mean
+disk_core_edge_orientation_spread rim_band_edge_orientation_spread
+outer_near_edge_orientation_spread outer_far_edge_orientation_spread
+mesh_tilt_disk_core mesh_tilt_rim_band mesh_tilt_outer_near mesh_tilt_outer_far
+mesh_smooth_disk_core mesh_smooth_rim_band mesh_smooth_outer_near
+mesh_smooth_outer_far theory_tilt_disk_core theory_tilt_rim_band
+theory_tilt_outer_near theory_tilt_outer_far theory_smooth_disk_core
+theory_smooth_rim_band theory_smooth_outer_near theory_smooth_outer_far
+theory_tilt_outer_near_finite theory_tilt_outer_far_finite
+theory_smooth_outer_near_finite theory_smooth_outer_far_finite
+theory_internal_disk_core theory_internal_rim_band theory_internal_outer_near
+theory_internal_outer_far theory_internal_outer_near_finite
+theory_internal_outer_far_finite theory_outer_r_max
+theory_internal_total_from_bands theory_internal_bands_minus_closed_form
+""".split()
+
+
+def _assert_finite_fields(row: dict, fields: list[str]) -> None:
+    nonfinite = [field for field in fields if not np.isfinite(float(row[field]))]
+    assert not nonfinite, f"non-finite report fields: {nonfinite}"
 
 
 def _freeze_cache_value(value):
@@ -88,77 +118,11 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
     assert len(rows) == 3
 
     for row in rows:
-        assert np.isfinite(float(row["theta"]))
-        assert np.isfinite(float(row["mesh_total"]))
-        assert np.isfinite(float(row["mesh_contact"]))
-        assert np.isfinite(float(row["mesh_internal"]))
-        assert np.isfinite(float(row["theory_total"]))
-        assert np.isfinite(float(row["theory_contact"]))
-        assert np.isfinite(float(row["theory_internal"]))
-        assert np.isfinite(float(row["total_error"]))
-        assert np.isfinite(float(row["contact_error"]))
-        assert np.isfinite(float(row["internal_error"]))
-        assert np.isfinite(float(row["mesh_internal_disk"]))
-        assert np.isfinite(float(row["mesh_internal_outer"]))
-        assert np.isfinite(float(row["theory_internal_disk"]))
-        assert np.isfinite(float(row["theory_internal_outer"]))
-        assert np.isfinite(float(row["internal_disk_error"]))
-        assert np.isfinite(float(row["internal_outer_error"]))
-        assert np.isfinite(float(row["inner_tphi_over_trad_median"]))
-        assert np.isfinite(float(row["outer_tphi_over_trad_median"]))
-        assert np.isfinite(float(row["disk_core_tphi_abs_median"]))
-        assert np.isfinite(float(row["disk_core_trad_abs_median"]))
-        assert np.isfinite(float(row["disk_core_tphi_over_trad_median"]))
-        assert np.isfinite(float(row["rim_band_tphi_abs_median"]))
-        assert np.isfinite(float(row["rim_band_trad_abs_median"]))
-        assert np.isfinite(float(row["rim_band_tphi_over_trad_median"]))
-        assert np.isfinite(float(row["outer_near_tphi_abs_median"]))
-        assert np.isfinite(float(row["outer_near_trad_abs_median"]))
-        assert np.isfinite(float(row["outer_near_tphi_over_trad_median"]))
-        assert np.isfinite(float(row["outer_far_tphi_abs_median"]))
-        assert np.isfinite(float(row["outer_far_trad_abs_median"]))
-        assert np.isfinite(float(row["outer_far_tphi_over_trad_median"]))
-        assert np.isfinite(float(row["disk_core_hmax_over_hmin_mean"]))
-        assert np.isfinite(float(row["rim_band_hmax_over_hmin_mean"]))
-        assert np.isfinite(float(row["outer_near_hmax_over_hmin_mean"]))
-        assert np.isfinite(float(row["outer_far_hmax_over_hmin_mean"]))
-        assert np.isfinite(float(row["disk_core_edge_orientation_spread"]))
-        assert np.isfinite(float(row["rim_band_edge_orientation_spread"]))
-        assert np.isfinite(float(row["outer_near_edge_orientation_spread"]))
-        assert np.isfinite(float(row["outer_far_edge_orientation_spread"]))
+        _assert_finite_fields(row, _FINITE_BASE_ROW_FIELDS)
         corr_aspect = float(row["corr_hmax_over_hmin_vs_tphi_over_trad"])
         corr_orient = float(row["corr_orientation_spread_vs_tphi_over_trad"])
         assert np.isfinite(corr_aspect) or np.isnan(corr_aspect)
         assert np.isfinite(corr_orient) or np.isnan(corr_orient)
-        assert np.isfinite(float(row["mesh_tilt_disk_core"]))
-        assert np.isfinite(float(row["mesh_tilt_rim_band"]))
-        assert np.isfinite(float(row["mesh_tilt_outer_near"]))
-        assert np.isfinite(float(row["mesh_tilt_outer_far"]))
-        assert np.isfinite(float(row["mesh_smooth_disk_core"]))
-        assert np.isfinite(float(row["mesh_smooth_rim_band"]))
-        assert np.isfinite(float(row["mesh_smooth_outer_near"]))
-        assert np.isfinite(float(row["mesh_smooth_outer_far"]))
-        assert np.isfinite(float(row["theory_tilt_disk_core"]))
-        assert np.isfinite(float(row["theory_tilt_rim_band"]))
-        assert np.isfinite(float(row["theory_tilt_outer_near"]))
-        assert np.isfinite(float(row["theory_tilt_outer_far"]))
-        assert np.isfinite(float(row["theory_smooth_disk_core"]))
-        assert np.isfinite(float(row["theory_smooth_rim_band"]))
-        assert np.isfinite(float(row["theory_smooth_outer_near"]))
-        assert np.isfinite(float(row["theory_smooth_outer_far"]))
-        assert np.isfinite(float(row["theory_tilt_outer_near_finite"]))
-        assert np.isfinite(float(row["theory_tilt_outer_far_finite"]))
-        assert np.isfinite(float(row["theory_smooth_outer_near_finite"]))
-        assert np.isfinite(float(row["theory_smooth_outer_far_finite"]))
-        assert np.isfinite(float(row["theory_internal_disk_core"]))
-        assert np.isfinite(float(row["theory_internal_rim_band"]))
-        assert np.isfinite(float(row["theory_internal_outer_near"]))
-        assert np.isfinite(float(row["theory_internal_outer_far"]))
-        assert np.isfinite(float(row["theory_internal_outer_near_finite"]))
-        assert np.isfinite(float(row["theory_internal_outer_far_finite"]))
-        assert np.isfinite(float(row["theory_outer_r_max"]))
-        assert np.isfinite(float(row["theory_internal_total_from_bands"]))
-        assert np.isfinite(float(row["theory_internal_bands_minus_closed_form"]))
         assert bool(row["radial_projection_diagnostic"]) is False
         assert np.isnan(float(row["proj_radial_mesh_internal"]))
         assert np.isnan(float(row["proj_radial_mesh_internal_outer_near"]))
@@ -166,28 +130,22 @@ def test_flat_disk_kh_term_audit_reports_finite_rows() -> None:
         assert np.isnan(
             float(row["proj_radial_internal_outer_near_abs_error_delta_vs_unprojected"])
         )
-        if float(row["section_score_internal_split_count"]) > 0.0:
-            assert np.isfinite(float(row["section_score_internal_split_l2_log"]))
-            assert np.isfinite(float(row["section_score_internal_split_max_abs_log"]))
-        if float(row["section_score_internal_bands_count"]) > 0.0:
-            assert np.isfinite(float(row["section_score_internal_bands_l2_log"]))
-            assert np.isfinite(float(row["section_score_internal_bands_max_abs_log"]))
-        if float(row["section_score_internal_bands_finite_outer_count"]) > 0.0:
-            assert np.isfinite(
-                float(row["section_score_internal_bands_finite_outer_l2_log"])
-            )
-            assert np.isfinite(
-                float(row["section_score_internal_bands_finite_outer_max_abs_log"])
-            )
-        if float(row["section_score_tilt_bands_count"]) > 0.0:
-            assert np.isfinite(float(row["section_score_tilt_bands_l2_log"]))
-            assert np.isfinite(float(row["section_score_tilt_bands_max_abs_log"]))
-        if float(row["section_score_smooth_bands_count"]) > 0.0:
-            assert np.isfinite(float(row["section_score_smooth_bands_l2_log"]))
-            assert np.isfinite(float(row["section_score_smooth_bands_max_abs_log"]))
-        if float(row["section_score_all_terms_count"]) > 0.0:
-            assert np.isfinite(float(row["section_score_all_terms_l2_log"]))
-            assert np.isfinite(float(row["section_score_all_terms_max_abs_log"]))
+        for score in (
+            "internal_split",
+            "internal_bands",
+            "internal_bands_finite_outer",
+            "tilt_bands",
+            "smooth_bands",
+            "all_terms",
+        ):
+            if float(row[f"section_score_{score}_count"]) > 0.0:
+                _assert_finite_fields(
+                    row,
+                    [
+                        f"section_score_{score}_l2_log",
+                        f"section_score_{score}_max_abs_log",
+                    ],
+                )
         assert float(row["mesh_internal_total_from_regions"]) == pytest.approx(
             float(row["mesh_internal"]), rel=0.0, abs=1e-12
         )
@@ -289,28 +247,22 @@ def test_flat_disk_kh_term_audit_radial_projection_diagnostic_emits_finite_rows(
     assert bool(report["meta"]["radial_projection_diagnostic"]) is True
     row = report["rows"][0]
     assert bool(row["radial_projection_diagnostic"]) is True
-    assert np.isfinite(float(row["proj_radial_mesh_internal"]))
-    assert np.isfinite(float(row["proj_radial_mesh_internal_disk"]))
-    assert np.isfinite(float(row["proj_radial_mesh_internal_outer"]))
-    assert np.isfinite(float(row["proj_radial_mesh_internal_disk_core"]))
-    assert np.isfinite(float(row["proj_radial_mesh_internal_rim_band"]))
-    assert np.isfinite(float(row["proj_radial_mesh_internal_outer_near"]))
-    assert np.isfinite(float(row["proj_radial_mesh_internal_outer_far"]))
-    assert np.isfinite(float(row["proj_radial_internal_disk_core_abs_error"]))
-    assert np.isfinite(float(row["proj_radial_internal_rim_band_abs_error"]))
-    assert np.isfinite(float(row["proj_radial_internal_outer_near_abs_error"]))
-    assert np.isfinite(float(row["proj_radial_internal_outer_far_abs_error"]))
-    assert np.isfinite(
-        float(row["proj_radial_internal_disk_core_abs_error_delta_vs_unprojected"])
-    )
-    assert np.isfinite(
-        float(row["proj_radial_internal_rim_band_abs_error_delta_vs_unprojected"])
-    )
-    assert np.isfinite(
-        float(row["proj_radial_internal_outer_near_abs_error_delta_vs_unprojected"])
-    )
-    assert np.isfinite(
-        float(row["proj_radial_internal_outer_far_abs_error_delta_vs_unprojected"])
+    _assert_finite_fields(
+        row,
+        """
+        proj_radial_mesh_internal proj_radial_mesh_internal_disk
+        proj_radial_mesh_internal_outer proj_radial_mesh_internal_disk_core
+        proj_radial_mesh_internal_rim_band proj_radial_mesh_internal_outer_near
+        proj_radial_mesh_internal_outer_far
+        proj_radial_internal_disk_core_abs_error
+        proj_radial_internal_rim_band_abs_error
+        proj_radial_internal_outer_near_abs_error
+        proj_radial_internal_outer_far_abs_error
+        proj_radial_internal_disk_core_abs_error_delta_vs_unprojected
+        proj_radial_internal_rim_band_abs_error_delta_vs_unprojected
+        proj_radial_internal_outer_near_abs_error_delta_vs_unprojected
+        proj_radial_internal_outer_far_abs_error_delta_vs_unprojected
+        """.split(),
     )
 
 
@@ -326,9 +278,14 @@ def test_flat_disk_kh_term_audit_fractional_partition_mode_runs() -> None:
     )
     assert report["meta"]["partition_mode"] == "fractional"
     row = report["rows"][0]
-    assert np.isfinite(float(row["mesh_internal_disk_core"]))
-    assert np.isfinite(float(row["mesh_internal_outer_near"]))
-    assert np.isfinite(float(row["mesh_internal_outer_far"]))
+    _assert_finite_fields(
+        row,
+        [
+            "mesh_internal_disk_core",
+            "mesh_internal_outer_near",
+            "mesh_internal_outer_far",
+        ],
+    )
     assert (
         float(row["mesh_internal_disk_core"])
         + float(row["mesh_internal_rim_band"])
@@ -433,6 +390,8 @@ def test_flat_disk_kh_term_audit_theta_relax_controls_emit_metadata() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
+@pytest.mark.exhaustive
 def test_flat_disk_kh_term_audit_staged_v2_relax_path_matches_dirty_branch() -> None:
     report = run_flat_disk_kh_term_audit(
         refine_level=3,
@@ -772,6 +731,8 @@ def test_flat_disk_kh_term_audit_finite_outer_reference_matches_infinite_at_rmax
 
 
 @pytest.mark.regression
+@pytest.mark.slow
+@pytest.mark.exhaustive
 def test_flat_disk_kh_term_audit_outerfield_tailmatch_improves_outer_far_section() -> (
     None
 ):
@@ -1396,6 +1357,7 @@ def test_flat_disk_kh_term_audit_v2_uses_strict_raw_ratio_semantics() -> None:
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_flat_disk_kh_term_audit_staged_targets_match_fixture_expectations() -> None:
     cfg_p10 = yaml.safe_load(
         (

@@ -1,10 +1,6 @@
-import os
-import sys
-
 import numpy as np
 
 # Adjust import paths for this testing environment
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from geometry.entities import Edge, Facet, Mesh, Vertex
 from runtime.refinement import refine_triangle_mesh
 

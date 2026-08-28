@@ -1,4 +1,3 @@
-import os
 import subprocess
 import sys
 from copy import deepcopy
@@ -8,8 +7,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import yaml
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from geometry.geom_io import load_data
 from runtime.refinement import refine_triangle_mesh
@@ -54,7 +51,7 @@ def _report_for_mode(mode: str) -> dict:
     )
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=None)
 def _kh_opt_report(
     *,
     refine_level: int,
@@ -220,6 +217,7 @@ def test_flat_disk_one_leaflet_mesh_parity_outer_free_e2e() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_preserves_planarity_during_tilt_relax() -> None:
     report_disabled = _report_for_mode("disabled")
     report_free = _report_for_mode("free")
@@ -229,6 +227,7 @@ def test_flat_disk_preserves_planarity_during_tilt_relax() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_outer_free_mode_does_not_shift_inner_theta_star() -> None:
     report_disabled = _report_for_mode("disabled")
     report_free = _report_for_mode("free")
@@ -242,6 +241,7 @@ def test_outer_free_mode_does_not_shift_inner_theta_star() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_splay_twist_mode_runs_with_zero_twist_default() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -262,6 +262,7 @@ def test_flat_disk_splay_twist_mode_runs_with_zero_twist_default() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_theta_mode_optimize_runs_and_reports_result() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -286,6 +287,7 @@ def test_flat_disk_theta_mode_optimize_runs_and_reports_result() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_theta_mode_optimize_full_runs_and_reports_polish() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -325,6 +327,7 @@ def test_flat_disk_theta_mode_optimize_full_runs_and_reports_polish() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_optimize_preset_fast_r3_is_noop_below_refine3() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -345,6 +348,7 @@ def test_flat_disk_optimize_preset_fast_r3_is_noop_below_refine3() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_optimize_preset_full_accuracy_r3_is_noop_below_refine3() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -365,6 +369,7 @@ def test_flat_disk_optimize_preset_full_accuracy_r3_is_noop_below_refine3() -> N
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_wide_expands_theta_span_for_kh_lane() -> None:
     report = _kh_opt_report(
         refine_level=1,
@@ -383,6 +388,7 @@ def test_flat_disk_optimize_preset_kh_wide_expands_theta_span_for_kh_lane() -> N
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_fast_is_opt_in_and_mesh_strict() -> None:
     report = _kh_opt_report(
         refine_level=3,  # should be overridden by strict-fast preset
@@ -413,6 +419,7 @@ def test_flat_disk_optimize_preset_kh_strict_fast_is_opt_in_and_mesh_strict() ->
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_fast_respects_explicit_rim_overrides() -> (
     None
 ):
@@ -435,6 +442,7 @@ def test_flat_disk_optimize_preset_kh_strict_fast_respects_explicit_rim_override
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_continuity_improves_rim_metrics() -> None:
     fast = _kh_opt_report(
         refine_level=1,
@@ -464,6 +472,7 @@ def test_flat_disk_optimize_preset_kh_strict_continuity_improves_rim_metrics() -
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_balanced_tradeoff_vs_fast() -> None:
     fast = _kh_opt_report(
         refine_level=1,
@@ -498,56 +507,146 @@ def test_flat_disk_optimize_preset_kh_strict_balanced_tradeoff_vs_fast() -> None
 
 
 @pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_energy_tight_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_energy_tight",
-    )
+@pytest.mark.exhaustive
+@pytest.mark.parametrize(
+    ("preset", "expected_meta", "parity_limit", "polish_objective"),
+    [
+        pytest.param(
+            "kh_strict_energy_tight",
+            {
+                "refine_level": 1,
+                "rim_local_refine_steps": 2,
+                "rim_local_refine_band_lambda": 8.0,
+            },
+            1.10,
+            "energy_factor",
+            id="energy-tight",
+        ),
+        pytest.param(
+            "kh_strict_partition_tight",
+            {
+                "refine_level": 1,
+                "rim_local_refine_steps": 2,
+                "rim_local_refine_band_lambda": 10.0,
+            },
+            1.2,
+            None,
+            id="partition-tight",
+        ),
+        pytest.param(
+            "kh_strict_section_tight",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 4.0,
+            },
+            1.25,
+            "energy_factor",
+            id="section-tight",
+        ),
+        pytest.param(
+            "kh_strict_outerfield_tight",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 3.0,
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 1.0,
+                "outer_local_refine_rmax_lambda": 8.0,
+            },
+            1.2,
+            "energy_factor",
+            id="outerfield-tight",
+        ),
+        pytest.param(
+            "kh_strict_outerfield_quality",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 3.0,
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 1.0,
+                "outer_local_refine_rmax_lambda": 8.0,
+                "local_edge_flip_steps": 1,
+                "local_edge_flip_rmin_lambda": 2.0,
+                "local_edge_flip_rmax_lambda": 6.0,
+            },
+            1.2,
+            "energy_factor",
+            id="outerfield-quality",
+        ),
+        pytest.param(
+            "kh_strict_outerfield_tailmatch",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 3.0,
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 1.0,
+                "outer_local_refine_rmax_lambda": 8.0,
+                "local_edge_flip_steps": 1,
+                "local_edge_flip_rmin_lambda": 0.5,
+                "local_edge_flip_rmax_lambda": 8.0,
+            },
+            1.2,
+            "energy_factor",
+            id="outerfield-tailmatch",
+        ),
+        pytest.param(
+            "kh_strict_outertail_balanced",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 3.0,
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 1.0,
+                "outer_local_refine_rmax_lambda": 10.0,
+            },
+            1.2,
+            "energy_factor",
+            id="outertail-balanced",
+        ),
+        pytest.param(
+            "kh_strict_outerfield_averaged",
+            {
+                "refine_level": 2,
+                "rim_local_refine_steps": 1,
+                "rim_local_refine_band_lambda": 3.0,
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 1.0,
+                "outer_local_refine_rmax_lambda": 8.0,
+                "local_edge_flip_steps": 0,
+                "outer_local_vertex_average_steps": 2,
+                "outer_local_vertex_average_rmin_lambda": 4.0,
+                "outer_local_vertex_average_rmax_lambda": 12.0,
+            },
+            1.2,
+            "energy_factor",
+            id="outerfield-averaged",
+        ),
+    ],
+)
+def test_flat_disk_optimize_preset_controls(
+    preset: str,
+    expected_meta: dict[str, int | float],
+    parity_limit: float,
+    polish_objective: str | None,
+) -> None:
+    report = _kh_opt_report(refine_level=1, optimize_preset=preset)
 
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_energy_tight"
-    assert int(report["meta"]["refine_level"]) == 1
-    assert int(report["meta"]["rim_local_refine_steps"]) == 2
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(8.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.10
-    assert float(report["parity"]["energy_factor"]) <= 1.10
+    assert report["meta"]["optimize_preset_effective"] == preset
+    for key, expected in expected_meta.items():
+        assert report["meta"][key] == pytest.approx(expected)
+    polish = report["optimize"]["parity_polish"]
+    assert polish is not None
+    if polish_objective is not None:
+        assert polish["objective"] == polish_objective
+    assert float(report["parity"]["theta_factor"]) <= parity_limit
+    assert float(report["parity"]["energy_factor"]) <= parity_limit
 
 
 @pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_partition_tight_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_partition_tight",
-    )
-
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_partition_tight"
-    assert int(report["meta"]["refine_level"]) == 1
-    assert int(report["meta"]["rim_local_refine_steps"]) == 2
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(10.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_section_tight_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,  # should be overridden by section-tight preset
-        optimize_preset="kh_strict_section_tight",
-    )
-
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_section_tight"
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(4.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.25
-    assert float(report["parity"]["energy_factor"]) <= 1.25
-
-
-@pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inner_and_global() -> (
     None
 ):
@@ -640,126 +739,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
 
 
 @pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_outerfield_tight",
-    )
-
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_tight"
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
-    assert int(report["meta"]["outer_local_refine_steps"]) == 1
-    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_outerfield_quality_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_outerfield_quality",
-    )
-
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_quality"
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
-    assert int(report["meta"]["outer_local_refine_steps"]) == 1
-    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
-    assert int(report["meta"]["local_edge_flip_steps"]) == 1
-    assert float(report["meta"]["local_edge_flip_rmin_lambda"]) == pytest.approx(2.0)
-    assert float(report["meta"]["local_edge_flip_rmax_lambda"]) == pytest.approx(6.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_outerfield_tailmatch_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_outerfield_tailmatch",
-    )
-
-    assert (
-        report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_tailmatch"
-    )
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
-    assert int(report["meta"]["outer_local_refine_steps"]) == 1
-    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
-    assert int(report["meta"]["local_edge_flip_steps"]) == 1
-    assert float(report["meta"]["local_edge_flip_rmin_lambda"]) == pytest.approx(0.5)
-    assert float(report["meta"]["local_edge_flip_rmax_lambda"]) == pytest.approx(8.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_outertail_balanced_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_outertail_balanced",
-    )
-
-    assert report["meta"]["optimize_preset_effective"] == "kh_strict_outertail_balanced"
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
-    assert int(report["meta"]["outer_local_refine_steps"]) == 1
-    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(
-        10.0
-    )
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
-
-
-@pytest.mark.benchmark
-def test_flat_disk_optimize_preset_kh_strict_outerfield_averaged_controls() -> None:
-    report = _kh_opt_report(
-        refine_level=1,
-        optimize_preset="kh_strict_outerfield_averaged",
-    )
-
-    assert (
-        report["meta"]["optimize_preset_effective"] == "kh_strict_outerfield_averaged"
-    )
-    assert int(report["meta"]["refine_level"]) == 2
-    assert int(report["meta"]["rim_local_refine_steps"]) == 1
-    assert float(report["meta"]["rim_local_refine_band_lambda"]) == pytest.approx(3.0)
-    assert int(report["meta"]["outer_local_refine_steps"]) == 1
-    assert float(report["meta"]["outer_local_refine_rmin_lambda"]) == pytest.approx(1.0)
-    assert float(report["meta"]["outer_local_refine_rmax_lambda"]) == pytest.approx(8.0)
-    assert int(report["meta"]["local_edge_flip_steps"]) == 0
-    assert int(report["meta"]["outer_local_vertex_average_steps"]) == 2
-    assert float(
-        report["meta"]["outer_local_vertex_average_rmin_lambda"]
-    ) == pytest.approx(4.0)
-    assert float(
-        report["meta"]["outer_local_vertex_average_rmax_lambda"]
-    ) == pytest.approx(12.0)
-    assert report["optimize"]["parity_polish"] is not None
-    assert report["optimize"]["parity_polish"]["objective"] == "energy_factor"
-    assert float(report["parity"]["theta_factor"]) <= 1.2
-    assert float(report["parity"]["energy_factor"]) <= 1.2
-
-
-@pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerfield_averaged_improves_finite_outer_split_score() -> (
     None
 ):
@@ -791,6 +771,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_averaged_improves_finite
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerfield_best_non_worsening_vs_outerfield_tight() -> (
     None
 ):
@@ -826,6 +807,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_best_non_worsening_vs_ou
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_section_polish_non_worsening_outer_section_score() -> None:
     base = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -870,6 +852,7 @@ def test_flat_disk_optimize_section_polish_non_worsening_outer_section_score() -
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_strict_outerfield_averaged_sweep_baseline_non_worsening() -> None:
     report = run_flat_disk_kh_outerfield_averaged_sweep(
         fixture=DEFAULT_FIXTURE,
@@ -938,6 +921,7 @@ def test_flat_disk_kh_strict_outerfield_averaged_sweep_baseline_non_worsening() 
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_fractional_refinement_trend_non_worsening_outerfield_best() -> (
     None
 ):
@@ -961,6 +945,7 @@ def test_flat_disk_kh_fractional_refinement_trend_non_worsening_outerfield_best(
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outertail_balanced_non_worsening_outer_tail_score() -> (
     None
 ):
@@ -979,6 +964,7 @@ def test_flat_disk_optimize_preset_kh_strict_outertail_balanced_non_worsening_ou
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerfield_quality_non_worsening_outer_tail_score() -> (
     None
 ):
@@ -997,6 +983,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_quality_non_worsening_ou
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerfield_tailmatch_non_worsening_outer_tail_score() -> (
     None
 ):
@@ -1027,6 +1014,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_tailmatch_non_worsening_
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_improves_outer_sections_vs_outerband() -> (
     None
 ):
@@ -1109,6 +1097,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_improves_outer_sec
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerband_tight_composite_score_non_worsening() -> (
     None
 ):
@@ -1144,6 +1133,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_composite_score_non
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_strict_section_tight_non_worsening_vs_energy_tight() -> None:
     energy_tight = _kh_opt_report(
         refine_level=1,
@@ -1172,6 +1162,7 @@ def test_flat_disk_kh_strict_section_tight_non_worsening_vs_energy_tight() -> No
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_robust_non_worsening_score() -> None:
     fast = _kh_opt_report(
         refine_level=1,
@@ -1200,6 +1191,7 @@ def test_flat_disk_optimize_preset_kh_strict_robust_non_worsening_score() -> Non
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_kh_consistent_mass_improves_energy_parity_lightweight() -> None:
     lumped = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1270,6 +1262,7 @@ def test_flat_disk_kh_optimize_profile_and_continuity_e2e() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_optimize_parity_does_not_worsen_with_refinement() -> None:
     refine1 = _kh_opt_report(
         refine_level=1,
@@ -1294,6 +1287,8 @@ def test_flat_disk_kh_optimize_parity_does_not_worsen_with_refinement() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
+@pytest.mark.exhaustive
 def test_flat_disk_unpinned_outerfield_preset_reports_finite_parity() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1316,6 +1311,7 @@ def test_flat_disk_unpinned_outerfield_preset_reports_finite_parity() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_unpinned_section_parity_non_worsening_refine2_to_refine3() -> None:
     def _section_errors(refine_level: int) -> tuple[float, float, float, float]:
         report = run_flat_disk_one_leaflet_benchmark(
@@ -1355,6 +1351,7 @@ def test_flat_disk_unpinned_section_parity_non_worsening_refine2_to_refine3() ->
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_splay_modulus_scale_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1368,6 +1365,7 @@ def test_flat_disk_reports_splay_modulus_scale_meta() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_default_splay_scale_stays_unmodified() -> None:
     report = _kh_opt_report(
         refine_level=1,
@@ -1377,6 +1375,7 @@ def test_flat_disk_kh_default_splay_scale_stays_unmodified() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_tilt_divergence_mode_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1393,6 +1392,7 @@ def test_flat_disk_reports_tilt_divergence_mode_meta() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_tilt_projection_and_post_relax_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1417,6 +1417,7 @@ def test_flat_disk_reports_tilt_projection_and_post_relax_meta() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_post_relax_projection_emits_apply_count() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1441,6 +1442,7 @@ def test_flat_disk_post_relax_projection_emits_apply_count() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_inner_coupled_update_mode_meta_and_stats() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1471,6 +1473,7 @@ def test_flat_disk_reports_inner_coupled_update_mode_meta_and_stats() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_tilt_transport_model_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1497,6 +1500,7 @@ def test_flat_disk_reports_tilt_transport_model_meta() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_tilt_mass_mode_out_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1519,6 +1523,7 @@ def test_flat_disk_reports_tilt_mass_mode_out_meta() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_curved_theta_objective_ablation_meta() -> None:
     baseline = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1585,6 +1590,7 @@ def test_flat_disk_reports_curved_theta_objective_ablation_meta() -> None:
     )
 
 
+@pytest.mark.slow
 def test_run_theta_relaxation_can_preserve_inner_state_between_repeats() -> None:
     params = physical_to_dimensionless_theory_params(
         kappa_physical=10.0,
@@ -1644,122 +1650,149 @@ def test_run_theta_relaxation_can_preserve_inner_state_between_repeats() -> None
 
 
 @pytest.mark.regression
-def test_flat_disk_rejects_invalid_tilt_divergence_mode() -> None:
-    with pytest.raises(
-        ValueError,
-        match="tilt_divergence_mode_in must be 'native' or 'vertex_recovered'",
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            theta_mode="scan",
-            theta_min=0.0,
-            theta_max=0.0014,
-            theta_count=8,
-            tilt_divergence_mode_in="bad_mode",
-        )
-
-
-@pytest.mark.regression
-def test_flat_disk_invalid_tilt_projection_and_post_relax_controls_raise() -> None:
-    with pytest.raises(
-        ValueError, match="tilt_projection_cadence must be 'per_step' or 'per_pass'"
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_projection_cadence="bad_mode",
-        )
-    with pytest.raises(ValueError, match="tilt_projection_interval must be >= 1"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_projection_interval=0,
-        )
-    with pytest.raises(ValueError, match="tilt_post_relax_inner_steps must be >= 0"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_post_relax_inner_steps=-1,
-        )
-    with pytest.raises(ValueError, match="tilt_post_relax_step_size must be >= 0"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_post_relax_step_size=-1.0e-3,
-        )
-    with pytest.raises(ValueError, match="tilt_post_relax_passes must be >= 1"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_post_relax_passes=0,
-        )
-    with pytest.raises(
-        ValueError,
-        match="inner_coupled_update_mode must be 'off' or 'rim_matched_radial_continuation_v1'",
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            inner_coupled_update_mode="bad_mode",
-        )
-    with pytest.raises(
-        ValueError,
-        match="tilt_transport_model must be 'ambient_v1' or 'connection_v1'",
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_transport_model="bad_mode",
-        )
-    with pytest.raises(
-        ValueError,
-        match="tilt_mass_mode_out must be 'auto', 'lumped', or 'consistent'",
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            tilt_mass_mode_out="bad_mode",
-        )
-    with pytest.raises(
-        ValueError,
-        match="curved_theta_objective_ablation_mode must be 'off' or 'inner_outer_rescaled'",
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="free",
-            geometry_lane="free_z",
-            parameterization="kh_physical",
-            theta_mode="optimize",
-            curved_theta_objective_ablation_mode="bad_mode",
-        )
-    with pytest.raises(
-        ValueError, match="curved theta objective ablation scales must be > 0"
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="free",
-            geometry_lane="free_z",
-            parameterization="kh_physical",
-            theta_mode="optimize",
-            curved_theta_objective_ablation_mode="inner_outer_rescaled",
-            curved_theta_objective_ablation_inner_scale=0.0,
-        )
+@pytest.mark.parametrize(
+    ("overrides", "error"),
+    [
+        pytest.param(
+            {
+                "smoothness_model": "splay_twist",
+                "theta_mode": "scan",
+                "theta_min": 0.0,
+                "theta_max": 0.0014,
+                "theta_count": 8,
+                "tilt_divergence_mode_in": "bad_mode",
+            },
+            "tilt_divergence_mode_in must be 'native' or 'vertex_recovered'",
+            id="tilt-divergence-mode",
+        ),
+        pytest.param(
+            {"tilt_projection_cadence": "bad_mode"},
+            "tilt_projection_cadence must be 'per_step' or 'per_pass'",
+            id="tilt-projection-cadence",
+        ),
+        pytest.param(
+            {"tilt_projection_interval": 0},
+            "tilt_projection_interval must be >= 1",
+            id="tilt-projection-interval",
+        ),
+        pytest.param(
+            {"tilt_post_relax_inner_steps": -1},
+            "tilt_post_relax_inner_steps must be >= 0",
+            id="post-relax-inner-steps",
+        ),
+        pytest.param(
+            {"tilt_post_relax_step_size": -1.0e-3},
+            "tilt_post_relax_step_size must be >= 0",
+            id="post-relax-step-size",
+        ),
+        pytest.param(
+            {"tilt_post_relax_passes": 0},
+            "tilt_post_relax_passes must be >= 1",
+            id="post-relax-passes",
+        ),
+        pytest.param(
+            {"inner_coupled_update_mode": "bad_mode"},
+            "inner_coupled_update_mode must be 'off' or 'rim_matched_radial_continuation_v1'",
+            id="inner-coupled-update-mode",
+        ),
+        pytest.param(
+            {"tilt_transport_model": "bad_mode"},
+            "tilt_transport_model must be 'ambient_v1' or 'connection_v1'",
+            id="tilt-transport-model",
+        ),
+        pytest.param(
+            {"tilt_mass_mode_out": "bad_mode"},
+            "tilt_mass_mode_out must be 'auto', 'lumped', or 'consistent'",
+            id="tilt-mass-mode-out",
+        ),
+        pytest.param(
+            {
+                "outer_mode": "free",
+                "geometry_lane": "free_z",
+                "parameterization": "kh_physical",
+                "theta_mode": "optimize",
+                "curved_theta_objective_ablation_mode": "bad_mode",
+            },
+            "curved_theta_objective_ablation_mode must be 'off' or 'inner_outer_rescaled'",
+            id="curved-objective-ablation-mode",
+        ),
+        pytest.param(
+            {
+                "outer_mode": "free",
+                "geometry_lane": "free_z",
+                "parameterization": "kh_physical",
+                "theta_mode": "optimize",
+                "curved_theta_objective_ablation_mode": "inner_outer_rescaled",
+                "curved_theta_objective_ablation_inner_scale": 0.0,
+            },
+            "curved theta objective ablation scales must be > 0",
+            id="curved-objective-ablation-scale",
+        ),
+        pytest.param(
+            {
+                "smoothness_model": "splay_twist",
+                "theta_mode": "optimize",
+                "splay_modulus_scale_in": 0.0,
+            },
+            "splay_modulus_scale_in must be > 0",
+            id="splay-modulus-scale",
+        ),
+        pytest.param(
+            {"parameterization": "invalid_mode"},
+            "parameterization must be",
+            id="parameterization",
+        ),
+        pytest.param(
+            {
+                "smoothness_model": "splay_twist",
+                "theta_mode": "optimize",
+                "outer_local_refine_steps": 1,
+                "outer_local_refine_rmin_lambda": 2.0,
+                "outer_local_refine_rmax_lambda": 2.0,
+            },
+            "outer_local_refine_rmax_lambda must be > outer_local_refine_rmin_lambda",
+            id="outer-local-refine-bounds",
+        ),
+        pytest.param(
+            {
+                "smoothness_model": "splay_twist",
+                "theta_mode": "optimize",
+                "local_edge_flip_steps": 1,
+                "local_edge_flip_rmin_lambda": 2.0,
+                "local_edge_flip_rmax_lambda": 2.0,
+            },
+            "local_edge_flip_rmax_lambda must be > local_edge_flip_rmin_lambda",
+            id="local-edge-flip-bounds",
+        ),
+        pytest.param(
+            {
+                "smoothness_model": "splay_twist",
+                "theta_mode": "optimize",
+                "outer_local_vertex_average_steps": 1,
+                "outer_local_vertex_average_rmin_lambda": 4.0,
+                "outer_local_vertex_average_rmax_lambda": 4.0,
+            },
+            (
+                "outer_local_vertex_average_rmax_lambda must be > "
+                "outer_local_vertex_average_rmin_lambda"
+            ),
+            id="outer-local-vertex-average-bounds",
+        ),
+    ],
+)
+def test_flat_disk_invalid_controls_raise(overrides: dict, error: str) -> None:
+    kwargs = {
+        "fixture": DEFAULT_FIXTURE,
+        "refine_level": 1,
+        "outer_mode": "disabled",
+        **overrides,
+    }
+    with pytest.raises(ValueError, match=error):
+        run_flat_disk_one_leaflet_benchmark(**kwargs)
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_strict_preset_improves_score_vs_baseline() -> None:
     baseline = _kh_opt_report(
         refine_level=1,
@@ -1805,68 +1838,7 @@ def test_flat_disk_kh_strict_preset_improves_score_vs_baseline() -> None:
 
 
 @pytest.mark.regression
-def test_flat_disk_invalid_splay_modulus_scale_raises() -> None:
-    with pytest.raises(ValueError, match="splay_modulus_scale_in must be > 0"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            theta_mode="optimize",
-            splay_modulus_scale_in=0.0,
-        )
-
-
-@pytest.mark.regression
-def test_flat_disk_invalid_parameterization_raises() -> None:
-    with pytest.raises(ValueError, match="parameterization must be"):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            parameterization="invalid_mode",
-        )
-
-
-@pytest.mark.regression
-def test_flat_disk_invalid_outer_local_refine_bounds_raises() -> None:
-    with pytest.raises(
-        ValueError,
-        match=(
-            "outer_local_refine_rmax_lambda must be > outer_local_refine_rmin_lambda"
-        ),
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            theta_mode="optimize",
-            outer_local_refine_steps=1,
-            outer_local_refine_rmin_lambda=2.0,
-            outer_local_refine_rmax_lambda=2.0,
-        )
-
-
-@pytest.mark.regression
-def test_flat_disk_invalid_local_edge_flip_bounds_raises() -> None:
-    with pytest.raises(
-        ValueError,
-        match=("local_edge_flip_rmax_lambda must be > local_edge_flip_rmin_lambda"),
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            theta_mode="optimize",
-            local_edge_flip_steps=1,
-            local_edge_flip_rmin_lambda=2.0,
-            local_edge_flip_rmax_lambda=2.0,
-        )
-
-
-@pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_outer_local_vertex_average_controls_reported() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1890,27 +1862,7 @@ def test_flat_disk_outer_local_vertex_average_controls_reported() -> None:
 
 
 @pytest.mark.regression
-def test_flat_disk_invalid_outer_local_vertex_average_bounds_raises() -> None:
-    with pytest.raises(
-        ValueError,
-        match=(
-            "outer_local_vertex_average_rmax_lambda must be > "
-            "outer_local_vertex_average_rmin_lambda"
-        ),
-    ):
-        run_flat_disk_one_leaflet_benchmark(
-            fixture=DEFAULT_FIXTURE,
-            refine_level=1,
-            outer_mode="disabled",
-            smoothness_model="splay_twist",
-            theta_mode="optimize",
-            outer_local_vertex_average_steps=1,
-            outer_local_vertex_average_rmin_lambda=4.0,
-            outer_local_vertex_average_rmax_lambda=4.0,
-        )
-
-
-@pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_lane_comparison_reports_both_lanes() -> None:
     report = run_flat_disk_lane_comparison(
         fixture=DEFAULT_FIXTURE,
@@ -1940,6 +1892,7 @@ def test_flat_disk_lane_comparison_reports_both_lanes() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_kh_physical_parameterization_reports_unit_scaling() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1967,6 +1920,7 @@ def test_flat_disk_kh_physical_parameterization_reports_unit_scaling() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_rim_continuity_and_contact_diagnostics() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1989,6 +1943,7 @@ def test_flat_disk_reports_rim_continuity_and_contact_diagnostics() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_optimize_mode_enforces_thetaB_on_full_disk_radius_ring() -> None:
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import tex_reference_params
@@ -2062,6 +2017,7 @@ def test_reproduce_flat_disk_one_leaflet_script_smoke(tmp_path) -> None:
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize(tmp_path) -> None:
     out_yaml = tmp_path / "flat_disk_one_leaflet_report_opt.yaml"
     subprocess.run(
@@ -2099,6 +2055,7 @@ def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize(tmp_path) -
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize_full(
     tmp_path,
 ) -> None:

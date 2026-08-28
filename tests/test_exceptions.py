@@ -1,10 +1,5 @@
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from core.exceptions import InvalidEdgeIndexError
 from geometry.entities import Edge, Facet, Mesh, Vertex

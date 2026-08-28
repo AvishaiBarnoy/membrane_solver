@@ -1,12 +1,9 @@
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 
 def test_importing_commands_io_does_not_import_matplotlib():

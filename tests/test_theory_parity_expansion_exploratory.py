@@ -1,12 +1,8 @@
 import copy
-import os
-import sys
 from pathlib import Path
 
 import pytest
 import yaml
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.reproduce_theory_parity import (  # noqa: E402
     _default_state,

@@ -55,6 +55,7 @@ from modules.energy.bt_selection import (
     _collect_preset_rows,
 )
 from runtime.tilt_optimization import _optimize_thetaB_scalar
+from tools.diagnostics.utils import _write_temp_fixture
 from tools.reproduce_theory_parity import (
     DEFAULT_PROTOCOL,
     DEFAULT_TEX_BENDING_MODULUS,
@@ -307,17 +308,6 @@ def _boundary_payload(mesh, positions: np.ndarray):
         return None
     _, r_hat = radial_unit_vectors(positions[disk_rows])
     return disk_rows, r_hat
-
-
-def _representative_rows(mesh) -> dict[str, int]:
-    roles = _row_roles(mesh)
-    out: dict[str, int] = {}
-    for role in ("disk", "trace_shell", "support_shell_1", "outer_bulk"):
-        for row, row_role in enumerate(roles):
-            if row_role == role:
-                out[role] = int(row)
-                break
-    return out
 
 
 def _module_energy(ctx, name: str, module, positions, tilts_in, tilts_out) -> float:
@@ -1856,12 +1846,6 @@ def _protocol_snapshot_audit(
         if cmd == "energy" or cmd == "r" or cmd.startswith("V") or cmd.startswith("g"):
             rows.append(snapshot(f"{idx}:{cmd}", cmd))
     return rows
-
-
-def _write_temp_fixture(doc: dict[str, Any], directory: Path, label: str) -> Path:
-    path = directory / f"{label}.yaml"
-    path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
-    return path
 
 
 def _apply_scaffold_runtime_options(doc: dict[str, Any], label: str) -> dict[str, Any]:

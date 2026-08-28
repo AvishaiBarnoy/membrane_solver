@@ -1,10 +1,5 @@
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.flat_disk_kh_error_source_audit import (
     _rank_effects,

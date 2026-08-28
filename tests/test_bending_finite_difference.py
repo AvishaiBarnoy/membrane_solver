@@ -1,9 +1,5 @@
-import os
-import sys
-
 import numpy as np
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import pytest
 
 from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
@@ -62,83 +58,49 @@ def _central_diff_grad(mesh: Mesh, gp: GlobalParameters, eps: float) -> np.ndarr
     return grad
 
 
-def test_bending_finite_difference_gradient_matches_energy_derivative():
-    mesh = _tetra_mesh()
-    gp = GlobalParameters(
+@pytest.mark.parametrize(
+    "parameters",
+    [
         {
             "bending_modulus": 1.0,
             "bending_energy_model": "willmore",
             "bending_gradient_mode": "finite_difference",
             "bending_fd_eps": 1e-6,
-        }
-    )
-    resolver = ParameterResolver(gp)
-
-    positions = mesh.positions_view()
-    idx_map = mesh.vertex_index_to_row
-    grad_arr = np.zeros_like(positions)
-    _ = bending.compute_energy_and_gradient_array(
-        mesh, gp, resolver, positions=positions, index_map=idx_map, grad_arr=grad_arr
-    )
-
-    grad_num = _central_diff_grad(mesh, gp, eps=1e-6)
-    diff = np.abs(grad_arr - grad_num)
-    denom = np.maximum(np.abs(grad_num), 1.0)
-    rel = diff / denom
-    assert float(np.max(rel)) < 5e-4
-
-
-def test_bending_analytic_gradient_matches_energy_derivative():
-    mesh = _tetra_mesh()
-    gp = GlobalParameters(
+        },
         {
             "bending_modulus": 1.0,
             "bending_energy_model": "willmore",
             "bending_gradient_mode": "analytic",
-        }
-    )
-    resolver = ParameterResolver(gp)
-
-    positions = mesh.positions_view()
-    idx_map = mesh.vertex_index_to_row
-    grad_arr = np.zeros_like(positions)
-    _ = bending.compute_energy_and_gradient_array(
-        mesh, gp, resolver, positions=positions, index_map=idx_map, grad_arr=grad_arr
-    )
-
-    grad_num = _central_diff_grad(mesh, gp, eps=1e-6)
-    diff = np.abs(grad_arr - grad_num)
-    denom = np.maximum(np.abs(grad_num), 1.0)
-    rel = diff / denom
-    max_rel = float(np.max(rel))
-    assert max_rel < 5e-4, f"max_rel={max_rel}"
-
-
-def test_helfrich_analytic_gradient_matches_energy_derivative():
-    mesh = _tetra_mesh()
-    gp = GlobalParameters(
+        },
         {
             "bending_modulus": 1.0,
             "bending_energy_model": "helfrich",
             "spontaneous_curvature": 0.5,
             "bending_gradient_mode": "analytic",
-        }
-    )
+        },
+    ],
+    ids=["willmore-finite-difference", "willmore-analytic", "helfrich-analytic"],
+)
+def test_bending_gradient_matches_energy_derivative(parameters: dict) -> None:
+    mesh = _tetra_mesh()
+    gp = GlobalParameters(parameters)
     resolver = ParameterResolver(gp)
 
     positions = mesh.positions_view()
-    idx_map = mesh.vertex_index_to_row
     grad_arr = np.zeros_like(positions)
-    _ = bending.compute_energy_and_gradient_array(
-        mesh, gp, resolver, positions=positions, index_map=idx_map, grad_arr=grad_arr
+    bending.compute_energy_and_gradient_array(
+        mesh,
+        gp,
+        resolver,
+        positions=positions,
+        index_map=mesh.vertex_index_to_row,
+        grad_arr=grad_arr,
     )
 
     grad_num = _central_diff_grad(mesh, gp, eps=1e-6)
-    diff = np.abs(grad_arr - grad_num)
-    denom = np.maximum(np.abs(grad_num), 1.0)
-    rel = diff / denom
-    max_rel = float(np.max(rel))
-    assert max_rel < 5e-4, f"max_rel={max_rel}"
+    relative_error = np.abs(grad_arr - grad_num) / np.maximum(np.abs(grad_num), 1.0)
+    max_relative_error = float(np.max(relative_error))
+    assert max_relative_error < 5e-4, f"max_rel={max_relative_error}"
 
 
 def test_helfrich_energy_reduces_when_C0_matches_sphere():

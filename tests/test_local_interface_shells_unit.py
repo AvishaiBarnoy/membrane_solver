@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -6,8 +5,6 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT))
-
 from geometry.geom_io import load_data, parse_geometry
 from modules.constraints.local_interface_shells import (
     build_local_interface_shell_data,

@@ -1,16 +1,20 @@
 import logging
-import os
-import sys
 
 import numpy as np
 
-sys.path.insert(0, os.getcwd())
 from geometry.geom_io import load_data, parse_geometry
 from runtime.constraint_manager import ConstraintModuleManager
 from runtime.diagnostics import audit
 from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as _build_minimizer
+
+
+def _build_mesh():
+    return parse_geometry(
+        load_data("tests/fixtures/kozlov_free_disk_coarse_refinable.yaml")
+    )
 
 
 class _MutatingModule:
@@ -39,9 +43,7 @@ class _MutatingModule:
 
 def test_debug_diagnostics_restore_state(caplog) -> None:
     caplog.set_level(logging.DEBUG, logger="membrane_solver")
-    mesh = parse_geometry(
-        load_data("tests/fixtures/kozlov_free_disk_coarse_refinable.yaml")
-    )
+    mesh = _build_mesh()
     mesh.energy_modules = ["mutator"]
     mesh.global_parameters.set("debug_purity_probe", 0)
 
@@ -73,18 +75,8 @@ def test_debug_diagnostics_restore_state(caplog) -> None:
 
 def test_debug_energy_context_does_not_call_breakdown(caplog, monkeypatch) -> None:
     caplog.set_level(logging.DEBUG, logger="membrane_solver")
-    mesh = parse_geometry(
-        load_data("tests/fixtures/kozlov_free_disk_coarse_refinable.yaml")
-    )
-    energy_manager = EnergyModuleManager(mesh.energy_modules)
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        energy_manager,
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    mesh = _build_mesh()
+    minim = _build_minimizer(mesh)
 
     called = {"count": 0}
 
@@ -97,20 +89,12 @@ def test_debug_energy_context_does_not_call_breakdown(caplog, monkeypatch) -> No
     assert called["count"] == 1
 
 
-def test_debug_minimize_loop_does_not_probe_diagnostic_energy(monkeypatch) -> None:
-    logging.getLogger("membrane_solver").setLevel(logging.DEBUG)
-    mesh = parse_geometry(
-        load_data("tests/fixtures/kozlov_free_disk_coarse_refinable.yaml")
-    )
-    energy_manager = EnergyModuleManager(mesh.energy_modules)
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        energy_manager,
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+def test_debug_minimize_loop_does_not_probe_diagnostic_energy(
+    monkeypatch, caplog
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="membrane_solver")
+    mesh = _build_mesh()
+    minim = _build_minimizer(mesh)
 
     def _boom(minimizer):
         raise AssertionError("diagnostic_energy should not be called in minimize loop")

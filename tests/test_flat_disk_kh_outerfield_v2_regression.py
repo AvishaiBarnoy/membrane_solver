@@ -1,9 +1,4 @@
-import os
-import sys
-
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from tools.diagnostics.flat_disk_kh_term_audit import (
     run_flat_disk_kh_outerfield_averaged_sweep,

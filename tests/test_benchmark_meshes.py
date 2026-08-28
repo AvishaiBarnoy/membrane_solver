@@ -1,9 +1,8 @@
-import os
-import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import pytest
 
 from geometry.geom_io import load_data, parse_geometry
+
+pytestmark = pytest.mark.unit
 
 
 def test_benchmark_dented_cube_mesh_parses_and_tags_present():

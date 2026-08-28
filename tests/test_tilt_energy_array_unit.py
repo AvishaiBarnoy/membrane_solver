@@ -1,11 +1,5 @@
-import os
-import sys
-
 import numpy as np
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from sample_meshes import cube_soft_volume_input  # noqa: E402
 
 from core.parameters.resolver import ParameterResolver  # noqa: E402
@@ -69,91 +63,73 @@ def _rng_tilts(shape, seed):
     return 1.0e-2 * rng.standard_normal(size=shape)
 
 
+def _assert_energy_only_matches_gradient_path(
+    module,
+    mesh,
+    param_resolver: ParameterResolver,
+    *,
+    tilt_fields: dict[str, np.ndarray],
+    gradient_keys: tuple[str, ...],
+) -> None:
+    positions = mesh.positions_view()
+    common = {
+        "positions": positions,
+        "index_map": mesh.vertex_index_to_row,
+        **tilt_fields,
+    }
+    energy_with_gradient = module.compute_energy_and_gradient_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        grad_arr=np.zeros_like(positions),
+        **common,
+        **{key: np.zeros_like(positions) for key in gradient_keys},
+    )
+    energy_only = module.compute_energy_array(
+        mesh,
+        mesh.global_parameters,
+        param_resolver,
+        **common,
+    )
+    assert energy_only == pytest.approx(
+        energy_with_gradient,
+        rel=1e-12,
+        abs=1e-12,
+    )
+
+
 def test_tilt_energy_array_matches_gradient_path():
     mesh = _build_mesh()
     mesh.global_parameters.set("tilt_rigidity", 1.3)
-    param_resolver = ParameterResolver(mesh.global_parameters)
-    positions = mesh.positions_view()
-    index_map = mesh.vertex_index_to_row
-
-    tilts = _rng_tilts(mesh.tilts_view().shape, 0)
-    grad_dummy = np.zeros_like(positions)
-    tilt_grad = np.zeros_like(positions)
-
-    e_grad = tilt.compute_energy_and_gradient_array(
+    _assert_energy_only_matches_gradient_path(
+        tilt,
         mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        grad_arr=grad_dummy,
-        tilts=tilts,
-        tilt_grad_arr=tilt_grad,
+        ParameterResolver(mesh.global_parameters),
+        tilt_fields={"tilts": _rng_tilts(mesh.tilts_view().shape, 0)},
+        gradient_keys=("tilt_grad_arr",),
     )
-    e_only = tilt.compute_energy_array(
-        mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        tilts=tilts,
-    )
-    assert e_only == pytest.approx(e_grad, rel=1e-12, abs=1e-12)
 
 
 def test_tilt_leaflet_energy_array_matches_gradient_path():
     mesh = _build_mesh()
     mesh.global_parameters.set("tilt_modulus_in", 0.7)
     mesh.global_parameters.set("tilt_modulus_out", 0.9)
-    param_resolver = ParameterResolver(mesh.global_parameters)
-    positions = mesh.positions_view()
-    index_map = mesh.vertex_index_to_row
+    resolver = ParameterResolver(mesh.global_parameters)
 
-    tilts_in = _rng_tilts(mesh.tilts_in_view().shape, 1)
-    tilts_out = _rng_tilts(mesh.tilts_out_view().shape, 2)
-    grad_dummy = np.zeros_like(positions)
-    tilt_grad_in = np.zeros_like(positions)
-    tilt_grad_out = np.zeros_like(positions)
-
-    e_in_grad = tilt_in.compute_energy_and_gradient_array(
+    _assert_energy_only_matches_gradient_path(
+        tilt_in,
         mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        grad_arr=grad_dummy,
-        tilts_in=tilts_in,
-        tilt_in_grad_arr=tilt_grad_in,
+        resolver,
+        tilt_fields={"tilts_in": _rng_tilts(mesh.tilts_in_view().shape, 1)},
+        gradient_keys=("tilt_in_grad_arr",),
     )
-    e_in_only = tilt_in.compute_energy_array(
+    _assert_energy_only_matches_gradient_path(
+        tilt_out,
         mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        tilts_in=tilts_in,
+        resolver,
+        tilt_fields={"tilts_out": _rng_tilts(mesh.tilts_out_view().shape, 2)},
+        gradient_keys=("tilt_out_grad_arr",),
     )
-    assert e_in_only == pytest.approx(e_in_grad, rel=1e-12, abs=1e-12)
-
-    e_out_grad = tilt_out.compute_energy_and_gradient_array(
-        mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        grad_arr=grad_dummy,
-        tilts_out=tilts_out,
-        tilt_out_grad_arr=tilt_grad_out,
-    )
-    e_out_only = tilt_out.compute_energy_array(
-        mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        tilts_out=tilts_out,
-    )
-    assert e_out_only == pytest.approx(e_out_grad, rel=1e-12, abs=1e-12)
 
 
 def test_tilt_out_energy_array_matches_gradient_path_with_shared_rim_outer_exclusion():
@@ -164,105 +140,44 @@ def test_tilt_out_energy_array_matches_gradient_path_with_shared_rim_outer_exclu
     mesh.global_parameters.set("tilt_modulus_out", 0.9)
     mesh.global_parameters.set("rim_slope_match_mode", "shared_rim_staggered_v1")
     mesh.global_parameters.set("tilt_out_exclude_shared_rim_outer_rows", True)
-    param_resolver = ParameterResolver(mesh.global_parameters)
-    positions = mesh.positions_view()
-    index_map = mesh.vertex_index_to_row
-
     tilts_out = np.zeros_like(mesh.tilts_out_view())
     tilts_out[:4, 0] = 1.0e-2
-    grad_dummy = np.zeros_like(positions)
-    tilt_grad_out = np.zeros_like(positions)
 
-    e_out_grad = tilt_out.compute_energy_and_gradient_array(
+    _assert_energy_only_matches_gradient_path(
+        tilt_out,
         mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        grad_arr=grad_dummy,
-        tilts_out=tilts_out,
-        tilt_out_grad_arr=tilt_grad_out,
+        ParameterResolver(mesh.global_parameters),
+        tilt_fields={"tilts_out": tilts_out},
+        gradient_keys=("tilt_out_grad_arr",),
     )
-    e_out_only = tilt_out.compute_energy_array(
-        mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        tilts_out=tilts_out,
-    )
-
-    assert e_out_only == pytest.approx(e_out_grad, rel=1e-12, abs=1e-12)
 
 
 def test_tilt_coupling_energy_array_matches_gradient_path():
     mesh = _build_mesh()
     mesh.global_parameters.set("tilt_coupling_modulus", 0.4)
     mesh.global_parameters.set("tilt_coupling_mode", "difference")
-    param_resolver = ParameterResolver(mesh.global_parameters)
-    positions = mesh.positions_view()
-    index_map = mesh.vertex_index_to_row
-
-    tilts_in = _rng_tilts(mesh.tilts_in_view().shape, 3)
-    tilts_out = _rng_tilts(mesh.tilts_out_view().shape, 4)
-    grad_dummy = np.zeros_like(positions)
-    tilt_grad_in = np.zeros_like(positions)
-    tilt_grad_out = np.zeros_like(positions)
-
-    e_grad = tilt_coupling.compute_energy_and_gradient_array(
+    _assert_energy_only_matches_gradient_path(
+        tilt_coupling,
         mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        grad_arr=grad_dummy,
-        tilts_in=tilts_in,
-        tilts_out=tilts_out,
-        tilt_in_grad_arr=tilt_grad_in,
-        tilt_out_grad_arr=tilt_grad_out,
+        ParameterResolver(mesh.global_parameters),
+        tilt_fields={
+            "tilts_in": _rng_tilts(mesh.tilts_in_view().shape, 3),
+            "tilts_out": _rng_tilts(mesh.tilts_out_view().shape, 4),
+        },
+        gradient_keys=("tilt_in_grad_arr", "tilt_out_grad_arr"),
     )
-    e_only = tilt_coupling.compute_energy_array(
-        mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        tilts_in=tilts_in,
-        tilts_out=tilts_out,
-    )
-    assert e_only == pytest.approx(e_grad, rel=1e-12, abs=1e-12)
 
 
 def test_tilt_smoothness_energy_array_matches_gradient_path():
     mesh = _build_mesh()
     mesh.global_parameters.set("tilt_smoothness_rigidity", 0.8)
-    param_resolver = ParameterResolver(mesh.global_parameters)
-    positions = mesh.positions_view()
-    index_map = mesh.vertex_index_to_row
-
-    tilts = _rng_tilts(mesh.tilts_view().shape, 5)
-    grad_dummy = np.zeros_like(positions)
-    tilt_grad = np.zeros_like(positions)
-
-    e_grad = tilt_smoothness.compute_energy_and_gradient_array(
+    _assert_energy_only_matches_gradient_path(
+        tilt_smoothness,
         mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        grad_arr=grad_dummy,
-        tilts=tilts,
-        tilt_grad_arr=tilt_grad,
+        ParameterResolver(mesh.global_parameters),
+        tilt_fields={"tilts": _rng_tilts(mesh.tilts_view().shape, 5)},
+        gradient_keys=("tilt_grad_arr",),
     )
-    e_only = tilt_smoothness.compute_energy_array(
-        mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        tilts=tilts,
-    )
-    assert e_only == pytest.approx(e_grad, rel=1e-12, abs=1e-12)
 
 
 def test_tilt_smoothness_connection_v1_matches_ambient_on_planar_mesh():
@@ -339,88 +254,35 @@ def test_tilt_smoothness_connection_v1_energy_array_matches_gradient_path():
     mesh = _build_mesh()
     mesh.global_parameters.set("tilt_smoothness_rigidity", 0.8)
     mesh.global_parameters.set("tilt_transport_model", "connection_v1")
-    param_resolver = ParameterResolver(mesh.global_parameters)
-    positions = mesh.positions_view()
-    index_map = mesh.vertex_index_to_row
-
-    tilts = _rng_tilts(mesh.tilts_view().shape, 10)
-    grad_dummy = np.zeros_like(positions)
-    tilt_grad = np.zeros_like(positions)
-
-    e_grad = tilt_smoothness.compute_energy_and_gradient_array(
+    _assert_energy_only_matches_gradient_path(
+        tilt_smoothness,
         mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        grad_arr=grad_dummy,
-        tilts=tilts,
-        tilt_grad_arr=tilt_grad,
+        ParameterResolver(mesh.global_parameters),
+        tilt_fields={"tilts": _rng_tilts(mesh.tilts_view().shape, 10)},
+        gradient_keys=("tilt_grad_arr",),
     )
-    e_only = tilt_smoothness.compute_energy_array(
-        mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        tilts=tilts,
-    )
-    assert e_only == pytest.approx(e_grad, rel=1e-12, abs=1e-12)
 
 
 def test_tilt_smoothness_leaflet_energy_array_matches_gradient_path():
     mesh = _build_mesh()
     mesh.global_parameters.set("bending_modulus_in", 0.6)
     mesh.global_parameters.set("bending_modulus_out", 0.5)
-    param_resolver = ParameterResolver(mesh.global_parameters)
-    positions = mesh.positions_view()
-    index_map = mesh.vertex_index_to_row
+    resolver = ParameterResolver(mesh.global_parameters)
 
-    tilts_in = _rng_tilts(mesh.tilts_in_view().shape, 6)
-    tilts_out = _rng_tilts(mesh.tilts_out_view().shape, 7)
-    grad_dummy = np.zeros_like(positions)
-    tilt_grad_in = np.zeros_like(positions)
-    tilt_grad_out = np.zeros_like(positions)
-
-    e_in_grad = tilt_smoothness_in.compute_energy_and_gradient_array(
+    _assert_energy_only_matches_gradient_path(
+        tilt_smoothness_in,
         mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        grad_arr=grad_dummy,
-        tilts_in=tilts_in,
-        tilt_in_grad_arr=tilt_grad_in,
+        resolver,
+        tilt_fields={"tilts_in": _rng_tilts(mesh.tilts_in_view().shape, 6)},
+        gradient_keys=("tilt_in_grad_arr",),
     )
-    e_in_only = tilt_smoothness_in.compute_energy_array(
+    _assert_energy_only_matches_gradient_path(
+        tilt_smoothness_out,
         mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        tilts_in=tilts_in,
+        resolver,
+        tilt_fields={"tilts_out": _rng_tilts(mesh.tilts_out_view().shape, 7)},
+        gradient_keys=("tilt_out_grad_arr",),
     )
-    assert e_in_only == pytest.approx(e_in_grad, rel=1e-12, abs=1e-12)
-
-    e_out_grad = tilt_smoothness_out.compute_energy_and_gradient_array(
-        mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        grad_arr=grad_dummy,
-        tilts_out=tilts_out,
-        tilt_out_grad_arr=tilt_grad_out,
-    )
-    e_out_only = tilt_smoothness_out.compute_energy_array(
-        mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        tilts_out=tilts_out,
-    )
-    assert e_out_only == pytest.approx(e_out_grad, rel=1e-12, abs=1e-12)
 
 
 def test_tilt_smoothness_leaflet_ctx_matches_plain_path():
@@ -494,33 +356,13 @@ def test_tilt_splay_twist_in_energy_array_matches_gradient_path():
     mesh = _build_mesh()
     mesh.global_parameters.set("tilt_splay_modulus_in", 0.6)
     mesh.global_parameters.set("tilt_twist_modulus_in", 0.2)
-    param_resolver = ParameterResolver(mesh.global_parameters)
-    positions = mesh.positions_view()
-    index_map = mesh.vertex_index_to_row
-
-    tilts_in = _rng_tilts(mesh.tilts_in_view().shape, 8)
-    grad_dummy = np.zeros_like(positions)
-    tilt_grad_in = np.zeros_like(positions)
-
-    e_in_grad = tilt_splay_twist_in.compute_energy_and_gradient_array(
+    _assert_energy_only_matches_gradient_path(
+        tilt_splay_twist_in,
         mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        grad_arr=grad_dummy,
-        tilts_in=tilts_in,
-        tilt_in_grad_arr=tilt_grad_in,
+        ParameterResolver(mesh.global_parameters),
+        tilt_fields={"tilts_in": _rng_tilts(mesh.tilts_in_view().shape, 8)},
+        gradient_keys=("tilt_in_grad_arr",),
     )
-    e_in_only = tilt_splay_twist_in.compute_energy_array(
-        mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        tilts_in=tilts_in,
-    )
-    assert e_in_only == pytest.approx(e_in_grad, rel=1e-12, abs=1e-12)
 
 
 def test_tilt_splay_twist_in_connection_v1_matches_ambient_on_planar_mesh():
@@ -561,30 +403,10 @@ def test_tilt_splay_twist_in_connection_v1_energy_array_matches_gradient_path():
     mesh.global_parameters.set("tilt_splay_modulus_in", 0.6)
     mesh.global_parameters.set("tilt_twist_modulus_in", 0.2)
     mesh.global_parameters.set("tilt_transport_model", "connection_v1")
-    param_resolver = ParameterResolver(mesh.global_parameters)
-    positions = mesh.positions_view()
-    index_map = mesh.vertex_index_to_row
-
-    tilts_in = _rng_tilts(mesh.tilts_in_view().shape, 12)
-    grad_dummy = np.zeros_like(positions)
-    tilt_grad_in = np.zeros_like(positions)
-
-    e_in_grad = tilt_splay_twist_in.compute_energy_and_gradient_array(
+    _assert_energy_only_matches_gradient_path(
+        tilt_splay_twist_in,
         mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        grad_arr=grad_dummy,
-        tilts_in=tilts_in,
-        tilt_in_grad_arr=tilt_grad_in,
+        ParameterResolver(mesh.global_parameters),
+        tilt_fields={"tilts_in": _rng_tilts(mesh.tilts_in_view().shape, 12)},
+        gradient_keys=("tilt_in_grad_arr",),
     )
-    e_in_only = tilt_splay_twist_in.compute_energy_array(
-        mesh,
-        mesh.global_parameters,
-        param_resolver,
-        positions=positions,
-        index_map=index_map,
-        tilts_in=tilts_in,
-    )
-    assert e_in_only == pytest.approx(e_in_grad, rel=1e-12, abs=1e-12)

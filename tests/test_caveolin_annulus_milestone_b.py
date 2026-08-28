@@ -1,17 +1,10 @@
-import os
-import sys
-
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
 from geometry.geom_io import parse_geometry
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
 from runtime.minimizer import Minimizer
 from runtime.refinement import refine_triangle_mesh
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as _build_minimizer
 
 
 def _build_annulus_flat_hard_source_mesh_dict() -> dict:
@@ -139,14 +132,7 @@ def _relax_leaflet_tilts(mesh, *, inner_steps: int) -> Minimizer:
             "tilt_tol": 1e-12,
         }
     )
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.enforce_constraints_after_mesh_ops(mesh)
     mesh.increment_version()
     mesh._positions_cache = None
@@ -165,14 +151,7 @@ def _ring_mean(mags: np.ndarray, radii: np.ndarray, r0: float) -> float:
 def test_kozlov_annulus_refine_inherits_circle_constraints() -> None:
     mesh = parse_geometry(_build_annulus_flat_hard_source_mesh_dict())
     mesh = refine_triangle_mesh(mesh)
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim.enforce_constraints_after_mesh_ops(mesh)
     mesh.increment_version()
     mesh._positions_cache = None
@@ -285,14 +264,7 @@ def test_kozlov_annulus_coupling_tracking() -> None:
     # Note: mesh loaded has tilt_fixed_in=True on rims, but tilt_fixed_out is False
     # everywhere by default (unless specified). We want tilt_out to be free to track.
 
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim._relax_leaflet_tilts(positions=mesh.positions_view(), mode="nested")
 
     # Check that tilt_out has tracked tilt_in (difference should be small)

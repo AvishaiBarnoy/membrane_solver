@@ -3,23 +3,11 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from core.parameters.global_parameters import GlobalParameters
 from core.parameters.resolver import ParameterResolver
-from geometry.entities import Mesh, Vertex
+from geometry.entities import Mesh
 from runtime.energy_context import EnergyContext
 from runtime.evaluation_manager import EvaluationManager
-
-
-def _single_vertex_mesh() -> Mesh:
-    mesh = Mesh()
-    mesh.vertices = {0: Vertex(0, np.zeros(3, dtype=float))}
-    mesh.edges = {}
-    mesh.facets = {}
-    mesh.energy_modules = []
-    mesh.constraint_modules = []
-    mesh.global_parameters = GlobalParameters()
-    mesh.build_position_cache()
-    return mesh
+from tests.sample_meshes import single_vertex_mesh as _single_vertex_mesh
 
 
 def _manager(

@@ -81,6 +81,7 @@ def test_reconciled_energy_split_uses_runtime_modules_and_shell_outer() -> None:
 
 @pytest.mark.benchmark
 @pytest.mark.slow
+@pytest.mark.exhaustive
 def test_curved_1disk_energy_control_volume_audit_actual_selected_theta() -> None:
     """Benchmark diagnostic should emit selected-theta energy/control evidence."""
     report = audit.run_curved_1disk_energy_control_volume_audit((0.12,))

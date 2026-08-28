@@ -3,10 +3,7 @@ from pathlib import Path
 import numpy as np
 
 from geometry.geom_io import load_data, parse_geometry
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.kozlov_test_utils import build_minimizer
 
 
 def _outer_radial_tilt_symmetry_metric(
@@ -55,9 +52,7 @@ def test_kozlov_free_disk_thetaB_theory_mode_smoke_and_symmetry() -> None:
     assert penalty_mode not in {"legacy", "on", "true", "1"}
     assert "tilt_thetaB_boundary_in" in (mesh.constraint_modules or [])
 
-    em = EnergyModuleManager(mesh.energy_modules)
-    cm = ConstraintModuleManager(mesh.constraint_modules)
-    minim = Minimizer(mesh, gp, GradientDescent(), em, cm, quiet=True)
+    minim = build_minimizer(mesh)
 
     # Keep this test fast: cap inner tilt work and thetaB scan effort.
     gp.set("tilt_kkt_projection_during_relaxation", False)
