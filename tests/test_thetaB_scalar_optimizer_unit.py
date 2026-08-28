@@ -30,8 +30,9 @@ class _ThetaBQuadraticEnergy:
 
     USES_TILT_LEAFLETS = True
 
-    def __init__(self, target: float):
+    def __init__(self, target: float, *, spike_on_perturb: bool = False):
         self._target = float(target)
+        self._spike_on_perturb = bool(spike_on_perturb)
 
     def compute_energy_and_gradient_array(
         self,
@@ -44,11 +45,16 @@ class _ThetaBQuadraticEnergy:
         grad_arr,
     ):
         thetaB = float(global_params.get("tilt_thetaB_value") or 0.0)
+        if self._spike_on_perturb and abs(thetaB - self._target) > 1e-12:
+            return 1e6
         return (thetaB - self._target) ** 2
 
 
 def _minimizer_with_dummy_energy(
-    *, target: float, global_params: GlobalParameters
+    *,
+    target: float,
+    global_params: GlobalParameters,
+    spike_on_perturb: bool = False,
 ) -> Minimizer:
     mesh = Mesh()
     mesh.global_parameters = global_params
@@ -56,7 +62,10 @@ def _minimizer_with_dummy_energy(
     mesh.vertices[1] = Vertex(1, np.array([1.0, 0.0, 0.0]))
     mesh.vertices[2] = Vertex(2, np.array([0.0, 1.0, 0.0]))
 
-    energy = _ThetaBQuadraticEnergy(target=target)
+    energy = _ThetaBQuadraticEnergy(
+        target=target,
+        spike_on_perturb=spike_on_perturb,
+    )
     energy_manager = _DummyEnergyManager(energy)
     constraint_manager = _DummyConstraintManager()
     stepper = _DummyStepper()
@@ -172,3 +181,75 @@ def test_set_leaflet_tilts_from_arrays_fast_updates_mesh_views_and_vertices():
     # Vertex accessors must reflect cache-backed values.
     assert np.allclose(mesh.vertices[0].tilt_in, tin[0])
     assert np.allclose(mesh.vertices[2].tilt_out, tout[2])
+
+
+@pytest.mark.unit
+def test_thetaB_optimizer_rollback_when_candidates_worsen_energy():
+    gp = GlobalParameters(
+        {
+            "tilt_thetaB_value": 0.5,
+            "tilt_thetaB_optimize": True,
+            "tilt_thetaB_optimize_every": 1,
+            "tilt_thetaB_optimize_delta": 0.1,
+            "tilt_thetaB_optimize_inner_steps": 1,
+        }
+    )
+    minimizer = _minimizer_with_dummy_energy(
+        target=0.5,
+        global_params=gp,
+        spike_on_perturb=True,
+    )
+
+    assert minimizer.compute_energy() == pytest.approx(0.0, abs=1e-12)
+    minimizer._optimize_thetaB_scalar(tilt_mode="fixed", iteration=0)
+    assert float(gp.get("tilt_thetaB_value")) == pytest.approx(0.5)
+    assert minimizer.compute_energy() == pytest.approx(0.0, abs=1e-12)
+
+
+@pytest.mark.unit
+def test_thetaB_optimizer_accepts_improving_candidates():
+    gp = GlobalParameters(
+        {
+            "tilt_thetaB_value": 0.0,
+            "tilt_thetaB_optimize": True,
+            "tilt_thetaB_optimize_every": 1,
+            "tilt_thetaB_optimize_delta": 0.1,
+            "tilt_thetaB_optimize_inner_steps": 1,
+        }
+    )
+    minimizer = _minimizer_with_dummy_energy(target=0.25, global_params=gp)
+
+    energy_before = minimizer.compute_energy()
+    minimizer._optimize_thetaB_scalar(tilt_mode="fixed", iteration=0)
+    assert minimizer.compute_energy() < energy_before
+    assert float(gp.get("tilt_thetaB_value")) != 0.0
+
+
+@pytest.mark.unit
+def test_thetaB_optimizer_rollback_preserves_tilts():
+    gp = GlobalParameters(
+        {
+            "tilt_thetaB_value": 0.5,
+            "tilt_thetaB_optimize": True,
+            "tilt_thetaB_optimize_every": 1,
+            "tilt_thetaB_optimize_delta": 0.1,
+            "tilt_thetaB_optimize_inner_steps": 1,
+        }
+    )
+    minimizer = _minimizer_with_dummy_energy(
+        target=0.5,
+        global_params=gp,
+        spike_on_perturb=True,
+    )
+    tin_original = np.array([[0.01, 0.02, 0.0], [0.03, 0.04, 0.0], [0.05, 0.06, 0.0]])
+    tout_original = np.array(
+        [[-0.01, -0.02, 0.0], [-0.03, -0.04, 0.0], [-0.05, -0.06, 0.0]]
+    )
+    minimizer._set_leaflet_tilts_from_arrays_fast(tin_original, tout_original)
+
+    minimizer._optimize_thetaB_scalar(tilt_mode="fixed", iteration=0)
+
+    np.testing.assert_allclose(minimizer.mesh.tilts_in_view(), tin_original, atol=1e-12)
+    np.testing.assert_allclose(
+        minimizer.mesh.tilts_out_view(), tout_original, atol=1e-12
+    )
