@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+import pytest
 
 from geometry.entities import Mesh
 from geometry.geom_io import parse_geometry
@@ -27,8 +28,7 @@ def _triangle_normals(mesh: Mesh) -> np.ndarray:
     return np.cross(v1 - v0, v2 - v0)
 
 
-def test_surface_relaxation_energy_monotone_and_no_flips() -> None:
-    """Acceptance: energy decreases and triangles do not invert."""
+def _surface_relaxation_case() -> tuple[Mesh, Minimizer]:
     mesh = _build_square_mesh_with_center(z_offset=0.2)
     for vid in range(4):
         mesh.vertices[vid].fixed = True
@@ -49,6 +49,12 @@ def test_surface_relaxation_energy_monotone_and_no_flips() -> None:
         tol=-1.0,
         quiet=True,
     )
+    return mesh, minimizer
+
+
+def test_surface_relaxation_energy_monotone_and_no_flips() -> None:
+    """Acceptance: energy decreases and triangles do not invert."""
+    mesh, minimizer = _surface_relaxation_case()
 
     normals0 = _triangle_normals(mesh)
     energies = [minimizer.compute_energy()]
@@ -62,6 +68,21 @@ def test_surface_relaxation_energy_monotone_and_no_flips() -> None:
     dot = np.einsum("ij,ij->i", normals0, normals1)
     assert np.all(dot >= 0.0)
     assert mesh.validate_edge_indices()
+
+
+def test_surface_relaxation_fixed_steps_signature() -> None:
+    """Numerical signature: fixed seed + fixed N steps yields stable observables."""
+    np.random.seed(0)
+    mesh, minimizer = _surface_relaxation_case()
+
+    for _ in range(100):
+        minimizer.minimize(n_steps=1)
+
+    energy = minimizer.compute_energy()
+    center_z = float(mesh.vertices[4].position[2])
+
+    assert energy == pytest.approx(1.0000000050010467, rel=0.0, abs=1e-10)
+    assert center_z == pytest.approx(5.0005233763034544e-05, rel=0.0, abs=1e-10)
 
 
 def test_cube_penalty_minimization_acceptance_criteria() -> None:
