@@ -64,10 +64,7 @@ jobs:
 
       - name: Run fast unit tests
         run: |
-          pytest -q \
-            tests/test_thetaB_scalar_optimizer_unit.py \
-            tests/test_thetaB_optimizer_energy_guard.py \
-            tests/test_flat_disk_one_leaflet_theory_unit.py
+          pytest -q tests/test_thetaB_scalar_optimizer_unit.py
 
   test-unit-full:
     name: Unit tests full + coverage (py3.12, non-PR)
