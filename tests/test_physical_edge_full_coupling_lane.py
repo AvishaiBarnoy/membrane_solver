@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -49,7 +50,10 @@ FULL_COUPLING_TRACE_FIXTURE = (
     / "kozlov_1disk_3d_free_disk_physical_edge_full_coupling_trace_eps005_v1.yaml"
 )
 
+pytestmark = pytest.mark.slow
 
+
+@lru_cache(maxsize=3)
 def _run_report(mesh_path: Path) -> dict:
     ctx = _build_context(mesh_path)
     _run_protocol_with_parity_activation(ctx, protocol=tuple(DEFAULT_PROTOCOL))
@@ -58,6 +62,7 @@ def _run_report(mesh_path: Path) -> dict:
     )
 
 
+@lru_cache(maxsize=8)
 def _full_coupling_shell_metrics(mesh_path: Path) -> dict[str, float]:
     ctx, _summary = _run_protocol_summary(
         mesh_path=mesh_path, protocol=tuple(DEFAULT_PROTOCOL)

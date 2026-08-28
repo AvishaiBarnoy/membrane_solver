@@ -1,15 +1,24 @@
 import math
 
+import pytest
+
 from tools.diagnostics.curved_1disk_rim_inner_tilt_profile_audit import (
     PROFILE_CLASSIFICATIONS,
     RIM_CLASSIFICATIONS,
     run_curved_1disk_rim_inner_tilt_profile_audit,
 )
 
+pytestmark = pytest.mark.slow
 
-def test_curved_1disk_rim_inner_tilt_profile_audit_reports_schema() -> None:
-    report = run_curved_1disk_rim_inner_tilt_profile_audit(include_selected=False)
 
+@pytest.fixture(scope="module")
+def report() -> dict:
+    return run_curved_1disk_rim_inner_tilt_profile_audit(include_selected=False)
+
+
+def test_curved_1disk_rim_inner_tilt_profile_audit_reports_schema(
+    report: dict,
+) -> None:
     diagnosis = report["diagnosis"]
     assert diagnosis["rim_inner_tilt_classification"] in RIM_CLASSIFICATIONS
     assert diagnosis["outer_profile_classification"] in PROFILE_CLASSIFICATIONS
@@ -26,8 +35,7 @@ def test_curved_1disk_rim_inner_tilt_profile_audit_reports_schema() -> None:
     assert case["outer_profile_probe"]
 
 
-def test_curved_1disk_rim_inner_tilt_trace_is_finite() -> None:
-    report = run_curved_1disk_rim_inner_tilt_profile_audit(include_selected=False)
+def test_curved_1disk_rim_inner_tilt_trace_is_finite(report: dict) -> None:
     traces = report["cases"][0]["tilt_trace"]
     labels = {row["label"] for row in traces}
 
@@ -47,8 +55,7 @@ def test_curved_1disk_rim_inner_tilt_trace_is_finite() -> None:
             assert math.isfinite(float(summary["theta_shared_median"]))
 
 
-def test_curved_1disk_rim_inner_tilt_module_and_energy_reconcile() -> None:
-    report = run_curved_1disk_rim_inner_tilt_profile_audit(include_selected=False)
+def test_curved_1disk_rim_inner_tilt_module_and_energy_reconcile(report: dict) -> None:
     case = report["cases"][0]
 
     for module_name in ("bending_tilt_in", "bending_tilt_out"):
@@ -76,8 +83,9 @@ def test_curved_1disk_rim_inner_tilt_module_and_energy_reconcile() -> None:
     assert recon["module_deltas"]
 
 
-def test_curved_1disk_rim_inner_tilt_profile_channels_are_reported() -> None:
-    report = run_curved_1disk_rim_inner_tilt_profile_audit(include_selected=False)
+def test_curved_1disk_rim_inner_tilt_profile_channels_are_reported(
+    report: dict,
+) -> None:
     profile = report["cases"][0]["outer_profile_probe"]
 
     assert profile["outer_k1_shared"]["count"] > 0

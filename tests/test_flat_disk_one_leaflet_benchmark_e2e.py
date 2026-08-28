@@ -36,6 +36,8 @@ from tools.reproduce_flat_disk_one_leaflet import (
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "reproduce_flat_disk_one_leaflet.py"
 
+pytestmark = pytest.mark.e2e
+
 
 @lru_cache(maxsize=4)
 def _report_for_mode(mode: str) -> dict:

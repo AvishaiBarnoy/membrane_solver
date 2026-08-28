@@ -13,6 +13,11 @@ from tools.diagnostics.curved_1disk_trumpet_descent_audit import _apply_z_mode
 from tools.diagnostics.utils import capture_state, restore_state
 
 
+@pytest.fixture(scope="module")
+def shape_direction_report() -> dict:
+    return run_curved_1disk_shape_direction_audit(horizons=(1,))
+
+
 def test_curved_1disk_leaflet_shape_gradients_match_log_direction() -> None:
     minim = _prepare_minimizer(0.1845693593)
     mesh = minim.mesh
@@ -51,8 +56,10 @@ def test_curved_1disk_leaflet_shape_gradients_match_log_direction() -> None:
     restore_state(mesh, *state)
 
 
-def test_curved_1disk_shape_direction_audit_reports_required_schema() -> None:
-    report = run_curved_1disk_shape_direction_audit(horizons=(1,))
+def test_curved_1disk_shape_direction_audit_reports_required_schema(
+    shape_direction_report: dict,
+) -> None:
+    report = shape_direction_report
 
     assert report["diagnosis"]["classification"] in ALLOWED_CLASSIFICATIONS
     assert report["diagnosis"]["no_energy_rescaling"] is True
@@ -83,8 +90,10 @@ def test_curved_1disk_shape_direction_audit_reports_required_schema() -> None:
     assert float(log_probe["total_delta"]) < 0.0
 
 
-def test_curved_1disk_shape_direction_audit_reconciles_and_replays_updates() -> None:
-    report = run_curved_1disk_shape_direction_audit(horizons=(1,))
+def test_curved_1disk_shape_direction_audit_reconciles_and_replays_updates(
+    shape_direction_report: dict,
+) -> None:
+    report = shape_direction_report
 
     for probe in report["directional_probes"]:
         assert math.isfinite(float(probe["total_delta"]))

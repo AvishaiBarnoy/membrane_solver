@@ -1,5 +1,7 @@
 import math
 
+import pytest
+
 from tools.diagnostics.curved_1disk_outer_profile_source_audit import (
     ALLOWED_CLASSIFICATIONS,
     SIGN_CONVENTION_CLASSIFICATIONS,
@@ -7,9 +9,12 @@ from tools.diagnostics.curved_1disk_outer_profile_source_audit import (
 )
 
 
-def test_curved_1disk_outer_profile_source_audit_reports_schema() -> None:
-    report = run_curved_1disk_outer_profile_source_audit(include_selected=False)
+@pytest.fixture(scope="module")
+def report() -> dict:
+    return run_curved_1disk_outer_profile_source_audit(include_selected=False)
 
+
+def test_curved_1disk_outer_profile_source_audit_reports_schema(report: dict) -> None:
     diagnosis = report["diagnosis"]
     assert diagnosis["classification"] in ALLOWED_CLASSIFICATIONS
     assert (
@@ -32,8 +37,9 @@ def test_curved_1disk_outer_profile_source_audit_reports_schema() -> None:
     assert case["profile_fit_controls"]
 
 
-def test_curved_1disk_outer_profile_source_shell_traces_have_channels() -> None:
-    report = run_curved_1disk_outer_profile_source_audit(include_selected=False)
+def test_curved_1disk_outer_profile_source_shell_traces_have_channels(
+    report: dict,
+) -> None:
     traces = report["cases"][0]["shell_traces"]
     labels = {trace["label"] for trace in traces}
 
@@ -65,8 +71,9 @@ def test_curved_1disk_outer_profile_source_shell_traces_have_channels() -> None:
             assert math.isfinite(float(row["curvature_median"]))
 
 
-def test_curved_1disk_outer_profile_source_perturbations_reconcile() -> None:
-    report = run_curved_1disk_outer_profile_source_audit(include_selected=False)
+def test_curved_1disk_outer_profile_source_perturbations_reconcile(
+    report: dict,
+) -> None:
     probes = report["cases"][0]["perturbation_probes"]
     names = {row["name"] for row in probes}
 
@@ -78,8 +85,7 @@ def test_curved_1disk_outer_profile_source_perturbations_reconcile() -> None:
         assert row["top_module_deltas"]
 
 
-def test_curved_1disk_outer_profile_source_profile_fit_controls() -> None:
-    report = run_curved_1disk_outer_profile_source_audit(include_selected=False)
+def test_curved_1disk_outer_profile_source_profile_fit_controls(report: dict) -> None:
     controls = report["cases"][0]["profile_fit_controls"]
     channels = {row["channel"] for row in controls["k1_by_channel"]}
 
@@ -119,8 +125,7 @@ def test_curved_1disk_outer_profile_source_profile_fit_controls() -> None:
         assert math.isfinite(float(comparison[key]))
 
 
-def test_curved_1disk_outer_profile_source_sign_convention_probe() -> None:
-    report = run_curved_1disk_outer_profile_source_audit(include_selected=False)
+def test_curved_1disk_outer_profile_source_sign_convention_probe(report: dict) -> None:
     probe = report["cases"][0]["profile_fit_controls"]["leaflet_sign_convention_probe"]
     fits = {row["name"]: row for row in probe["fits"]}
 
@@ -154,8 +159,9 @@ def test_curved_1disk_outer_profile_source_sign_convention_probe() -> None:
         assert "runtime leaflet coupling" in probe["recommendation"]
 
 
-def test_curved_1disk_outer_profile_source_classifies_k1_ok_log_suppressed() -> None:
-    report = run_curved_1disk_outer_profile_source_audit(include_selected=False)
+def test_curved_1disk_outer_profile_source_classifies_k1_ok_log_suppressed(
+    report: dict,
+) -> None:
     diagnosis = report["diagnosis"]
     controls = report["cases"][0]["profile_fit_controls"]
     primary = controls["primary_physical_common_k1"]
