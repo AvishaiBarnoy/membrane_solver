@@ -1,10 +1,7 @@
 import numpy as np
 
 from geometry.geom_io import parse_geometry
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as _build_minimizer
 
 
 def _single_triangle_data() -> dict:
@@ -41,14 +38,7 @@ def _single_triangle_data() -> dict:
 def test_tilt_solve_mode_coupled_uses_inner_steps_fallback() -> None:
     """`tilt_solve_mode=coupled` should relax even without `tilt_coupled_steps`."""
     mesh = parse_geometry(_single_triangle_data())
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
 
     before = float(
         np.linalg.norm(mesh.tilts_in_view()) + np.linalg.norm(mesh.tilts_out_view())

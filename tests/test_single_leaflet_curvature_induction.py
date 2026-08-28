@@ -7,10 +7,7 @@ import pytest
 from commands.executor import execute_command_line
 from geometry.curvature import compute_curvature_fields
 from geometry.geom_io import load_data, parse_geometry
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as _build_minimizer
 
 pytestmark = pytest.mark.e2e
 
@@ -38,14 +35,7 @@ def test_single_leaflet_curvature_induction() -> None:
     )
     mesh = parse_geometry(load_data(path))
 
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     ctx = _Context(mesh=mesh, minimizer=minim, stepper=minim.stepper)
 
     execute_command_line(ctx, "induction_quick")
