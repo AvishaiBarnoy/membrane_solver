@@ -2,10 +2,7 @@ import numpy as np
 import pytest
 
 from geometry.geom_io import load_data, parse_geometry
-from runtime.constraint_manager import ConstraintModuleManager
-from runtime.energy_manager import EnergyModuleManager
-from runtime.minimizer import Minimizer
-from runtime.steppers.gradient_descent import GradientDescent
+from tests.minimizer_test_utils import build_minimizer as _build_minimizer
 
 pytestmark = pytest.mark.e2e
 
@@ -28,14 +25,7 @@ def _relax_rect_tilt_source(
         }
     )
 
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim._relax_tilts(positions=mesh.positions_view(), mode="nested")
 
     positions = mesh.positions_view()
@@ -68,14 +58,7 @@ def test_single_source_tilt_decays_across_rectangle() -> None:
         }
     )
 
-    minim = Minimizer(
-        mesh,
-        mesh.global_parameters,
-        GradientDescent(),
-        EnergyModuleManager(mesh.energy_modules),
-        ConstraintModuleManager(mesh.constraint_modules),
-        quiet=True,
-    )
+    minim = _build_minimizer(mesh)
     minim._relax_tilts(positions=mesh.positions_view(), mode="nested")
 
     positions = mesh.positions_view()
