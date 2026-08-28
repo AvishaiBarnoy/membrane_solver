@@ -90,7 +90,9 @@ jobs:
 
       - name: Run full unit tests with coverage
         run: |
-          pytest -q -m "unit" --cov=. --cov-report=xml
+          pytest -q -o addopts='' \
+            -m "unit and not acceptance and not benchmark and not e2e and not slow and not script and not exhaustive" \
+            --cov=. --cov-report=xml
 
   theory-critical:
     name: Theory correctness (blocking)
@@ -136,8 +138,10 @@ jobs:
           pip install -e .
 
       - name: Run flat-disk regression tests
+        env:
+          PYTEST_MARKER: ${{ github.event_name == 'pull_request' && 'regression and not benchmark and not exhaustive' || 'regression and not benchmark' }}
         run: |
-          pytest -q -o addopts='' -m "regression and not benchmark" \
+          pytest -q -o addopts='' -m "$PYTEST_MARKER" \
             tests/test_flat_disk_kh_error_source_audit_regression.py \
             tests/test_flat_disk_kh_outer_vertex_audit_regression.py \
             tests/test_flat_disk_kh_outerfield_v2_regression.py \
@@ -169,8 +173,10 @@ jobs:
           pip install -e .
 
       - name: Run non-flat-disk regression tests
+        env:
+          PYTEST_MARKER: ${{ github.event_name == 'pull_request' && 'regression and not benchmark and not exhaustive' || 'regression and not benchmark' }}
         run: |
-          pytest -q -o addopts='' -m "regression and not benchmark" \
+          pytest -q -o addopts='' -m "$PYTEST_MARKER" \
             --ignore=tests/test_flat_disk_kh_error_source_audit_regression.py \
             --ignore=tests/test_flat_disk_kh_outer_vertex_audit_regression.py \
             --ignore=tests/test_flat_disk_kh_outerfield_v2_regression.py \
@@ -186,6 +192,7 @@ jobs:
   e2e-free-disk-convergence-core:
     name: E2E free-disk convergence core (py3.12)
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
@@ -233,8 +240,10 @@ jobs:
           pip install -e .
 
       - name: Run free-disk convergence regional E2E tests
+        env:
+          PYTEST_MARKER: ${{ github.event_name == 'pull_request' && 'e2e and not exhaustive' || 'e2e' }}
         run: |
-          pytest -q -o addopts='' \
+          pytest -q -o addopts='' -m "$PYTEST_MARKER" \
             tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_tilt_in_overgrowth_is_near_rim_dominated \
             tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_tilt_in_overgrowth_is_disk_rim_dominated \
             tests/test_kozlov_free_disk_thetaB_convergence_e2e.py::test_kozlov_free_disk_post_theta018_tilt_in_growth_is_outer_membrane_dominated \
@@ -291,8 +300,10 @@ jobs:
           pip install -e .
 
       - name: Run remaining E2E tests
+        env:
+          PYTEST_MARKER: ${{ github.event_name == 'pull_request' && 'e2e and not exhaustive' || 'e2e' }}
         run: |
-          pytest -q -m "e2e" \
+          pytest -q -o addopts='' -m "$PYTEST_MARKER" \
             --ignore=tests/test_kozlov_free_disk_thetaB_convergence_e2e.py \
             --ignore=tests/test_flat_disk_one_leaflet_benchmark_e2e.py
 

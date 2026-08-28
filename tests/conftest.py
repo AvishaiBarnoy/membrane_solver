@@ -42,7 +42,7 @@ def pytest_collection_modifyitems(
 
         # Respect explicit test-level markers in mixed files so CI lanes stay
         # disjoint even when filenames still carry legacy suffixes like `_e2e`.
-        if {"unit", "regression", "e2e", "benchmark"} & explicit:
+        if {"unit", "regression", "e2e", "acceptance", "benchmark"} & explicit:
             continue
 
         if "benchmark" in name:
@@ -55,6 +55,12 @@ def pytest_collection_modifyitems(
 
         if "regression" in name:
             item.add_marker(pytest.mark.regression)
+            continue
+
+        # Operational modifiers describe cost or execution style, not a fast
+        # primary category. Never let their otherwise-uncategorized tests leak
+        # into the scheduled unit+coverage lane.
+        if {"slow", "script", "exhaustive"} & explicit:
             continue
 
         item.add_marker(pytest.mark.unit)
