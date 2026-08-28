@@ -60,11 +60,6 @@ def _rim_slope_proxy(mesh) -> float:
 
 
 @pytest.mark.acceptance
-@pytest.mark.exhaustive
-@pytest.mark.xfail(
-    strict=True,
-    reason="Current coupled profile exceeds the strict tensionless rim-slope band",
-)
 def test_free_disk_coupled_bandwise_observables_match_tensionless_theory(
     canonical_profile_protocol_result,
 ) -> None:
