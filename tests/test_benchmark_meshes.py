@@ -1,4 +1,8 @@
+import pytest
+
 from geometry.geom_io import load_data, parse_geometry
+
+pytestmark = pytest.mark.unit
 
 
 def test_benchmark_dented_cube_mesh_parses_and_tags_present():

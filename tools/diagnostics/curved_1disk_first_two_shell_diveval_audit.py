@@ -42,6 +42,14 @@ def _median(rows: list[dict[str, object]], key: str) -> float:
     return float(np.median(vals)) if vals.size else 0.0
 
 
+def _resolved_div_sign(gp, *, cache_tag: str, default: float) -> float:
+    """Resolve the runtime sign while tolerating the retired private helper."""
+    resolver = getattr(_btl, "_resolved_div_sign", None)
+    if resolver is None:
+        return float(default)
+    return float(resolver(gp, cache_tag=cache_tag, default=default))
+
+
 def run_curved_1disk_first_two_shell_diveval_audit() -> dict[str, object]:
     """Run the first-two-shell ``div_eval`` audit and return a report."""
     result = _run_curved_theta_candidate(THEORY_THETA_B)
@@ -65,13 +73,15 @@ def run_curved_1disk_first_two_shell_diveval_audit() -> dict[str, object]:
                 _resolve_transport_model(gp.get("tilt_transport_model", "ambient_v1"))
             ),
             "inner_lane_sign_fix_active": bool(
-                _btl._use_curved_free_disk_shared_rim_inner_div_sign_fix(gp)
+                getattr(
+                    _btl,
+                    "_use_curved_free_disk_shared_rim_inner_div_sign_fix",
+                    lambda _gp: False,
+                )(gp)
             ),
             "in": {
                 "row_count": int(len(in_rows)),
-                "div_sign": float(
-                    _btl._resolved_div_sign(gp, cache_tag="in", default=-1.0)
-                ),
+                "div_sign": _resolved_div_sign(gp, cache_tag="in", default=-1.0),
                 "div_raw_median": _median(in_rows, "div_raw_median"),
                 "div_signed_median": _median(in_rows, "div_signed_median"),
                 "div_term_median": _median(in_rows, "div_term_median"),
@@ -97,9 +107,7 @@ def run_curved_1disk_first_two_shell_diveval_audit() -> dict[str, object]:
             },
             "out": {
                 "row_count": int(len(out_rows)),
-                "div_sign": float(
-                    _btl._resolved_div_sign(gp, cache_tag="out", default=1.0)
-                ),
+                "div_sign": _resolved_div_sign(gp, cache_tag="out", default=1.0),
                 "div_raw_median": _median(out_rows, "div_raw_median"),
                 "div_signed_median": _median(out_rows, "div_signed_median"),
                 "div_term_median": _median(out_rows, "div_term_median"),

@@ -196,6 +196,7 @@ def test_full_coupling_trace_builder_supports_convergence_epsilons() -> None:
         )
 
 
+@pytest.mark.exhaustive
 def test_full_coupling_shell_rows_are_present_free_and_area_active() -> None:
     ctx, summary = _run_protocol_summary(
         mesh_path=FULL_COUPLING_FIXTURE, protocol=tuple(DEFAULT_PROTOCOL)
@@ -222,6 +223,7 @@ def test_full_coupling_trace_direct_outer_response_exceeds_default_lane() -> Non
     assert float(trace_primary["phi"]) > float(default_primary["phi"])
 
 
+@pytest.mark.exhaustive
 def test_full_coupling_resolution_reports_finite_metrics() -> None:
     base_doc = (
         yaml.safe_load(FULL_COUPLING_TRACE_FIXTURE.read_text(encoding="utf-8")) or {}

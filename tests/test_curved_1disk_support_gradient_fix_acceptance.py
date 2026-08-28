@@ -50,6 +50,7 @@ def test_curved_1disk_log_direction_remains_valid_descent_after_support_fix(
     assert float(log_probe["total_delta"]) < 0.0
 
 
+@pytest.mark.exhaustive
 def test_curved_1disk_transition_regularization_does_not_prefer_high_branch() -> None:
     theory = _run_curved_theta_candidate(float(THEORY_THETA_B))
     high = _run_curved_theta_candidate(0.22)

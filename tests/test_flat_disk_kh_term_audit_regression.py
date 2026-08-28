@@ -391,6 +391,7 @@ def test_flat_disk_kh_term_audit_theta_relax_controls_emit_metadata() -> None:
 
 @pytest.mark.regression
 @pytest.mark.slow
+@pytest.mark.exhaustive
 def test_flat_disk_kh_term_audit_staged_v2_relax_path_matches_dirty_branch() -> None:
     report = run_flat_disk_kh_term_audit(
         refine_level=3,
@@ -731,6 +732,7 @@ def test_flat_disk_kh_term_audit_finite_outer_reference_matches_infinite_at_rmax
 
 @pytest.mark.regression
 @pytest.mark.slow
+@pytest.mark.exhaustive
 def test_flat_disk_kh_term_audit_outerfield_tailmatch_improves_outer_far_section() -> (
     None
 ):
@@ -1355,6 +1357,7 @@ def test_flat_disk_kh_term_audit_v2_uses_strict_raw_ratio_semantics() -> None:
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_flat_disk_kh_term_audit_staged_targets_match_fixture_expectations() -> None:
     cfg_p10 = yaml.safe_load(
         (

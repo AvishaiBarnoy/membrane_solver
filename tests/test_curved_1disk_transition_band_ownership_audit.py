@@ -9,7 +9,7 @@ from tools.diagnostics.curved_1disk_transition_band_ownership_audit import (
     run_curved_1disk_transition_band_ownership_audit,
 )
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.exhaustive]
 
 
 @pytest.fixture(scope="module")

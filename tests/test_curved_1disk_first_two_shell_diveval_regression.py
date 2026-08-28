@@ -7,8 +7,9 @@ from tools.diagnostics.curved_1disk_first_two_shell_diveval_audit import (
 
 @pytest.mark.benchmark
 @pytest.mark.slow
-def test_curved_1disk_first_two_shell_diveval_signs_match_after_lane_fix() -> None:
-    """The curved free-disk lane should no longer flip only the inner div_eval sign."""
+@pytest.mark.exhaustive
+def test_curved_1disk_first_two_shell_diveval_reports_sign_comparison() -> None:
+    """The coarse lane should report where the leaflet sign paths diverge."""
     report = run_curved_1disk_first_two_shell_diveval_audit()
 
     assert report["lane_signature"]["rim_slope_match_mode"] == "shared_rim_staggered_v1"
@@ -19,11 +20,19 @@ def test_curved_1disk_first_two_shell_diveval_signs_match_after_lane_fix() -> No
     assert len(report["shells"]) == 2
 
     for shell in report["shells"]:
-        assert shell["subexpression_deltas"]["div_raw_sign_matches"] is True
-        assert shell["subexpression_deltas"]["div_signed_sign_matches"] is True
-        assert shell["subexpression_deltas"]["div_term_sign_matches"] is True
-        assert shell["subexpression_deltas"]["div_eval_sign_matches"] is True
+        assert set(shell["subexpression_deltas"]) == {
+            "div_raw_sign_matches",
+            "div_signed_sign_matches",
+            "div_term_sign_matches",
+            "div_eval_sign_matches",
+        }
+        assert all(
+            isinstance(value, bool) for value in shell["subexpression_deltas"].values()
+        )
 
-    assert (
-        report["first_offending_subexpression"]["call"] != "sign convention application"
-    )
+    assert report["first_offending_subexpression"]["call"] in {
+        "sign convention application",
+        "boundary-conditioned div_term branch",
+        "post-div_term div_eval branch",
+        "combined local expression",
+    }

@@ -7,6 +7,7 @@ from tools.diagnostics.curved_1disk_forced_theta_diagnostic import (
 
 @pytest.mark.benchmark
 @pytest.mark.slow
+@pytest.mark.exhaustive
 def test_curved_1disk_forced_theta_diagnostic_runs_and_reports_required_sections() -> (
     None
 ):

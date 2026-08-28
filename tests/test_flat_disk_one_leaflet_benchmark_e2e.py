@@ -36,8 +36,6 @@ from tools.reproduce_flat_disk_one_leaflet import (
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "reproduce_flat_disk_one_leaflet.py"
 
-pytestmark = pytest.mark.e2e
-
 
 @lru_cache(maxsize=4)
 def _report_for_mode(mode: str) -> dict:
@@ -53,7 +51,7 @@ def _report_for_mode(mode: str) -> dict:
     )
 
 
-@lru_cache(maxsize=8)
+@lru_cache(maxsize=None)
 def _kh_opt_report(
     *,
     refine_level: int,
@@ -219,6 +217,7 @@ def test_flat_disk_one_leaflet_mesh_parity_outer_free_e2e() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_preserves_planarity_during_tilt_relax() -> None:
     report_disabled = _report_for_mode("disabled")
     report_free = _report_for_mode("free")
@@ -228,6 +227,7 @@ def test_flat_disk_preserves_planarity_during_tilt_relax() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_outer_free_mode_does_not_shift_inner_theta_star() -> None:
     report_disabled = _report_for_mode("disabled")
     report_free = _report_for_mode("free")
@@ -241,6 +241,7 @@ def test_outer_free_mode_does_not_shift_inner_theta_star() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_splay_twist_mode_runs_with_zero_twist_default() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -261,6 +262,7 @@ def test_flat_disk_splay_twist_mode_runs_with_zero_twist_default() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_theta_mode_optimize_runs_and_reports_result() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -285,6 +287,7 @@ def test_flat_disk_theta_mode_optimize_runs_and_reports_result() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_theta_mode_optimize_full_runs_and_reports_polish() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -324,6 +327,7 @@ def test_flat_disk_theta_mode_optimize_full_runs_and_reports_polish() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_optimize_preset_fast_r3_is_noop_below_refine3() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -344,6 +348,7 @@ def test_flat_disk_optimize_preset_fast_r3_is_noop_below_refine3() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_optimize_preset_full_accuracy_r3_is_noop_below_refine3() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -364,6 +369,7 @@ def test_flat_disk_optimize_preset_full_accuracy_r3_is_noop_below_refine3() -> N
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_wide_expands_theta_span_for_kh_lane() -> None:
     report = _kh_opt_report(
         refine_level=1,
@@ -382,6 +388,7 @@ def test_flat_disk_optimize_preset_kh_wide_expands_theta_span_for_kh_lane() -> N
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_fast_is_opt_in_and_mesh_strict() -> None:
     report = _kh_opt_report(
         refine_level=3,  # should be overridden by strict-fast preset
@@ -412,6 +419,7 @@ def test_flat_disk_optimize_preset_kh_strict_fast_is_opt_in_and_mesh_strict() ->
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_fast_respects_explicit_rim_overrides() -> (
     None
 ):
@@ -434,6 +442,7 @@ def test_flat_disk_optimize_preset_kh_strict_fast_respects_explicit_rim_override
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_continuity_improves_rim_metrics() -> None:
     fast = _kh_opt_report(
         refine_level=1,
@@ -463,6 +472,7 @@ def test_flat_disk_optimize_preset_kh_strict_continuity_improves_rim_metrics() -
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_balanced_tradeoff_vs_fast() -> None:
     fast = _kh_opt_report(
         refine_level=1,
@@ -497,6 +507,7 @@ def test_flat_disk_optimize_preset_kh_strict_balanced_tradeoff_vs_fast() -> None
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 @pytest.mark.parametrize(
     ("preset", "expected_meta", "parity_limit", "polish_objective"),
     [
@@ -635,6 +646,7 @@ def test_flat_disk_optimize_preset_controls(
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inner_and_global() -> (
     None
 ):
@@ -727,6 +739,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_balances_outer_inne
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerfield_averaged_improves_finite_outer_split_score() -> (
     None
 ):
@@ -758,6 +771,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_averaged_improves_finite
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerfield_best_non_worsening_vs_outerfield_tight() -> (
     None
 ):
@@ -793,6 +807,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_best_non_worsening_vs_ou
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_section_polish_non_worsening_outer_section_score() -> None:
     base = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -837,6 +852,7 @@ def test_flat_disk_optimize_section_polish_non_worsening_outer_section_score() -
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_strict_outerfield_averaged_sweep_baseline_non_worsening() -> None:
     report = run_flat_disk_kh_outerfield_averaged_sweep(
         fixture=DEFAULT_FIXTURE,
@@ -905,6 +921,7 @@ def test_flat_disk_kh_strict_outerfield_averaged_sweep_baseline_non_worsening() 
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_fractional_refinement_trend_non_worsening_outerfield_best() -> (
     None
 ):
@@ -928,6 +945,7 @@ def test_flat_disk_kh_fractional_refinement_trend_non_worsening_outerfield_best(
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outertail_balanced_non_worsening_outer_tail_score() -> (
     None
 ):
@@ -946,6 +964,7 @@ def test_flat_disk_optimize_preset_kh_strict_outertail_balanced_non_worsening_ou
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerfield_quality_non_worsening_outer_tail_score() -> (
     None
 ):
@@ -964,6 +983,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_quality_non_worsening_ou
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerfield_tailmatch_non_worsening_outer_tail_score() -> (
     None
 ):
@@ -994,6 +1014,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_tailmatch_non_worsening_
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_improves_outer_sections_vs_outerband() -> (
     None
 ):
@@ -1076,6 +1097,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerfield_tight_improves_outer_sec
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_outerband_tight_composite_score_non_worsening() -> (
     None
 ):
@@ -1111,6 +1133,7 @@ def test_flat_disk_optimize_preset_kh_strict_outerband_tight_composite_score_non
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_strict_section_tight_non_worsening_vs_energy_tight() -> None:
     energy_tight = _kh_opt_report(
         refine_level=1,
@@ -1139,6 +1162,7 @@ def test_flat_disk_kh_strict_section_tight_non_worsening_vs_energy_tight() -> No
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_optimize_preset_kh_strict_robust_non_worsening_score() -> None:
     fast = _kh_opt_report(
         refine_level=1,
@@ -1167,6 +1191,7 @@ def test_flat_disk_optimize_preset_kh_strict_robust_non_worsening_score() -> Non
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_kh_consistent_mass_improves_energy_parity_lightweight() -> None:
     lumped = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1237,6 +1262,7 @@ def test_flat_disk_kh_optimize_profile_and_continuity_e2e() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_optimize_parity_does_not_worsen_with_refinement() -> None:
     refine1 = _kh_opt_report(
         refine_level=1,
@@ -1261,6 +1287,8 @@ def test_flat_disk_kh_optimize_parity_does_not_worsen_with_refinement() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
+@pytest.mark.exhaustive
 def test_flat_disk_unpinned_outerfield_preset_reports_finite_parity() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1283,6 +1311,7 @@ def test_flat_disk_unpinned_outerfield_preset_reports_finite_parity() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_unpinned_section_parity_non_worsening_refine2_to_refine3() -> None:
     def _section_errors(refine_level: int) -> tuple[float, float, float, float]:
         report = run_flat_disk_one_leaflet_benchmark(
@@ -1322,6 +1351,7 @@ def test_flat_disk_unpinned_section_parity_non_worsening_refine2_to_refine3() ->
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_splay_modulus_scale_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1335,6 +1365,7 @@ def test_flat_disk_reports_splay_modulus_scale_meta() -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_default_splay_scale_stays_unmodified() -> None:
     report = _kh_opt_report(
         refine_level=1,
@@ -1344,6 +1375,7 @@ def test_flat_disk_kh_default_splay_scale_stays_unmodified() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_tilt_divergence_mode_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1360,6 +1392,7 @@ def test_flat_disk_reports_tilt_divergence_mode_meta() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_tilt_projection_and_post_relax_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1384,6 +1417,7 @@ def test_flat_disk_reports_tilt_projection_and_post_relax_meta() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_post_relax_projection_emits_apply_count() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1408,6 +1442,7 @@ def test_flat_disk_post_relax_projection_emits_apply_count() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_inner_coupled_update_mode_meta_and_stats() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1438,6 +1473,7 @@ def test_flat_disk_reports_inner_coupled_update_mode_meta_and_stats() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_tilt_transport_model_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1464,6 +1500,7 @@ def test_flat_disk_reports_tilt_transport_model_meta() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_tilt_mass_mode_out_meta() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1486,6 +1523,7 @@ def test_flat_disk_reports_tilt_mass_mode_out_meta() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_curved_theta_objective_ablation_meta() -> None:
     baseline = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1552,6 +1590,7 @@ def test_flat_disk_reports_curved_theta_objective_ablation_meta() -> None:
     )
 
 
+@pytest.mark.slow
 def test_run_theta_relaxation_can_preserve_inner_state_between_repeats() -> None:
     params = physical_to_dimensionless_theory_params(
         kappa_physical=10.0,
@@ -1753,6 +1792,7 @@ def test_flat_disk_invalid_controls_raise(overrides: dict, error: str) -> None:
 
 
 @pytest.mark.benchmark
+@pytest.mark.exhaustive
 def test_flat_disk_kh_strict_preset_improves_score_vs_baseline() -> None:
     baseline = _kh_opt_report(
         refine_level=1,
@@ -1798,6 +1838,7 @@ def test_flat_disk_kh_strict_preset_improves_score_vs_baseline() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_outer_local_vertex_average_controls_reported() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1821,6 +1862,7 @@ def test_flat_disk_outer_local_vertex_average_controls_reported() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_lane_comparison_reports_both_lanes() -> None:
     report = run_flat_disk_lane_comparison(
         fixture=DEFAULT_FIXTURE,
@@ -1850,6 +1892,7 @@ def test_flat_disk_lane_comparison_reports_both_lanes() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_kh_physical_parameterization_reports_unit_scaling() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1877,6 +1920,7 @@ def test_flat_disk_kh_physical_parameterization_reports_unit_scaling() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_reports_rim_continuity_and_contact_diagnostics() -> None:
     report = run_flat_disk_one_leaflet_benchmark(
         fixture=DEFAULT_FIXTURE,
@@ -1899,6 +1943,7 @@ def test_flat_disk_reports_rim_continuity_and_contact_diagnostics() -> None:
 
 
 @pytest.mark.regression
+@pytest.mark.slow
 def test_flat_disk_optimize_mode_enforces_thetaB_on_full_disk_radius_ring() -> None:
     from runtime.refinement import refine_triangle_mesh
     from tools.diagnostics.flat_disk_one_leaflet_theory import tex_reference_params
@@ -1972,6 +2017,7 @@ def test_reproduce_flat_disk_one_leaflet_script_smoke(tmp_path) -> None:
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize(tmp_path) -> None:
     out_yaml = tmp_path / "flat_disk_one_leaflet_report_opt.yaml"
     subprocess.run(
@@ -2009,6 +2055,7 @@ def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize(tmp_path) -
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_reproduce_flat_disk_one_leaflet_script_smoke_theta_optimize_full(
     tmp_path,
 ) -> None:

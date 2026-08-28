@@ -112,6 +112,7 @@ def test_flat_disk_curved_lane_matches_3d_updated_signs_p10_target() -> None:
 
 
 @pytest.mark.acceptance
+@pytest.mark.exhaustive
 def test_flat_disk_curved_lane_matches_3d_updated_signs_p5_target() -> None:
     report = _run_curved_lane_from_fixture(
         "flat_disk_one_leaflet_kh_physical_curved_p5_target.yaml"

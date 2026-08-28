@@ -7,6 +7,7 @@ from tools.diagnostics.curved_1disk_first_two_shell_ingredient_audit import (
 
 @pytest.mark.benchmark
 @pytest.mark.slow
+@pytest.mark.exhaustive
 def test_curved_1disk_first_two_shell_ingredient_audit_reports_required_sections() -> (
     None
 ):

@@ -8,7 +8,7 @@ from tools.diagnostics.curved_1disk_rim_inner_tilt_profile_audit import (
     run_curved_1disk_rim_inner_tilt_profile_audit,
 )
 
-pytestmark = pytest.mark.slow
+pytestmark = [pytest.mark.slow, pytest.mark.exhaustive]
 
 
 @pytest.fixture(scope="module")

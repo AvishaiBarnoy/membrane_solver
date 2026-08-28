@@ -7,6 +7,7 @@ from tools.diagnostics.curved_1disk_shared_rim_phi_target_audit import (
 
 @pytest.mark.benchmark
 @pytest.mark.slow
+@pytest.mark.exhaustive
 def test_curved_1disk_shared_rim_phi_target_audit_reports_single_call() -> None:
     """The shared-rim phi-target audit should emit one final diagnosis call."""
     report = run_curved_1disk_shared_rim_phi_target_audit()

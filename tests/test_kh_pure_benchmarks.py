@@ -4,6 +4,8 @@ from geometry.geom_io import load_data, parse_geometry
 from runtime.refinement import refine_triangle_mesh
 from tests.minimizer_test_utils import build_minimizer as _build_minimizer
 
+pytestmark = pytest.mark.unit
+
 
 def _compute_energy(path: str) -> float:
     mesh = parse_geometry(load_data(path))

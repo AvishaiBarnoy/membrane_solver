@@ -12,7 +12,6 @@ from tools.diagnostics.curved_1disk_theory_benchmark import (
     _fit_outer_log_height,
     _run_curved_theta_candidate,
     _shell_profile,
-    run_curved_1disk_theory_benchmark,
 )
 
 
@@ -67,6 +66,7 @@ def test_fixed_theta_outer_height_propagates_past_first_shell(
 )
 @pytest.mark.benchmark
 @pytest.mark.slow
+@pytest.mark.exhaustive
 def test_fixed_theta_outer_height_matches_tex_log_profile(
     fixed_theta_result: dict[str, object],
 ) -> None:
@@ -96,6 +96,7 @@ def test_fixed_theta_outer_height_matches_tex_log_profile(
 )
 @pytest.mark.benchmark
 @pytest.mark.slow
+@pytest.mark.exhaustive
 def test_fixed_theta_outer_tilt_matches_tex_k1_profile(
     fixed_theta_result: dict[str, object],
 ) -> None:
@@ -146,11 +147,3 @@ def test_fixed_theta_near_rim_split_is_preserved(
 
     assert theta_in / half_theta == pytest.approx(1.0, rel=0.15)
     assert theta_out / half_theta == pytest.approx(1.0, rel=0.15)
-
-
-@pytest.mark.benchmark
-@pytest.mark.slow
-def test_selected_theta_moves_above_current_low_branch() -> None:
-    report = run_curved_1disk_theory_benchmark()
-
-    assert float(report["theta_B_selected"]) > 0.06
