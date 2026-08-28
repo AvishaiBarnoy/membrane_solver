@@ -113,8 +113,20 @@ jobs:
       - name: Verify and run critical theory tests
         run: |
           pytest -q -o addopts='' tests/test_theory_critical_ci_manifest.py
-          mapfile -t theory_tests < <(grep -v '^#' tests/manifest/theory_critical_pr.txt | grep -v '^$')
-          pytest -q -o addopts='' "${theory_tests[@]}"
+          pids=()
+          for manifest in \
+            tests/manifest/theory_critical_audits_pr.txt \
+            tests/manifest/theory_critical_protocols_pr.txt
+          do
+            mapfile -t theory_tests < <(grep -v '^#' "$manifest" | grep -v '^$')
+            pytest -q -o addopts='' "${theory_tests[@]}" &
+            pids+=("$!")
+          done
+          status=0
+          for pid in "${pids[@]}"; do
+            wait "$pid" || status=1
+          done
+          exit "$status"
 
   regression-flat-disk:
     name: Regression flat-disk (py3.12)
