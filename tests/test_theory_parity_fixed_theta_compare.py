@@ -12,6 +12,7 @@ TAIL_TIE_TOL = 5.0e-4
 
 @pytest.mark.regression
 @pytest.mark.slow
+@pytest.mark.exhaustive
 def test_fixed_theta_compare_shows_contact_stability_and_profiled_elastic_collapse(
     tmp_path,
 ) -> None:

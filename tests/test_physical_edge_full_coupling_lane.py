@@ -11,11 +11,9 @@ from tools.diagnostics.scaffold_energy_imbalance_audit import (  # noqa: E402
     _base_term_summary_for_fixture,
 )
 from tools.diagnostics.thetaB_cadence_relaxation_audit import (  # noqa: E402
-    _collect_live_summary,
     _one_step_shell_update_summary,
     _outer_bending_tilt_gradient_components,
     _outer_shell_rows,
-    _run_protocol_summary,
     _shell_vector_summary,
     _write_temp_fixture,
 )
@@ -53,42 +51,45 @@ FULL_COUPLING_TRACE_FIXTURE = (
 pytestmark = pytest.mark.slow
 
 
-@lru_cache(maxsize=3)
-def _run_report(mesh_path: Path) -> dict:
+@lru_cache(maxsize=8)
+def _full_coupling_evidence(mesh_path: Path) -> dict:
     ctx = _build_context(mesh_path)
     _run_protocol_with_parity_activation(ctx, protocol=tuple(DEFAULT_PROTOCOL))
-    return _collect_report_from_context(
+    report = _collect_report_from_context(
         ctx=ctx, mesh_path=mesh_path, protocol=tuple(DEFAULT_PROTOCOL)
-    )
-
-
-@lru_cache(maxsize=8)
-def _full_coupling_shell_metrics(mesh_path: Path) -> dict[str, float]:
-    ctx, _summary = _run_protocol_summary(
-        mesh_path=mesh_path, protocol=tuple(DEFAULT_PROTOCOL)
     )
     shell_rows = _outer_shell_rows(ctx.mesh)
     coupling = _outer_bending_tilt_gradient_components(
         ctx=ctx, div_term_sign=1.0, pullback_sign=1.0
     )
     return {
-        "combined_shell_gradient": float(
-            _shell_vector_summary(ctx.mesh, coupling["combined_gradient"], shell_rows)[
-                "norm"
-            ]
+        "report": report,
+        "participation": dict(
+            getattr(ctx.minimizer, "_last_leaflet_relaxation_stats", {})
         ),
-        "first_shell_update": float(
-            _one_step_shell_update_summary(
-                ctx=ctx,
-                theta=float(
-                    _collect_live_summary(
-                        ctx=ctx, mesh_path=mesh_path, protocol=tuple(DEFAULT_PROTOCOL)
-                    )["thetaB_value"]
-                    or 0.0
-                ),
-            )["norm"]
-        ),
+        "outer_shell_row_count": len(shell_rows),
+        "shell_metrics": {
+            "combined_shell_gradient": float(
+                _shell_vector_summary(
+                    ctx.mesh, coupling["combined_gradient"], shell_rows
+                )["norm"]
+            ),
+            "first_shell_update": float(
+                _one_step_shell_update_summary(
+                    ctx=ctx,
+                    theta=float(report["metrics"]["thetaB_value"] or 0.0),
+                )["norm"]
+            ),
+        },
     }
+
+
+def _run_report(mesh_path: Path) -> dict:
+    return _full_coupling_evidence(mesh_path)["report"]
+
+
+def _full_coupling_shell_metrics(mesh_path: Path) -> dict[str, float]:
+    return _full_coupling_evidence(mesh_path)["shell_metrics"]
 
 
 def test_full_coupling_fixture_reports_lane_and_reference_mode() -> None:
@@ -198,12 +199,9 @@ def test_full_coupling_trace_builder_supports_convergence_epsilons() -> None:
 
 @pytest.mark.exhaustive
 def test_full_coupling_shell_rows_are_present_free_and_area_active() -> None:
-    ctx, summary = _run_protocol_summary(
-        mesh_path=FULL_COUPLING_FIXTURE, protocol=tuple(DEFAULT_PROTOCOL)
-    )
-    participation = summary["leaflet_relaxation_stats"]
-    shell_rows = _outer_shell_rows(ctx.mesh)
-    assert len(shell_rows) > 0
+    evidence = _full_coupling_evidence(FULL_COUPLING_FIXTURE)
+    participation = evidence["participation"]
+    assert evidence["outer_shell_row_count"] > 0
     assert int(participation.get("outer_shell_row_count", 0)) > 0
     assert int(participation.get("active_outer_area_rows", 0)) > 0
     assert int(participation.get("free_rows_out", 0)) > 0
