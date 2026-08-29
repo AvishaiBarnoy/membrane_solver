@@ -8,6 +8,10 @@ from typing import Any, Sequence
 import numpy as np
 from scipy import integrate, special
 
+from tools.flat_disk_benchmark_metrics import (
+    _rim_boundary_realization_metrics as _boundary_realization_metrics,  # noqa: F401
+)
+
 
 def _radial_frames(positions: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return radius, radial unit vectors, and azimuthal unit vectors."""
@@ -635,22 +639,6 @@ def _theory_term_band_split(
     return dict(zip(_THEORY_BAND_SPLIT_FIELD_ORDER, values, strict=True))
 
 
-def _boundary_realization_metrics(
-    mesh,
-    *,
-    radius: float,
-    theta_value: float,
-) -> dict[str, float]:
-    """Measure realized radial tilt on the rim shell vs imposed theta_B."""
-    from tools.reproduce_flat_disk_one_leaflet import (
-        _rim_boundary_realization_metrics,
-    )
-
-    return _rim_boundary_realization_metrics(
-        mesh, radius=float(radius), theta_value=float(theta_value)
-    )
-
-
 def _leakage_metrics(
     mesh,
     *,
@@ -660,7 +648,7 @@ def _leakage_metrics(
     outer_near_width_lambda: float,
 ) -> dict[str, float]:
     """Report azimuthal (t_phi) leakage relative to radial component."""
-    from tools.reproduce_flat_disk_one_leaflet import _leakage_metrics as shared_metrics
+    from tools.flat_disk_benchmark_metrics import _leakage_metrics as shared_metrics
 
     return shared_metrics(
         mesh,

@@ -131,7 +131,7 @@ def _theory_split_coeffs(theory: Any) -> tuple[float, float, float]:
 
 def _kh_reference_profiles(*, smoothness_model: str) -> dict[str, str]:
     """Return explicit continuum reference labels for flat KH diagnostics."""
-    from tools.reproduce_flat_disk_one_leaflet import (
+    from tools.flat_disk_benchmark_metrics import (
         _flat_benchmark_reference_profiles,
     )
 
