@@ -6,6 +6,18 @@ from geometry.polygon_triangulation import (
     orient_edges_cycle,
     refine_polygonal_facets,
 )
+from runtime.refinement_policies import (
+    apply_preset_definitions,
+    choose_midpoint_preset,
+    has_fixed_constraint,
+    inherit_disk_interface_tags,
+    inherit_disk_target_options,
+    inherit_pin_to_circle_options,
+    inherit_pin_to_plane_options,
+    inherit_rigid_disk_group,
+    is_ring_like_preset,
+    merge_constraints,
+)
 
 __all__ = ["orient_edges_cycle", "refine_polygonal_facets", "refine_triangle_mesh"]
 
@@ -24,344 +36,18 @@ def refine_triangle_mesh(mesh):
     boundary_edge_ids = {
         int(eid) for eid, facets in mesh.edge_to_facets.items() if len(facets) == 1
     }
-
-    def _merge_constraints(options: dict, additions: list[str]) -> None:
-        if not additions:
-            return
-        existing = options.get("constraints")
-        if existing is None:
-            options["constraints"] = list(additions)
-            return
-        if isinstance(existing, str):
-            merged = [existing]
-        else:
-            merged = list(existing)
-        for item in additions:
-            if item not in merged:
-                merged.append(item)
-        options["constraints"] = merged
-
-    def _has_fixed_constraint(options: dict | None) -> bool:
-        if not options:
-            return False
-        if bool(options.get("fixed", False)):
-            return True
-        constraints = options.get("constraints")
-        if constraints == "fixed":
-            return True
-        if isinstance(constraints, list):
-            return "fixed" in constraints
-        return False
+    definitions = getattr(mesh, "definitions", {}) or {}
 
     def _apply_preset_definitions(options: dict) -> tuple[dict, bool]:
-        preset = options.get("preset")
-        if not preset:
-            return options, False
-        definitions = getattr(mesh, "definitions", {}) or {}
-        defaults = definitions.get(preset)
-        if not isinstance(defaults, dict):
-            return options, False
-        merged = defaults.copy()
-        merged.update(options)
-
-        def _as_list(val):
-            if val is None:
-                return []
-            if isinstance(val, str):
-                return [val]
-            return list(val)
-
-        merged_constraints = _as_list(defaults.get("constraints"))
-        for item in _as_list(options.get("constraints")):
-            if item not in merged_constraints:
-                merged_constraints.append(item)
-        if merged_constraints:
-            merged["constraints"] = merged_constraints
-        else:
-            merged.pop("constraints", None)
-        if "preset" not in merged:
-            merged["preset"] = preset
-        preset_fixed = bool(defaults.get("fixed", False)) or _has_fixed_constraint(
-            merged
-        )
-        return merged, preset_fixed
-
-    def _maybe_inherit_pin_to_circle_options(
-        v1_options: dict, v2_options: dict
-    ) -> dict | None:
-        """Return shared pin_to_circle options when both endpoints are constrained.
-
-        Refinement creates midpoint vertices on edges. For boundary rims tagged
-        with ``pin_to_circle`` at the vertex level, midpoints must inherit the
-        same constraint metadata so subsequent constraint enforcement keeps the
-        refined boundary circular.
-        """
-
-        def has_pin_to_circle(options: dict) -> bool:
-            constraints = options.get("constraints")
-            if constraints == "pin_to_circle":
-                return True
-            if isinstance(constraints, list):
-                return "pin_to_circle" in constraints
-            return False
-
-        if not (has_pin_to_circle(v1_options) and has_pin_to_circle(v2_options)):
-            return None
-
-        def merge_equal(key: str) -> tuple[bool, object | None]:
-            a = v1_options.get(key)
-            b = v2_options.get(key)
-            if a is None and b is None:
-                return True, None
-            if a is None:
-                return True, b
-            if b is None:
-                return True, a
-            if isinstance(a, (list, tuple, np.ndarray)) or isinstance(
-                b, (list, tuple, np.ndarray)
-            ):
-                try:
-                    ok = bool(
-                        np.allclose(
-                            np.asarray(a, dtype=float), np.asarray(b, dtype=float)
-                        )
-                    )
-                except Exception:
-                    ok = False
-                return ok, a if ok else None
-            return (a == b), (a if a == b else None)
-
-        merged: dict = {}
-        keys = (
-            "pin_to_circle_group",
-            "pin_to_circle_mode",
-            "pin_to_circle_radius",
-            "pin_to_circle_normal",
-            "pin_to_circle_point",
-        )
-        for key in keys:
-            ok, val = merge_equal(key)
-            if not ok:
-                return None
-            if val is not None:
-                merged[key] = val
-
-        preset = v1_options.get("preset")
-        if preset is not None and preset == v2_options.get("preset"):
-            merged["preset"] = preset
-
-        return merged
-
-    def _maybe_inherit_pin_to_plane_options(
-        v1_options: dict, v2_options: dict
-    ) -> dict | None:
-        """Return shared pin_to_plane options when both endpoints are constrained."""
-
-        def has_pin_to_plane(options: dict) -> bool:
-            constraints = options.get("constraints")
-            if constraints == "pin_to_plane":
-                return True
-            if isinstance(constraints, list):
-                return "pin_to_plane" in constraints
-            return False
-
-        if not (has_pin_to_plane(v1_options) and has_pin_to_plane(v2_options)):
-            return None
-
-        def merge_equal(key: str) -> tuple[bool, object | None]:
-            a = v1_options.get(key)
-            b = v2_options.get(key)
-            if a is None and b is None:
-                return True, None
-            if a is None:
-                return True, b
-            if b is None:
-                return True, a
-            if isinstance(a, (list, tuple, np.ndarray)) or isinstance(
-                b, (list, tuple, np.ndarray)
-            ):
-                try:
-                    ok = bool(
-                        np.allclose(
-                            np.asarray(a, dtype=float), np.asarray(b, dtype=float)
-                        )
-                    )
-                except Exception:
-                    ok = False
-                return ok, a if ok else None
-            return (a == b), (a if a == b else None)
-
-        merged: dict = {}
-        keys = (
-            "pin_to_plane_group",
-            "pin_to_plane_mode",
-            "pin_to_plane_normal",
-            "pin_to_plane_point",
-        )
-        for key in keys:
-            ok, val = merge_equal(key)
-            if not ok:
-                return None
-            if val is not None:
-                merged[key] = val
-        return merged
-
-    def _maybe_inherit_disk_target_options(
-        v1_options: dict, v2_options: dict
-    ) -> dict | None:
-        """Inherit disk target tags when both endpoints share them."""
-        keys = (
-            "tilt_disk_target_group_in",
-            "tilt_disk_target_group_out",
-        )
-        merged: dict = {}
-        for key in keys:
-            a = v1_options.get(key)
-            b = v2_options.get(key)
-            if a is not None and b is not None and a == b:
-                merged[key] = a
-        return merged if merged else None
-
-    def _maybe_inherit_disk_interface_vertex_tags(
-        v1_options: dict,
-        v2_options: dict,
-    ) -> dict | None:
-        """Inherit disk-interface tags for mid-edge vertices on the pinned disk ring.
-
-        For Kozlov-style one-disk setups the disk boundary ring is defined by
-        per-vertex metadata (group "disk") plus additional tags used by rim
-        matching and thetaB coupling:
-          - rim_slope_match_group
-          - tilt_thetaB_group
-          - tilt_thetaB_group_in
-
-        Refinement introduces mid-edge vertices that must inherit these tags so
-        interface constraints/energies act on the full refined ring, not only
-        on the original coarse vertices.
-        """
-
-        def _disk_group_value(options: dict) -> str | None:
-            for key in (
-                "tilt_thetaB_group_in",
-                "tilt_thetaB_group",
-                "rim_slope_match_group",
-            ):
-                val = options.get(key)
-                if val is None:
-                    continue
-                sval = str(val).strip()
-                if sval == "disk":
-                    return sval
-            return None
-
-        g1 = _disk_group_value(v1_options)
-        g2 = _disk_group_value(v2_options)
-        if g1 != "disk" or g2 != "disk":
-            return None
-
-        merged = {
-            "rim_slope_match_group": "disk",
-            "tilt_thetaB_group_in": "disk",
-        }
-        if (
-            str(v1_options.get("tilt_thetaB_group") or "") == "disk"
-            or str(v2_options.get("tilt_thetaB_group") or "") == "disk"
-        ):
-            merged["tilt_thetaB_group"] = "disk"
-        return merged
-
-    def _maybe_inherit_rigid_disk_group(
-        v1_options: dict, v2_options: dict
-    ) -> dict | None:
-        """Inherit rigid-disk group when both endpoints share it."""
-        g1 = v1_options.get("rigid_disk_group")
-        g2 = v2_options.get("rigid_disk_group")
-        if g1 is None or g2 is None:
-            return None
-        if str(g1) != str(g2):
-            return None
-        return {"rigid_disk_group": str(g1)}
+        return apply_preset_definitions(options, definitions)
 
     def _maybe_inherit_preset(
-        v1_options: dict, v2_options: dict
+        first_options: dict, second_options: dict
     ) -> tuple[str | None, bool]:
-        """Return a deterministic preset and whether to apply preset defaults."""
-        p1 = v1_options.get("preset")
-        p2 = v2_options.get("preset")
-        if p1 is None and p2 is None:
-            return None, False
-
-        definitions = getattr(mesh, "definitions", {}) or {}
-
-        def _is_disk(preset: object) -> bool:
-            return str(preset).startswith("disk") if preset is not None else False
-
-        def _is_ring_like(preset: object) -> bool:
-            if preset is None:
-                return False
-            opts = definitions.get(preset)
-            if not isinstance(opts, dict):
-                return False
-            return any(
-                key in opts
-                for key in (
-                    "pin_to_circle_group",
-                    "rim_slope_match_group",
-                    "tilt_thetaB_group_in",
-                )
-            )
-
-        if p1 is None:
-            return (None, False) if _is_ring_like(p2) else (p2, True)
-        if p2 is None:
-            return (None, False) if _is_ring_like(p1) else (p1, True)
-        if p1 == p2:
-            return p1, True
-
-        if _is_ring_like(p1) and not _is_ring_like(p2):
-            return p2, True
-        if _is_ring_like(p2) and not _is_ring_like(p1):
-            return p1, True
-        if _is_ring_like(p1) and _is_ring_like(p2):
-            if p1 == "disk_edge":
-                return p2, False
-            if p2 == "disk_edge":
-                return p1, False
-            return p1, False
-
-        # If one endpoint is disk_edge and the other is a disk interior preset,
-        # keep the interior preset to avoid inflating the boundary ring.
-        if p1 == "disk_edge" and _is_disk(p2):
-            return p2, True
-        if p2 == "disk_edge" and _is_disk(p1):
-            return p1, True
-        if p1 == "disk_edge" and not _is_disk(p2):
-            return p2, True
-        if p2 == "disk_edge" and not _is_disk(p1):
-            return p1, True
-        # Avoid leaking disk presets onto membrane-side midpoints.
-        if _is_disk(p1) and not _is_disk(p2):
-            return p2, True
-        if _is_disk(p2) and not _is_disk(p1):
-            return p1, True
-        # Mixed presets: prefer v1 for determinism.
-        return p1, True
+        return choose_midpoint_preset(first_options, second_options, definitions)
 
     def _is_ring_like_preset(preset: object) -> bool:
-        if preset is None:
-            return False
-        definitions = getattr(mesh, "definitions", {}) or {}
-        opts = definitions.get(preset)
-        if not isinstance(opts, dict):
-            return False
-        return any(
-            key in opts
-            for key in (
-                "pin_to_circle_group",
-                "rim_slope_match_group",
-                "tilt_thetaB_group_in",
-            )
-        )
+        return is_ring_like_preset(preset, definitions)
 
     def get_or_create_edge(v_from, v_to, parent_edge=None, parent_facet=None):
         key = (min(v_from, v_to), max(v_from, v_to))
@@ -446,43 +132,43 @@ def refine_triangle_mesh(mesh):
             midpoint_options = edge.options.copy()
             v1_options = getattr(mesh.vertices[v1], "options", {}) or {}
             v2_options = getattr(mesh.vertices[v2], "options", {}) or {}
-            both_endpoints_fixed = _has_fixed_constraint(
+            both_endpoints_fixed = has_fixed_constraint(
                 v1_options
-            ) and _has_fixed_constraint(v2_options)
+            ) and has_fixed_constraint(v2_options)
             inherit_circle_on_midpoint = True
             if (int(edge_idx) not in boundary_edge_ids) and both_endpoints_fixed:
                 inherit_circle_on_midpoint = False
             inherited_circle = None
             if inherit_circle_on_midpoint:
-                inherited_circle = _maybe_inherit_pin_to_circle_options(
+                inherited_circle = inherit_pin_to_circle_options(
                     v1_options,
                     v2_options,
                 )
             if inherited_circle is not None:
-                _merge_constraints(midpoint_options, ["pin_to_circle"])
+                merge_constraints(midpoint_options, ["pin_to_circle"])
                 midpoint_options.update(inherited_circle)
             inherited_plane = None
             if inherit_circle_on_midpoint:
-                inherited_plane = _maybe_inherit_pin_to_plane_options(
+                inherited_plane = inherit_pin_to_plane_options(
                     v1_options,
                     v2_options,
                 )
             if inherited_plane is not None:
-                _merge_constraints(midpoint_options, ["pin_to_plane"])
+                merge_constraints(midpoint_options, ["pin_to_plane"])
                 midpoint_options.update(inherited_plane)
-            inherited_target = _maybe_inherit_disk_target_options(
+            inherited_target = inherit_disk_target_options(
                 v1_options,
                 v2_options,
             )
             if inherited_target is not None:
                 midpoint_options.update(inherited_target)
-            inherited_interface = _maybe_inherit_disk_interface_vertex_tags(
+            inherited_interface = inherit_disk_interface_tags(
                 v1_options,
                 v2_options,
             )
             if inherited_interface is not None:
                 midpoint_options.update(inherited_interface)
-            inherited_rigid = _maybe_inherit_rigid_disk_group(
+            inherited_rigid = inherit_rigid_disk_group(
                 v1_options,
                 v2_options,
             )
@@ -512,7 +198,7 @@ def refine_triangle_mesh(mesh):
                 np.asarray(midpoint_position, dtype=float),
                 fixed=edge.fixed
                 or preset_fixed
-                or _has_fixed_constraint(midpoint_options),
+                or has_fixed_constraint(midpoint_options),
                 options=midpoint_options,
                 tilt=midpoint_tilt,
                 tilt_fixed=midpoint_tilt_fixed,
