@@ -1,61 +1,66 @@
 # Repository Token-Reduction Checkup
 
-Status: **test/CI detour closed; resume subsystem convergence**
-Date: 2026-08-29
+Status: **all six phases complete; reopen only from measured friction**
+Date: 2026-08-30
 
 ## Objective
 
-Reduce the context and rediscovery cost of repository work while preserving
-solver behavior and scientific evidence. Count production code, tests, and
-governance together. Prefer bounded, cohesive, net-neutral or net-negative
-changes over broad decomposition.
+Reduce repository context and rediscovery cost while preserving solver behavior
+and scientific evidence. Count production code, tests, and governance together;
+prefer cohesive, bounded ownership over decomposition by file size alone.
 
-## Current baseline
+## Closeout baseline
 
-- 551 tracked Python files and 126,949 Python lines.
-- 42 Markdown files and 6,548 Markdown lines before this checkup.
-- Largest areas: tests 46,303 lines; tools 38,149; modules 19,389; runtime
-  10,659; geometry 5,088; commands 1,634.
-- Since the Phase 4 branch point (`caca279`), current `main` is net 4,876 lines
-  smaller: 3,556 additions and 8,432 deletions.
-- The largest remaining context hotspots are diagnostic drivers, followed by
-  `runtime/minimizer.py`, `runtime/steppers/tilt_relaxation.py`,
-  `runtime/refinement.py`, and `geometry/mesh.py`.
+- 556 tracked Python files and 126,920 Python lines.
+- 43 Markdown files and 6,432 Markdown lines.
+- Largest areas: tests 46,303 lines; tools 38,194; modules 19,389; runtime
+  10,314; geometry 5,359; commands 1,634.
+- Since the Phase 4 branch point (`caca279`), Python is net 5,056 lines smaller
+  (5,991 additions and 11,047 deletions).
+- Across the Phase 4R closeout range (`98cd1a1..2b7e284`), Python is net 29
+  lines smaller and Markdown is net 121 lines smaller.
 
 ## Phase reconciliation
 
-| Phase | Current status on `main` | Decision |
+| Phase | Status | Ongoing rule |
 |---|---|---|
-| 1 — repository plan | Complete in substance through `AGENTS.md`, repository routing, guardrails, and measured baselines. | Do not restore the old long plan. |
-| 2 — subsystem plan | Sufficient but intentionally compact. The detailed historical YAML map never merged. | Add routing only after repeated search cost is observed. |
-| 3 — per-change manifests and low-risk extraction | Complete. Evaluation, projection, IO, topology, minimizer-helper, and diagnostic boundaries are present. | Continue using focused manifests transiently; do not accumulate permanent manifests. |
-| 4 — subsystem convergence | **Incomplete on `main`.** Its historical helper-heavy implementation remained on a stale divergent branch. | Re-evaluate against the current tree; do not cherry-pick it wholesale. |
-| 5 — integration and scientific separation | Complete. Fast, PR, background, exhaustive, and theory lanes are separated. | Frozen except under the reopen criteria in `SLOW_TEST_DEDUP_PLAN.md`. |
-| 6 — retirement and ownership cleanup | Complete. Obsolete tools, diagnostic wrappers, prototypes, and duplicate disk/rim-source implementations were removed or consolidated. | Preserve the retained scientific lanes. |
+| 1 — repository plan | Complete through `AGENTS.md`, repository routing, guardrails, and measured baselines. | Do not restore the old long plan. |
+| 2 — subsystem plan | Complete and intentionally compact. | Add routing only after repeated search cost is observed. |
+| 3 — per-change manifests and low-risk extraction | Complete. Evaluation, projection, IO, topology, minimizer-helper, and diagnostic boundaries are present. | Keep change manifests transient. |
+| 4 — subsystem convergence | Complete after measured Phase 4R re-evaluation. | Preserve the accepted ownership boundaries; do not decompose large files solely because they are large. |
+| 5 — integration and scientific separation | Complete. Fast, PR, background, exhaustive, and theory lanes are separated. | Reopen only under `SLOW_TEST_DEDUP_PLAN.md` criteria. |
+| 6 — retirement and ownership cleanup | Complete. Obsolete tools, wrappers, prototypes, and duplicate disk/rim-source implementations were removed or consolidated. | Preserve retained scientific lanes. |
 
-The historical `codex/fix-seven-theory-audits` branch is evidence, not an
-integration source. It contains useful experiments but predates later theory
-fixes and repository compaction. Several proposed Phase 4 slices increased the
-full production-and-test cluster despite improving locality.
+## Phase 4R closeout
 
-## Active phase: 4R — convergence re-evaluation
+Accepted boundaries:
 
-Evaluate remaining hotspots in this order:
+- polygon triangulation owns geometry policy; refinement retains a compatibility
+  import;
+- refinement option policy is separate from topology mutation;
+- thetaB Markdown serialization and report-wide analysis share one report owner;
+- flat-KH numerical metrics have one owner separate from audit orchestration;
+- shared flat-disk benchmark measurements no longer import through the large
+  reproduction driver.
 
-1. `runtime/minimizer.py` and rejected-step/scaffold ownership;
-2. `runtime/steppers/tilt_relaxation.py` policy versus numerical loop ownership;
-3. `runtime/refinement.py` parsing, policy, and topology ownership;
-4. the three largest retained diagnostic drivers.
+The final three-slice batch added 38 Python lines for module boundaries while
+removing 1,555 lines from the three affected drivers: flat-KH audit (896),
+flat-disk reproduction (446), and thetaB cadence audit (213). Tests and
+Markdown were unchanged in that batch. Existing compatibility imports preserve
+callers without duplicating implementations.
 
-For each slice:
+Rejected splits remain rejected: the callback-heavy minimizer fallback owner,
+the helper-heavy tilt policy split, and thetaB configuration extraction. Each
+would add coupling or a wide import surface without enough working-context gain.
 
-1. identify one owner and behavior boundary;
-2. measure files and lines that a typical change must inspect;
-3. use existing tests unless a real coverage gap is found;
-4. preserve call order, mutation ownership, cache epochs, and report schemas;
-5. reject the slice if it adds fragmentation or governance without a concrete
-   navigation, correctness, or runtime benefit;
-6. remeasure the complete production-test-documentation cluster.
+## Reopen criteria
 
-Stop after three accepted slices and repeat this checkup. Do not return to
-repository-wide test cleanup during Phase 4R.
+Reopen locality work only when at least one condition is measured:
+
+1. repeated tasks must inspect unrelated owner files to make one bounded change;
+2. duplicate implementations reappear across retained tools or runtime modules;
+3. a behavior bug exposes an ownership or test-boundary gap;
+4. sampled agent work shows context or rediscovery cost has materially worsened.
+
+Do not resume repository-wide test cleanup or continue extracting helpers merely
+to reduce the size of a retained driver.
