@@ -22,6 +22,14 @@ _BOUNDARY_KEYS = (
 )
 
 
+def format_float(value: Any, digits: int = 4) -> str:
+    """Format a report scalar, returning ``n/a`` for non-numeric values."""
+    try:
+        return f"{float(value):.{digits}f}"
+    except (TypeError, ValueError):
+        return "n/a"
+
+
 def _write_temp_fixture(doc: dict[str, Any], directory: Path, label: str) -> Path:
     path = directory / f"{label}.yaml"
     path.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
