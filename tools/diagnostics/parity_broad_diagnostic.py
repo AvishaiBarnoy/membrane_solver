@@ -51,6 +51,9 @@ from tools.diagnostics.utils import (  # noqa: E402
     row_region_mask_dict,
     triangle_region_masks,
 )
+from tools.diagnostics.utils import (
+    format_float as _fmt,
+)
 from tools.reproduce_theory_parity import (  # noqa: E402
     _build_context,
     _collect_report_from_context,
@@ -481,13 +484,6 @@ def run_diagnostic(*, protocol: tuple[str, ...], mode: str = "run") -> dict[str,
     }
     report["observations"] = _top_observations(report)
     return report
-
-
-def _fmt(value: Any, digits: int = 4) -> str:
-    try:
-        return f"{float(value):.{digits}f}"
-    except (TypeError, ValueError):
-        return "n/a"
 
 
 def render_markdown_report(report: dict[str, Any]) -> str:
