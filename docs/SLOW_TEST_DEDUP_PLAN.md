@@ -1,229 +1,47 @@
-# Slow Test Dedup Plan
+# Slow Test and CI Closeout
 
-## Goal
+Status: **complete as of 2026-08-29**
 
-Reduce the runtime of the explicit slow suite
+## Result
 
-```bash
-pytest -q -o addopts='' -m "acceptance or benchmark or e2e or slow or script"
-```
+The default, PR, background, and exhaustive selections are separated. Shared
+fixtures and helpers compact repeated setup, obsolete diagnostic wrappers are
+retired, and the blocking theory manifest runs as two concurrent shards inside
+one stable required check.
 
-without dropping unique behavior coverage.
+Measured GitHub Actions baselines:
 
-Current observed runtime:
+- pull-request suite critical path: about 7 minutes 14 seconds;
+- blocking theory check: 5 minutes 28 seconds (previously 8 minutes 34 seconds);
+- main/background suite: 18 minutes 20 seconds.
 
-- fast default suite: about 72s
-- explicit slow suite: about 70 minutes
+The background critical path is intentional. It includes exploratory cases
+marked `exhaustive` that PR selection omits. The regional free-disk cases test
+distinct optimizer, refinement, exclusion, weighting, and attribution
+interventions. The three additional flat-disk cases exercise distinct staged
+relaxation, outer-tail matching, and unpinned-preset workflows. No exact
+duplicate execution was found in the closeout audit.
 
-## Current state
+## Suite contract
 
-The explicit slow suite is now green. The remaining problem is overlap, not
-correctness.
+- `pytest -q`: fast default confidence.
+- PR CI: representative unit, regression, E2E, and blocking theory coverage;
+  excludes exhaustive cases.
+- Main/background CI: includes exhaustive regression and E2E evidence.
+- Scheduled workflows: broad benchmarks, profiles, and exploratory theory.
 
-The dominant cost comes from repeated calls to the same benchmark and script
-entry points:
+Do not shorten the background lane merely because it is slow. Change its
+selection only when an exact duplicate, obsolete scientific avenue, or cheaper
+equivalent assertion is demonstrated. Do not weaken tolerances or protected
+theory branches as a runtime optimization.
 
-- `run_flat_disk_one_leaflet_benchmark(...)`
-- `run_flat_disk_kh_term_audit(...)`
-- `run_flat_disk_kh_term_audit_refine_sweep(...)`
-- `tools/reproduce_theory_parity.py`
-- `tools/diagnostics/physics_sweep.py`
+## Reopen criteria
 
-## Inventory by behavior cluster
+Reopen test/CI compaction only when one of these is true:
 
-### 1. Flat benchmark path
-
-Primary overlapping files:
-
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_one_leaflet_benchmark_e2e.py`
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_one_leaflet_optimize_preset_benchmark.py`
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_one_leaflet_optimize_mode_tradeoff_benchmark.py`
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_tilt_mass_mode_benchmark.py`
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_one_leaflet_curved_lane_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_reproduce_flat_disk_one_leaflet_acceptance.py`
-
-Observed overlap:
-
-- `test_flat_disk_one_leaflet_benchmark_e2e.py` is the largest concentration of
-  repeated benchmark calls.
-- Several smaller benchmark files exercise the same benchmark entry point with
-  narrow parameter changes.
-
-Recommended main slow-suite retention:
-
-- keep one broad benchmark/E2E module:
-  - `/Users/User/github/membrane_solver/tests/test_flat_disk_one_leaflet_benchmark_e2e.py`
-- keep one acceptance snapshot module:
-  - `/Users/User/github/membrane_solver/tests/test_reproduce_flat_disk_one_leaflet_acceptance.py`
-- keep curved-lane acceptance separately because it covers a distinct lane:
-  - `/Users/User/github/membrane_solver/tests/test_flat_disk_one_leaflet_curved_lane_acceptance.py`
-
-Recommended nightly/exhaustive candidates:
-
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_one_leaflet_optimize_preset_benchmark.py`
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_one_leaflet_optimize_mode_tradeoff_benchmark.py`
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_tilt_mass_mode_benchmark.py`
-
-Reason:
-
-- these are parameter-sensitivity checks on the same benchmark driver
-- they are useful, but they overlap heavily with the broad benchmark module
-
-### 2. KH term audit path
-
-Primary overlapping files:
-
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_kh_term_audit_regression.py`
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_kh_region_parity_regression.py`
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_kh_partition_ablation_regression.py`
-
-Observed overlap:
-
-- `test_flat_disk_kh_term_audit_regression.py` already covers most audit
-  semantics directly.
-- The smaller region/partition regression files mostly validate wrapper logic
-  around the same audit path.
-
-Recommended main slow-suite retention:
-
-- keep:
-  - `/Users/User/github/membrane_solver/tests/test_flat_disk_kh_term_audit_regression.py`
-
-Recommended nightly/exhaustive candidates:
-
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_kh_region_parity_regression.py`
-- `/Users/User/github/membrane_solver/tests/test_flat_disk_kh_partition_ablation_regression.py`
-
-Reason:
-
-- wrapper-level overlap with the main KH audit regression file
-
-### 3. Theory parity / theory CLI path
-
-Primary overlapping files:
-
-- `/Users/User/github/membrane_solver/tests/test_reproduce_theory_parity_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_parity_against_tex_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_parity_trend.py`
-- `/Users/User/github/membrane_solver/tests/test_reproduce_theory_parity_fixed_polish.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_equivalence_audit_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_scaling_audit_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_mesh_convergence_audit_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_coverage_audit_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_protocol_suffix_sweep_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_parity_drift_triage.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_parity_expansion_exploratory.py`
-
-Observed overlap:
-
-- many of these shell out to the same theory CLI and inspect adjacent artifact
-  families
-- they are all valuable, but not all need to live in the main slow path
-
-Recommended main slow-suite retention:
-
-- `/Users/User/github/membrane_solver/tests/test_reproduce_theory_parity_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_parity_against_tex_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_parity_trend.py`
-
-Reason:
-
-- together they cover:
-  - baseline artifact correctness
-  - TeX target comparison
-  - trend artifact generation
-
-Recommended nightly/exhaustive candidates:
-
-- `/Users/User/github/membrane_solver/tests/test_reproduce_theory_parity_fixed_polish.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_equivalence_audit_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_scaling_audit_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_mesh_convergence_audit_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_coverage_audit_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_protocol_suffix_sweep_acceptance.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_parity_drift_triage.py`
-- `/Users/User/github/membrane_solver/tests/test_theory_parity_expansion_exploratory.py`
-
-### 4. CLI / script hygiene
-
-Primary files:
-
-- `/Users/User/github/membrane_solver/tests/test_cli_end_to_end.py`
-- `/Users/User/github/membrane_solver/tests/test_cli_benchmark_end_to_end.py`
-- `/Users/User/github/membrane_solver/tests/test_visualization_hygiene.py`
-- `/Users/User/github/membrane_solver/tests/test_tilt_benchmark_runner.py`
-- `/Users/User/github/membrane_solver/tests/test_profile_macro_hotspots.py`
-- `/Users/User/github/membrane_solver/tests/test_physics_sweep_inventory.py`
-
-Observed overlap:
-
-- these are mostly unique script entry points
-- overlap is lower here than in benchmark/theory modules
-
-Recommended main slow-suite retention:
-
-- keep all for now except where exact CLI overlap is proven later
-
-### 5. Kozlov E2E family
-
-Primary files:
-
-- `/Users/User/github/membrane_solver/tests/test_kozlov_*.py`
-- `/Users/User/github/membrane_solver/tests/test_bending_tilt_leaflet_e2e.py`
-- `/Users/User/github/membrane_solver/tests/test_single_leaflet_curvature_induction.py`
-- `/Users/User/github/membrane_solver/tests/test_tilt_source_decay_e2e.py`
-
-Observed overlap:
-
-- there is likely overlap within the Kozlov free-disk family
-- but that needs a second pass by scenario, not just by filename
-
-Recommended action:
-
-- defer Kozlov dedup to a separate pass
-- do not reclassify these yet without scenario-level review
-
-## Proposed tier structure
-
-### Fast default
-
-Already implemented:
-
-```bash
-pytest -q
-```
-
-### Main slow suite
-
-Keep one representative test per unique expensive behavior:
-
-```bash
-pytest -q -o addopts='' -m "(acceptance or benchmark or e2e or slow or script) and not exhaustive"
-```
-
-after reclassifying the overlapping modules above.
-
-### Nightly / exhaustive
-
-Add a new marker, for example `exhaustive`, for overlap-heavy tests that still
-have value but should not stay in the main slow path.
-
-Candidate first moves:
-
-- optimize-preset benchmark module
-- optimize-mode tradeoff benchmark module
-- tilt-mass-mode benchmark module
-- theory parity auxiliary audit modules
-- KH audit wrapper regressions
-
-## Next dedup PR
-
-1. Add an `exhaustive` marker in `pytest.ini`.
-2. Move the clearly overlapping benchmark/theory modules above from the main
-   slow suite to the exhaustive tier.
-3. Re-run:
-   - `pytest -q`
-   - `pytest -q -o addopts='' -m "(acceptance or benchmark or e2e or slow or script) and not exhaustive"`
-   - optional exhaustive collection sanity check:
-     `pytest -q -o addopts='' -m "exhaustive"`
-4. Measure the runtime reduction.
+1. PR critical-path time materially regresses from the baseline above.
+2. Collection shows the same expensive protocol invocation in multiple
+   blocking PR lanes without distinct assertions.
+3. A retained exhaustive case is explicitly retired by its scientific owner.
+4. A shared result can remove repeated work without coupling independent lanes
+   or adding more governance than it removes.
