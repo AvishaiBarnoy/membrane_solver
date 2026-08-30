@@ -10,6 +10,10 @@
 - `fortran_kernels/`: Performance-critical math (Bending/Tilt).
 - `tests/fixtures/`: Scientific reference data. **Do not delete.**
 
+## Canonical Owners
+- `tools/diagnostics/flat_disk_kh_term_audit.py` owns KH audit orchestration; `flat_disk_kh_metrics.py` owns radial mesh/theory metrics.
+- `tools/diagnostics/thetaB_cadence_relaxation_audit.py` owns probes; `thetaB_cadence_report.py` owns classification and Markdown reporting.
+
 ## Fragile & High-Risk Files
 Avoid reading these in full unless structural changes are required. Use `grep_search` and targeted `read_file`.
 - `runtime/minimizer.py`: Partially decomposed monolithic class. New helpers reside in:
