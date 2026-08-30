@@ -79,6 +79,7 @@ from tools.theory_parity_interface_profiles import (  # noqa: E402
     build_outer_shell_scaffold_fixture,
 )
 
+# Report names above are compatibility reexports; thetaB_cadence_report is canonical.
 ROOT = Path(__file__).resolve().parents[2]
 FULL_COUPLING_FIXTURE = (
     ROOT

@@ -13,6 +13,7 @@ from typing import Any, Sequence
 import numpy as np
 import yaml
 
+# Compatibility facade; numerical metric implementations are owned by flat_disk_kh_metrics.
 from tools.diagnostics.flat_disk_kh_metrics import (
     _band_anisotropy_metrics,
     _boundary_realization_metrics,

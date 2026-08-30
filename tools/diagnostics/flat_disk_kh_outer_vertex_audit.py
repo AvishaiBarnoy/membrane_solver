@@ -84,7 +84,7 @@ def _vertex_bands(
     radius: float,
     lambda_value: float,
 ) -> list[dict[str, float | int | str]]:
-    from tools.diagnostics.flat_disk_kh_term_audit import _radial_frames
+    from tools.diagnostics.flat_disk_kh_metrics import _radial_frames
 
     r, r_hat, phi_hat = _radial_frames(positions)
 
@@ -167,7 +167,7 @@ def _field_profile_errors(
     radius: float,
     lambda_value: float,
 ) -> dict[str, dict[str, float | int]]:
-    from tools.diagnostics.flat_disk_kh_term_audit import _radial_frames
+    from tools.diagnostics.flat_disk_kh_metrics import _radial_frames
 
     r, r_hat, phi_hat = _radial_frames(positions)
     expected = _analytic_radial_amplitude(
@@ -263,7 +263,7 @@ def _frozen_analytic_tilts(
     radius: float,
     lambda_value: float,
 ) -> np.ndarray:
-    from tools.diagnostics.flat_disk_kh_term_audit import _radial_frames
+    from tools.diagnostics.flat_disk_kh_metrics import _radial_frames
 
     r, r_hat, _ = _radial_frames(positions)
     amplitude = _analytic_radial_amplitude(
@@ -288,7 +288,7 @@ def run_flat_disk_kh_outer_vertex_audit(
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
     from runtime.refinement import refine_triangle_mesh
-    from tools.diagnostics.flat_disk_kh_term_audit import (
+    from tools.diagnostics.flat_disk_kh_metrics import (
         _mesh_internal_band_split,
         _radial_frames,
         _theory_term_band_split,

@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from runtime.refinement import refine_triangle_mesh
-from tools.diagnostics.flat_disk_kh_term_audit import (
+from tools.diagnostics.flat_disk_kh_metrics import (
     _mesh_internal_band_split,
     _mesh_internal_region_split,
     _mesh_internal_triangle_terms,
